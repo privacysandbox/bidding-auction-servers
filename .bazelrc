@@ -1,0 +1,127 @@
+build --verbose_failures
+build --client_env=CC=clang
+build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
+build --client_env=BAZEL_CXXOPTS=-std=c++17
+
+build --compilation_mode=opt
+build --output_filter='^//((?!(third_party):).)*$'`
+build --color=yes
+
+# Required to import opentelemetry with abseil
+build --@io_opentelemetry_cpp//api:with_abseil
+
+# Avoid linking to ICU shared libs for googleurl
+build --@com_google_googleurl//build_config:system_icu=0
+
+test --test_verbose_timeout_warnings
+
+build:instance_local  --//:instance=local
+build:instance_local --@google_privacysandbox_servers_common//:instance=local
+
+build:instance_aws  --//:instance=aws
+build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
+
+build:platform_local --//:platform=local
+build:platform_local --@google_privacysandbox_servers_common//:platform=local
+build:platform_local --@control_plane_shared//cc/public/cpio/interface:platform=local
+
+build:platform_aws --//:platform=aws
+build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
+build:platform_aws --@control_plane_shared//cc/public/cpio/interface:platform=aws
+
+build:platform_gcp --//:platform=gcp
+# TODO(b/285960898): Update platform to gcp when common repo supports gcp.
+build:platform_gcp --@google_privacysandbox_servers_common//:platform=local
+build:platform_gcp --@control_plane_shared//cc/public/cpio/interface:platform=gcp
+
+build:local_aws --config=instance_local
+build:local_aws --config=platform_aws
+
+build:local_gcp --config=instance_local
+build:local_gcp --config=platform_gcp
+
+build:local_local --config=instance_local
+build:local_local --config=platform_local
+
+build:aws_aws --config=instance_aws
+build:aws_aws --config=platform_aws
+
+# Address sanitizer
+# bazel build --config asan
+build:asan --strip=never
+build:asan --copt -fsanitize=address
+build:asan --copt -DADDRESS_SANITIZER
+build:asan --copt -g
+build:asan --copt -fno-omit-frame-pointer
+build:asan --linkopt -fsanitize=address
+# Run sudo apt-get install lld in case of error
+build:asan --linkopt=-fuse-ld=lld
+build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
+
+# Memory sanitizer
+# bazel build --config msan
+build:msan --strip=never
+build:msan --copt -fsanitize=memory
+build:msan --copt -DMEMORY_SANITIZER
+build:msan --copt -g
+build:msan --copt -fno-omit-frame-pointer
+build:msan --linkopt -fsanitize=memory
+
+# Undefined Behavior Sanitizer
+# bazel build --config ubsan
+build:ubsan --strip=never
+build:ubsan --copt -fsanitize=undefined
+build:ubsan --copt -DUNDEFINED_BEHAVIOR_SANITIZER
+build:ubsan --copt -g
+build:ubsan --copt -fno-omit-frame-pointer
+build:ubsan --linkopt -fsanitize=undefined
+build:ubsan --linkopt -lubsan
+
+# Thread Sanitizer
+# bazel build --config tsan
+build:tsan --strip=never
+build:tsan --copt=-fsanitize=thread
+build:tsan --copt=-fno-omit-frame-pointer
+build:tsan --copt=-DGPR_NO_DIRECT_SYSCALLS
+build:tsan --copt=-DGRPC_TSAN
+build:tsan --copt -g
+build:tsan --linkopt=-fsanitize=thread
+# This is needed to address false positive problem with abseil.
+# https://github.com/google/sanitizers/issues/953
+build:tsan --test_env=TSAN_OPTIONS=report_atomic_races=0
+
+test:coretests --test_tag_filters=-flaky
+
+build:small-tests --compilation_mode=dbg
+test:small-tests --build_tests_only
+test:small-tests --test_size_filters=-large,-enormous
+test:small-tests --test_tag_filters=-requires-network
+test:small-tests --runs_per_test=20
+test:small-tests --flaky_test_attempts=2
+test:small-tests --runs_per_test_detects_flakes
+test:small-tests --test_summary=detailed
+
+build:all-tests --compilation_mode=dbg
+test:all-tests --build_tests_only
+test:all-tests --test_summary=detailed
+
+# clang_coverage -- the set of args to configure C++ code coverage in bazel with clang
+build:clang_coverage --compilation_mode=opt
+build:clang_coverage --combined_report=lcov
+build:clang_coverage --nocache_test_results
+build:clang_coverage --action_env=GCOV=/usr/bin/llvm-profdata
+build:clang_coverage --action_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
+build:clang_coverage --action_env=BAZEL_LLVM_COV=/usr/bin/llvm-cov
+build:clang_coverage --strategy=TestRunner=sandboxed,local
+build:clang_coverage --strategy=CoverageReport=sandboxed,local
+build:clang_coverage --experimental_scale_timeouts=1.5
+build:clang_coverage --coverage_support=@//tools/coverage:coverage_support
+build:clang_coverage --test_env=CC_CODE_COVERAGE_SCRIPT=tools/coverage/collect_cc_coverage.sh
+
+coverage --config=coverage
+coverage --build_tests_only
+build:coverage --config=clang_coverage
+build:coverage --action_env=PRIVACY_SANDBOX_SERVERS_BUILD_CONFIG_COVERAGE=1
+build:coverage --test_tag_filters=-nocoverage,small
+build:coverage --instrumentation_filter="/services[/:],/tools/secure_invoke/payload_generator[/:]"

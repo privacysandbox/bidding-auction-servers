@@ -1,0 +1,685 @@
+//  Copyright 2022 Google LLC
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+
+#ifndef SERVICES_COMMON_TEST_RANDOM_H_
+#define SERVICES_COMMON_TEST_RANDOM_H_
+
+#include <memory>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <google/protobuf/util/json_util.h>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/time/time.h"
+#include "api/bidding_auction_servers.pb.h"
+#include "services/common/test/utils/cbor_test_utils.h"
+
+// helper functions to generate random objects for testing
+namespace privacy_sandbox::bidding_auction_servers {
+
+using EncodedBuyerInputs = google::protobuf::Map<std::string, std::string>;
+
+std::string MakeARandomString() {
+  return std::to_string(ToUnixNanos(absl::Now()));
+}
+
+std::string MakeARandomUrl() {
+  return absl::StrCat("https://", MakeARandomString(), ".com");
+}
+
+absl::flat_hash_map<std::string, std::string> MakeARandomMap(int entries = 2) {
+  absl::flat_hash_map<std::string, std::string> output;
+  for (int i = 0; i < entries; i++) {
+    output.try_emplace(MakeARandomString(), MakeARandomString());
+  }
+  return output;
+}
+
+int MakeARandomInt(int min, int max) {
+  std::default_random_engine curr_time_generator(ToUnixMillis(absl::Now()));
+  return std::uniform_int_distribution<int>(min, max)(curr_time_generator);
+}
+
+template <typename num_type>
+num_type MakeARandomNumber(num_type min, num_type max) {
+  std::default_random_engine curr_time_generator(ToUnixMillis(absl::Now()));
+  return std::uniform_real_distribution<num_type>(min,
+                                                  max)(curr_time_generator);
+}
+
+std::unique_ptr<google::protobuf::Struct> MakeARandomStruct(int num_fields) {
+  auto a_struct = std::make_unique<google::protobuf::Struct>();
+  auto& map = *(a_struct->mutable_fields());
+  for (int i = 0; i < num_fields; i++) {
+    map[MakeARandomString()].set_string_value(MakeARandomString());
+  }
+  return a_struct;
+}
+
+void ProtoToJson(const google::protobuf::Message& proto,
+                 std::string* json_output) {
+  auto options = google::protobuf::util::JsonPrintOptions();
+  options.preserve_proto_field_names = true;
+  google::protobuf::util::MessageToJsonString(proto, json_output, options);
+}
+
+std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields) {
+  std::unique_ptr<std::string> json_output = std::make_unique<std::string>();
+  std::unique_ptr<google::protobuf::Struct> map = MakeARandomStruct(num_fields);
+  ProtoToJson(*map, json_output.get());
+  return json_output;
+}
+
+google::protobuf::Struct MakeAnAd(std::string render_url,
+                                  std::string metadata_key,
+                                  int metadata_value) {
+  google::protobuf::Struct ad;
+  google::protobuf::Value ad_render_url;
+  ad_render_url.set_string_value(render_url);
+  ad.mutable_fields()->try_emplace("renderUrl", ad_render_url);
+
+  auto metadata_obj = MakeARandomStruct(0);
+  google::protobuf::Value metadata_v;
+  metadata_v.set_number_value(metadata_value);
+  metadata_obj->mutable_fields()->try_emplace(metadata_key, metadata_v);
+
+  google::protobuf::Value metadata_obj_val;
+  metadata_obj_val.set_allocated_struct_value(metadata_obj.release());
+  ad.mutable_fields()->try_emplace("metadata", metadata_obj_val);
+  return ad;
+}
+
+google::protobuf::ListValue MakeARandomListOfAds() {
+  google::protobuf::ListValue output;
+  for (int i = 0; i < MakeARandomInt(1, 10); i++) {
+    output.mutable_values()->Add()->mutable_struct_value()->MergeFrom(
+        MakeAnAd(MakeARandomString(), MakeARandomString(), i));
+  }
+  return output;
+}
+
+// Consistent to aid latency benchmarking.
+std::string MakeAFixedSetOfUserBiddingSignals(int num_ads) {
+  std::string output = "{";
+  for (int i = 0; i < num_ads; i++) {
+    absl::StrAppend(&output, "\"userBiddingSignal", i + 1, "\": \"someValue\"");
+    if (i < num_ads - 1) {
+      absl::StrAppend(&output, ",");
+    }
+  }
+  absl::StrAppend(&output, "}");
+  return output;
+}
+
+// Consistent to aid latency benchmarking.
+google::protobuf::ListValue MakeAFixedSetOfAds(int num_ads) {
+  google::protobuf::ListValue output;
+  for (int i = 0; i < num_ads; i++) {
+    output.mutable_values()->Add()->mutable_struct_value()->MergeFrom(
+        MakeAnAd("barStandardAds.com/id=1776", "creationIndex", i));
+  }
+  return output;
+}
+
+google::protobuf::ListValue MakeARandomListOfStrings() {
+  google::protobuf::ListValue output;
+  for (int i = 0; i < MakeARandomInt(1, 10); i++) {
+    auto* v = output.mutable_values()->Add();
+    v->set_string_value(MakeARandomString());
+  }
+  return output;
+}
+
+google::protobuf::ListValue MakeARandomListOfNumbers() {
+  google::protobuf::ListValue output;
+  for (int i = 0; i < MakeARandomInt(1, 10); i++) {
+    float number = MakeARandomNumber<float>(1, 10);
+    output.add_values()->set_number_value(number);
+  }
+  return output;
+}
+
+std::string MakeRandomPreviousWins(
+    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids,
+    bool set_times_to_one = false) {
+  std::string previous_wins = "[";
+  for (int i = 0; i < ad_render_ids.size(); i++) {
+    int time_val = 1;
+    if (!set_times_to_one) {
+      time_val = (unsigned)time(NULL);
+    }
+    absl::StrAppend(&previous_wins, "[", time_val, ",\"", ad_render_ids.at(i),
+                    "\"]");
+    if (i < ad_render_ids.size() - 1) {
+      absl::StrAppend(&previous_wins, ",");
+    }
+  }
+  absl::StrAppend(&previous_wins, "]");
+  return previous_wins;
+}
+
+BrowserSignals MakeRandomBrowserSignalsForIG(
+    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids) {
+  BrowserSignals browser_signals;
+  browser_signals.set_join_count(MakeARandomInt(0, 10));
+  browser_signals.set_bid_count(MakeARandomInt(0, 50));
+  browser_signals.set_recency((unsigned long)std::time(NULL));
+  browser_signals.set_prev_wins(MakeRandomPreviousWins(ad_render_ids));
+  return browser_signals;
+}
+
+constexpr char test_ig_with_two_ads[] =
+    R"json({"ads":[{"metadata":["134256827445","594352291621","4","16996677067"],"renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=134256827445&cr_id=594352291621&cv_id=4"},{"metadata":["134256827445","605048329089","2","16996677067"],"renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=134256827445&cr_id=605048329089&cv_id=2"}],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
+
+// Must manually delete/take ownership of underlying pointer
+std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice() {
+  // Parse an IG in the form sent from the device.
+  BuyerInput::InterestGroup ig_with_two_ads;
+  auto result = google::protobuf::util::JsonStringToMessage(
+      test_ig_with_two_ads, &ig_with_two_ads);
+  std::unique_ptr<BuyerInput::InterestGroup> u_ptr_to_ig =
+      std::make_unique<BuyerInput::InterestGroup>(ig_with_two_ads);
+  u_ptr_to_ig->mutable_bidding_signals_keys()->Add(MakeARandomString());
+  google::protobuf::RepeatedPtrField<std::string> ad_render_ids;
+  ad_render_ids.Add(MakeARandomString());
+  u_ptr_to_ig->mutable_browser_signals()->CopyFrom(
+      MakeRandomBrowserSignalsForIG(ad_render_ids));
+  return u_ptr_to_ig;
+}
+
+std::unique_ptr<
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+MakeAnInterestGroupForBiddingSentFromDevice() {
+  std::unique_ptr<BuyerInput::InterestGroup> ig_with_two_ads =
+      MakeAnInterestGroupSentFromDevice();
+  auto ig_for_bidding_from_device = std::make_unique<
+      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>();
+
+  ig_for_bidding_from_device->set_name(ig_with_two_ads->name());
+  ig_for_bidding_from_device->mutable_browser_signals()->CopyFrom(
+      ig_with_two_ads->browser_signals());
+  ig_for_bidding_from_device->mutable_ads()->MergeFrom(ig_with_two_ads->ads());
+  ig_for_bidding_from_device->mutable_trusted_bidding_signals_keys()->Add(
+      MakeARandomString());
+  return ig_for_bidding_from_device;
+}
+
+/*
+ * Build random trusted bidding signals with interest group names.
+ */
+std::string MakeRandomTrustedBiddingSignals(
+    const GenerateBidsRequest::GenerateBidsRawRequest& raw_request) {
+  std::string signals_dest;
+  absl::StrAppend(&signals_dest, "{\"keys\":{");
+  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
+    auto interest_group = raw_request.interest_group_for_bidding().at(i);
+    std::string raw_random_signals;
+    google::protobuf::util::MessageToJsonString(MakeARandomListOfStrings(),
+                                                &raw_random_signals);
+    absl::StrAppend(&signals_dest, "\"", interest_group.name(),
+                    "\":", raw_random_signals);
+    if (i < raw_request.interest_group_for_bidding_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+  absl::StrAppend(&signals_dest, "}}");
+  return signals_dest;
+}
+
+// build_android_signals: If false, will insert random values into
+// browser signals, otherwise will insert random values into android signals.
+std::unique_ptr<
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+MakeARandomInterestGroupForBidding(
+    bool build_android_signals,
+    bool set_user_bidding_signals_to_empty_struct = false) {
+  std::unique_ptr<
+      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+      ig_for_bidding =
+          std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest::
+                               InterestGroupForBidding>();
+  ig_for_bidding->set_name(MakeARandomString());
+  ig_for_bidding->mutable_ads()->MergeFrom(MakeARandomListOfAds());
+  ig_for_bidding->mutable_trusted_bidding_signals_keys()->Add(
+      MakeARandomString());
+  if (!set_user_bidding_signals_to_empty_struct) {
+    // Takes ownership of pointer.
+    ig_for_bidding->set_user_bidding_signals(
+        R"JSON({"years": [1776, 1868], "name": "winston", "someId": 1789})JSON");
+  }
+  int ad_render_ids_to_generate = MakeARandomInt(1, 10);
+  for (int i = 0; i < ad_render_ids_to_generate; i++) {
+    *ig_for_bidding->mutable_ad_render_ids()->Add() =
+        absl::StrCat("ad_render_id_", MakeARandomString());
+  }
+  if (build_android_signals) {
+    // Empty message for now.
+    ig_for_bidding->mutable_android_signals();
+  } else {
+    ig_for_bidding->mutable_browser_signals()->CopyFrom(
+        MakeRandomBrowserSignalsForIG(ig_for_bidding->ad_render_ids()));
+  }
+  return ig_for_bidding;
+}
+
+std::unique_ptr<
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+MakeALargeInterestGroupForBiddingForLatencyTesting() {
+  int num_ads = 10, num_bidding_signals_keys = 10, num_ad_render_ids = 10,
+      num_ad_component_render_ids = 10, num_user_bidding_signals = 10;
+  std::unique_ptr<
+      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+      ig_for_bidding =
+          std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest::
+                               InterestGroupForBidding>();
+  // Name.
+  ig_for_bidding->set_name("HandbagShoppers");
+  // Ad render IDs.
+  for (int i = 0; i < num_ad_render_ids; i++) {
+    ig_for_bidding->mutable_ad_render_ids()->Add(
+        absl::StrCat("adRenderId", i + 1));
+  }
+  // Ad component render IDs.
+  for (int i = 0; i < num_ad_component_render_ids; i++) {
+    ig_for_bidding->mutable_ad_component_render_ids()->Add(
+        absl::StrCat("adComponentRenderId", i + 1));
+  }
+  // Bidding signals keys.
+  for (int i = 0; i < num_bidding_signals_keys; i++) {
+    ig_for_bidding->mutable_trusted_bidding_signals_keys()->Add(
+        absl::StrCat("biddingSignalsKey", i + 1));
+  }
+  // User bidding signals.
+  ig_for_bidding->set_user_bidding_signals(
+      MakeAFixedSetOfUserBiddingSignals(num_user_bidding_signals));
+  // Device signals.
+  ig_for_bidding->mutable_browser_signals()->CopyFrom(
+      MakeRandomBrowserSignalsForIG(ig_for_bidding->ad_render_ids()));
+  // Ads.
+  ig_for_bidding->mutable_ads()->MergeFrom(MakeAFixedSetOfAds(num_ads));
+  return ig_for_bidding;
+}
+
+std::unique_ptr<
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+MakeARandomInterestGroupForBiddingFromAndroid() {
+  return MakeARandomInterestGroupForBidding(true);
+}
+
+std::unique_ptr<
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
+MakeARandomInterestGroupForBiddingFromBrowser() {
+  return MakeARandomInterestGroupForBidding(false);
+}
+
+GenerateBidsRequest MakeARandomGenerateBidsRequestForAndroid() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  GenerateBidsRequest::GenerateBidsRawRequest raw_request;
+  // Takes ownership of pointers
+  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
+      MakeARandomInterestGroupForBiddingFromAndroid().release());
+  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
+      MakeARandomInterestGroupForBiddingFromAndroid().release());
+  raw_request.set_allocated_auction_signals(
+      std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
+  raw_request.set_allocated_buyer_signals(
+      std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
+  raw_request.set_bidding_signals(MakeARandomString());
+
+  GenerateBidsRequest request;
+  request.set_key_id(MakeARandomString());
+  request.set_request_ciphertext(MakeARandomString());
+  *request.mutable_raw_request() = std::move(raw_request);
+  return request;
+}
+
+GenerateBidsRequest MakeARandomGenerateBidsRequestForBrowser() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  GenerateBidsRequest::GenerateBidsRawRequest raw_request;
+  // Takes ownership of pointers
+  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
+      MakeARandomInterestGroupForBiddingFromBrowser().release());
+  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
+      MakeARandomInterestGroupForBiddingFromBrowser().release());
+  raw_request.set_allocated_auction_signals(
+      std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
+  raw_request.set_allocated_buyer_signals(
+      std::move(MakeARandomStructJsonString(MakeARandomInt(0, 10))).release());
+  raw_request.set_bidding_signals(MakeARandomString());
+  raw_request.set_seller(MakeARandomString());
+  raw_request.set_publisher_name(MakeARandomString());
+
+  GenerateBidsRequest request;
+  request.set_key_id(MakeARandomString());
+  request.set_request_ciphertext(MakeARandomString());
+  *request.mutable_raw_request() = std::move(raw_request);
+  return request;
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
+                             int num_ad_components = 5) {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata ad_with_bid;
+
+  ad_with_bid.mutable_ad()->mutable_struct_value()->MergeFrom(
+      MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
+  ad_with_bid.set_interest_group_name(MakeARandomString());
+  ad_with_bid.set_render(MakeARandomString());
+  ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
+  ad_with_bid.set_interest_group_owner(MakeARandomString());
+
+  for (int i = 0; i < num_ad_components; i++) {
+    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+  }
+
+  return ad_with_bid;
+}
+
+DebugReportUrls MakeARandomDebugReportUrls() {
+  DebugReportUrls debug_report_urls;
+  debug_report_urls.set_auction_debug_win_url(MakeARandomUrl());
+  debug_report_urls.set_auction_debug_loss_url(MakeARandomUrl());
+  return debug_report_urls;
+}
+
+WinReportingUrls::ReportingUrls MakeARandomReportingUrls(
+    int intraction_entries = 10) {
+  WinReportingUrls::ReportingUrls reporting_urls;
+  reporting_urls.set_reporting_url(MakeARandomUrl());
+  for (int index = 0; index < intraction_entries; index++) {
+    reporting_urls.mutable_interaction_reporting_urls()->try_emplace(
+        MakeARandomString(), MakeARandomUrl());
+  }
+  return reporting_urls;
+}
+
+WinReportingUrls MakeARandomWinReportingUrls() {
+  WinReportingUrls win_reporting_urls;
+  *win_reporting_urls.mutable_buyer_reporting_urls() =
+      MakeARandomReportingUrls();
+  *win_reporting_urls.mutable_component_seller_reporting_urls() =
+      MakeARandomReportingUrls();
+  *win_reporting_urls.mutable_top_level_seller_reporting_urls() =
+      MakeARandomReportingUrls();
+  return win_reporting_urls;
+}
+
+AdWithBid MakeARandomAdWithBid(float min_bid, float max_bid,
+                               int num_ad_components = 5) {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  AdWithBid ad_with_bid;
+
+  ad_with_bid.mutable_ad()->mutable_struct_value()->MergeFrom(
+      MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
+  ad_with_bid.set_interest_group_name(MakeARandomString());
+  ad_with_bid.set_render(MakeARandomString());
+  ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
+  *ad_with_bid.mutable_debug_report_urls() = MakeARandomDebugReportUrls();
+  for (int i = 0; i < num_ad_components; i++) {
+    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+  }
+  ad_with_bid.set_bid_currency("USD");
+  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+  ad_with_bid.set_modeling_signals(MakeARandomInt(0, 100));
+  return ad_with_bid;
+}
+
+GenerateBidsResponse MakeARandomGenerateBidsResponse() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.mutable_bids()->Add(MakeARandomAdWithBid(0, 10));
+
+  GenerateBidsResponse response;
+  *response.mutable_raw_response() = std::move(raw_response);
+  response.set_response_ciphertext(MakeARandomString());
+  return response;
+}
+
+ScoreAdsRequest MakeARandomScoreAdsRequest() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  raw_request.set_allocated_auction_signals(
+      std::move(MakeARandomStructJsonString(1).release()));
+  raw_request.set_allocated_seller_signals(
+      std::move(MakeARandomStructJsonString(1).release()));
+  raw_request.set_publisher_hostname(MakeARandomString());
+
+  ScoreAdsRequest request;
+  request.set_key_id(MakeARandomString());
+  request.set_request_ciphertext(MakeARandomString());
+  *request.mutable_raw_request() = std::move(raw_request);
+  return request;
+}
+
+ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
+  ScoreAdsResponse::AdScore ad_score;
+  float bid = MakeARandomNumber<float>(1, 2.5);
+  float score = MakeARandomNumber<float>(1, 2.5);
+  ad_score.set_desirability(score);
+  ad_score.set_render(MakeARandomString());
+  ad_score.set_interest_group_name(MakeARandomString());
+  ad_score.set_buyer_bid(bid);
+  ad_score.set_interest_group_owner(MakeARandomString());
+  ad_score.set_ad_metadata(MakeARandomString());
+  ad_score.set_allow_component_auction(false);
+  ad_score.set_bid(bid);
+  *ad_score.mutable_debug_report_urls() = MakeARandomDebugReportUrls();
+  *ad_score.mutable_win_reporting_urls() = MakeARandomWinReportingUrls();
+  for (int index = 0; index < hob_buyer_entries; index++) {
+    ad_score.mutable_ig_owner_highest_scoring_other_bids_map()->try_emplace(
+        MakeARandomString(), MakeARandomListOfNumbers());
+  }
+  return ad_score;
+}
+
+ScoreAdsResponse MakeARandomScoreAdsResponse() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+
+  ScoreAdsResponse response;
+  *response.mutable_raw_response() = std::move(raw_response);
+  response.set_response_ciphertext(MakeARandomString());
+  return response;
+}
+
+// Must manually delete/take ownership of underlying pointer
+// build_android_signals: If false, will build browser signals instead.
+BuyerInput::InterestGroup MakeARandomInterestGroup(bool build_android_signals) {
+  BuyerInput::InterestGroup interest_group;
+  interest_group.set_name(MakeARandomString());                             // 1
+  interest_group.mutable_bidding_signals_keys()->Add(MakeARandomString());  // 2
+  interest_group.mutable_bidding_signals_keys()->Add(MakeARandomString());  // 2
+  interest_group.mutable_ads()->MergeFrom(MakeARandomListOfAds());
+  interest_group.set_allocated_user_bidding_signals(
+      MakeARandomStructJsonString(5).release());
+  int ad_render_ids_to_generate = MakeARandomInt(1, 10);
+  for (int i = 0; i < ad_render_ids_to_generate; i++) {
+    *interest_group.mutable_ad_render_ids()->Add() =
+        absl::StrCat("ad_render_id_", MakeARandomString());
+  }
+  if (build_android_signals) {
+    // Empty field right now.
+    interest_group.mutable_android_signals();
+  } else {
+    interest_group.mutable_browser_signals()->CopyFrom(
+        MakeRandomBrowserSignalsForIG(interest_group.ad_render_ids()));
+  }
+  return interest_group;
+}
+
+BuyerInput::InterestGroup MakeARandomInterestGroupFromAndroid() {
+  return MakeARandomInterestGroup(true);
+}
+
+BuyerInput::InterestGroup MakeARandomInterestGroupFromBrowser() {
+  return MakeARandomInterestGroup(false);
+}
+
+GetBidsRequest MakeARandomGetBidsRequest() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_allocated_auction_signals(
+      std::move(MakeARandomStructJsonString(1).release()));
+
+  GetBidsRequest request;
+  request.set_request_ciphertext(MakeARandomString());
+  *request.mutable_raw_request() = std::move(raw_request);
+  return request;
+}
+
+GetBidsResponse MakeARandomGetBidsResponse() {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  GetBidsResponse::GetBidsRawResponse raw_response;
+
+  GetBidsResponse response;
+  *response.mutable_raw_response() = std::move(raw_response);
+  response.set_response_ciphertext(MakeARandomString());
+  return response;
+}
+
+SelectAdRequest MakeARandomSelectAdRequest(
+    absl::string_view seller_domain_origin) {
+  SelectAdRequest request;
+
+  BuyerInput buyer_input_1;
+  BuyerInput buyer_input_2;
+  auto ig_with_two_ads_1 = MakeAnInterestGroupSentFromDevice();
+  auto ig_with_two_ads_2 = MakeAnInterestGroupSentFromDevice();
+  buyer_input_1.mutable_interest_groups()->AddAllocated(
+      ig_with_two_ads_1.release());
+  buyer_input_2.mutable_interest_groups()->AddAllocated(
+      ig_with_two_ads_2.release());
+  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  buyer_inputs.emplace("ad_tech_A.com", buyer_input_1);
+  buyer_inputs.emplace("ad_tech_B.com", buyer_input_2);
+  absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
+      GetEncodedBuyerInputMap(buyer_inputs);
+  request.mutable_raw_protected_audience_input()->set_generation_id(
+      MakeARandomString());
+  *request.mutable_raw_protected_audience_input()->mutable_buyer_input() =
+      *std::move(encoded_buyer_input);
+
+  request.mutable_auction_config()->set_seller_signals(absl::StrCat(
+      "{\"seller_signal\": \"", MakeARandomString(), "\"}"));  // 3.
+
+  request.mutable_auction_config()->set_auction_signals(
+      absl::StrCat("{\"auction_signal\": \"", MakeARandomString(), "\"}"));
+
+  request.mutable_auction_config()->set_seller(MakeARandomString());
+  request.mutable_auction_config()->set_buyer_timeout_ms(1000);
+
+  for (auto& buyer_input_pair :
+       request.raw_protected_audience_input().buyer_input()) {
+    *request.mutable_auction_config()->mutable_buyer_list()->Add() =
+        buyer_input_pair.first;
+  }
+
+  request.mutable_auction_config()->set_seller(seller_domain_origin);
+
+  request.mutable_raw_protected_audience_input()->set_publisher_name(
+      MakeARandomString());  // 6.
+  // 7.
+  request.set_client_type(SelectAdRequest_ClientType_ANDROID);
+
+  return request;
+}
+
+google::protobuf::Value MakeAStringValue(const std::string& v) {
+  google::protobuf::Value obj;
+  obj.set_string_value(v);
+  return obj;
+}
+
+google::protobuf::Value MakeANullValue() {
+  google::protobuf::Value obj;
+  obj.set_null_value(google::protobuf::NULL_VALUE);
+  return obj;
+}
+
+google::protobuf::Value MakeAListValue(
+    const std::vector<google::protobuf::Value>& vec) {
+  google::protobuf::Value obj;
+  for (auto& val : vec) {
+    obj.mutable_list_value()->add_values()->MergeFrom(val);
+  }
+  return obj;
+}
+
+BuyerInput MakeARandomBuyerInput() {
+  BuyerInput_InterestGroup interest_group;
+  interest_group.set_name(MakeARandomString());
+  interest_group.add_bidding_signals_keys(MakeARandomString());
+  interest_group.add_bidding_signals_keys(MakeARandomString());
+  interest_group.add_component_ads(MakeARandomString());
+  interest_group.add_component_ads(MakeARandomString());
+  interest_group.set_user_bidding_signals(MakeARandomString());
+  interest_group.mutable_ads();
+
+  BrowserSignals* signals = interest_group.mutable_browser_signals();
+  signals->set_join_count(MakeARandomInt(0, 10));
+  signals->set_bid_count(MakeARandomInt(0, 10));
+  signals->set_recency(MakeARandomInt(0, 10));
+  signals->set_prev_wins("[]");
+
+  BuyerInput buyer_input;
+  *buyer_input.add_interest_groups() = std::move(interest_group);
+  return buyer_input;
+}
+
+ProtectedAudienceInput MakeARandomProtectAudienceInput() {
+  ProtectedAudienceInput input;
+  input.set_publisher_name(MakeARandomString());
+  input.set_generation_id(MakeARandomString());
+  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  buyer_inputs.emplace(MakeARandomString(), MakeARandomBuyerInput());
+  absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
+      GetEncodedBuyerInputMap(buyer_inputs);
+  *input.mutable_buyer_input() = *std::move(encoded_buyer_input);
+  input.set_enable_debug_reporting(true);
+  return input;
+}
+
+AuctionResult MakeARandomAuctionResult() {
+  AuctionResult result;
+  result.set_ad_render_url(MakeARandomString());
+  result.set_bid(MakeARandomNumber<float>(0.0, 1.0));
+  result.set_interest_group_name(MakeARandomString());
+  result.set_interest_group_owner(MakeARandomString());
+  result.set_score(MakeARandomNumber<float>(0.0, 1.0));
+
+  AuctionResult::InterestGroupIndex ig_indices;
+  ig_indices.add_index(MakeARandomInt(1, 5));
+  result.mutable_bidding_groups()->try_emplace(MakeARandomString(),
+                                               std::move(ig_indices));
+  // TODO(b/287074572): Add reporting URLs and other reporting fields here
+  // when adding support for reporting.
+  return result;
+}
+
+}  // namespace privacy_sandbox::bidding_auction_servers
+
+#endif  // SERVICES_COMMON_TEST_RANDOM_H_

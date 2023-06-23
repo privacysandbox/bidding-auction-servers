@@ -1,0 +1,77 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//:__subpackages__"])
+
+cc_library(
+    name = "v8_dispatcher",
+    srcs = [
+        "v8_dispatcher.cc",
+    ],
+    hdrs = [
+        "v8_dispatcher.h",
+    ],
+    deps = [
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@control_plane_shared//cc/roma/roma_service/src:roma_service_lib",
+    ],
+)
+
+cc_library(
+    name = "code_dispatch_client",
+    srcs = [
+        "code_dispatch_client.cc",
+    ],
+    hdrs = [
+        "code_dispatch_client.h",
+    ],
+    deps = [
+        ":v8_dispatcher",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "code_dispatch_client_test",
+    size = "small",
+    srcs = ["code_dispatch_client_test.cc"],
+    deps = [
+        ":code_dispatch_client",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/test:mocks",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "code_dispatch_client_integration_test",
+    size = "large",
+    srcs = ["code_dispatch_client_integration_test.cc"],
+    deps = [
+        ":code_dispatch_client",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
