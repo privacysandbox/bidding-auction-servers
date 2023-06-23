@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Start Envoy before the nitro allocator service.
+# Otherwise, Envoy segfaults.
+# See b/276754615 for more detail.
+# TODO(b/276754615): Update after envoy fixes its bug.
+docker run --rm \
+--network host \
+-v /etc/envoy:/etc/envoy \
+envoyproxy/envoy-distroless-dev:e0cc4306253f0318f9dcbc77cf32feb6245c378f \
+--config-path /etc/envoy/envoy.yaml \
+-l info &
+# Ping Envoy until it's ready. Silent fail otherwise --
+# load balancer health checks will eventually kill this instance.
+curl --retry 6 --retry-all-errors localhost:9902/ready
+
+# Make sure nitro enclave allocator service is stopped
+systemctl stop nitro-enclaves-allocator.service
+
+# Allocate resources available to enclave
+export ALLOCATOR_YAML=/etc/nitro_enclaves/allocator.yaml
+cat >"$${ALLOCATOR_YAML}" <<EOF
+---
+# How much memory to allocate for enclaves (in MiB).
+memory_mib: ${enclave_memory_mib}
+# How many CPUs to reserve for enclaves.
+cpu_count: ${enclave_cpu_count}
+EOF
+
+# Start nitro enclave service
+systemctl start nitro-enclaves-allocator.service
+systemctl enable nitro-enclaves-allocator.service
+
+# Start the SCP nitro aws proxy service
+systemctl start vsockproxy.service
+systemctl enable vsockproxy.service
+
+# Update otel collector config
+sed -i -e 's/$SERVICE/'${service}'/g' /opt/privacysandbox/otel_collector_config.yaml
+# Start the otel collector
+sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl \
+-c /opt/privacysandbox/otel_collector_config.yaml \
+-a start
+
+nitro-cli run-enclave \
+--cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
+--eif-path /opt/privacysandbox/server_enclave_image.eif \
+--enclave-cid 16 --attach-console ${debug_mode} \
+ > output.log

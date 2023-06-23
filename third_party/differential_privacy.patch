@@ -1,0 +1,15 @@
+diff --git a/algorithms/approx-bounds.h b/algorithms/approx-bounds.h
+index 6141eb4..0ef0fae 100644
+--- a/algorithms/approx-bounds.h
++++ b/algorithms/approx-bounds.h
+@@ -109,8 +109,8 @@ class ApproxBounds : public Algorithm<T> {
+   // Serialize the positive and negative bin counts.
+   Summary Serialize() const override {
+     ApproxBoundsSummary am_summary;
+-    *am_summary.mutable_pos_bin_count() = {pos_bins_.begin(), pos_bins_.end()};
+-    *am_summary.mutable_neg_bin_count() = {neg_bins_.begin(), neg_bins_.end()};
++    am_summary.mutable_pos_bin_count()->Assign(pos_bins_.begin(), pos_bins_.end());
++    am_summary.mutable_neg_bin_count()->Assign(neg_bins_.begin(), neg_bins_.end());
+     Summary summary;
+     summary.mutable_data()->PackFrom(am_summary);
+     return summary;

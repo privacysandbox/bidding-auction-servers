@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/SellerFrontEnd/AuctionResponse",
+  "type": "object",
+  "$defs": {
+    "errorDef": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "number" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "reportingUrlsDef": {
+      "type": "object",
+      "properties": {
+        "reportingUrl": { "type": "string" },
+        "interactionReportingUrls": {
+          "patternProperties": {
+            ".*": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "winReportingUrlsDef": {
+      "type": "object",
+      "buyerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
+      "componentSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
+      "topLevelSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" }
+    }
+  },
+  "properties": {
+    "adRenderURL": {
+      "type": "string",
+      "description": "The ad that will be rendered on the end user's device."
+    },
+    "componentAds": {
+      "type": "array",
+      "description": "List of render URLs for component ads to be displayed as part of this ad",
+      "items": {
+        "type": "string"
+      }
+    },
+    "interestGroupName": {
+      "type": "string",
+      "description": "Name of the InterestGroup (Custom Audience), the remarketing ad belongs to."
+    },
+    "interestGroupOwner": {
+      "type": "string",
+      "description": "Origin of the Buyer who owns the interest group that includes the ad."
+    },
+    "biddingGroups": {
+      "type": "object",
+      "description": "Map from interest group owner to a list of interest groups that bid in this auction",
+      "patternProperties": {
+        "^https://": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "description": "Indices of interest groups in the original request for this owner that submitted a bid for this auction. This is used to update the bidCount for these interest groups. Note that we send the index instead of the name because that allows us to avoid compressing separately."
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "score": {
+      "type": "number",
+      "description": "Score of the ad determined during the auction. Any value that is zero or negative indicates that the ad cannot win the auction. The winner of the auction would be the ad that was given the highest score. The output from ScoreAd() script is desirability that implies score for an ad."
+    },
+    "bid": {
+      "type": "number",
+      "description": "Bid price corresponding to an ad."
+    },
+    "isChaff": {
+      "type": "boolean",
+      "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."
+    },
+    "winReportingUrls": { "$ref": "#/$defs/winReportingUrlsDef" },
+    "error": { "$ref": "#/$defs/errorDef" }
+  }
+}

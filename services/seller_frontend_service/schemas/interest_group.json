@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/BuyerInput/AuctionBlob/InterestGroup",
+  "$defs": {
+    "adRenderId": {
+      "type": "string",
+      "description": "Ad Render ID that can be used to reconstruct the ad object based on server-side information. Sent instead of the ad object."
+    }
+  },
+  "type": "object",
+  "required": [ "name" ],
+  "properties": {
+    "name": {"type": "string"},
+    "biddingSignalsKeys": {
+      "type": "array",
+      "items": {"type": "string", "uniqueItems": true}
+    },
+    "userBiddingSignals": {"type": "string"},
+    "ads": {
+      "type": "array",
+      "items": {
+       "$ref": "#/$defs/adRenderId"
+      }
+    },
+    "componentAds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/adRenderId"
+      }
+    },
+    "browserSignals": {
+      "type": "object",
+      "properties": {
+        "joinCount": {
+          "type": "number",
+          "description": "Number of times the group was joined in the last 30 days."
+        },
+        "bidCount": {
+          "type": "number",
+          "description": "Number of times the group bid in an auction in the last 30 days."
+        },
+        "recency": {
+          "type": "number",
+          "description": "The most recent join time for this group expressed in seconds before the containing auctionBlob was requested."
+        },
+        "prevWins": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "description":
+              "Tuple of time-ad pairs for a previous win for this interest group that occurred in the last 30 days. The time is specified in seconds before the containing auctionBlob was requested.",
+            "items": false,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              { "$ref": "#/$defs/adRenderId"}
+            ]
+          }
+        }
+      }
+    }
+  }
+}

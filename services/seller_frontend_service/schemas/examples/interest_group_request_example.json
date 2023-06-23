@@ -1,0 +1,19 @@
+{
+  "name": "cars",
+  "biddingSignalsKeys": ["key1", "key2"],
+  "userBiddingSignals": "signals",
+  "ads": [
+    "<adRenderId>",
+    "<adRenderId2>"
+  ],
+  "componentAds": [],
+  "browserSignals": {
+    "joinCount": 2,
+    "bidCount": 0,
+    "recency": 1684226729,
+    "prevWins": [
+        [-20, "<adRenderId>"],
+        [-100, "<adRenderId>"]
+      ]
+  }
+}
