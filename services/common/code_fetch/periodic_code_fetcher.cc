@@ -31,7 +31,7 @@ PeriodicCodeFetcher::PeriodicCodeFetcher(
     std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
     const V8Dispatcher& dispatcher, server_common::Executor* executor,
     absl::Duration time_out_ms,
-    absl::AnyInvocable<absl::string_view(absl::string_view)> wrap_code)
+    absl::AnyInvocable<std::string(const std::string&)> wrap_code)
     : url_endpoint_(url_endpoint),
       fetch_period_ms_(fetch_period_ms),
       curl_http_fetcher_(std::move(curl_http_fetcher)),
@@ -63,7 +63,7 @@ void PeriodicCodeFetcher::PeriodicCodeFetch() {
       if (cb_result_value_ != *result) {
         cb_result_value_ = *result;
 
-        absl::string_view wrapped_code = wrap_code_(cb_result_value_);
+        std::string wrapped_code = wrap_code_(cb_result_value_);
         absl::Status syncResult = dispatcher_.LoadSync(1, wrapped_code);
         VLOG(1) << "Roma Client Response: " << syncResult;
         if (syncResult.ok()) {

@@ -31,11 +31,14 @@ namespace privacy_sandbox::bidding_auction_servers {
 class ProtoFactory {
  public:
   static std::unique_ptr<GetBidsResponse::GetBidsRawResponse>
-  CreateGetBidsRawResponse(std::unique_ptr<GenerateBidsResponse> response);
+  CreateGetBidsRawResponse(
+      std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
+          raw_response);
 
   // Creates Bidding Request from GetBidsRawRequest, Bidding Signals.
   // TODO(b/239242947): Set key id and cipher text instead of raw request.
-  static std::unique_ptr<GenerateBidsRequest> CreateGenerateBidsRequest(
+  static std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+  CreateGenerateBidsRawRequest(
       const GetBidsRequest::GetBidsRawRequest& get_bid_raw_request,
       const BuyerInput& buyer_input,
       std::unique_ptr<BiddingSignals> bidding_signals,

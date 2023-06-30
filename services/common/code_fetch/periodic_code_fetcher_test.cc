@@ -34,7 +34,8 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](absl::string_view code_blob) { return "test"; };
+  auto WrapCode = [](const std::string& code_blob) { return "test"; };
+  constexpr char kSampleWrappedCode[] = "test";
 
   absl::BlockingCounter done(1);
   EXPECT_CALL(*curl_http_fetcher, FetchUrl)
@@ -52,8 +53,8 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
 
   EXPECT_CALL(dispatcher, LoadSync)
       .WillOnce(
-          [&done, &url_response, &WrapCode](int version, absl::string_view js) {
-            EXPECT_EQ(js, WrapCode(url_response));
+          [&done, &kSampleWrappedCode](int version, absl::string_view js) {
+            EXPECT_EQ(js, kSampleWrappedCode);
             done.DecrementCount();
             return absl::OkStatus();
           });
@@ -73,7 +74,7 @@ TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](absl::string_view code_blob) { return "test"; };
+  auto WrapCode = [](const std::string& code_blob) { return "test"; };
 
   absl::BlockingCounter done_fetch_url(1);
   EXPECT_CALL(*curl_http_fetcher, FetchUrl)
@@ -113,7 +114,8 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](absl::string_view code_blob) { return "test"; };
+  auto WrapCode = [](const std::string& code_blob) { return "test"; };
+  constexpr char kSampleWrappedCode[] = "test";
 
   absl::BlockingCounter done_fetch_url(2);
   absl::BlockingCounter done_load_sync(1);
@@ -143,9 +145,9 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
 
   EXPECT_CALL(dispatcher, LoadSync)
       .Times(1)
-      .WillOnce([&url_response, &done_load_sync, &WrapCode](
-                    int version, absl::string_view js) {
-        EXPECT_EQ(js, WrapCode(url_response));
+      .WillOnce([&done_load_sync, &kSampleWrappedCode](int version,
+                                                       absl::string_view js) {
+        EXPECT_EQ(js, kSampleWrappedCode);
         done_load_sync.DecrementCount();
         return absl::OkStatus();
       });

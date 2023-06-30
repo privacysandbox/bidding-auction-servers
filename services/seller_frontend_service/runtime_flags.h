@@ -64,7 +64,7 @@ inline constexpr absl::string_view kFlags[] = {
     BUYER_EGRESS_TLS,
 };
 
-std::vector<absl::string_view> GetServiceFlags() {
+inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);
   std::vector<absl::string_view> flags(kFlags, kFlags + size);
 

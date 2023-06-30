@@ -38,6 +38,8 @@ function builder::set_workspace() {
   else
     WORKSPACE="$(git rev-parse --show-toplevel)"
   fi
+  local -r ws_path="$(realpath "${WORKSPACE}"/WORKSPACE)"
+  WORKSPACE="$(dirname "${ws_path}")"
 }
 
 #######################################

@@ -108,7 +108,7 @@ repos:
     name: terraform fmt
     language: script
     pass_filenames: false
-    entry: tools/terraform fmt -write=true -recursive production/deploy
+    entry: builders/tools/terraform fmt -write=true -recursive production/deploy
     exclude: scp/
     types_or:
     - terraform

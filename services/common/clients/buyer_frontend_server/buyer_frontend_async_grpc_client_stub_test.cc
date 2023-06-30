@@ -27,7 +27,8 @@ using ServiceThread =
 
 using BuyerFrontEndImplementationType =
     ::testing::Types<AsyncGrpcClientTypeDefinitions<
-        GetBidsRequest, GetBidsResponse, ServiceThread,
+        GetBidsRequest, GetBidsRequest::GetBidsRawRequest, GetBidsResponse,
+        GetBidsResponse::GetBidsRawResponse, ServiceThread,
         BuyerFrontEndAsyncGrpcClient, BuyerServiceClientConfig>>;
 
 INSTANTIATE_TYPED_TEST_SUITE_P(BuyerFrontEndAsyncGrpcClientStubTest,

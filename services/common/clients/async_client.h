@@ -30,7 +30,8 @@ using RequestMetadata = absl::flat_hash_map<std::string, std::string>;
 
 // Classes implementing this template and interface are able to execute
 // asynchronous requests.
-template <typename Request, typename Response>
+template <typename Request, typename Response, typename RawRequest,
+          typename RawResponse>
 class AsyncClient {
  public:
   // Polymorphic class => virtual destructor
@@ -46,7 +47,18 @@ class AsyncClient {
       std::unique_ptr<Request> request, const RequestMetadata& metadata,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
           on_done,
-      absl::Duration timeout) const = 0;
+      absl::Duration timeout) const {
+    return absl::NotFoundError("Method not implemented.");
+  }
+
+  // Executes the inter service GRPC request asynchronously.
+  virtual absl::Status ExecuteInternal(
+      std::unique_ptr<RawRequest> request, const RequestMetadata& metadata,
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+          on_done,
+      absl::Duration timeout) const {
+    return absl::NotFoundError("Method not implemented.");
+  }
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

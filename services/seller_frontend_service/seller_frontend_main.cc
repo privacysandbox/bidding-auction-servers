@@ -31,23 +31,16 @@
 #include "grpcpp/health_check_service_interface.h"
 #include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
-#include "services/common/clients/auction_server/scoring_async_client.h"
-#include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
-#include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/status_macros.h"
-#include "services/seller_frontend_service/providers/http_scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/runtime_flags.h"
-#include "services/seller_frontend_service/seller_frontend_config.pb.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/config_param_parser.h"
-#include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
@@ -93,10 +86,6 @@ ABSL_FLAG(std::optional<bool>, buyer_egress_tls, std::nullopt,
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-using ::google::protobuf::TextFormat;
-using ::google::scp::cpio::Cpio;
-using ::google::scp::cpio::CpioOptions;
-using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
@@ -137,12 +126,20 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         PRIMARY_COORDINATOR_ACCOUNT_IDENTITY);
   config_client.SetFlag(FLAGS_secondary_coordinator_account_identity,
                         SECONDARY_COORDINATOR_ACCOUNT_IDENTITY);
+  config_client.SetFlag(FLAGS_gcp_primary_workload_identity_pool_provider,
+                        GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_secondary_workload_identity_pool_provider,
+                        GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_primary_key_service_cloud_function_url,
+                        GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+  config_client.SetFlag(FLAGS_gcp_secondary_key_service_cloud_function_url,
+                        GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
   config_client.SetFlag(FLAGS_primary_coordinator_region,
                         PRIMARY_COORDINATOR_REGION);
   config_client.SetFlag(FLAGS_secondary_coordinator_region,
                         SECONDARY_COORDINATOR_REGION);
-  config_client.SetFlag(FLAGS_private_key_cache_ttl_minutes,
-                        PRIVATE_KEY_CACHE_TTL_MINUTES);
+  config_client.SetFlag(FLAGS_private_key_cache_ttl_seconds,
+                        PRIVATE_KEY_CACHE_TTL_SECONDS);
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
@@ -156,111 +153,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   return config_client;
 }
 
-// TODO(b/281533856): Remove SellerFrontEndConfig, it is an unnecessary wrapper.
-SellerFrontEndConfig CreateSellerFrontendConfig(
-    TrustedServersConfigClient& config_client) {
-  std::string port = config_client.GetStringParameter(PORT).data();
-  int get_bid_rpc_timeout =
-      config_client.GetIntParameter(GET_BID_RPC_TIMEOUT_MS);
-  int key_value_signals_fetch_rpc_timeout_ms =
-      config_client.GetIntParameter(KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
-  int score_ads_rpc_timeout_ms =
-      config_client.GetIntParameter(SCORE_ADS_RPC_TIMEOUT_MS);
-  std::string seller_origin_domain =
-      config_client.GetStringParameter(SELLER_ORIGIN_DOMAIN).data();
-  std::string auction_server_host =
-      config_client.GetStringParameter(AUCTION_SERVER_HOST).data();
-  std::string key_value_signals_host =
-      config_client.GetStringParameter(KEY_VALUE_SIGNALS_HOST).data();
-  std::string buyer_server_hosts =
-      config_client.GetStringParameter(BUYER_SERVER_HOSTS).data();
-  bool enable_buyer_compression =
-      config_client.GetBooleanParameter(ENABLE_BUYER_COMPRESSION);
-  bool enable_auction_compression =
-      config_client.GetBooleanParameter(ENABLE_AUCTION_COMPRESSION);
-  bool enable_seller_frontend_benchmarking =
-      config_client.GetBooleanParameter(ENABLE_SELLER_FRONTEND_BENCHMARKING);
-  bool enable_encryption = config_client.GetBooleanParameter(ENABLE_ENCRYPTION);
-
-  SellerFrontEndConfig config;
-  config.set_server_listen_port(port);
-  config.set_get_bid_rpc_timeout_ms(get_bid_rpc_timeout);
-  config.set_key_value_signals_fetch_rpc_timeout_ms(
-      key_value_signals_fetch_rpc_timeout_ms);
-  config.set_score_ads_rpc_timeout_ms(score_ads_rpc_timeout_ms);
-  config.set_seller_origin_domain(seller_origin_domain);
-  config.set_auction_server_host(auction_server_host);
-  config.set_key_value_signals_host(key_value_signals_host);
-  config.set_buyer_server_hosts(buyer_server_hosts);
-  config.set_enable_buyer_compression(enable_buyer_compression);
-  config.set_enable_auction_compression(enable_auction_compression);
-  config.set_enable_seller_frontend_benchmarking(
-      enable_seller_frontend_benchmarking);
-  config.set_enable_encryption(enable_encryption);
-  return config;
-}
-
 // Brings up the gRPC SellerFrontEndService on the FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
-
-  SellerFrontEndConfig config = CreateSellerFrontendConfig(config_client);
-
-  std::string server_address =
-      absl::StrCat("0.0.0.0:", config.server_listen_port());
-  server_common::GrpcInit gprc_init;
-  auto executor = std::make_unique<server_common::EventEngineExecutor>(
-      config_client.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
-          ? grpc_event_engine::experimental::CreateEventEngine()
-          : grpc_event_engine::experimental::GetDefaultEventEngine());
-
-  std::unique_ptr<SellerKeyValueAsyncHttpClient> kv_http_client;
-  // Reporting Client.
-  std::unique_ptr<AsyncReporter> async_reporter;
-  kv_http_client = std::make_unique<SellerKeyValueAsyncHttpClient>(
-      config.key_value_signals_host(),
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
-  async_reporter = std::make_unique<AsyncReporter>(
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
-
-  // Scoring Signals Provider
-  HttpScoringSignalsAsyncProvider scoring_signals_async_provider(
-      std::move(kv_http_client));
-
-  std::unique_ptr<server_common::KeyFetcherManagerInterface>
-      key_fetcher_manager = CreateKeyFetcherManager(config_client);
-  std::unique_ptr<CryptoClientWrapperInterface> crypto_client =
-      CreateCryptoClient();
-
-  AuctionServiceClientConfig client_config = {
-      .server_addr = config.auction_server_host(),
-      .compression = config.enable_auction_compression(),
-      .secure_client = config_client.GetBooleanParameter(AUCTION_EGRESS_TLS),
-      .encryption_enabled =
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION)};
-  ScoringAsyncGrpcClient scoring_client(
-      key_fetcher_manager.get(), crypto_client.get(), std::move(client_config));
-
-  // Buyer Clients.
-  PS_ASSIGN_OR_RETURN((absl::flat_hash_map<std::string, std::string>
-                           status_or_ig_owner_to_bfe_domain_map),
-                      ParseIgOwnerToBfeDomainMap(config.buyer_server_hosts()));
-
-  BuyerServiceClientConfig buyer_service_client_config = {
-      .compression = config.enable_buyer_compression(),
-      .secure_client = config_client.GetBooleanParameter(BUYER_EGRESS_TLS),
-      .encryption_enabled =
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION)};
-  BuyerFrontEndAsyncClientFactory buyer_clients(
-      status_or_ig_owner_to_bfe_domain_map, key_fetcher_manager.get(),
-      crypto_client.get(), buyer_service_client_config);
-
-  // Client Registry.
-  ClientRegistry clients(scoring_signals_async_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager.get(),
-                         std::move(async_reporter));
 
   server_common::metric::BuildDependentConfig telemetry_config(
       config_client
@@ -279,7 +176,13 @@ absl::Status RunServer() {
           ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
           .get());
 
-  SellerFrontEndService seller_frontend_service(config, clients);
+  std::string server_address =
+      absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
+  server_common::GrpcInit gprc_init;
+
+  SellerFrontEndService seller_frontend_service(
+      &config_client, CreateKeyFetcherManager(config_client),
+      CreateCryptoClient());
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;

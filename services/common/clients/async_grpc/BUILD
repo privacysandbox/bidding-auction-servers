@@ -25,7 +25,10 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients:async_client",
+        "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper_interface",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/util:error_categories",
         "//services/common/util:status_macros",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
     ],
@@ -38,6 +41,7 @@ cc_test(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/clients/async_grpc:default_async_grpc_client",
+        "//services/common/constants:common_service_flags",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
@@ -55,10 +59,32 @@ cc_test(
     srcs = ["default_async_grpc_client_test.cc"],
     deps = [
         "//services/common/clients/async_grpc:default_async_grpc_client",
+        "//services/common/constants:common_service_flags",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:random",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/synchronization",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "default_raw_async_grpc_client_integration_test_utils",
+    size = "medium",
+    srcs = ["default_raw_async_grpc_client_stub_test.h"],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/clients/async_grpc:default_async_grpc_client",
+        "//services/common/constants:common_service_flags",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

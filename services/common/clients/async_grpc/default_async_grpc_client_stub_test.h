@@ -28,18 +28,29 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "services/common/clients/client_params.h"
+#include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/crypto_client_factory.h"
+#include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+constexpr char kSecret[] = "secret";
+constexpr char kKeyId[] = "keyid";
 
-template <typename Request, typename Response, typename ServiceThread,
-          typename TestClient, typename ClientConfig>
+using ::testing::AnyNumber;
+
+template <typename Request, typename RawRequest, typename Response,
+          typename RawResponse, typename ServiceThread, typename TestClient,
+          typename ClientConfig>
 struct AsyncGrpcClientTypeDefinitions {
   using RequestType = Request;
+  using RawRequestType = RawRequest;
   using ResponseType = Response;
+  using RawResponseType = RawResponse;
   using ServiceThreadType = ServiceThread;
   using TestClientType = TestClient;
   using ClientConfigType = ClientConfig;
@@ -50,46 +61,100 @@ class AsyncGrpcClientStubTest : public ::testing::Test {};
 
 TYPED_TEST_SUITE_P(AsyncGrpcClientStubTest);
 
+template <typename T>
+void SetupMockCryptoClientWrapper(T request,
+                                  MockCryptoClientWrapper& crypto_client) {
+  // Mock the HpkeEncrypt() call on the crypto client.
+  google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
+      hpke_encrypt_response;
+  hpke_encrypt_response.set_secret(kSecret);
+  hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+  hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
+      request.SerializeAsString());
+  EXPECT_CALL(crypto_client, HpkeEncrypt)
+      .Times(testing::AnyNumber())
+      .WillOnce(testing::Return(hpke_encrypt_response));
+
+  // Mock the HpkeDecrypt() call on the crypto_client.
+  google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+      hpke_decrypt_response;
+  hpke_decrypt_response.set_payload(request.SerializeAsString());
+  hpke_decrypt_response.set_secret(kSecret);
+  EXPECT_CALL(crypto_client, HpkeDecrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly(testing::Return(hpke_decrypt_response));
+
+  // Mock the AeadEncrypt() call on the crypto_client.
+  google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+  data.set_ciphertext(request.SerializeAsString());
+  google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+      aead_encrypt_response;
+  *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+  EXPECT_CALL(crypto_client, AeadEncrypt)
+      .Times(AnyNumber())
+      .WillOnce(testing::Return(aead_encrypt_response));
+
+  // Mock the AeadDecrypt() call on the crypto_client.
+  google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse
+      aead_decrypt_response;
+  aead_decrypt_response.set_payload(request.SerializeAsString());
+  EXPECT_CALL(crypto_client, AeadDecrypt)
+      .Times(AnyNumber())
+      .WillOnce(testing::Return(aead_decrypt_response));
+}
+
 TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
+  using RawRequest = typename TypeParam::RawRequestType;
   using Response = typename TypeParam::ResponseType;
+  using RawResponse = typename TypeParam::RawResponseType;
   using TestClient = typename TypeParam::TestClientType;
   using ClientConfig = typename TypeParam::ClientConfigType;
 
-  Request received_request;
+  RawRequest received_request;
   auto dummy_service_thread_ = std::make_unique<ServiceThread>(
       [&received_request](grpc::CallbackServerContext* context,
                           const Request* request, Response* response) {
-        received_request = *request;
+        received_request.ParseFromString(request->request_ciphertext());
         auto reactor = context->DefaultReactor();
         reactor->Finish(grpc::Status::OK);
         return reactor;
       });
 
-  ClientConfig client_config;
-  client_config.server_addr = dummy_service_thread_->GetServerAddr();
-
-  TestClient class_under_test(nullptr, nullptr, client_config);
+  ClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  RawRequest raw_request;
+  auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClientWrapper(raw_request, crypto_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
+                              client_config);
   absl::Notification notification;
-  Request request;
-  auto input_request_ptr = std::make_unique<Request>(request);
 
-  class_under_test.Execute(
+  class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
   notification.WaitForNotification();
   EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
-      request, received_request));
+      raw_request, received_request));
 }
 
 TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
+  using RawRequest = typename TypeParam::RawRequestType;
   using Response = typename TypeParam::ResponseType;
+  using RawResponse = typename TypeParam::RawResponseType;
   using TestClient = typename TypeParam::TestClientType;
   using ClientConfig = typename TypeParam::ClientConfigType;
 
@@ -112,15 +177,25 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
         return reactor;
       });
 
-  ClientConfig client_config;
-  client_config.server_addr = dummy_service_thread_->GetServerAddr();
-
-  TestClient class_under_test(nullptr, nullptr, client_config);
+  ClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  RawRequest raw_request;
+  auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClientWrapper(raw_request, crypto_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
+                              client_config);
   absl::Notification notification;
-  class_under_test.Execute(
-      std::make_unique<Request>(), sent_metadata,
+  class_under_test.ExecuteInternal(
+      std::make_unique<RawRequest>(), sent_metadata,
       [&notification](
-          absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
   notification.WaitForNotification();
@@ -137,7 +212,9 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
 TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
+  using RawRequest = typename TypeParam::RawRequestType;
   using Response = typename TypeParam::ResponseType;
+  using RawResponse = typename TypeParam::RawResponseType;
   using TestClient = typename TypeParam::TestClientType;
   using ClientConfig = typename TypeParam::ClientConfigType;
 
@@ -150,17 +227,26 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
         return reactor;
       });
 
-  ClientConfig client_config;
-  client_config.server_addr = dummy_service_thread_->GetServerAddr();
-
-  TestClient class_under_test(nullptr, nullptr, client_config);
-  auto input_request_ptr = std::make_unique<Request>();
+  ClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  RawRequest raw_request;
+  auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClientWrapper(raw_request, crypto_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
+                              client_config);
   absl::Notification notification;
 
-  class_under_test.Execute(
+  class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         EXPECT_EQ(get_values_response.status().code(),
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();
@@ -172,11 +258,12 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
 TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
+  using RawRequest = typename TypeParam::RawRequestType;
   using Response = typename TypeParam::ResponseType;
+  using RawResponse = typename TypeParam::RawResponseType;
   using TestClient = typename TypeParam::TestClientType;
   using ClientConfig = typename TypeParam::ClientConfigType;
 
-  auto input_request_ptr = std::make_unique<Request>();
   absl::Notification notification;
   absl::Duration timeout = absl::Milliseconds(MakeARandomInt(50, 100));
   auto expected_timeout = absl::Now() + timeout;
@@ -199,14 +286,24 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
         return reactor;
       });
 
-  ClientConfig client_config;
-  client_config.server_addr = dummy_service_thread_->GetServerAddr();
-
-  TestClient class_under_test(nullptr, nullptr, client_config);
-  class_under_test.Execute(
+  ClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  RawRequest raw_request;
+  auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClientWrapper(raw_request, crypto_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
+                              client_config);
+  class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       },
       timeout);
@@ -219,35 +316,46 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
 TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
+  using RawRequest = typename TypeParam::RawRequestType;
   using Response = typename TypeParam::ResponseType;
+  using RawResponse = typename TypeParam::RawResponseType;
   using TestClient = typename TypeParam::TestClientType;
   using ClientConfig = typename TypeParam::ClientConfigType;
 
-  Response expected_output;
+  RawResponse expected_output;
   auto dummy_service_thread_ = std::make_unique<ServiceThread>(
       [expected_output](grpc::CallbackServerContext* context,
                         const Request* request, Response* response) {
-        *response = expected_output;
+        response->set_response_ciphertext(expected_output.SerializeAsString());
 
         auto reactor = context->DefaultReactor();
         reactor->Finish(grpc::Status::OK);
         return reactor;
       });
 
-  ClientConfig client_config;
-  client_config.server_addr = dummy_service_thread_->GetServerAddr();
-
-  TestClient class_under_test(nullptr, nullptr, client_config);
+  ClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  RawRequest raw_request;
+  auto input_request_ptr = std::make_unique<RawRequest>();
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClientWrapper(raw_request, crypto_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
+                              client_config);
   absl::Notification notification;
   std::unique_ptr<Response> output;
-  auto input_request_ptr = std::make_unique<Request>();
 
-  class_under_test.Execute(
+  class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification, &expected_output](
-          absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
-            *get_values_response.value().get(), expected_output));
+            **get_values_response, expected_output));
         notification.Notify();
       });
 

@@ -64,7 +64,7 @@ while [[ $# -gt 0 ]]; do
       if [[ -z ${IMAGE} ]]; then
         usage
       fi
-      shift 2
+      shift 2 || usage
       ;;
     --fast)
       FAST=1
@@ -237,7 +237,7 @@ function generate_hashes_cbuild() {
 generate_hashes_direct
 
 if [[ ${FAST} -eq 1 ]]; then
-  exit
+  exit ${RETCODE}
 fi
 
 generate_hashes_cbuild

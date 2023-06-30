@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <string>
+
 #include <include/gmock/gmock-matchers.h>
 
 #include "absl/status/statusor.h"
@@ -31,23 +33,23 @@ class MockCryptoClientWrapper : public CryptoClientWrapperInterface {
                   google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse>,
               HpkeEncrypt,
               (const google::cmrt::sdk::public_key_service::v1::PublicKey&,
-               absl::string_view),
+               const std::string&),
               (noexcept, override));
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse>,
               HpkeDecrypt,
               (const server_common::PrivateKey& private_key,
-               absl::string_view ciphertext),
+               const std::string& ciphertext),
               (noexcept, override));
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>,
               AeadEncrypt,
-              (absl::string_view plaintext_payload, absl::string_view secret),
+              (const std::string& plaintext_payload, const std::string& secret),
               (noexcept, override));
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>,
               AeadDecrypt,
-              (absl::string_view plaintext_payload, absl::string_view secret),
+              (const std::string& plaintext_payload, const std::string& secret),
               (noexcept, override));
 };
 

@@ -42,10 +42,26 @@ struct GetSellerValuesOutput {
   std::string result;
 };
 
+// The data used to build the Seller KV look url suffix
+struct GetSellerValuesRawInput {
+  // [SSP] List of keys to query values for, under the namespace renderUrls.
+  std::vector<std::string> render_urls;
+
+  // [SSP] List of keys to query values for, under the namespace
+  // adComponentRenderUrls.
+  std::vector<std::string> ad_component_render_urls;
+};
+
+// Response from Seller Key Value server as JSON string.
+struct GetSellerValuesRawOutput {
+  std::string result;
+};
+
 // This class fetches Key/Value pairs from a Seller Key/Value Server instance
 // using a http client.
 class SellerKeyValueAsyncHttpClient
-    : public AsyncClient<GetSellerValuesInput, GetSellerValuesOutput> {
+    : public AsyncClient<GetSellerValuesInput, GetSellerValuesOutput,
+                         GetSellerValuesRawInput, GetSellerValuesRawOutput> {
  public:
   // HttpFetcherAsync argument must outlive instance.
   // This class uses the http client to fetch KV values in real time.

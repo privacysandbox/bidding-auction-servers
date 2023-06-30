@@ -27,8 +27,9 @@ using ServiceThread = MockServerThread<AuctionServiceMock, Request, Response>;
 
 using ScoringImplementationType =
     ::testing::Types<AsyncGrpcClientTypeDefinitions<
-        Request, Response, ServiceThread, ScoringAsyncGrpcClient,
-        AuctionServiceClientConfig>>;
+        Request, ScoreAdsRequest::ScoreAdsRawRequest, Response,
+        ScoreAdsResponse::ScoreAdsRawResponse, ServiceThread,
+        ScoringAsyncGrpcClient, AuctionServiceClientConfig>>;
 
 INSTANTIATE_TYPED_TEST_SUITE_P(ScoringAsyncGrpcClientStubTest,
                                AsyncGrpcClientStubTest,

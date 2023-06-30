@@ -22,7 +22,7 @@ void AsyncReporter::DoReport(
     const HTTPRequest& reporting_request,
     absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
         done_callback) {
-  this->http_fetcher_async_->FetchUrl(reporting_request, kNormalTimeoutMs,
-                                      std::move(done_callback));
+  http_fetcher_async_->FetchUrl(reporting_request, kNormalTimeoutMs,
+                                std::move(done_callback));
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

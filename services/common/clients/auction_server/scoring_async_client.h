@@ -29,7 +29,9 @@
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-using ScoringAsyncClient = AsyncClient<ScoreAdsRequest, ScoreAdsResponse>;
+using ScoringAsyncClient = AsyncClient<ScoreAdsRequest, ScoreAdsResponse,
+                                       ScoreAdsRequest::ScoreAdsRawRequest,
+                                       ScoreAdsResponse::ScoreAdsRawResponse>;
 
 struct AuctionServiceClientConfig {
   std::string server_addr;
@@ -41,7 +43,8 @@ struct AuctionServiceClientConfig {
 // This class is an async grpc client for the Fledge Auction (Scoring) Service.
 class ScoringAsyncGrpcClient
     : public DefaultAsyncGrpcClient<ScoreAdsRequest, ScoreAdsResponse,
-                                    ScoreAdsResponse_ScoreAdsRawResponse> {
+                                    ScoreAdsRequest::ScoreAdsRawRequest,
+                                    ScoreAdsResponse::ScoreAdsRawResponse> {
  public:
   explicit ScoringAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -53,8 +56,10 @@ class ScoringAsyncGrpcClient
   //
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
-  absl::Status SendRpc(ClientParams<ScoreAdsRequest, ScoreAdsResponse>* params,
-                       absl::string_view hpke_secret) const override;
+  absl::Status SendRpc(const std::string& hpke_secret,
+                       RawClientParams<ScoreAdsRequest, ScoreAdsResponse,
+                                       ScoreAdsResponse::ScoreAdsRawResponse>*
+                           params) const override;
 
   std::unique_ptr<Auction::Stub> stub_;
 };

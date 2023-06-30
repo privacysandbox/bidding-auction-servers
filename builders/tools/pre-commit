@@ -143,7 +143,7 @@ if [[ $# -gt 0 ]]; then
         --entrypoint=/usr/pre-commit-venv/bin/pre-commit \
         --volume "${WORKSPACE}":/src/workspace \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        --env "${SKIP_ENV}" \
+        --env="${SKIP_ENV}" \
         --workdir /src/workspace \
         "${IMAGE_TAGGED}" \
         "${PRECOMMIT_CMD}" --config ./.pre-commit-config.yaml "$@"

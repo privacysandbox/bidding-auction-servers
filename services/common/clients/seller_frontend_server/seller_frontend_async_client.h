@@ -35,7 +35,8 @@ inline constexpr absl::Duration sfe_client_max_timeout =
     absl::Milliseconds(60000);
 
 using SellerFrontEndAsyncClient =
-    AsyncClient<SelectAdRequest, SelectAdResponse>;
+    AsyncClient<SelectAdRequest, SelectAdResponse, SelectAdRequest,
+                SelectAdResponse>;
 
 struct SellerFrontEndServiceClientConfig {
   std::string server_addr;

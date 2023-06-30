@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
-load("@rules_proto//proto:defs.bzl", "proto_descriptor_set", "proto_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,22 +25,6 @@ cc_library(
         "//services/common/constants:common_service_flags",
         "@com_google_absl//absl/strings",
     ],
-)
-
-proto_library(
-    name = "seller_frontend_config_proto",
-    srcs = ["seller_frontend_config.proto"],
-    deps = [],
-)
-
-proto_descriptor_set(
-    name = "seller_frontend_config_descriptor_set",
-    deps = [":seller_frontend_config_proto"],
-)
-
-cc_proto_library(
-    name = "seller_frontend_config_cc_proto",
-    deps = [":seller_frontend_config_proto"],
 )
 
 cc_library(
@@ -62,10 +45,10 @@ cc_library(
     ],
     deps = [
         ":runtime_flags",
-        ":seller_frontend_config_cc_proto",
         ":seller_frontend_providers",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common/clients:multi_curl_http_fetcher_async",
         "//services/common/clients:scoring_async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client_factory",
@@ -96,6 +79,7 @@ cc_library(
         "@control_plane_shared//cc/public/cpio/interface:cpio",
         "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
         "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
@@ -155,8 +139,6 @@ cc_binary(
     ],
     deps = [
         ":seller_frontend_service",
-        "//services/common/clients:multi_curl_http_fetcher_async",
-        "//services/common/clients:seller_key_value_async_http_client",
         "//services/common/clients/config:config_client_util",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
@@ -170,8 +152,6 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
         "@rapidjson",
     ],

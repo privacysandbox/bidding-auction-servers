@@ -28,7 +28,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
-void LogMetrics(const GetBidsRequest* request) {
+void LogMetrics(const GetBidsRequest* request, GetBidsResponse* response) {
   auto& metric_context = metric::BfeContextMap()->Get(request);
   LogIfError(
       metric_context
@@ -39,29 +39,42 @@ void LogMetrics(const GetBidsRequest* request) {
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
+  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+      (int)request->ByteSizeLong()));
+
+  LogIfError(
+      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
+          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context.LogUpDownCounterDeferred<
+             server_common::metric::kTotalRequestFailedCount>(
+      [&metric_context]() -> int {
+        return metric_context.is_request_successful() ? 0 : 1;
+      }));
 }
 }  // namespace
 
 BuyerFrontEndService::BuyerFrontEndService(
     std::unique_ptr<BiddingSignalsAsyncProvider> bidding_signals_async_provider,
-    std::unique_ptr<BiddingAsyncClient> bidding_async_client,
-    server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-    CryptoClientWrapperInterface* crypto_client, const GetBidsConfig config,
-    bool enable_benchmarking)
+    const BiddingServiceClientConfig& client_config,
+    std::unique_ptr<server_common::KeyFetcherManagerInterface>
+        key_fetcher_manager,
+    std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
+    const GetBidsConfig config, bool enable_benchmarking)
     : bidding_signals_async_provider_(
           std::move(bidding_signals_async_provider)),
-      bidding_async_client_(std::move(bidding_async_client)),
-      key_fetcher_manager_(key_fetcher_manager),
-      crypto_client_(crypto_client),
       config_(std::move(config)),
-      enable_benchmarking_(enable_benchmarking) {}
+      enable_benchmarking_(enable_benchmarking),
+      key_fetcher_manager_(std::move(key_fetcher_manager)),
+      crypto_client_(std::move(crypto_client)),
+      bidding_async_client_(std::make_unique<BiddingAsyncGrpcClient>(
+          key_fetcher_manager_.get(), crypto_client_.get(), client_config)) {}
 
 grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
     grpc::CallbackServerContext* context, const GetBidsRequest* request,
     GetBidsResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("GetBids"));
-  LogMetrics(request);
+  LogMetrics(request, response);
 
   VLOG(2) << "\nGetBidsRequest:\n" << request->DebugString();
   if (VLOG_IS_ON(2)) {
@@ -74,8 +87,8 @@ grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
   // Will be deleted in onDone
   auto reactor = std::make_unique<GetBidsUnaryReactor>(
       *context, *request, *response, *bidding_signals_async_provider_,
-      *bidding_async_client_, config_, key_fetcher_manager_, crypto_client_,
-      enable_benchmarking_);
+      *bidding_async_client_, config_, key_fetcher_manager_.get(),
+      crypto_client_.get(), enable_benchmarking_);
   reactor->Execute();
   return reactor.release();
 }

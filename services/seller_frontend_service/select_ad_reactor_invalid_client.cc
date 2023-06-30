@@ -21,8 +21,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 SelectAdReactorInvalidClient::SelectAdReactorInvalidClient(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const SellerFrontEndConfig& config)
-    : SelectAdReactor(context, request, response, clients, config),
+    const TrustedServersConfigClient& config_client)
+    : SelectAdReactor(context, request, response, clients, config_client),
       client_type_(request->client_type()) {}
 
 void SelectAdReactorInvalidClient::Execute() {
@@ -30,6 +30,28 @@ void SelectAdReactorInvalidClient::Execute() {
       grpc::INVALID_ARGUMENT,
       absl::StrCat(kUnsupportedClientType, " (",
                    SelectAdRequest_ClientType_Name(client_type_), ")")));
+}
+
+absl::StatusOr<std::string>
+SelectAdReactorInvalidClient::GetNonEncryptedResponse(
+    const std::optional<ScoreAdsResponse::AdScore>& high_score,
+    const google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>&
+        bidding_group_map,
+    const std::optional<AuctionResult::Error>& error) {
+  return "";
+}
+
+ProtectedAudienceInput
+SelectAdReactorInvalidClient::GetDecodedProtectedAudienceInput(
+    absl::string_view encoded_data) {
+  return {};
+}
+
+absl::flat_hash_map<absl::string_view, BuyerInput>
+SelectAdReactorInvalidClient::GetDecodedBuyerinputs(
+    const google::protobuf::Map<std::string, std::string>&
+        encoded_buyer_inputs) {
+  return {};
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -50,7 +50,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
         void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
         on_done,
     absl::Duration timeout) const {
-  HTTPRequest request = BuildBuyerKeyValueRequest(this->kv_server_base_address_,
+  HTTPRequest request = BuildBuyerKeyValueRequest(kv_server_base_address_,
                                                   metadata, std::move(keys));
   VLOG(2) << "BuyerKeyValueAsyncHttpClient Request: " << request.url;
   auto done_callback = [on_done = std::move(on_done)](
@@ -68,7 +68,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
       std::move(on_done)(resultStr.status());
     }
   };
-  this->http_fetcher_async_->FetchUrl(
+  http_fetcher_async_->FetchUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),
       std::move(done_callback));
   return absl::OkStatus();
@@ -81,7 +81,7 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetBuyerValuesInput>();
-    this->Execute(
+    Execute(
         std::move(request), {},
         [](absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
                buyer_kv_output) mutable {

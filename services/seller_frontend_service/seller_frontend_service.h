@@ -16,6 +16,7 @@
 #define SERVICES_SELLER_FRONTEND_SERVICE_SELLER_FRONTEND_SERVICE_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include <grpcpp/grpcpp.h>
@@ -25,9 +26,15 @@
 #include "services/common/clients/auction_server/scoring_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
+#include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/seller_frontend_service/providers/http_scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/providers/scoring_signals_async_provider.h"
-#include "services/seller_frontend_service/seller_frontend_config.pb.h"
+#include "services/seller_frontend_service/runtime_flags.h"
+#include "services/seller_frontend_service/util/config_param_parser.h"
+#include "src/core/lib/event_engine/default_event_engine.h"
+#include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -39,23 +46,8 @@ struct ClientRegistry {
   const ScoringAsyncClient& scoring;
   const ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>&
       buyer_factory;
-  server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
+  server_common::KeyFetcherManagerInterface& key_fetcher_manager_;
   std::unique_ptr<AsyncReporter> reporting;
-  explicit ClientRegistry(
-      const ScoringSignalsAsyncProvider& scoring_signals_async_provider,
-      const ScoringAsyncClient& scoring,
-      const ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>&
-          buyer_factory,
-      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      std::unique_ptr<AsyncReporter> reporting_)
-      : scoring_signals_async_provider(scoring_signals_async_provider),
-        scoring(scoring),
-        buyer_factory(buyer_factory),
-        key_fetcher_manager_(key_fetcher_manager),
-        reporting(std::move(reporting_)) {
-    CHECK(key_fetcher_manager_ != nullptr)
-        << "KeyFetcherManager cannot be null";
-  }
 };
 
 // SellerFrontEndService implements business logic to orchestrate requests
@@ -65,9 +57,64 @@ struct ClientRegistry {
 // code in a secure privacy sandbox inside a secure Virtual Machine.
 class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
  public:
-  explicit SellerFrontEndService(const SellerFrontEndConfig& config,
-                                 const ClientRegistry& clients)
-      : config_(config), clients_(clients) {}
+  SellerFrontEndService(
+      const TrustedServersConfigClient* config_client,
+      std::unique_ptr<server_common::KeyFetcherManagerInterface>
+          key_fetcher_manager,
+      std::unique_ptr<CryptoClientWrapperInterface> crypto_client)
+      : config_client_(*config_client),
+        key_fetcher_manager_(std::move(key_fetcher_manager)),
+        crypto_client_(std::move(crypto_client)),
+        executor_(std::make_unique<server_common::EventEngineExecutor>(
+            config_client_.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
+                ? grpc_event_engine::experimental::CreateEventEngine()
+                : grpc_event_engine::experimental::GetDefaultEventEngine())),
+        scoring_signals_async_provider_(
+            std::make_unique<HttpScoringSignalsAsyncProvider>(
+                std::make_unique<SellerKeyValueAsyncHttpClient>(
+                    config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
+                    std::make_unique<MultiCurlHttpFetcherAsync>(
+                        executor_.get()),
+                    true))),
+        scoring_(std::make_unique<ScoringAsyncGrpcClient>(
+            key_fetcher_manager_.get(), crypto_client_.get(),
+            AuctionServiceClientConfig{
+                .server_addr =
+                    config_client_.GetStringParameter(AUCTION_SERVER_HOST)
+                        .data(),
+                .compression = config_client_.GetBooleanParameter(
+                    ENABLE_AUCTION_COMPRESSION),
+                .secure_client =
+                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS),
+                .encryption_enabled =
+                    config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)})),
+        buyer_factory_([this]() {
+          absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+              ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(
+                  config_client_.GetStringParameter(BUYER_SERVER_HOSTS));
+          CHECK_OK(ig_owner_to_bfe_domain_map);
+          return std::make_unique<BuyerFrontEndAsyncClientFactory>(
+              *ig_owner_to_bfe_domain_map, key_fetcher_manager_.get(),
+              crypto_client_.get(),
+              BuyerServiceClientConfig{
+                  .compression = config_client_.GetBooleanParameter(
+                      ENABLE_BUYER_COMPRESSION),
+                  .secure_client =
+                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS),
+                  .encryption_enabled =
+                      config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)});
+        }()),
+        clients_{
+            *scoring_signals_async_provider_, *scoring_, *buyer_factory_,
+            *key_fetcher_manager_,
+            std::make_unique<AsyncReporter>(
+                std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))} {
+  }
+
+  SellerFrontEndService(const TrustedServersConfigClient* config_client,
+                        ClientRegistry clients)
+      : config_client_(*config_client), clients_(std::move(clients)) {}
+
   // Selects a winning ad by running an ad auction.
   //
   // This is an rpc endpoint which will lead to further requests (rpc and http)
@@ -85,8 +132,16 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       bidding_auction_servers::SelectAdResponse* response) override;
 
  private:
-  const SellerFrontEndConfig& config_;
-  const ClientRegistry& clients_;
+  const TrustedServersConfigClient& config_client_;
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+  std::unique_ptr<CryptoClientWrapperInterface> crypto_client_;
+  std::unique_ptr<server_common::Executor> executor_;
+  std::unique_ptr<ScoringSignalsAsyncProvider> scoring_signals_async_provider_;
+  std::unique_ptr<ScoringAsyncClient> scoring_;
+  std::unique_ptr<ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>>
+      buyer_factory_;
+  const ClientRegistry clients_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

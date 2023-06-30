@@ -158,7 +158,7 @@ cc_library(
 )
 
 cc_test(
-    name = "buyer_frontend_service_test",
+    name = "get_bids_unary_reactor_test",
     size = "small",
     srcs = [
         "get_bids_unary_reactor_test.cc",
@@ -170,6 +170,7 @@ cc_test(
         "//services/common/test:random",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
     ],
 )
 

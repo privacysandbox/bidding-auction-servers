@@ -53,7 +53,7 @@ class TrustedServersConfigClient {
   // This provides a way to make the configurations optional and provide
   // default values in the code in case not specified in the cloud metadata.
   // This further enables the cloud metadata to only contain the values that
-  // are mandatory or need to be overriden.
+  // are mandatory or need to be overridden.
   explicit TrustedServersConfigClient(
       absl::Span<const absl::string_view> all_flags,
       absl::AnyInvocable<
@@ -70,18 +70,21 @@ class TrustedServersConfigClient {
   // from the cloud metadata store.
   absl::Status Init(std::string_view config_param_prefix) noexcept;
 
+  // Checks if a parameter is present in the config client.
+  bool HasParameter(absl::string_view name) const noexcept;
+
   // Fetches the string value for the specified config parameter.
-  absl::string_view GetStringParameter(absl::string_view name) noexcept;
+  absl::string_view GetStringParameter(absl::string_view name) const noexcept;
 
   // Fetches the boolean value for the specified config parameter.
-  bool GetBooleanParameter(absl::string_view name) noexcept;
+  bool GetBooleanParameter(absl::string_view name) const noexcept;
 
   // Fetches the int value for the specified config parameter.
-  int GetIntParameter(absl::string_view name) noexcept;
+  int GetIntParameter(absl::string_view name) const noexcept;
 
   // Fetches custom flag value for the specified config parameter.
   template <typename T>
-  T GetCustomParameter(absl::string_view name) noexcept {
+  T GetCustomParameter(absl::string_view name) const noexcept {
     T flag_parsed;
     std::string err;
     CHECK(AbslParseFlag(config_entries_map_.at(name), &flag_parsed, &err))
@@ -115,6 +118,11 @@ class TrustedServersConfigClient {
     if (flag_value.has_value()) {
       config_entries_map_[config_name] = AbslUnparseFlag(*flag_value);
     }
+  }
+
+  void SetFlagForTest(absl::string_view flag_value,
+                      absl::string_view config_name) {
+    config_entries_map_[config_name] = flag_value;
   }
 
  private:

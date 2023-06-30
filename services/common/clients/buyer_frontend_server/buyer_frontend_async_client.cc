@@ -34,17 +34,33 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
 }
 
 absl::Status BuyerFrontEndAsyncGrpcClient::SendRpc(
-    ClientParams<GetBidsRequest, GetBidsResponse>* params,
-    absl::string_view hpke_secret) const {
+    const std::string& hpke_secret,
+    RawClientParams<GetBidsRequest, GetBidsResponse,
+                    GetBidsResponse::GetBidsRawResponse>* params) const {
+  VLOG(5) << "BuyerFrontEndAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GetBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
-        if (encryption_enabled_ &&
-            !DecryptResponse(params->ResponseRef(), hpke_secret).ok()) {
-          status = grpc::Status(grpc::StatusCode::INTERNAL,
-                                "Failed decrypting Buyer Service response");
+        DCHECK(encryption_enabled_);
+        if (!status.ok()) {
+          VLOG(1) << "SendRPC completion status not ok: "
+                  << ToAbslStatus(status);
+          params->OnDone(status);
+          return;
         }
 
+        VLOG(6) << "SendRPC completion status ok";
+        auto decrypted_response =
+            DecryptResponse(hpke_secret, params->ResponseRef());
+        if (!decrypted_response.ok()) {
+          VLOG(1) << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
+          params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                      decrypted_response.status().ToString()));
+          return;
+        }
+
+        params->SetRawResponse(*std::move(decrypted_response));
+        VLOG(6) << "Returning the decrypted response via callback";
         params->OnDone(status);
       });
 

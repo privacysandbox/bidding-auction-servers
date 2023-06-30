@@ -112,24 +112,40 @@ class MockExecutor : public server_common::Executor {
   MOCK_METHOD(bool, Cancel, (server_common::TaskId task_id), (override));
 };
 
-template <typename Request, typename Response>
-class AsyncClientMock : public AsyncClient<Request, Response> {
+template <typename Request, typename Response, typename RawRequest,
+          typename RawResponse>
+class AsyncClientMock
+    : public AsyncClient<Request, Response, RawRequest, RawResponse> {
  public:
   MOCK_METHOD(
       absl::Status, Execute,
-      (std::unique_ptr<Request> request, (const RequestMetadata& metadata),
+      (std::unique_ptr<Request> request, const RequestMetadata& metadata,
        absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
+           on_done,
+       absl::Duration timeout),
+      (const, override));
+
+  MOCK_METHOD(
+      absl::Status, ExecuteInternal,
+      (std::unique_ptr<RawRequest> raw_request, const RequestMetadata& metadata,
+       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
            on_done,
        absl::Duration timeout),
       (const, override));
 };
 
 using BuyerFrontEndAsyncClientMock =
-    AsyncClientMock<GetBidsRequest, GetBidsResponse>;
+    AsyncClientMock<GetBidsRequest, GetBidsResponse,
+                    GetBidsRequest::GetBidsRawRequest,
+                    GetBidsResponse::GetBidsRawResponse>;
 using ScoringAsyncClientMock =
-    AsyncClientMock<ScoreAdsRequest, ScoreAdsResponse>;
+    AsyncClientMock<ScoreAdsRequest, ScoreAdsResponse,
+                    ScoreAdsRequest::ScoreAdsRawRequest,
+                    ScoreAdsResponse::ScoreAdsRawResponse>;
 using BiddingAsyncClientMock =
-    AsyncClientMock<GenerateBidsRequest, GenerateBidsResponse>;
+    AsyncClientMock<GenerateBidsRequest, GenerateBidsResponse,
+                    GenerateBidsRequest::GenerateBidsRawRequest,
+                    GenerateBidsResponse::GenerateBidsRawResponse>;
 
 // Utility class to be used by anything that relies on an HttpFetcherAsync.
 class MockHttpFetcherAsync : public HttpFetcherAsync {
@@ -320,12 +336,12 @@ class ClientFactoryMock : public ClientFactory<Client, ClientKey> {
               (const, override));
 };
 
-template <class ServiceMock, class Request, class Response>
+template <class ServiceMock, class RawRequest, class Response>
 class MockServerThread {
  public:
   explicit MockServerThread(
       std::function<grpc::ServerUnaryReactor*(grpc::CallbackServerContext*,
-                                              const Request*, Response*)>
+                                              const RawRequest*, Response*)>
           rpc_method) {
     // Setup server
     mock_server_address_ = "localhost";

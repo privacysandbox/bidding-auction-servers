@@ -53,6 +53,7 @@ inline constexpr char kMalformedBuyerInput[] = "Malformed buyer input.";
 
 // Server side errors listed here.
 inline constexpr char kInternalError[] = "Internal Error";
+inline constexpr char kEncryptionFailed[] = "Encryption Failure.";
 
 // Error handling related constants.
 inline constexpr char kErrorDelimiter[] = "; ";

@@ -85,6 +85,11 @@ class Context {
 
   bool is_decrypted() { return decrypted_; }
 
+  // Set once request is successful
+  void SetRequestSuccessful() { is_request_successful_ = true; }
+
+  bool is_request_successful() const { return is_request_successful_; }
+
   // Logs metric for a UpDownCounter
   // Example: LogUpDownCounter<kCounterDefinition>(1);
   template <const auto& definition, typename T>
@@ -288,6 +293,7 @@ class Context {
 
   U* metric_router_;
   bool decrypted_ = false;
+  bool is_request_successful_ = false;
   const BuildDependentConfig& metric_config_;
   absl::Mutex mutex_;
   std::vector<absl::AnyInvocable<absl::Status() &&>> callbacks_

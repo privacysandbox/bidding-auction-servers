@@ -38,9 +38,9 @@ namespace privacy_sandbox::bidding_auction_servers {
 //  response is finished being served, GenerateBidsReactor cleans up all
 //  necessary state and grpc releases the reactor from memory.
 class GenerateBidsReactor
-    : public CodeDispatchReactor<GenerateBidsRequest,
-                                 GenerateBidsRequest::GenerateBidsRawRequest,
-                                 GenerateBidsResponse> {
+    : public CodeDispatchReactor<
+          GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
+          GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
   explicit GenerateBidsReactor(
       const CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
@@ -54,6 +54,10 @@ class GenerateBidsReactor
   void Execute() override;
 
  private:
+  // Cleans up and deletes the GenerateBidsReactor. Called by the grpc library
+  // after the response has finished.
+  void OnDone() override;
+
   // Asynchronous callback used by the v8 code executor to return a result. This
   // will be called in a different thread owned by the code dispatch library.
   //
@@ -67,7 +71,11 @@ class GenerateBidsReactor
   // Gets logging context as key/value pair that is useful for tracking a
   // request through the B&A services.
   ContextLogger::ContextMap GetLoggingContext(
-      const GenerateBidsRequest& generate_bids_request);
+      const GenerateBidsRequest::GenerateBidsRawRequest& generate_bids_request);
+
+  // Encrypts the response before the GRPC call is finished with the provided
+  // status.
+  void EncryptResponseAndFinish(grpc::Status status);
 
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_;
   bool enable_buyer_debug_url_generation_;

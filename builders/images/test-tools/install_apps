@@ -10,11 +10,6 @@ install_packages() {
     libstdc++
 }
 
-install_ghz() {
-  go install github.com/bojand/ghz/cmd/ghz@v0.114.0
-  ghz --help
-}
-
 install_nghttp2() {
   apk --no-cache add \
     nghttp2~=1
@@ -27,14 +22,7 @@ install_apache2_utils() {
   ab -V
 }
 
-install_cassowary() {
-  go install github.com/rogerwelin/cassowary/cmd/cassowary@v0.16.0
-  cassowary --help
-}
-
 apk --no-cache update
 install_packages
-install_ghz
 install_nghttp2
 install_apache2_utils
-install_cassowary

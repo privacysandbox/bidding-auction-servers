@@ -39,7 +39,7 @@ resource "google_compute_instance_template" "frontends" {
     mode        = "READ_WRITE"
     type        = "PERSISTENT"
 
-    source_image = "projects/confidential-space-images/global/images/family/${var.use_debug_image ? "confidential-space-debug" : "confidential-space"}"
+    source_image = "projects/confidential-space-images/global/images/family/${var.use_confidential_space_debug_image ? "confidential-space-debug" : "confidential-space"}"
   }
 
   labels = {
@@ -81,12 +81,13 @@ resource "google_compute_instance_template" "frontends" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
   metadata = {
-    tee-image-reference        = var.frontend_tee_image
-    tee-container-log-redirect = true
-    mesh-name                  = var.mesh_name
-    environment                = var.environment
-    operator                   = var.operator
-    service                    = var.frontend_service_name
+    tee-image-reference              = var.frontend_tee_image
+    tee-container-log-redirect       = true
+    tee-impersonate-service-accounts = var.tee_impersonate_service_accounts
+    mesh-name                        = var.mesh_name
+    environment                      = var.environment
+    operator                         = var.operator
+    service                          = var.frontend_service_name
   }
 
   lifecycle {
@@ -169,7 +170,7 @@ resource "google_compute_instance_template" "backends" {
   name        = "${var.operator}-${var.environment}-${var.backend_service_name}-${each.value.region}-it"
   provider    = google-beta
   description = "This template is used to create confidential compute instances, one service per instance."
-  tags        = ["allow-hc", "allow-ssh", "allow-backend-ingress"]
+  tags        = ["allow-hc", "allow-ssh", "allow-backend-ingress", "allow-all-egress"]
 
   disk {
     auto_delete  = true
@@ -178,7 +179,7 @@ resource "google_compute_instance_template" "backends" {
     disk_type    = "pd-standard"
     interface    = "NVME"
     mode         = "READ_WRITE"
-    source_image = "projects/confidential-space-images/global/images/family/${var.use_debug_image ? "confidential-space-debug" : "confidential-space"}"
+    source_image = "projects/confidential-space-images/global/images/family/${var.use_confidential_space_debug_image ? "confidential-space-debug" : "confidential-space"}"
     type         = "PERSISTENT"
   }
 
@@ -221,9 +222,10 @@ resource "google_compute_instance_template" "backends" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
   metadata = {
-    tee-image-reference        = var.backend_tee_image
-    tee-container-log-redirect = true
-    operator                   = var.operator
+    tee-image-reference              = var.backend_tee_image
+    tee-container-log-redirect       = true
+    tee-impersonate-service-accounts = var.tee_impersonate_service_accounts
+    operator                         = var.operator
   }
 
   lifecycle {

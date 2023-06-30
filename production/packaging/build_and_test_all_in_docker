@@ -39,6 +39,7 @@ function _print_runtime() {
 
 declare -a SERVICES
 declare INSTANCE
+declare BUILD_FLAVOR=prod
 declare PLATFORM
 declare -i VERBOSE=0
 declare VERBOSE_ARG=
@@ -58,6 +59,7 @@ usage:
                                    Use multiple times to specify more than one service.
     --instance                   [REQUIRED] Exactly one of: local, aws
     --platform                   [REQUIRED] Exactly one of: gcp, aws
+    --build-flavor               [REQUIRED] Exactly one of: prod, non_prod; Turn on all vlog if set to: non_prod
     --precommit-only             Run precommit then exit
     --no-precommit               Skip precommit checks
     --no-tests                   Skip tests
@@ -106,6 +108,10 @@ while [[ $# -gt 0 ]]; do
       INSTANCE="$2"
       shift 2 || usage
       ;;
+    --build-flavor)
+      BUILD_FLAVOR="$2"
+      shift 2 || usage
+      ;;
     --platform)
       PLATFORM="$2"
       shift 2 || usage
@@ -151,7 +157,7 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
     exit 1
   fi
 fi
-BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM}"
+BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --//:build_flavor=${BUILD_FLAVOR}"
 
 if [[ ${VERBOSE} -eq 1 ]]; then
   set -o xtrace
@@ -166,7 +172,7 @@ if [[ ${PRECOMMIT_ONLY} -eq 1 ]]; then
   exit 0
 fi
 
-printf "==== build and test specified platform=%s, instance=%s targets using bazel-debian for: %s ====\n" "${PLATFORM}" "${INSTANCE}" "${SERVICES[*]}"
+printf "==== build and test specified platform=%s, instance=%s build_flavor=%s targets using bazel-debian for: %s ====\n" "${PLATFORM}" "${INSTANCE}" "${BUILD_FLAVOR}" "${SERVICES[*]}"
 
 declare -a BUILD_TARGETS
 declare -a TEST_TARGETS

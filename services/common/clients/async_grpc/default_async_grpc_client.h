@@ -24,6 +24,7 @@
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/util/error_categories.h"
 #include "services/common/util/status_macros.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
@@ -35,13 +36,15 @@ using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
 inline constexpr absl::Duration max_timeout = absl::Milliseconds(60000);
 
 // This class acts as a template for a basic asynchronous grpc client.
-template <typename Request, typename Response, typename RawResponse>
-class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
+template <typename Request, typename Response, typename RawRequest,
+          typename RawResponse>
+class DefaultAsyncGrpcClient
+    : public AsyncClient<Request, Response, RawRequest, RawResponse> {
  public:
   DefaultAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client, bool encryption_enabled)
-      : AsyncClient<Request, Response>(),
+      : AsyncClient<Request, Response, RawRequest, RawResponse>(),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
         encryption_enabled_(encryption_enabled) {}
@@ -49,30 +52,34 @@ class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
   DefaultAsyncGrpcClient(const DefaultAsyncGrpcClient&) = delete;
   DefaultAsyncGrpcClient& operator=(const DefaultAsyncGrpcClient&) = delete;
 
-  // Executes the grpc request asynchronously.
-  //
-  // request: the request object to execute
-  // metadata: Metadata to be passed to the client
-  // on_done: callback called when the request is finished executing
-  // timeout: a timeout value for the request
-  // TODO(b/285963550): Handle the sync failures in reactor classes.
-  absl::Status Execute(
-      std::unique_ptr<Request> request, const RequestMetadata& metadata,
-      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
+  absl::Status ExecuteInternal(
+      std::unique_ptr<RawRequest> raw_request, const RequestMetadata& metadata,
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
           on_done,
       absl::Duration timeout = max_timeout) const override {
-    std::string hpke_secret;
-    if (encryption_enabled_) {
-      PS_ASSIGN_OR_RETURN(hpke_secret, EncryptRequest(request.get()));
+    DCHECK(encryption_enabled_);
+    VLOG(5) << "Encrypting request ...";
+    auto secret_request = EncryptRequest(raw_request.get());
+    if (!secret_request.ok()) {
+      VLOG(1) << "Failed to encrypt the request: " << secret_request.status();
+      auto error_status = absl::InternalError(kEncryptionFailed);
+      std::move(on_done)(error_status);
+      return error_status;
     }
+    auto& [hpke_secret, request] = *secret_request;
+    VLOG(5) << "Encrypting completed ...";
 
-    auto params = std::make_unique<ClientParams<Request, Response>>(
-        std::move(request), std::move(on_done), metadata);
+    auto params =
+        std::make_unique<RawClientParams<Request, Response, RawResponse>>(
+            std::move(request), std::move(on_done), metadata);
     params->SetDeadline(std::min(max_timeout, timeout));
-    return SendRpc(params.release(), hpke_secret);
+    VLOG(5) << "Sending RPC ...";
+    return SendRpc(hpke_secret, params.release());
   }
 
  protected:
+  using SecretRequest = std::pair<std::string, std::unique_ptr<Request>>;
+
   // Sends an asynchronous request via grpc. This method must be implemented
   // by classes implementing this interface.
   //
@@ -80,16 +87,20 @@ class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
   // by the grpc stub.
   // hpke_secret: secret generated during HPKE encryption used during
   // AeadDecryption
-  virtual absl::Status SendRpc(ClientParams<Request, Response>* params,
-                               absl::string_view hpke_secret) const = 0;
+  [[deprecated]] virtual absl::Status SendRpc(
+      ClientParams<Request, Response>* params,
+      const std::string& hpke_secret) const {
+    return absl::NotFoundError("Method should be implemented by subclasses");
+  }
 
-  server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
-  CryptoClientWrapperInterface* crypto_client_;
+  virtual absl::Status SendRpc(
+      const std::string& hpke_secret,
+      RawClientParams<Request, Response, RawResponse>* params) const {
+    VLOG(5) << "Stub SendRpc invoked ...";
+    return absl::NotFoundError("Method should be implemented by subclasses");
+  }
 
-  // Whether HPKE encryption is enabled for intra-server communication.
-  bool encryption_enabled_;
-
-  absl::StatusOr<std::string> EncryptRequest(Request* request) const {
+  absl::StatusOr<SecretRequest> EncryptRequest(RawRequest* raw_request) const {
     absl::StatusOr<PublicKey> key = key_fetcher_manager_->GetPublicKey();
     if (!key.ok()) {
       const std::string error =
@@ -100,7 +111,7 @@ class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
     }
 
     auto encrypt_response = crypto_client_->HpkeEncrypt(
-        key.value(), request->raw_request().SerializeAsString());
+        key.value(), raw_request->SerializeAsString());
 
     if (!encrypt_response.ok()) {
       const std::string error = absl::StrCat(
@@ -109,15 +120,16 @@ class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
       return absl::InternalError(error);
     }
 
+    std::unique_ptr<Request> request = std::make_unique<Request>();
     request->set_key_id(key->key_id());
     request->set_request_ciphertext(
         std::move(encrypt_response->encrypted_data().ciphertext()));
-    request->clear_raw_request();
-    return std::move(encrypt_response->secret());
+    return SecretRequest{std::move(encrypt_response->secret()),
+                         std::move(request)};
   }
 
-  absl::Status DecryptResponse(Response* response,
-                               absl::string_view hpke_secret) const {
+  [[deprecated]] absl::Status DecryptResponse(
+      Response* response, const std::string& hpke_secret) const {
     absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
         decrypt_response = crypto_client_->AeadDecrypt(
             response->response_ciphertext(), hpke_secret);
@@ -134,6 +146,36 @@ class DefaultAsyncGrpcClient : public AsyncClient<Request, Response> {
     response->clear_response_ciphertext();
     return absl::OkStatus();
   }
+
+  absl::StatusOr<std::unique_ptr<RawResponse>> DecryptResponse(
+      const std::string& hpke_secret, Response* response) const {
+    VLOG(6) << "Decrypting the response ...";
+    absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
+        decrypt_response = crypto_client_->AeadDecrypt(
+            response->response_ciphertext(), hpke_secret);
+    if (!decrypt_response.ok()) {
+      const std::string error = absl::StrCat(
+          "Could not decrypt response: ", decrypt_response.status().message());
+      LOG(ERROR) << error;
+      return absl::InternalError(error);
+    }
+
+    std::unique_ptr<RawResponse> raw_response = std::make_unique<RawResponse>();
+    if (!raw_response->ParseFromString(decrypt_response->payload())) {
+      const std::string error_msg =
+          "Failed to parse proto from decrypted response";
+      return absl::InvalidArgumentError(error_msg);
+    }
+
+    VLOG(6) << "Decryption/decoding of response succeeded";
+    return raw_response;
+  }
+
+  server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
+  CryptoClientWrapperInterface* crypto_client_;
+
+  // Whether HPKE encryption is enabled for intra-server communication.
+  bool encryption_enabled_;
 };
 
 // Creates a shared grpc channel from a given server URL. This channel

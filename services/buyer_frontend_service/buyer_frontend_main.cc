@@ -112,12 +112,20 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         PRIMARY_COORDINATOR_ACCOUNT_IDENTITY);
   config_client.SetFlag(FLAGS_secondary_coordinator_account_identity,
                         SECONDARY_COORDINATOR_ACCOUNT_IDENTITY);
+  config_client.SetFlag(FLAGS_gcp_primary_workload_identity_pool_provider,
+                        GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_secondary_workload_identity_pool_provider,
+                        GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_primary_key_service_cloud_function_url,
+                        GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+  config_client.SetFlag(FLAGS_gcp_secondary_key_service_cloud_function_url,
+                        GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
   config_client.SetFlag(FLAGS_primary_coordinator_region,
                         PRIMARY_COORDINATOR_REGION);
   config_client.SetFlag(FLAGS_secondary_coordinator_region,
                         SECONDARY_COORDINATOR_REGION);
-  config_client.SetFlag(FLAGS_private_key_cache_ttl_minutes,
-                        PRIVATE_KEY_CACHE_TTL_MINUTES);
+  config_client.SetFlag(FLAGS_private_key_cache_ttl_seconds,
+                        PRIVATE_KEY_CACHE_TTL_SECONDS);
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
@@ -146,11 +154,6 @@ absl::Status RunServer() {
       config_client.GetBooleanParameter(ENABLE_BUYER_FRONTEND_BENCHMARKING);
   bool enable_bidding_compression =
       config_client.GetBooleanParameter(ENABLE_BIDDING_COMPRESSION);
-
-  GetBidsConfig get_bids_config{
-      config_client.GetIntParameter(GENERATE_BID_TIMEOUT_MS),
-      config_client.GetIntParameter(BIDDING_SIGNALS_LOAD_TIMEOUT_MS),
-      config_client.GetBooleanParameter(ENABLE_ENCRYPTION)};
 
   if (bidding_server_addr.empty()) {
     return absl::InvalidArgumentError("Missing: Bidding server address");
@@ -186,24 +189,22 @@ absl::Status RunServer() {
           ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
           .get());
 
-  std::unique_ptr<server_common::KeyFetcherManagerInterface>
-      key_fetcher_manager = CreateKeyFetcherManager(config_client);
-  std::unique_ptr<CryptoClientWrapperInterface> crypto_client =
-      CreateCryptoClient();
-
-  BiddingServiceClientConfig client_config = {
-      .server_addr = bidding_server_addr,
-      .compression = enable_bidding_compression,
-      .secure_client = config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
-      .encryption_enabled =
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION)};
   BuyerFrontEndService buyer_frontend_service(
       std::make_unique<HttpBiddingSignalsAsyncProvider>(
           std::move(buyer_kv_async_http_client)),
-      std::make_unique<BiddingAsyncGrpcClient>(
-          key_fetcher_manager.get(), crypto_client.get(), client_config),
-      key_fetcher_manager.get(), crypto_client.get(),
-      std::move(get_bids_config), enable_buyer_frontend_benchmarking);
+      BiddingServiceClientConfig{
+          .server_addr = bidding_server_addr,
+          .compression = enable_bidding_compression,
+          .secure_client =
+              config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
+          .encryption_enabled =
+              config_client.GetBooleanParameter(ENABLE_ENCRYPTION)},
+      CreateKeyFetcherManager(config_client), CreateCryptoClient(),
+      GetBidsConfig{
+          config_client.GetIntParameter(GENERATE_BID_TIMEOUT_MS),
+          config_client.GetIntParameter(BIDDING_SIGNALS_LOAD_TIMEOUT_MS),
+          config_client.GetBooleanParameter(ENABLE_ENCRYPTION)},
+      enable_buyer_frontend_benchmarking);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

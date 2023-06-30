@@ -29,7 +29,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 using BiddingAsyncClient =
-    AsyncClient<GenerateBidsRequest, GenerateBidsResponse>;
+    AsyncClient<GenerateBidsRequest, GenerateBidsResponse,
+                GenerateBidsRequest::GenerateBidsRawRequest,
+                GenerateBidsResponse::GenerateBidsRawResponse>;
 
 struct BiddingServiceClientConfig {
   std::string server_addr;
@@ -42,12 +44,13 @@ struct BiddingServiceClientConfig {
 class BiddingAsyncGrpcClient
     : public DefaultAsyncGrpcClient<
           GenerateBidsRequest, GenerateBidsResponse,
-          GenerateBidsResponse_GenerateBidsRawResponse> {
+          GenerateBidsRequest::GenerateBidsRawRequest,
+          GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
   BiddingAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      BiddingServiceClientConfig client_config);
+      const BiddingServiceClientConfig& client_config);
 
  protected:
   // Sends an asynchronous request via grpc to the Bidding Service.
@@ -55,8 +58,10 @@ class BiddingAsyncGrpcClient
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
   absl::Status SendRpc(
-      ClientParams<GenerateBidsRequest, GenerateBidsResponse>* params,
-      absl::string_view hpke_secret) const override;
+      const std::string& hpke_secret,
+      RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
+                      GenerateBidsResponse::GenerateBidsRawResponse>* params)
+      const override;
   std::unique_ptr<Bidding::Stub> stub_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers

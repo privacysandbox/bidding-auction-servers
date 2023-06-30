@@ -20,6 +20,7 @@
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -133,7 +134,10 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
       R"JSON(":)JSON", browser_signals.join_count(), R"JSON(,")JSON", kBidCount,
       R"JSON(":)JSON", browser_signals.bid_count(), R"JSON(,")JSON", kRecency,
       R"JSON(":)JSON", browser_signals.recency(), R"JSON(,")JSON", kPrevWins,
-      R"JSON(":)JSON", browser_signals.prev_wins(), "}");
+      R"JSON(":)JSON",
+      browser_signals.prev_wins().empty() ? R"JSON("")JSON"
+                                          : browser_signals.prev_wins(),
+      "}");
 }
 
 absl::StatusOr<std::string> SerializeRepeatedStringField(
@@ -321,20 +325,28 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
       trusted_bidding_signals_itr->second.value().json;
 
   // IG must have device signals to participate in Bidding.
+  google::protobuf::util::MessageDifferencer differencer;
   if (interest_group.has_browser_signals() &&
-      interest_group.browser_signals().IsInitialized()) {
+      interest_group.browser_signals().IsInitialized() &&
+      !differencer.Equals(BrowserSignals::default_instance(),
+                          interest_group.browser_signals())) {
     generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(MakeBrowserSignalsForScript(
             raw_request.publisher_name(), raw_request.seller(),
             interest_group.browser_signals()));
-  } else if (interest_group.has_android_signals()) {
+  } else if (interest_group.has_android_signals() &&
+             interest_group.android_signals().IsInitialized() &&
+             !differencer.Equals(AndroidSignals::default_instance(),
+                                 interest_group.browser_signals())) {
+    std::string serialized_android_signals =
+        ProtoToJson(interest_group.android_signals());
     generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
-        std::make_shared<std::string>(
-            ProtoToJson(interest_group.android_signals()));
+        std::make_shared<std::string>((serialized_android_signals.empty())
+                                          ? R"JSON("")JSON"
+                                          : serialized_android_signals);
   } else {
-    return absl::InvalidArgumentError(
-        "Interest Group must contain non-empty browser or android "
-        "signals to generate bids.");
+    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
+        std::make_shared<std::string>(R"JSON("")JSON");
   }
 
   // Wrap buyer code to add reporting URLs to generateBid response.
@@ -382,16 +394,15 @@ GenerateBidsReactor::GenerateBidsReactor(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceRuntimeConfig& runtime_config)
-    : CodeDispatchReactor<GenerateBidsRequest,
-                          GenerateBidsRequest::GenerateBidsRawRequest,
-                          GenerateBidsResponse>(
+    : CodeDispatchReactor<
+          GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
+          GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>(
           dispatcher, request, response, key_fetcher_manager, crypto_client,
           runtime_config.encryption_enabled),
       benchmarking_logger_(std::move(benchmarking_logger)),
       enable_buyer_debug_url_generation_(
           runtime_config.enable_buyer_debug_url_generation),
-      roma_timeout_ms_(runtime_config.roma_timeout_ms),
-      logger_(GetLoggingContext(*request)) {
+      roma_timeout_ms_(runtime_config.roma_timeout_ms) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
@@ -401,6 +412,7 @@ GenerateBidsReactor::GenerateBidsReactor(
 
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
+  logger_ = ContextLogger(GetLoggingContext(raw_request_));
   auto interest_groups = raw_request_.interest_group_for_bidding();
 
   // Parse trusted bidding signals
@@ -410,7 +422,7 @@ void GenerateBidsReactor::Execute() {
     logger_.vlog(0, "Request failed while parsing bidding signals: ",
                  ig_trusted_signals_map.status().ToString(
                      absl::StatusToStringMode::kWithEverything));
-    Finish(FromAbslStatus(ig_trusted_signals_map.status()));
+    EncryptResponseAndFinish(FromAbslStatus(ig_trusted_signals_map.status()));
     return;
   }
 
@@ -422,7 +434,13 @@ void GenerateBidsReactor::Execute() {
         BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
                                 ig_trusted_signals_map.value(),
                                 enable_buyer_debug_url_generation_, logger_);
-    if (generate_bid_request.ok()) {
+    if (!generate_bid_request.ok()) {
+      if (VLOG_IS_ON(3)) {
+        logger_.vlog(3, "Unable to build GenerateBidRequest: ",
+                     generate_bid_request.status().ToString(
+                         absl::StatusToStringMode::kWithEverything));
+      }
+    } else {
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
       dispatch_requests_.push_back(dispatch_request);
@@ -430,7 +448,7 @@ void GenerateBidsReactor::Execute() {
   }
 
   if (dispatch_requests_.empty()) {
-    Finish(grpc::Status::OK);
+    EncryptResponseAndFinish(grpc::Status::OK);
     return;
   }
 
@@ -439,7 +457,7 @@ void GenerateBidsReactor::Execute() {
       dispatch_requests_,
       [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
         GenerateBidsCallback(result);
-        Finish(grpc::Status::OK);
+        EncryptResponseAndFinish(grpc::Status::OK);
       });
 
   if (!status.ok()) {
@@ -447,7 +465,8 @@ void GenerateBidsReactor::Execute() {
     TextFormat::PrintToString(raw_request_, &original_request);
     logger_.vlog(1, "Execution request failed for batch: ", original_request,
                  status.ToString(absl::StatusToStringMode::kWithEverything));
-    Finish(grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
+    EncryptResponseAndFinish(
+        grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
 }
 
@@ -467,28 +486,26 @@ void GenerateBidsReactor::GenerateBidsCallback(
     }
   }
   benchmarking_logger_->HandleResponseBegin();
-  // Create empty response
-  response_->mutable_raw_response();
   int failed_requests = 0;
   for (int i = 0; i < output.size(); i++) {
     auto& result = output.at(i);
     if (result.ok()) {
       AdWithBid bid;
-      auto valid = google::protobuf::util::JsonStringToMessage(
-          result.value().resp, &bid);
-      const std::string interest_group_name = result.value().id;
+      auto valid =
+          google::protobuf::util::JsonStringToMessage(result->resp, &bid);
+      const std::string interest_group_name = result->id;
       if (valid.ok()) {
         if (bid.bid() == 0.0f && !bid.has_debug_report_urls()) {
           logger_.vlog(2, "Skipping 0 bid for ", interest_group_name, ": ",
                        bid.DebugString());
         } else {
           bid.set_interest_group_name(interest_group_name);
-          *response_->mutable_raw_response()->add_bids() = bid;
+          *raw_response_.add_bids() = bid;
         }
       } else {
         logger_.vlog(
             1, "Invalid json output from code execution for interest_group ",
-            interest_group_name, ": ", result.value().resp);
+            interest_group_name, ": ", result->resp);
       }
     } else {
       failed_requests = failed_requests + 1;
@@ -500,23 +517,28 @@ void GenerateBidsReactor::GenerateBidsCallback(
 
   logger_.vlog(1, "\n\nFailed of total: ", failed_requests, "/", output.size());
   benchmarking_logger_->HandleResponseEnd();
-  logger_.vlog(2, "GenerateBidsResponse:\n", response_->DebugString());
+  logger_.vlog(2, "GenerateBidsResponse:\n", raw_response_.DebugString());
+}
 
-  if (encryption_enabled_) {
-    EncryptResponse();
-    LogIfError(
-        metric_context_
-            ->LogUpDownCounter<server_common::metric::kEncryptedResponseByte>(
-                (int)response_->response_ciphertext().size()));
+void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
+  DCHECK(encryption_enabled_);
+  if (!EncryptResponse()) {
+    logger_.vlog(1, "Failed to encrypt the generate bids response.");
+    status = grpc::Status(grpc::INTERNAL, kInternalServerError);
   }
+  if (status.error_code() == grpc::StatusCode::OK) {
+    metric_context_->SetRequestSuccessful();
+  }
+  Finish(status);
 }
 
 ContextLogger::ContextMap GenerateBidsReactor::GetLoggingContext(
-    const GenerateBidsRequest& generate_bids_request) {
-  const auto& logging_context =
-      generate_bids_request.raw_request().log_context();
+    const GenerateBidsRequest::GenerateBidsRawRequest& generate_bids_request) {
+  const auto& logging_context = generate_bids_request.log_context();
   return {{kGenerationId, logging_context.generation_id()},
           {kAdtechDebugId, logging_context.adtech_debug_id()}};
 }
+
+void GenerateBidsReactor::OnDone() { delete this; }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

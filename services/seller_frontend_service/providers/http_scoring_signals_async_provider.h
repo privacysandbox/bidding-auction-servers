@@ -28,7 +28,8 @@ class HttpScoringSignalsAsyncProvider final
  public:
   explicit HttpScoringSignalsAsyncProvider(
       std::unique_ptr<
-          AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>);
+          AsyncClient<GetSellerValuesInput, GetSellerValuesOutput,
+                      GetSellerValuesRawInput, GetSellerValuesRawOutput>>);
 
   // HttpScoringSignalsAsyncProvider is neither copyable nor movable.
   HttpScoringSignalsAsyncProvider(const HttpScoringSignalsAsyncProvider&) =
@@ -47,7 +48,9 @@ class HttpScoringSignalsAsyncProvider final
            absl::Duration timeout) const override;
 
  private:
-  std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
+  std::unique_ptr<
+      AsyncClient<GetSellerValuesInput, GetSellerValuesOutput,
+                  GetSellerValuesRawInput, GetSellerValuesRawOutput>>
       http_seller_kv_async_client_;
 };
 

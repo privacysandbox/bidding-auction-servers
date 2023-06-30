@@ -92,6 +92,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // request through the BA services.
   ContextLogger::ContextMap GetLoggingContext();
 
+  // Finishes the RPC call with an OK status.
+  void FinishWithOkStatus();
+
   // References for state, request, response and context from gRPC.
   // Should be released by gRPC
   // https://github.com/grpc/grpc/blob/dbc45208e2bfe14f01b1cbb06d0cd7c01077debb/include/grpcpp/server_context.h#L604
@@ -101,6 +104,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Should be released by gRPC after call is finished
   GetBidsResponse* get_bids_response_;
+  std::unique_ptr<GetBidsResponse::GetBidsRawResponse> get_bids_raw_response_ =
+      nullptr;
 
   // Metadata to be sent to buyer KV server.
   RequestMetadata kv_metadata_;

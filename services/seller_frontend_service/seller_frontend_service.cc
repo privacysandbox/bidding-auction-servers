@@ -32,7 +32,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-void LogMetrics(const SelectAdRequest* request) {
+void LogMetrics(const SelectAdRequest* request, SelectAdResponse* response) {
   auto& metric_context = metric::SfeContextMap()->Get(request);
   LogIfError(
       metric_context
@@ -43,23 +43,33 @@ void LogMetrics(const SelectAdRequest* request) {
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
+  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+      (int)request->ByteSizeLong()));
+  LogIfError(
+      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
+          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context.LogUpDownCounterDeferred<
+             server_common::metric::kTotalRequestFailedCount>(
+      [&metric_context]() -> int {
+        return metric_context.is_request_successful() ? 0 : 1;
+      }));
 }
 
 // Factory method to get a reactor based on the request type.
 std::unique_ptr<SelectAdReactor> GetReactorForRequest(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const SellerFrontEndConfig& config) {
+    const TrustedServersConfigClient& config_client) {
   switch (request->client_type()) {
     case SelectAdRequest::ANDROID:
       return std::make_unique<SelectAdReactorForApp>(context, request, response,
-                                                     clients, config);
+                                                     clients, config_client);
     case SelectAdRequest::BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(context, request, response,
-                                                     clients, config);
+                                                     clients, config_client);
     default:
       return std::make_unique<SelectAdReactorInvalidClient>(
-          context, request, response, clients, config);
+          context, request, response, clients, config_client);
   }
 }
 
@@ -70,7 +80,7 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     SelectAdResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("SelectAd"));
-  LogMetrics(request);
+  LogMetrics(request, response);
 
   VLOG(2) << "\nSelectAdRequest:\n" << request->DebugString();
   if (VLOG_IS_ON(2)) {
@@ -80,8 +90,8 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     }
   }
 
-  auto reactor =
-      GetReactorForRequest(context, request, response, clients_, config_);
+  auto reactor = GetReactorForRequest(context, request, response, clients_,
+                                      config_client_);
   reactor->Execute();
   return reactor.release();
 }

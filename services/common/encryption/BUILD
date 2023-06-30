@@ -33,7 +33,10 @@ cc_library(
     deps = [
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
+        "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",

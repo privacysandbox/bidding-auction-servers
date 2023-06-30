@@ -27,19 +27,19 @@ namespace {
 
 using ::testing::An;
 
-GetBidsRequest GetRequest() {
-  auto request = MakeARandomGetBidsRequest();
+GetBidsRequest::GetBidsRawRequest GetRequest() {
+  GetBidsRequest::GetBidsRawRequest request;
   for (int i = 0; i < MakeARandomInt(1, 10); i++) {
-    *request.mutable_raw_request()
-         ->mutable_buyer_input()
-         ->add_interest_groups() = MakeARandomInterestGroupFromBrowser();
+    *request.mutable_buyer_input()->add_interest_groups() =
+        MakeARandomInterestGroupFromBrowser();
   }
   return request;
 }
 
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
+                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
   auto request = GetRequest();
   absl::Notification notification;
 
@@ -61,14 +61,13 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
               absl::Duration timeout) {
             // Check that keys received in input are from buyer_input
             EXPECT_STREQ(input->hostname.data(),
-                         request.raw_request().publisher_name().data());
+                         request.publisher_name().data());
             absl::flat_hash_set<std::string> received_keys(input->keys.begin(),
                                                            input->keys.end());
 
             // Collect all expected keys
             absl::flat_hash_set<std::string> expected_keys;
-            for (const auto& ca :
-                 request.raw_request().buyer_input().interest_groups()) {
+            for (const auto& ca : request.buyer_input().interest_groups()) {
               expected_keys.emplace(ca.name());
               expected_keys.insert(ca.bidding_signals_keys().begin(),
                                    ca.bidding_signals_keys().end());
@@ -87,7 +86,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
 
   HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
 
-  BiddingSignalsRequest bidding_signals_request(request.raw_request(), {});
+  BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
       [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {},
@@ -97,7 +96,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
 
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
+                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
   auto request = GetRequest();
   absl::Notification notification;
 
@@ -121,7 +121,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
 
   HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
 
-  BiddingSignalsRequest bidding_signals_request(request.raw_request(), {});
+  BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
       [&notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {
@@ -135,9 +135,10 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
 TEST(HttpBiddingSignalsAsyncProviderTest,
      MapsBuyerValuesAsyncClientResponseToBiddingSignals) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
+                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
   auto request = GetRequest();
-  *request.mutable_raw_request()->mutable_buyer_input()->add_interest_groups() =
+  *request.mutable_buyer_input()->add_interest_groups() =
       MakeARandomInterestGroupFromBrowser();
   absl::Notification notification;
   std::string expected_output = MakeARandomString();
@@ -166,10 +167,10 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
 
   HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
 
-  BiddingSignalsRequest bidding_signals_request(request.raw_request(), {});
+  BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [&expected_output, &request,
+      [&expected_output,
        &notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {
         EXPECT_STREQ(signals.value()->trusted_signals->c_str(),
                      expected_output.c_str());

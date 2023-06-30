@@ -29,6 +29,9 @@
 #include "gtest/gtest.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
@@ -38,8 +41,12 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-using ::google::protobuf::TextFormat;
+constexpr char kSecret[] = "secret";
+constexpr char kKeyId[] = "keyid";
 
+using ::google::protobuf::TextFormat;
+using ::testing::AnyNumber;
+using ::testing::Return;
 using RawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
@@ -272,6 +279,53 @@ void CheckInputCorrectForAdWithFooComp(
   EXPECT_EQ(*input[5], "{}");
 }
 
+template <typename Request>
+void SetupMockCryptoClientWrapper(Request request,
+                                  MockCryptoClientWrapper& crypto_client) {
+  // Mock the HpkeEncrypt() call on the crypto client.
+  google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
+      hpke_encrypt_response;
+  hpke_encrypt_response.set_secret(kSecret);
+  hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+  hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
+      request.SerializeAsString());
+  EXPECT_CALL(crypto_client, HpkeEncrypt)
+      .Times(testing::AnyNumber())
+      .WillOnce(testing::Return(hpke_encrypt_response));
+
+  // Mock the HpkeDecrypt() call on the crypto_client.
+  google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+      hpke_decrypt_response;
+  hpke_decrypt_response.set_payload(request.SerializeAsString());
+  hpke_decrypt_response.set_secret(kSecret);
+  EXPECT_CALL(crypto_client, HpkeDecrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly(testing::Return(hpke_decrypt_response));
+
+  // Mock the AeadEncrypt() call on the crypto_client. This is used to encrypt
+  // the response coming back from the service.
+
+  EXPECT_CALL(crypto_client, AeadEncrypt)
+      .Times(AnyNumber())
+      .WillOnce(
+          [](const std::string& plaintext_payload, const std::string& secret) {
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+            data.set_ciphertext(plaintext_payload);
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+                aead_encrypt_response;
+            *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+            return aead_encrypt_response;
+          });
+
+  // Mock the AeadDecrypt() call on the crypto_client.
+  google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse
+      aead_decrypt_response;
+  aead_decrypt_response.set_payload(request.SerializeAsString());
+  EXPECT_CALL(crypto_client, AeadDecrypt)
+      .Times(AnyNumber())
+      .WillOnce(testing::Return(aead_decrypt_response));
+}
+
 class ScoreAdsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -285,7 +339,7 @@ class ScoreAdsReactorTest : public ::testing::Test {
                                    const MockCodeDispatchClient& dispatcher,
                                    AuctionServiceRuntimeConfig runtime_config) {
     ScoreAdsResponse response;
-    *request_.mutable_raw_request() = raw_request;
+    *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
     std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
         std::make_unique<ScoreAdsNoOpLogger>();
 
@@ -293,10 +347,19 @@ class ScoreAdsReactorTest : public ::testing::Test {
     std::unique_ptr<MockAsyncReporter> async_reporter =
         std::make_unique<MockAsyncReporter>(
             std::make_unique<MockHttpFetcherAsync>());
+    MockCryptoClientWrapper crypto_client;
+    SetupMockCryptoClientWrapper(raw_request, crypto_client);
+    TrustedServersConfigClient config_client({});
+    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+    runtime_config.encryption_enabled = true;
+    request_.set_key_id(kKeyId);
     // The last parameter is a flag for whether to parse the Trusted Scoring
     // Signals. It must be set to true for this test to pass.
     ScoreAdsReactor reactor(dispatcher, &request_, &response,
-                            std::move(benchmarkingLogger), nullptr, nullptr,
+                            std::move(benchmarkingLogger),
+                            key_fetcher_manager.get(), &crypto_client,
                             std::move(async_reporter), runtime_config);
     reactor.Execute();
     return response;
@@ -523,7 +586,9 @@ TEST_F(ScoreAdsReactorTest, EmptySignalsResultsInNoResponse) {
   BuildRawRequest({foo}, "", "", "", "", raw_request);
   const ScoreAdsResponse response =
       ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
-  EXPECT_FALSE(response.raw_response().has_ad_score());
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_FALSE(raw_response.has_ad_score());
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -550,13 +615,16 @@ TEST_F(ScoreAdsReactorTest,
       .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
                        &id_to_ad](std::vector<DispatchRequest>& batch,
                                   BatchDispatchDoneCallback done_callback) {
+        VLOG(1) << "Batch executing";
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
         for (auto request : batch) {
+          VLOG(1) << "Accessing id ad mapping for " << request.id;
           score_to_ad.insert_or_assign(current_score + 1,
                                        id_to_ad.at(request.id));
+          VLOG(1) << "Successfully accessed id ad mapping for " << request.id;
           score_logic.push_back(
               absl::StrCat("{\"desirability\": ", current_score + 1,
                            ", \"allowComponentAuction\": ",
@@ -568,8 +636,12 @@ TEST_F(ScoreAdsReactorTest,
   auto response =
       ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 
-  auto scored_ad = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  VLOG(1) << "Accessing score to ad mapping for " << scored_ad.desirability();
   auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
+  VLOG(1) << "Accessed score to ad mapping for " << scored_ad.desirability();
   // All scored ads must have these next four fields present and set.
   // The next three of these are all taken from the ad_with_bid.
   EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
@@ -586,12 +658,14 @@ TEST_F(ScoreAdsReactorTest,
   // Since in the above test we are assuming not component auctions, verify.
   EXPECT_FALSE(scored_ad.allow_component_auction());
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
+  VLOG(1) << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map()
                 .at(kInterestGroupOwnerOfBarBidder)
                 .values()
                 .at(0)
                 .number_value(),
             2);
+  VLOG(1) << "Accessed mapping for ig_owner_highest_scoring_other_bids_map";
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -636,7 +710,9 @@ TEST_F(ScoreAdsReactorTest,
   auto response =
       ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 
-  auto scored_ad = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
   auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
   // All scored ads must have these next four fields present and set.
   // The next three of these are all taken from the ad_with_bid.
@@ -702,7 +778,9 @@ TEST_F(ScoreAdsReactorTest,
   auto response =
       ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 
-  auto scored_ad = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
   auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
   // All scored ads must have these next four fields present and set.
   // The next three of these are all taken from the ad_with_bid.
@@ -767,7 +845,9 @@ TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
       .enable_seller_debug_url_generation = true};
   auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
 
-  auto scored_ad = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
   EXPECT_TRUE(scored_ad.has_debug_report_urls());
@@ -799,7 +879,9 @@ TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
       .enable_seller_debug_url_generation = true};
   auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
 
-  auto scored_ad = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  auto scored_ad = raw_response.ad_score();
   // Ad was parsed successfully.
   EXPECT_EQ(scored_ad.desirability(), 1);
 }
@@ -842,7 +924,9 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   decrypt_response.set_secret("secret");
   EXPECT_CALL(crypto_client, HpkeDecrypt)
       .WillOnce(testing::Return(decrypt_response));
-  // Mock the AeadEncrypt() call on the crypto_client.
+
+  // Mock the AeadEncrypt() call on the crypto_client. This is used for
+  // encrypting the response.
   google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
   data.set_ciphertext("ciphertext");
   google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse encrypt_response;
@@ -861,7 +945,6 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
                           runtime_config);
   reactor.Execute();
 
-  EXPECT_FALSE(response.has_raw_response());
   EXPECT_FALSE(response.response_ciphertext().empty());
 }
 

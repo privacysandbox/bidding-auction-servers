@@ -15,46 +15,100 @@
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
 
 #include "absl/synchronization/notification.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr char kKeyId[] = "key_id";
+constexpr char kSecret[] = "secret";
+using ::testing::AnyNumber;
+
+void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
+  EXPECT_CALL(crypto_client, HpkeEncrypt)
+      .Times(testing::AnyNumber())
+      .WillOnce(
+          [](const google::cmrt::sdk::public_key_service::v1::PublicKey& key,
+             const std::string& plaintext_payload) {
+            google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
+                hpke_encrypt_response;
+            hpke_encrypt_response.set_secret(kSecret);
+            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+            hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
+                plaintext_payload);
+            return hpke_encrypt_response;
+          });
+
+  // Mock the HpkeDecrypt() call on the crypto_client. This is used by the
+  // service to decrypt the incoming request.
+  EXPECT_CALL(crypto_client, HpkeDecrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly([](const server_common::PrivateKey& private_key,
+                         const std::string& ciphertext) {
+        google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+            hpke_decrypt_response;
+        hpke_decrypt_response.set_payload(ciphertext);
+        hpke_decrypt_response.set_secret(kSecret);
+        return hpke_decrypt_response;
+      });
+
+  // Mock the AeadEncrypt() call on the crypto_client. This is used to encrypt
+  // the response coming back from the service.
+  EXPECT_CALL(crypto_client, AeadEncrypt)
+      .Times(AnyNumber())
+      .WillOnce(
+          [](const std::string& plaintext_payload, const std::string& secret) {
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+            data.set_ciphertext(plaintext_payload);
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+                aead_encrypt_response;
+            *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+            return aead_encrypt_response;
+          });
+}
+
 // The structs below have some definitions to mimic protos.
 // default_async_grpc_client expects these fields to exist on the template types
 // provided during instantiation.
-struct RawRequest {
-  std::string SerializeAsString() { return ""; }
+struct MockRawRequest {
+  std::string value;
+  std::string SerializeAsString() { return value; }
 };
 
 struct MockRequest {
-  int value;
-  RawRequest raw_request_field;
-
-  void set_request_ciphertext(absl::string_view cipher) {}
-  void clear_raw_request() {}
-  RawRequest raw_request() { return raw_request_field; }
+  std::string request_ciphertext() const { return request_ciphertext_; }
+  void set_request_ciphertext(absl::string_view cipher) {
+    request_ciphertext_ = cipher;
+  }
   void set_key_id(absl::string_view key_id) {}
+
+ private:
+  std::string request_ciphertext_;
 };
 
-struct RawResponse {
+struct MockRawResponse {
   void ParseFromString(absl::string_view) {}
 };
 
 class MockResponse {
  public:
   int value;
-  RawResponse raw_response;
+  MockRawResponse raw_response;
   std::string ciphertext;
 
-  RawResponse* mutable_raw_response() { return &raw_response; }
+  MockRawResponse* mutable_raw_response() { return &raw_response; }
   void clear_response_ciphertext() {}
   std::string& response_ciphertext() { return ciphertext; }
 };
 
 class TestDefaultAsyncGrpcClient
-    : public DefaultAsyncGrpcClient<MockRequest, MockResponse, RawResponse> {
+    : public DefaultAsyncGrpcClient<MockRequest, MockResponse, MockRawRequest,
+                                    MockRawResponse> {
  public:
   TestDefaultAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -66,9 +120,14 @@ class TestDefaultAsyncGrpcClient
         notification_(notification),
         req_(req),
         expected_timeout_(expected_timeout) {}
-  absl::Status SendRpc(ClientParams<MockRequest, MockResponse>* params,
-                       absl::string_view hpke_secret) const override {
-    EXPECT_EQ(params->RequestRef()->value, req_.value);
+
+  absl::Status SendRpc(
+      const std::string& hpke_secret,
+      RawClientParams<MockRequest, MockResponse, MockRawResponse>* params)
+      const override {
+    VLOG(1) << "SendRpc invoked";
+    EXPECT_EQ(params->RequestRef()->request_ciphertext(),
+              req_.request_ciphertext());
     absl::Duration actual_timeout =
         absl::FromChrono(params->ContextRef()->deadline()) - absl::Now();
 
@@ -91,15 +150,25 @@ TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
   absl::Notification notification;
   MockRequest req;
   RequestMetadata metadata = MakeARandomMap();
-  req.value = 1;
+  MockRawRequest raw_request;
+  raw_request.value = "test";
+  req.set_request_ciphertext(raw_request.SerializeAsString());
 
   absl::Duration timeout_ms = absl::Milliseconds(100);
-  TestDefaultAsyncGrpcClient client(nullptr, nullptr, false, notification, req,
-                                    timeout_ms);
+  auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
+  SetupMockCryptoClientWrapper(*crypto_client);
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  TestDefaultAsyncGrpcClient client(key_fetcher_manager.get(),
+                                    crypto_client.get(), true, notification,
+                                    req, timeout_ms);
 
-  client.Execute(
-      std::make_unique<MockRequest>(req), metadata,
-      [](absl::StatusOr<std::unique_ptr<MockResponse>> result) {}, timeout_ms);
+  client.ExecuteInternal(
+      std::make_unique<MockRawRequest>(raw_request), metadata,
+      [](absl::StatusOr<std::unique_ptr<MockRawResponse>> result) {},
+      timeout_ms);
   notification.WaitForNotification();
 }
 }  // namespace

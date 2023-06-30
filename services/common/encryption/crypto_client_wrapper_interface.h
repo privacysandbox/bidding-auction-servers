@@ -18,6 +18,7 @@
 #define SERVICES_COMMON_ENCRYPTION_CRYPTO_CLIENT_WRAPPER_INTERFACE_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "absl/status/statusor.h"
@@ -37,27 +38,27 @@ class CryptoClientWrapperInterface {
   virtual absl::StatusOr<
       google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse>
   HpkeDecrypt(const server_common::PrivateKey& private_key,
-              absl::string_view ciphertext) noexcept = 0;
+              const std::string& ciphertext) noexcept = 0;
 
   // Encrypts a plaintext payload using HPKE and the provided public key.
   virtual absl::StatusOr<
       google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse>
   HpkeEncrypt(const google::cmrt::sdk::public_key_service::v1::PublicKey& key,
-              absl::string_view plaintext_payload) noexcept = 0;
+              const std::string& plaintext_payload) noexcept = 0;
 
   // Encrypts plaintext payload using AEAD and a secret derived from the HPKE
   // decrypt operation.
   virtual absl::StatusOr<
       google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
-  AeadEncrypt(absl::string_view plaintext_payload,
-              absl::string_view secret) noexcept = 0;
+  AeadEncrypt(const std::string& plaintext_payload,
+              const std::string& secret) noexcept = 0;
 
   // Decrypts a ciphertext using AEAD and a secret derived from the HPKE
   // encrypt operation.
   virtual absl::StatusOr<
       google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
-  AeadDecrypt(absl::string_view ciphertext,
-              absl::string_view secret) noexcept = 0;
+  AeadDecrypt(const std::string& ciphertext,
+              const std::string& secret) noexcept = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

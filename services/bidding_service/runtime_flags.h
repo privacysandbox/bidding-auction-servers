@@ -42,7 +42,7 @@ inline constexpr absl::string_view kFlags[] = {
     JS_URL_FETCH_PERIOD_MS,
     JS_TIME_OUT_MS};
 
-std::vector<absl::string_view> GetServiceFlags() {
+inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);
   std::vector<absl::string_view> flags(kFlags, kFlags + size);
 

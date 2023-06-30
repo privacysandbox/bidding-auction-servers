@@ -24,17 +24,66 @@
 #include "services/bidding_service/bidding_adtech_code_wrapper.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 using ::google::protobuf::TextFormat;
+using ::testing::AnyNumber;
 
 // Must be ample time for generateBid() to complete, otherwise we risk
 // flakiness. In production, generateBid() should run in no more than a few
 // hundred milliseconds.
 constexpr int kGenerateBidExecutionTimeSeconds = 2;
+constexpr char kKeyId[] = "key_id";
+constexpr char kSecret[] = "secret";
+
+void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
+  EXPECT_CALL(crypto_client, HpkeEncrypt)
+      .Times(testing::AnyNumber())
+      .WillRepeatedly(
+          [](const google::cmrt::sdk::public_key_service::v1::PublicKey& key,
+             const std::string& plaintext_payload) {
+            google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
+                hpke_encrypt_response;
+            hpke_encrypt_response.set_secret(kSecret);
+            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+            hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
+                plaintext_payload);
+            return hpke_encrypt_response;
+          });
+
+  // Mock the HpkeDecrypt() call on the crypto_client. This is used by the
+  // service to decrypt the incoming request.
+  EXPECT_CALL(crypto_client, HpkeDecrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly([](const server_common::PrivateKey& private_key,
+                         const std::string& ciphertext) {
+        google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+            hpke_decrypt_response;
+        *hpke_decrypt_response.mutable_payload() = ciphertext;
+        hpke_decrypt_response.set_secret(kSecret);
+        return hpke_decrypt_response;
+      });
+
+  // Mock the AeadEncrypt() call on the crypto_client. This is used to encrypt
+  // the response coming back from the service.
+  EXPECT_CALL(crypto_client, AeadEncrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly(
+          [](const std::string& plaintext_payload, const std::string& secret) {
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+            *data.mutable_ciphertext() = plaintext_payload;
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+                aead_encrypt_response;
+            *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+            return aead_encrypt_response;
+          });
+}
 
 // While Roma demands JSON input and enforces it strictly, we follow the
 // javascript style guide for returning objects here, so object keys are
@@ -231,8 +280,7 @@ void SetupV8Dispatcher(V8Dispatcher* dispatcher,
   ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_js_blob).ok());
 }
 
-void BuildGenerateBidsRequestFromBrowser(
-    GenerateBidsRequest* request,
+GenerateBidsRequest::GenerateBidsRawRequest BuildGenerateBidsRequestFromBrowser(
     absl::flat_hash_map<std::string, google::protobuf::ListValue>*
         interest_group_to_ad,
     int desired_bid_count = 5, bool set_enable_debug_reporting = false) {
@@ -245,7 +293,7 @@ void BuildGenerateBidsRequestFromBrowser(
                                       interest_group->ads());
   }
   raw_request.set_bidding_signals(MakeRandomTrustedBiddingSignals(raw_request));
-  *request->mutable_raw_request() = raw_request;
+  return raw_request;
 }
 
 class GenerateBidsReactorIntegrationTest : public ::testing::Test {
@@ -256,7 +304,20 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
     config_proto.set_mode(server_common::metric::ServerConfig::PROD);
     metric::BiddingContextMap(
         server_common::metric::BuildDependentConfig(config_proto));
+
+    TrustedServersConfigClient config_client({});
+    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    key_fetcher_manager_ = CreateKeyFetcherManager(config_client);
+    SetupMockCryptoClientWrapper(*crypto_client_);
   }
+
+  std::unique_ptr<MockCryptoClientWrapper> crypto_client_ =
+      std::make_unique<MockCryptoClientWrapper>();
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+  BiddingServiceRuntimeConfig bidding_service_runtime_config_ = {
+      .encryption_enabled = true};
 };
 
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
@@ -266,9 +327,11 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
   SetupV8Dispatcher(&dispatcher, js_code);
 
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
-  BuildGenerateBidsRequestFromBrowser(&request, &interest_group_to_ad);
+  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  request.set_request_ciphertext(raw_request.SerializeAsString());
   GenerateBidsResponse response;
 
   auto generate_bids_reactor_factory =
@@ -292,15 +355,18 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
 
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& ad_with_bid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     std::string expected_render_url =
         interest_group_to_ad.at(ad_with_bid.interest_group_name())
@@ -334,9 +400,11 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   SetupV8Dispatcher(&dispatcher, js_code_requiring_parsed_user_bidding_signals);
 
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
-  BuildGenerateBidsRequestFromBrowser(&request, &interest_group_to_ad);
+  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  request.set_request_ciphertext(raw_request.SerializeAsString());
   GenerateBidsResponse response;
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
@@ -359,15 +427,18 @@ TEST_F(GenerateBidsReactorIntegrationTest,
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
 
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& ad_with_bid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     std::string expected_render_url =
         interest_group_to_ad.at(ad_with_bid.interest_group_name())
@@ -399,12 +470,13 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   CodeDispatchClient client(dispatcher);
   SetupV8Dispatcher(&dispatcher, js_code_requiring_trusted_bidding_signals);
 
-  int desired_bid_count = 5;
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
-  BuildGenerateBidsRequestFromBrowser(&request, &interest_group_to_ad);
-  ASSERT_GT(request.raw_request().bidding_signals().length(), 0);
+  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  request.set_request_ciphertext(raw_request.SerializeAsString());
+  ASSERT_GT(raw_request.bidding_signals().length(), 0);
 
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
@@ -414,20 +486,23 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
                 const BiddingServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger =
             std::make_unique<BiddingNoOpLogger>();
-        return new GenerateBidsReactor(client, request, response,
-                                       std::move(benchmarking_logger), nullptr,
-                                       nullptr, runtime_config);
+        return new GenerateBidsReactor(
+            client, request, response, std::move(benchmarking_logger),
+            key_fetcher_manager, crypto_client, runtime_config);
       };
   GenerateBidsResponse response;
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
 
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& ad_with_bid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
     ASSERT_TRUE(ad_with_bid.ad().struct_value().fields().find("tbsLength") !=
                 ad_with_bid.ad().struct_value().fields().end());
     // One signal key per IG.
@@ -446,11 +521,13 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
                     js_code_requiring_trusted_bidding_signals_keys);
 
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
-  BuildGenerateBidsRequestFromBrowser(&request, &interest_group_to_ad);
-  ASSERT_GT(request.raw_request()
-                .interest_group_for_bidding(0)
+  GenerateBidsRequest::GenerateBidsRawRequest raw_request =
+      BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  request.set_request_ciphertext(raw_request.SerializeAsString());
+  ASSERT_GT(raw_request.interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
             0);
 
@@ -467,15 +544,17 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
             key_fetcher_manager, crypto_client, runtime_config);
       };
   GenerateBidsResponse response;
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
-
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& ad_with_bid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
     ASSERT_TRUE(ad_with_bid.ad().struct_value().fields().find("tbskLength") !=
                 ad_with_bid.ad().struct_value().fields().end());
     EXPECT_EQ(ad_with_bid.ad()
@@ -483,8 +562,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
                   .fields()
                   .at("tbskLength")
                   .number_value(),
-              request.raw_request()
-                  .interest_group_for_bidding(0)
+              raw_request.interest_group_for_bidding(0)
                   .trusted_bidding_signals_keys_size());
   }
   EXPECT_TRUE(dispatcher.Stop().ok());
@@ -509,6 +587,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   SetupV8Dispatcher(&dispatcher, js_code_requiring_user_bidding_signals);
   int desired_bid_count = 5;
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
@@ -521,7 +600,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
     ASSERT_TRUE(interest_group->user_bidding_signals().empty());
   }
   GenerateBidsResponse response;
-  *request.mutable_raw_request() = raw_request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
@@ -542,19 +621,22 @@ TEST_F(GenerateBidsReactorIntegrationTest,
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
 
   ASSERT_TRUE(response.IsInitialized());
-  ASSERT_TRUE(response.raw_response().IsInitialized());
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  ASSERT_TRUE(raw_response.IsInitialized());
 
   // All instances of the script should have crashed; no bids should have been
   // generated.
-  ASSERT_EQ(response.raw_response().bids_size(), 0);
+  ASSERT_EQ(raw_response.bids_size(), 0);
   EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
@@ -565,6 +647,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   SetupV8Dispatcher(&dispatcher, js_code);
   int desired_bid_count = 1;
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
@@ -575,11 +658,11 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
     interest_group_to_ad.try_emplace(interest_group->name(),
                                      interest_group->ads());
     // This fails in production, the user Bidding Signals are not being set.
-    // use logging to figire out why.
+    // use logging to figure out why.
   }
   raw_request.set_bidding_signals(MakeRandomTrustedBiddingSignals(raw_request));
   GenerateBidsResponse response;
-  *request.mutable_raw_request() = raw_request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
@@ -600,15 +683,18 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, BiddingServiceRuntimeConfig());
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_);
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
 
-  EXPECT_EQ(response.raw_response().bids_size(), 1);
-  for (const auto& ad_with_bid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     std::string expected_render_url =
         interest_group_to_ad.at(ad_with_bid.interest_group_name())
@@ -643,11 +729,12 @@ void GenerateBidDebugReportingTestHelper(
   CodeDispatchClient client(dispatcher);
   SetupV8Dispatcher(&dispatcher, js_blob);
   GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, google::protobuf::ListValue>
       interest_group_to_ad;
-  BuildGenerateBidsRequestFromBrowser(&request, &interest_group_to_ad,
-                                      desired_bid_count,
-                                      enable_debug_reporting);
+  auto raw_request = BuildGenerateBidsRequestFromBrowser(
+      &interest_group_to_ad, desired_bid_count, enable_debug_reporting);
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
 
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
@@ -663,10 +750,21 @@ void GenerateBidDebugReportingTestHelper(
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
+  std::unique_ptr<MockCryptoClientWrapper> crypto_client =
+      std::make_unique<MockCryptoClientWrapper>();
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  SetupMockCryptoClientWrapper(*crypto_client);
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager = CreateKeyFetcherManager(config_client);
+
   const BiddingServiceRuntimeConfig& runtime_config = {
+      .encryption_enabled = true,
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
-  BiddingService service(std::move(generate_bids_reactor_factory), nullptr,
-                         nullptr, std::move(runtime_config));
+  BiddingService service(std::move(generate_bids_reactor_factory),
+                         std::move(key_fetcher_manager),
+                         std::move(crypto_client), std::move(runtime_config));
   service.GenerateBids(&context, &request, response);
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
@@ -681,8 +779,10 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerDebugUrlGenerationDisabled) {
                                       enable_debug_reporting,
                                       enable_buyer_debug_url_generation);
 
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& adWithBid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
     EXPECT_GT(adWithBid.bid(), 0);
     EXPECT_FALSE(adWithBid.has_debug_report_urls());
   }
@@ -695,8 +795,10 @@ TEST_F(GenerateBidsReactorIntegrationTest, EventLevelDebugReportingDisabled) {
   GenerateBidDebugReportingTestHelper(&response, js_code_with_debug_urls,
                                       enable_debug_reporting,
                                       enable_buyer_debug_url_generation);
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& adWithBid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
     EXPECT_GT(adWithBid.bid(), 0);
     EXPECT_FALSE(adWithBid.has_debug_report_urls());
   }
@@ -710,8 +812,10 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidDebugReportingTestHelper(&response, js_code_with_debug_urls,
                                       enable_debug_reporting,
                                       enable_buyer_debug_url_generation);
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& adWithBid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
     EXPECT_GT(adWithBid.bid(), 0);
     EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
               "https://example-dsp.com/debugWin");
@@ -728,8 +832,10 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidDebugReportingTestHelper(
       &response, js_code_throws_exception_with_debug_urls,
       enable_debug_reporting, enable_buyer_debug_url_generation);
-  EXPECT_GT(response.raw_response().bids_size(), 0);
-  for (const auto& adWithBid : response.raw_response().bids()) {
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
     EXPECT_EQ(adWithBid.bid(), 0);
     EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
               "https://example-dsp.com/debugWin");
@@ -746,7 +852,9 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidDebugReportingTestHelper(&response, js_code_throws_exception,
                                       enable_debug_reporting,
                                       enable_buyer_debug_url_generation);
-  EXPECT_EQ(response.raw_response().bids_size(), 0);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_EQ(raw_response.bids_size(), 0);
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -46,7 +46,7 @@ DOCKER_RUN_ARGS+=(
 for evar in "${ENV_VARS[@]}"
 do
   DOCKER_RUN_ARGS+=(
-    "--env ${evar}"
+    "--env=${evar}"
   )
 done
 if [[ -t 0 ]] && [[ -t 1 ]]; then

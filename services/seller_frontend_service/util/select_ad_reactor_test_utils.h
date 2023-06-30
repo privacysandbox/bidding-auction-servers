@@ -29,8 +29,8 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/ohttp_utils.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
-#include "services/seller_frontend_service/seller_frontend_config.pb.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
+#include "services/seller_frontend_service/test/app_test_utils.h"
 #include "services/seller_frontend_service/util/app_utils.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
@@ -55,13 +55,23 @@ constexpr float kZeroBidValue = 0.0;
 constexpr int kNumAdComponentRenderUrl = 1;
 constexpr int kNonZeroDesirability = 1;
 
+struct EncryptedSelectAdRequestWithContext {
+  // Clear text protected audience input.
+  ProtectedAudienceInput protected_audience_input;
+  // Request containing the ciphertext blob of protected audience input.
+  SelectAdRequest select_ad_request;
+  // OHTTP request context used to encrypt the plain text protected audience
+  // input. (Useful for decoding the response).
+  quiche::ObliviousHttpRequest::Context context;
+};
+
 absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
     const SelectAdRequest& request);
 
 void SetupBuyerClientMock(
     absl::string_view hostname,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
-    const std::optional<GetBidsResponse>& bid,
+    const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
     bool repeated_get_allowed = false);
 
 void BuildAdWithBidFromAdWithBidMetadata(
@@ -81,15 +91,22 @@ void SetupScoringProviderMock(
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed = false);
 
-SellerFrontEndConfig CreateConfig();
+TrustedServersConfigClient CreateConfig();
 
-SelectAdResponse RunRequest(const SellerFrontEndConfig& config,
+template <class T>
+SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
                             const ClientRegistry& clients,
-                            const SelectAdRequest& request);
+                            const SelectAdRequest& request) {
+  grpc::CallbackServerContext context;
+  SelectAdResponse response;
+  T reactor(&context, &request, &response, clients, config_client);
+  reactor.Execute();
+  return response;
+}
 
 server_common::PrivateKey GetPrivateKey();
 
-SelectAdRequest GetSampleSelectAdRequest(
+EncryptedSelectAdRequestWithContext GetSampleSelectAdRequest(
     SelectAdRequest::ClientType client_type,
     absl::string_view seller_origin_domain);
 
@@ -97,7 +114,7 @@ BuyerBidsList GetBuyerClientsAndBidsForReactor(
     const SelectAdRequest& request,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients);
 
-std::pair<SelectAdRequest, ClientRegistry>
+std::pair<EncryptedSelectAdRequestWithContext, ClientRegistry>
 GetSelectAdRequestAndClientRegistryForTest(
     SelectAdRequest::ClientType client_type, std::optional<float> buyer_bid,
     const MockAsyncProvider<BuyerBidsList, ScoringSignals>&
@@ -117,17 +134,25 @@ GetProtoEncodedEncryptedInputAndOhttpContext(
     const ProtectedAudienceInput& protected_audience_input);
 
 template <typename T>
-SelectAdResponse RunReactorRequest(const SellerFrontEndConfig& config,
-                                   const ClientRegistry& clients,
-                                   const SelectAdRequest& request,
-                                   bool fail_fast = false) {
+SelectAdResponse RunReactorRequest(
+    const TrustedServersConfigClient& config_client,
+    const ClientRegistry& clients, const SelectAdRequest& request,
+    bool fail_fast = false) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
-  T reactor(&context, &request, &response, clients, config, fail_fast);
+  T reactor(&context, &request, &response, clients, config_client, fail_fast);
   reactor.Execute();
   return response;
 }
+
+AuctionResult DecryptAppProtoAuctionResult(
+    absl::string_view auction_result_ciphertext,
+    quiche::ObliviousHttpRequest::Context& context);
+
+AuctionResult DecryptBrowserAuctionResult(
+    absl::string_view auction_result_ciphertext,
+    quiche::ObliviousHttpRequest::Context& context);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

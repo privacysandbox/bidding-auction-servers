@@ -98,12 +98,21 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         PRIMARY_COORDINATOR_ACCOUNT_IDENTITY);
   config_client.SetFlag(FLAGS_secondary_coordinator_account_identity,
                         SECONDARY_COORDINATOR_ACCOUNT_IDENTITY);
+  config_client.SetFlag(FLAGS_gcp_primary_workload_identity_pool_provider,
+                        GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_secondary_workload_identity_pool_provider,
+                        GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  config_client.SetFlag(FLAGS_gcp_primary_key_service_cloud_function_url,
+                        GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+  config_client.SetFlag(FLAGS_gcp_secondary_key_service_cloud_function_url,
+                        GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+
   config_client.SetFlag(FLAGS_primary_coordinator_region,
                         PRIMARY_COORDINATOR_REGION);
   config_client.SetFlag(FLAGS_secondary_coordinator_region,
                         SECONDARY_COORDINATOR_REGION);
-  config_client.SetFlag(FLAGS_private_key_cache_ttl_minutes,
-                        PRIVATE_KEY_CACHE_TTL_MINUTES);
+  config_client.SetFlag(FLAGS_private_key_cache_ttl_seconds,
+                        PRIVATE_KEY_CACHE_TTL_SECONDS);
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
@@ -152,7 +161,7 @@ absl::Status RunServer() {
   // specified
   if (!config_client.GetStringParameter(JS_URL).empty()) {
     auto WrapCode = [enable_buyer_debug_url_generation](
-                        absl::string_view adtech_code_blob) {
+                        const std::string& adtech_code_blob) {
       return enable_buyer_debug_url_generation
                  ? GetWrappedAdtechCodeForBidding(adtech_code_blob)
                  : adtech_code_blob;
@@ -213,23 +222,22 @@ absl::Status RunServer() {
         } else {
           benchmarkingLogger = std::make_unique<BiddingNoOpLogger>();
         }
-        return new GenerateBidsReactor(
+        auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
             client, request, response, std::move(benchmarkingLogger),
             key_fetcher_manager, crypto_client, runtime_config);
+        return generate_bids_reactor.release();
       };
 
-  std::unique_ptr<server_common::KeyFetcherManagerInterface>
-      key_fetcher_manager = CreateKeyFetcherManager(config_client);
-  std::unique_ptr<CryptoClientWrapperInterface> crypto_client =
-      CreateCryptoClient();
   const BiddingServiceRuntimeConfig runtime_config = {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};
+
   BiddingService bidding_service(std::move(generate_bids_reactor_factory),
-                                 key_fetcher_manager.get(), crypto_client.get(),
+                                 CreateKeyFetcherManager(config_client),
+                                 CreateCryptoClient(),
                                  std::move(runtime_config));
 
   grpc::EnableDefaultHealthCheckService(true);

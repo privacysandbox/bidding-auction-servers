@@ -49,7 +49,7 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
       std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
       const V8Dispatcher& dispatcher, server_common::Executor* executor,
       absl::Duration time_out_ms,
-      absl::AnyInvocable<absl::string_view(absl::string_view)> wrap_code);
+      absl::AnyInvocable<std::string(const std::string&)> wrap_code);
 
   // Not copyable or movable.
   PeriodicCodeFetcher(const PeriodicCodeFetcher&) = delete;
@@ -74,7 +74,7 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
   const V8Dispatcher& dispatcher_;
   server_common::Executor* executor_;
   absl::Duration time_out_ms_;
-  absl::AnyInvocable<absl::string_view(absl::string_view)> wrap_code_;
+  absl::AnyInvocable<std::string(const std::string&)> wrap_code_;
 
   // Keeps track of the next task to be performed on the executor.
   server_common::TaskId task_id_;

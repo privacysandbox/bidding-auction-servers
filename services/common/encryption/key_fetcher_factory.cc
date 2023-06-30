@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "glog/logging.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -65,8 +66,23 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
   secondary.service_region =
       config_client.GetStringParameter(SECONDARY_COORDINATOR_REGION);
 
+  if (config_client.HasParameter(GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER)) {
+    VLOG(3) << "Found GCP Workload Identity Pool Provider, proceeding...";
+    primary.gcp_private_key_vending_service_cloudfunction_url =
+        config_client.GetStringParameter(
+            GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+    primary.gcp_wip_provider = config_client.GetStringParameter(
+        GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+
+    secondary.gcp_private_key_vending_service_cloudfunction_url =
+        config_client.GetStringParameter(
+            GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL);
+    secondary.gcp_wip_provider = config_client.GetStringParameter(
+        GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER);
+  }
+
   absl::Duration private_key_ttl = absl::Seconds(
-      config_client.GetIntParameter(PRIVATE_KEY_CACHE_TTL_MINUTES));
+      config_client.GetIntParameter(PRIVATE_KEY_CACHE_TTL_SECONDS));
   std::unique_ptr<PrivateKeyFetcherInterface> private_key_fetcher =
       server_common::PrivateKeyFetcherFactory::Create(primary, {secondary},
                                                       private_key_ttl);
@@ -81,8 +97,6 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
           std::move(private_key_fetcher), std::move(event_engine));
   manager->Start();
 
-  // TODO(b/280345837): The server should wait till the first key fetch is done
-  //  before continuing.
   return manager;
 }
 

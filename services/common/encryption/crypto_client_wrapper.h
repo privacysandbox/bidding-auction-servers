@@ -18,6 +18,7 @@
 #define SERVICES_COMMON_ENCRYPTION_CRYPTO_CLIENT_WRAPPER_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "absl/status/statusor.h"
@@ -52,23 +53,24 @@ class CryptoClientWrapper : public CryptoClientWrapperInterface {
   // Encrypts a plaintext payload using HPKE.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse>
   HpkeEncrypt(const google::cmrt::sdk::public_key_service::v1::PublicKey& key,
-              absl::string_view plaintext_payload) noexcept;
+              const std::string& plaintext_payload) noexcept;
 
   // Decrypts a ciphertext using HPKE.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse>
   HpkeDecrypt(const server_common::PrivateKey& private_key,
-              absl::string_view ciphertext) noexcept;
+              const std::string& ciphertext) noexcept;
 
   // Encrypts plaintext payload using AEAD and a secret derived from the HPKE
   // decrypt operation.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
-  AeadEncrypt(absl::string_view plaintext_payload,
-              absl::string_view secret) noexcept;
+  AeadEncrypt(const std::string& plaintext_payload,
+              const std::string& secret) noexcept;
 
   // Decrypts a ciphertext using AEAD and a secret derived from the HPKE
   // encrypt operation.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
-  AeadDecrypt(absl::string_view ciphertext, absl::string_view secret) noexcept;
+  AeadDecrypt(const std::string& ciphertext,
+              const std::string& secret) noexcept;
 
  private:
   std::unique_ptr<google::scp::cpio::CryptoClientInterface> crypto_client_;

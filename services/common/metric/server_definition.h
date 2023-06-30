@@ -35,8 +35,10 @@ inline constexpr server_common::metric::Definition<
 // API to get `Context` for bidding server to log metric
 inline constexpr const server_common::metric::DefinitionName*
     kBiddingMetricList[] = {&server_common::metric::kTotalRequestCount,
+                            &server_common::metric::kTotalRequestFailedCount,
                             &server_common::metric::kServerTotalTimeMs,
-                            &server_common::metric::kEncryptedResponseByte,
+                            &server_common::metric::kRequestByte,
+                            &server_common::metric::kResponseByte,
                             &kV8DispatchTimeMs};
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBiddingMetricSpan = kBiddingMetricList;
@@ -54,7 +56,10 @@ using BiddingContext = server_common::metric::ServerContext<kBiddingMetricSpan>;
 inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
     {
         &server_common::metric::kTotalRequestCount,
+        &server_common::metric::kTotalRequestFailedCount,
         &server_common::metric::kServerTotalTimeMs,
+        &server_common::metric::kRequestByte,
+        &server_common::metric::kResponseByte,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
@@ -72,7 +77,10 @@ using BfeContext = server_common::metric::ServerContext<kBfeMetricSpan>;
 inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
     {
         &server_common::metric::kTotalRequestCount,
+        &server_common::metric::kTotalRequestFailedCount,
         &server_common::metric::kServerTotalTimeMs,
+        &server_common::metric::kRequestByte,
+        &server_common::metric::kResponseByte,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
@@ -90,7 +98,10 @@ using SfeContext = server_common::metric::ServerContext<kSfeMetricSpan>;
 inline constexpr const server_common::metric::DefinitionName*
     kAuctionMetricList[] = {
         &server_common::metric::kTotalRequestCount,
+        &server_common::metric::kTotalRequestFailedCount,
         &server_common::metric::kServerTotalTimeMs,
+        &server_common::metric::kRequestByte,
+        &server_common::metric::kResponseByte,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kAuctionMetricSpan = kAuctionMetricList;
