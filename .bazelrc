@@ -1,3 +1,4 @@
+build --announce_rc
 build --verbose_failures
 build --client_env=CC=clang
 build --cxxopt=-std=c++17

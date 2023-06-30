@@ -69,32 +69,23 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
-  auto [request, clients] = GetSelectAdRequestAndClientRegistryForTest(
-      SelectAdRequest::ANDROID, kNonZeroBidValue, scoring_signals_provider,
-      scoring_client, buyer_front_end_async_client_factory_mock,
-      key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
-
-  // Set up the encoded cipher text in the request.
-  auto [encrypted_request, context] =
-      GetProtoEncodedEncryptedInputAndOhttpContext(
-          request.raw_protected_audience_input());
-  *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_request);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest(
+          SelectAdRequest::ANDROID, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
-  config.set_enable_encryption(true);
+  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
+      RunReactorRequest<SelectAdReactorForApp>(
+          config, clients, request_with_context.select_ad_request);
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
-
-  config.set_enable_encryption(false);
-  SelectAdResponse plain_response =
-      RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
-  EXPECT_TRUE(plain_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(), context);
+      encrypted_response.auction_result_ciphertext(),
+      request_with_context.context);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -114,14 +105,9 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
       GzipDecompress(unframed_response->compressed_data);
   EXPECT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
-
-  // Validate that the two response (encoded vs raw) representations are the
-  // same.
   AuctionResult deserialized_auction_result;
   EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
       decompressed_response->data(), decompressed_response->size()));
-  EXPECT_EQ(deserialized_auction_result.DebugString(),
-            plain_response.raw_response().DebugString());
   EXPECT_FALSE(deserialized_auction_result.is_chaff());
 
   // Validate that the bidding groups data is present.
@@ -149,32 +135,23 @@ TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
-  auto [request, clients] = GetSelectAdRequestAndClientRegistryForTest(
-      SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
-      scoring_client, buyer_front_end_async_client_factory_mock,
-      key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
-
-  // Set up the encoded cipher text in the request.
-  auto [encrypted_request, context] =
-      GetProtoEncodedEncryptedInputAndOhttpContext(
-          request.raw_protected_audience_input());
-  *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_request);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest(
+          SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
-  config.set_enable_encryption(true);
+  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
+      RunReactorRequest<SelectAdReactorForApp>(
+          config, clients, request_with_context.select_ad_request);
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
-
-  config.set_enable_encryption(false);
-  SelectAdResponse plain_response =
-      RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
-  EXPECT_TRUE(plain_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(), context);
+      encrypted_response.auction_result_ciphertext(),
+      request_with_context.context);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -194,14 +171,9 @@ TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
       GzipDecompress(unframed_response->compressed_data);
   EXPECT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
-
-  // Validate that the two response (encoded vs raw) representations are the
-  // same.
   AuctionResult deserialized_auction_result;
   EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
       decompressed_response->data(), decompressed_response->size()));
-  EXPECT_EQ(deserialized_auction_result.DebugString(),
-            plain_response.raw_response().DebugString());
 
   // Validate chaff bit is set in response.
   EXPECT_TRUE(deserialized_auction_result.is_chaff());
@@ -216,14 +188,16 @@ TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
-  auto [request, clients] = GetSelectAdRequestAndClientRegistryForTest(
-      SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
-      scoring_client, buyer_front_end_async_client_factory_mock,
-      key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
-
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest(
+          SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+  auto& protected_audience_input =
+      request_with_context.protected_audience_input;
+  auto& request = request_with_context.select_ad_request;
   // Set up the encoded cipher text in the request.
-  std::string encoded_request =
-      request.raw_protected_audience_input().SerializeAsString();
+  std::string encoded_request = protected_audience_input.SerializeAsString();
   // Corrupt the binary proto so that we can verify a proper error is set in
   // the response.
   encoded_request.data()[0] = 'a';
@@ -236,12 +210,11 @@ TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request = ohttp_request->EncapsulateAndSerialize();
   auto context = std::move(*ohttp_request).ReleaseContext();
-
   *request.mutable_protected_audience_ciphertext() =
       std::move(encrypted_request);
 
   auto config = CreateConfig();
-  config.set_enable_encryption(true);
+  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());

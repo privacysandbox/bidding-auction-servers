@@ -22,8 +22,11 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <include/gmock/gmock-actions.h>
 
+#include "absl/strings/escaping.h"
 #include "cpio/client_providers/interface/crypto_client_provider_interface.h"
 #include "gtest/gtest.h"
+#include "proto/hpke.pb.h"
+#include "proto/tink.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -94,7 +97,7 @@ TEST(CryptoClientWrapperTest, HpkeEncrypt_Success) {
   expected_request.set_shared_info(kSharedInfo);
   expected_request.set_is_bidirectional(true);
   expected_request.set_secret_length(
-      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_16_BYTES);
+      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_32_BYTES);
 
   HpkeEncryptResponse mock_response;
   HpkeEncryptedData data;
@@ -143,12 +146,25 @@ TEST(CryptoClientWrapperTest, HpkeEncrypt_Failure) {
 
 TEST(CryptoClientWrapperTest, HpkeDecrypt_Success) {
   server_common::PrivateKey private_key;
-  private_key.key_id = "key_id";
-  private_key.private_key = "private_key";
+  private_key.key_id = "keyid";
+  private_key.private_key = "privatekey";
+
+  google::crypto::tink::HpkePrivateKey hpke_private_key;
+  hpke_private_key.set_private_key(private_key.private_key);
+
+  const int unused_key_id = 0;
+  google::crypto::tink::Keyset keyset;
+  keyset.set_primary_key_id(unused_key_id);
+  keyset.add_key();
+  keyset.mutable_key(0)->set_key_id(unused_key_id);
+  keyset.mutable_key(0)->mutable_key_data()->set_value(
+      hpke_private_key.SerializeAsString());
 
   HpkeDecryptRequest expected_request;
   google::cmrt::sdk::private_key_service::v1::PrivateKey key;
-  key.set_private_key(private_key.private_key);
+  key.set_key_id(private_key.key_id);
+  key.set_private_key(
+      std::move(absl::Base64Escape(keyset.SerializeAsString())));
   *expected_request.mutable_private_key() = std::move(key);
   HpkeEncryptedData data;
   data.set_ciphertext(kCiphertext);
@@ -156,7 +172,7 @@ TEST(CryptoClientWrapperTest, HpkeDecrypt_Success) {
   expected_request.set_shared_info(kSharedInfo);
   expected_request.set_is_bidirectional(true);
   expected_request.set_secret_length(
-      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_16_BYTES);
+      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_32_BYTES);
 
   HpkeDecryptResponse mock_response;
   mock_response.set_payload(kPlaintext);

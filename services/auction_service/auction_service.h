@@ -46,12 +46,13 @@ class AuctionService final : public Auction::CallbackService {
  public:
   explicit AuctionService(
       ScoreAdsReactorFactory score_ads_reactor_factory,
-      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client,
+      std::unique_ptr<server_common::KeyFetcherManagerInterface>
+          key_fetcher_manager,
+      std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
       AuctionServiceRuntimeConfig runtime_config)
       : score_ads_reactor_factory_(std::move(score_ads_reactor_factory)),
-        key_fetcher_manager_(key_fetcher_manager),
-        crypto_client_(crypto_client),
+        key_fetcher_manager_(std::move(key_fetcher_manager)),
+        crypto_client_(std::move(crypto_client)),
         runtime_config_(std::move(runtime_config)) {}
   // Scores ads by running an ad auction.
   //
@@ -70,8 +71,9 @@ class AuctionService final : public Auction::CallbackService {
 
  private:
   ScoreAdsReactorFactory score_ads_reactor_factory_;
-  server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
-  CryptoClientWrapperInterface* crypto_client_;
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+  std::unique_ptr<CryptoClientWrapperInterface> crypto_client_;
   AuctionServiceRuntimeConfig runtime_config_;
 };
 

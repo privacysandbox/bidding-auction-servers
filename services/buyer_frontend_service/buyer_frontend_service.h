@@ -37,10 +37,11 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
   explicit BuyerFrontEndService(
       std::unique_ptr<BiddingSignalsAsyncProvider>
           bidding_signals_async_provider,
-      std::unique_ptr<BiddingAsyncClient> bidding_async_client,
-      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client, const GetBidsConfig config,
-      bool enable_benchmarking = false);
+      const BiddingServiceClientConfig& client_config,
+      std::unique_ptr<server_common::KeyFetcherManagerInterface>
+          key_fetcher_manager,
+      std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
+      const GetBidsConfig config, bool enable_benchmarking = false);
   // Returns bid for the top eligible ad candidate.
   //
   // This is the API that can be used by the Seller Frontend Service.
@@ -61,16 +62,17 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
   // The Bidding signals provider is used to fetch signals required for bidding
   // from external sources, such as a KeyValue server or an HTTP server.
   std::unique_ptr<BiddingSignalsAsyncProvider> bidding_signals_async_provider_;
+  // Config for modifying behaviour of GetBidsUnaryReactor.
+  const GetBidsConfig config_;
+  bool enable_benchmarking_;
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+  std::unique_ptr<CryptoClientWrapperInterface> crypto_client_;
   // The BiddingAsyncClient is used to call Bidding Service to execute
   // AdTech's code in a secure privacy sandbox and generate the bids.
   // The bids received in response from the BiddingAsyncClient are returned
   // to the caller in the GetBid response.
   std::unique_ptr<BiddingAsyncClient> bidding_async_client_;
-  // Config for modifying behaviour of GetBidsUnaryReactor.
-  const GetBidsConfig config_;
-  bool enable_benchmarking_;
-  server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
-  CryptoClientWrapperInterface* crypto_client_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

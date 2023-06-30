@@ -18,10 +18,13 @@
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "cc/core/interface/errors.h"
 #include "cc/public/cpio/interface/crypto_client/type_def.h"
 #include "glog/logging.h"
+#include "proto/hpke.pb.h"
+#include "proto/tink.pb.h"
 #include "services/common/util/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -52,7 +55,7 @@ namespace {
 
 absl::Status HandleCryptoOperationResult(const ExecutionResult& result,
                                          bool operation_successful,
-                                         absl::string_view operation) {
+                                         const std::string& operation) {
   if (!result.Successful() || !operation_successful) {
     // Only log the execution result error; don't log the callback failure
     // twice.
@@ -82,18 +85,18 @@ CryptoClientWrapper::CryptoClientWrapper(
 CryptoClientWrapper::~CryptoClientWrapper() { crypto_client_->Stop(); }
 
 absl::StatusOr<HpkeEncryptResponse> CryptoClientWrapper::HpkeEncrypt(
-    const PublicKey& key, absl::string_view plaintext_payload) noexcept {
+    const PublicKey& key, const std::string& plaintext_payload) noexcept {
   google::cmrt::sdk::public_key_service::v1::PublicKey public_key;
   public_key.set_key_id(key.key_id());
   public_key.set_public_key(key.public_key());
 
   HpkeEncryptRequest request;
   *request.mutable_public_key() = std::move(public_key);
-  request.set_payload(plaintext_payload.data());
+  request.set_payload(plaintext_payload);
   request.set_shared_info(kSharedInfo);
   request.set_is_bidirectional(true);
   request.set_secret_length(
-      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_16_BYTES);
+      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_32_BYTES);
 
   HpkeEncryptResponse response;
   bool success = false;
@@ -120,10 +123,10 @@ absl::StatusOr<HpkeEncryptResponse> CryptoClientWrapper::HpkeEncrypt(
 }
 
 absl::StatusOr<AeadEncryptResponse> CryptoClientWrapper::AeadEncrypt(
-    absl::string_view plaintext_payload, absl::string_view secret) noexcept {
+    const std::string& plaintext_payload, const std::string& secret) noexcept {
   AeadEncryptRequest request;
-  request.set_payload(plaintext_payload.data());
-  request.set_secret(secret.data());
+  request.set_payload(plaintext_payload);
+  request.set_secret(secret);
   request.set_shared_info(kSharedInfo);
 
   AeadEncryptResponse response;
@@ -150,14 +153,27 @@ absl::StatusOr<AeadEncryptResponse> CryptoClientWrapper::AeadEncrypt(
 
 absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
     const server_common::PrivateKey& private_key,
-    absl::string_view ciphertext) noexcept {
+    const std::string& ciphertext) noexcept {
+  google::crypto::tink::HpkePrivateKey hpke_private_key;
+  hpke_private_key.set_private_key(private_key.private_key);
+
+  const int unused_key_id = 0;
+  google::crypto::tink::Keyset keyset;
+  keyset.set_primary_key_id(unused_key_id);
+  keyset.add_key();
+  keyset.mutable_key(0)->set_key_id(unused_key_id);
+  keyset.mutable_key(0)->mutable_key_data()->set_value(
+      hpke_private_key.SerializeAsString());
+
   // Only the private_key field needs to be set for decryption.
   google::cmrt::sdk::private_key_service::v1::PrivateKey key;
-  key.set_private_key(private_key.private_key);
+  key.set_key_id(private_key.key_id);
+  key.set_private_key(
+      std::move(absl::Base64Escape(keyset.SerializeAsString())));
 
   // Only the ciphertext field needs to be set for decryption.
   HpkeEncryptedData encrypted_data;
-  encrypted_data.set_ciphertext(ciphertext.data());
+  encrypted_data.set_ciphertext(std::move(ciphertext));
 
   HpkeDecryptRequest request;
   *request.mutable_private_key() = std::move(key);
@@ -165,7 +181,7 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
   request.set_shared_info(kSharedInfo);
   request.set_is_bidirectional(true);
   request.set_secret_length(
-      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_16_BYTES);
+      google::cmrt::sdk::crypto_service::v1::SECRET_LENGTH_32_BYTES);
 
   HpkeDecryptResponse response;
   bool success = false;
@@ -192,14 +208,11 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
 }
 
 absl::StatusOr<AeadDecryptResponse> CryptoClientWrapper::AeadDecrypt(
-    absl::string_view ciphertext, absl::string_view secret) noexcept {
-  AeadEncryptedData encrypted_data;
-  encrypted_data.set_ciphertext(ciphertext.data());
-
+    const std::string& ciphertext, const std::string& secret) noexcept {
   AeadDecryptRequest request;
-  *request.mutable_encrypted_data() = std::move(encrypted_data);
-  request.set_secret(secret.data());
   request.set_shared_info(kSharedInfo);
+  request.set_secret(secret);
+  request.mutable_encrypted_data()->set_ciphertext(ciphertext);
 
   AeadDecryptResponse response;
   bool success = false;

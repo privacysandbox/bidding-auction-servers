@@ -33,8 +33,9 @@ using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 SelectAdReactorForApp::SelectAdReactorForApp(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const SellerFrontEndConfig& config, bool fail_fast)
-    : SelectAdReactor(context, request, response, clients, config, fail_fast) {}
+    const TrustedServersConfigClient& config_client, bool fail_fast)
+    : SelectAdReactor(context, request, response, clients, config_client,
+                      fail_fast) {}
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,

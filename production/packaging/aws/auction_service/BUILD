@@ -28,7 +28,10 @@ load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 
 pkg_files(
     name = "server_executables",
-    srcs = [
+    srcs = select({
+        "//:non_prod_build": ["//production/packaging/common/nonprod"],
+        "//conditions:default": ["//production/packaging/common/prod"],
+    }) + [
         "bin/init_server_basic",
         "//services/auction_service:server",
         "@control_plane_shared//cc/aws/proxy/src:proxify",

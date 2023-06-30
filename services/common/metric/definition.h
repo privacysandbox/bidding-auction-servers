@@ -274,6 +274,12 @@ constexpr bool IsInList(const Definition<T, privacy, instrument>& definition,
 // List of common metrics used by any servers
 inline constexpr Definition<int, Privacy::kNonImpacting,
                             Instrument::kUpDownCounter>
+    kTotalRequestFailedCount(
+        "kTotalRequestFailedCount",
+        "Total number of requests that resulted in failure");
+
+inline constexpr Definition<int, Privacy::kNonImpacting,
+                            Instrument::kUpDownCounter>
     kTotalRequestCount("kTotalRequestCounter",
                        "Total number of requests received by the server");
 
@@ -283,11 +289,12 @@ inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
                        "Total time taken by the server to execute the request",
                        kTimeHistogram);
 
-inline constexpr Definition<int, Privacy::kNonImpacting,
-                            Instrument::kUpDownCounter>
-    kEncryptedResponseByte("kEncryptedResponseByte",
-                           "Encrypted Response size in bytes");
+inline constexpr double kSizeHistogram[] = {0, 20, 40, 80, 100, 200, 400, 800};
+inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
+    kResponseByte("kResponseByte", "Response size in bytes", kSizeHistogram);
 
+inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
+    kRequestByte("kRequestByte", "Request size in bytes", kSizeHistogram);
 }  // namespace privacy_sandbox::server_common::metric
 
 #endif  // SERVICES_COMMON_METRIC_DEFINITION_H_

@@ -99,8 +99,8 @@ variable "envoy_port" {
   default     = 51052
 }
 
-variable "use_debug_image" {
-  description = "If true, use the Confidential space debug image. Else use the prod image, which does not allow SSH."
+variable "use_confidential_space_debug_image" {
+  description = "If true, use the Confidential space debug image. Else use the prod image, which does not allow SSH. The images containing the service logic will run on top of this image and have their own prod and debug builds."
   type        = bool
   default     = false
 }
@@ -108,4 +108,10 @@ variable "use_debug_image" {
 variable "runtime_flags" {
   type        = map(string)
   description = "Seller runtime flags. Must exactly match flags specified in <project root>/services/(auction_service|seller_frontend_service)/runtime_flags.h"
+}
+
+variable "tee_impersonate_service_accounts" {
+  description = "Comma separated list of service accounts (by email) the TEE should impersonate."
+  type        = string
+  default     = ""
 }

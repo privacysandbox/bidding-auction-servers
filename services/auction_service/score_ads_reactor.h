@@ -48,9 +48,9 @@ inline constexpr char kNoTrustedScoringSignals[] =
 // response is finished being served, ScoreAdsReactor cleans up all
 // necessary state and grpc releases the reactor from memory.
 class ScoreAdsReactor
-    : public CodeDispatchReactor<ScoreAdsRequest,
-                                 ScoreAdsRequest_ScoreAdsRawRequest,
-                                 ScoreAdsResponse> {
+    : public CodeDispatchReactor<
+          ScoreAdsRequest, ScoreAdsRequest::ScoreAdsRawRequest,
+          ScoreAdsResponse, ScoreAdsResponse::ScoreAdsRawResponse> {
  public:
   explicit ScoreAdsReactor(
       const CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
@@ -75,11 +75,14 @@ class ScoreAdsReactor
       const std::vector<absl::StatusOr<DispatchResponse>>& output);
 
   ContextLogger::ContextMap GetLoggingContext(
-      const ScoreAdsRequest& score_ads_request);
+      const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request);
 
   // Performs debug reporting for all scored ads by the seller.
   void PerformDebugReporting(
       const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
+
+  // Finishes the RPC call with an OK status.
+  void FinishWithOkStatus();
 
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's

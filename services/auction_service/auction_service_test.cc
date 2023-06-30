@@ -15,6 +15,7 @@
 #include "services/auction_service/auction_service.h"
 
 #include <memory>
+#include <string>
 
 #include <grpcpp/server.h>
 
@@ -28,12 +29,20 @@
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/auction_service/score_ads_reactor.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
+constexpr char kKeyId[] = "key_id";
+constexpr char kSecret[] = "secret";
+
+using ::testing::AnyNumber;
 
 struct LocalAuctionStartResult {
   int port;
@@ -66,22 +75,60 @@ std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
   return Auction::NewStub(channel);
 }
 
-TEST(AuctionServiceTest, InstantiatesScoreAdsReactor) {
-  MockCodeDispatchClient dispatcher;
-  ScoreAdsRequest request;
-  ScoreAdsResponse response;
+class AuctionServiceTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    server_common::metric::ServerConfig config_proto;
+    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
+    metric::AuctionContextMap(
+        server_common::metric::BuildDependentConfig(config_proto));
+    SetupMockCryptoClientWrapper();
+  }
 
+  void SetupMockCryptoClientWrapper() {
+    // Mock the HpkeDecrypt() call on the crypto_client_. This is used by the
+    // service to decrypt the incoming request_.
+    EXPECT_CALL(*crypto_client_, HpkeDecrypt)
+        .Times(AnyNumber())
+        .WillRepeatedly([](const server_common::PrivateKey& private_key,
+                           const std::string& ciphertext) {
+          google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+              hpke_decrypt_response;
+          hpke_decrypt_response.set_payload(ciphertext);
+          hpke_decrypt_response.set_secret(kSecret);
+          return hpke_decrypt_response;
+        });
+
+    // Mock the AeadEncrypt() call on the crypto_client_. This is used to
+    // encrypt the response_ coming back from the service.
+    EXPECT_CALL(*crypto_client_, AeadEncrypt)
+        .Times(AnyNumber())
+        .WillOnce([](const std::string& plaintext_payload,
+                     const std::string& secret) {
+          google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+          data.set_ciphertext(plaintext_payload);
+          google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+              aead_encrypt_response;
+          *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+          return aead_encrypt_response;
+        });
+  }
+
+  MockCodeDispatchClient dispatcher_;
+  ScoreAdsRequest request_;
+  ScoreAdsResponse response_;
+  std::unique_ptr<MockCryptoClientWrapper> crypto_client_ =
+      std::make_unique<MockCryptoClientWrapper>();
+  TrustedServersConfigClient config_client_{{}};
+};
+
+TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
   absl::BlockingCounter init_pending(1);
-  // initialize
-  server_common::metric::ServerConfig config_proto;
-  config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-  metric::AuctionContextMap(
-      server_common::metric::BuildDependentConfig(config_proto));
   auto score_ads_reactor_factory =
-      [&dispatcher, &init_pending](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+      [this, &init_pending](
+          const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
+          CryptoClientWrapperInterface* crypto_client_,
           const AuctionServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
             std::make_unique<ScoreAdsNoOpLogger>();
@@ -89,116 +136,131 @@ TEST(AuctionServiceTest, InstantiatesScoreAdsReactor) {
             std::make_unique<MockAsyncReporter>(
                 std::make_unique<MockHttpFetcherAsync>());
         auto mock = std::make_unique<MockScoreAdsReactor>(
-            dispatcher, request, response, key_fetcher_manager, crypto_client,
-            runtime_config, std::move(benchmarkingLogger),
+            dispatcher_, request_, response_, key_fetcher_manager,
+            crypto_client_, runtime_config, std::move(benchmarkingLogger),
             std::move(async_reporter), "");
         EXPECT_CALL(*mock, Execute).Times(1);
         init_pending.DecrementCount();
         return mock;
       };
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         AuctionServiceRuntimeConfig());
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_), auction_service_runtime_config);
   grpc::CallbackServerContext context;
-  auto mock = service.ScoreAds(&context, &request, &response);
+  auto mock = service.ScoreAds(&context, &request_, &response_);
   init_pending.Wait();
   delete mock;
 }
 
-TEST(AuctionServiceTest, AbortsIfMissingAds) {
-  MockCodeDispatchClient dispatcher;
+TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
   auto score_ads_reactor_factory =
-      [&dispatcher](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
-          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
-          const AuctionServiceRuntimeConfig& runtime_config) {
+      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+             server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+             CryptoClientWrapperInterface* crypto_client_,
+             const AuctionServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<MockAsyncReporter> async_reporter =
             std::make_unique<MockAsyncReporter>(
                 std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher, request, response,
+            dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client, std::move(async_reporter), runtime_config);
+            crypto_client_, std::move(async_reporter), runtime_config);
       };
-
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         AuctionServiceRuntimeConfig());
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_), auction_service_runtime_config);
 
   LocalAuctionStartResult result = StartLocalAuction(&service);
   std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
 
   grpc::ClientContext context;
-  ScoreAdsRequest request;
-  ScoreAdsResponse response;
-  grpc::Status status = stub->ScoreAds(&context, request, &response);
+  grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   ASSERT_EQ(status.error_message(), kNoAdsToScore);
 }
 
-TEST(AuctionServiceTest, AbortsIfMissingScoringSignals) {
-  MockCodeDispatchClient dispatcher;
+TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
   auto score_ads_reactor_factory =
-      [&dispatcher](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
-          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
-          const AuctionServiceRuntimeConfig& runtime_config) {
+      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+             server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+             CryptoClientWrapperInterface* crypto_client_,
+             const AuctionServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<MockAsyncReporter> async_reporter =
             std::make_unique<MockAsyncReporter>(
                 std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher, request, response,
+            dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client, std::move(async_reporter), runtime_config);
+            crypto_client_, std::move(async_reporter), runtime_config);
       };
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         AuctionServiceRuntimeConfig());
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_), auction_service_runtime_config);
 
   LocalAuctionStartResult result = StartLocalAuction(&service);
   std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
 
   grpc::ClientContext context;
-  ScoreAdsRequest request;
-  *request.mutable_raw_request()->mutable_ad_bids()->Add() =
-      MakeARandomAdWithBidMetadata(1, 10);
-  ScoreAdsResponse response;
-  grpc::Status status = stub->ScoreAds(&context, request, &response);
+  request_.set_key_id(kKeyId);
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  *raw_request.mutable_ad_bids()->Add() = MakeARandomAdWithBidMetadata(1, 10);
+  *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   ASSERT_EQ(status.error_message(), kNoTrustedScoringSignals);
 }
 
-TEST(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
-  MockCodeDispatchClient dispatcher;
+TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
   auto score_ads_reactor_factory =
-      [&dispatcher](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
-          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
-          const AuctionServiceRuntimeConfig& runtime_config) {
+      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+             server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+             CryptoClientWrapperInterface* crypto_client_,
+             const AuctionServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<MockAsyncReporter> async_reporter =
             std::make_unique<MockAsyncReporter>(
                 std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher, request, response,
+            dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client, std::move(async_reporter), runtime_config);
+            crypto_client_, std::move(async_reporter), runtime_config);
       };
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         AuctionServiceRuntimeConfig());
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_), auction_service_runtime_config);
 
   LocalAuctionStartResult result = StartLocalAuction(&service);
   std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
 
   grpc::ClientContext context;
-  ScoreAdsRequest request;
-  *request.mutable_raw_request()->mutable_ad_bids()->Add() =
-      MakeARandomAdWithBidMetadata(1, 10);
-  request.mutable_raw_request()->set_scoring_signals(
+  request_.set_key_id(kKeyId);
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  *raw_request.mutable_ad_bids()->Add() = MakeARandomAdWithBidMetadata(1, 10);
+  raw_request.set_scoring_signals(
       R"json({"renderUrls":{"placeholder_url":[123]}})json");
-  ScoreAdsResponse response;
-  grpc::Status status = stub->ScoreAds(&context, request, &response);
+  *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
   ASSERT_EQ(status.error_message(), kNoAdsWithValidScoringSignals);
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);

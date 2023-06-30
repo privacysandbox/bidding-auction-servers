@@ -46,7 +46,21 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::optional<std::string>, secondary_coordinator_region, std::nullopt,
     "The region of the secondary coordinator's Private Key Vending Service");
-ABSL_FLAG(std::optional<int>, private_key_cache_ttl_minutes, 64800,  // 45 days
+ABSL_FLAG(std::optional<std::string>,
+          gcp_primary_workload_identity_pool_provider, std::nullopt,
+          "The GCP primary workload identity pool provider resource name.");
+ABSL_FLAG(std::optional<std::string>,
+          gcp_secondary_workload_identity_pool_provider, std::nullopt,
+          "The GCP secondary workload identity pool provider resource name.");
+
+ABSL_FLAG(std::optional<std::string>,
+          gcp_primary_key_service_cloud_function_url, std::nullopt,
+          "GCP primary private key vending service cloud function URL.");
+ABSL_FLAG(std::optional<std::string>,
+          gcp_secondary_key_service_cloud_function_url, std::nullopt,
+          "GCP secondary private key vending service cloud function URL.");
+ABSL_FLAG(std::optional<int>, private_key_cache_ttl_seconds,
+          3888000,  // 45 days
           "The duration of how long encryption keys are cached in memory");
 ABSL_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds,
           10800,  // 3 hours

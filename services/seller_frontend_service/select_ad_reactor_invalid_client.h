@@ -17,6 +17,8 @@
 #ifndef SERVICES_SELLER_FRONTEND_SERVICE_SELECT_AD_REACTOR_INVALID_CLIENT_H_
 #define SERVICES_SELLER_FRONTEND_SERVICE_SELECT_AD_REACTOR_INVALID_CLIENT_H_
 
+#include <string>
+
 #include <grpcpp/grpcpp.h>
 
 #include "absl/status/statusor.h"
@@ -29,11 +31,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 // client type is specified in the request.
 class SelectAdReactorInvalidClient : public SelectAdReactor {
  public:
-  explicit SelectAdReactorInvalidClient(grpc::CallbackServerContext* context,
-                                        const SelectAdRequest* request,
-                                        SelectAdResponse* response,
-                                        const ClientRegistry& clients,
-                                        const SellerFrontEndConfig& config);
+  explicit SelectAdReactorInvalidClient(
+      grpc::CallbackServerContext* context, const SelectAdRequest* request,
+      SelectAdResponse* response, const ClientRegistry& clients,
+      const TrustedServersConfigClient& config_client);
   virtual ~SelectAdReactorInvalidClient() = default;
 
   // SelectAdReactorInvalidClient is neither copyable nor movable.
@@ -44,6 +45,19 @@ class SelectAdReactorInvalidClient : public SelectAdReactor {
   void Execute() override;
 
  private:
+  absl::StatusOr<std::string> GetNonEncryptedResponse(
+      const std::optional<ScoreAdsResponse::AdScore>& high_score,
+      const google::protobuf::Map<
+          std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
+      const std::optional<AuctionResult::Error>& error) override;
+
+  ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+      absl::string_view encoded_data) override;
+
+  absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(
+      const google::protobuf::Map<std::string, std::string>&
+          encoded_buyer_inputs) override;
+
   SelectAdRequest::ClientType client_type_;
 };
 

@@ -25,7 +25,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-void LogMetrics(const ScoreAdsRequest* request) {
+void LogMetrics(const ScoreAdsRequest* request, ScoreAdsResponse* response) {
   auto& metric_context = metric::AuctionContextMap()->Get(request);
   LogIfError(
       metric_context
@@ -36,21 +36,31 @@ void LogMetrics(const ScoreAdsRequest* request) {
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
+  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+      (int)request->ByteSizeLong()));
+  LogIfError(
+      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
+          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context.LogUpDownCounterDeferred<
+             server_common::metric::kTotalRequestFailedCount>(
+      [&metric_context]() -> int {
+        return metric_context.is_request_successful() ? 0 : 1;
+      }));
 }
-
 }  // namespace
 grpc::ServerUnaryReactor* AuctionService::ScoreAds(
     grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
     ScoreAdsResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("ScoreAds"));
-  LogMetrics(request);
+  LogMetrics(request, response);
 
   VLOG(2) << "\nScoreAdsRequest:\n" << request->DebugString();
 
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
-  auto reactor = score_ads_reactor_factory_(
-      request, response, key_fetcher_manager_, crypto_client_, runtime_config_);
+  auto reactor =
+      score_ads_reactor_factory_(request, response, key_fetcher_manager_.get(),
+                                 crypto_client_.get(), runtime_config_);
   reactor->Execute();
   return reactor.release();
 }

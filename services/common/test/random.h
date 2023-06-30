@@ -27,6 +27,7 @@
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/seller_frontend_service/test/app_test_utils.h"
 
 // helper functions to generate random objects for testing
 namespace privacy_sandbox::bidding_auction_servers {
@@ -326,7 +327,8 @@ MakeARandomInterestGroupForBiddingFromBrowser() {
   return MakeARandomInterestGroupForBidding(false);
 }
 
-GenerateBidsRequest MakeARandomGenerateBidsRequestForAndroid() {
+GenerateBidsRequest::GenerateBidsRawRequest
+MakeARandomGenerateBidsRawRequestForAndroid() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
@@ -341,14 +343,11 @@ GenerateBidsRequest MakeARandomGenerateBidsRequestForAndroid() {
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_bidding_signals(MakeARandomString());
 
-  GenerateBidsRequest request;
-  request.set_key_id(MakeARandomString());
-  request.set_request_ciphertext(MakeARandomString());
-  *request.mutable_raw_request() = std::move(raw_request);
-  return request;
+  return raw_request;
 }
 
-GenerateBidsRequest MakeARandomGenerateBidsRequestForBrowser() {
+GenerateBidsRequest::GenerateBidsRawRequest
+MakeARandomGenerateBidsRequestForBrowser() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
@@ -365,11 +364,7 @@ GenerateBidsRequest MakeARandomGenerateBidsRequestForBrowser() {
   raw_request.set_seller(MakeARandomString());
   raw_request.set_publisher_name(MakeARandomString());
 
-  GenerateBidsRequest request;
-  request.set_key_id(MakeARandomString());
-  request.set_request_ciphertext(MakeARandomString());
-  *request.mutable_raw_request() = std::move(raw_request);
-  return request;
+  return raw_request;
 }
 
 ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
@@ -443,33 +438,13 @@ AdWithBid MakeARandomAdWithBid(float min_bid, float max_bid,
   return ad_with_bid;
 }
 
-GenerateBidsResponse MakeARandomGenerateBidsResponse() {
+GenerateBidsResponse::GenerateBidsRawResponse
+MakeARandomGenerateBidsRawResponse() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.mutable_bids()->Add(MakeARandomAdWithBid(0, 10));
-
-  GenerateBidsResponse response;
-  *response.mutable_raw_response() = std::move(raw_response);
-  response.set_response_ciphertext(MakeARandomString());
-  return response;
-}
-
-ScoreAdsRequest MakeARandomScoreAdsRequest() {
-  // request object will take ownership
-  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
-  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
-  raw_request.set_allocated_auction_signals(
-      std::move(MakeARandomStructJsonString(1).release()));
-  raw_request.set_allocated_seller_signals(
-      std::move(MakeARandomStructJsonString(1).release()));
-  raw_request.set_publisher_hostname(MakeARandomString());
-
-  ScoreAdsRequest request;
-  request.set_key_id(MakeARandomString());
-  request.set_request_ciphertext(MakeARandomString());
-  *request.mutable_raw_request() = std::move(raw_request);
-  return request;
+  return raw_response;
 }
 
 ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
@@ -491,17 +466,6 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
         MakeARandomString(), MakeARandomListOfNumbers());
   }
   return ad_score;
-}
-
-ScoreAdsResponse MakeARandomScoreAdsResponse() {
-  // request object will take ownership
-  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
-  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-
-  ScoreAdsResponse response;
-  *response.mutable_raw_response() = std::move(raw_response);
-  response.set_response_ciphertext(MakeARandomString());
-  return response;
 }
 
 // Must manually delete/take ownership of underlying pointer
@@ -537,34 +501,26 @@ BuyerInput::InterestGroup MakeARandomInterestGroupFromBrowser() {
   return MakeARandomInterestGroup(false);
 }
 
-GetBidsRequest MakeARandomGetBidsRequest() {
+GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_publisher_name("publisher_name");
   raw_request.set_allocated_auction_signals(
       std::move(MakeARandomStructJsonString(1).release()));
+  return raw_request;
+}
 
+GetBidsRequest MakeARandomGetBidsRequest() {
   GetBidsRequest request;
-  request.set_request_ciphertext(MakeARandomString());
-  *request.mutable_raw_request() = std::move(raw_request);
+  GetBidsRequest::GetBidsRawRequest raw_request =
+      MakeARandomGetBidsRawRequest();
+  request.set_request_ciphertext(raw_request.SerializeAsString());
+  request.set_key_id(MakeARandomString());
   return request;
 }
 
-GetBidsResponse MakeARandomGetBidsResponse() {
-  // request object will take ownership
-  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
-  GetBidsResponse::GetBidsRawResponse raw_response;
-
-  GetBidsResponse response;
-  *response.mutable_raw_response() = std::move(raw_response);
-  response.set_response_ciphertext(MakeARandomString());
-  return response;
-}
-
-SelectAdRequest MakeARandomSelectAdRequest(
-    absl::string_view seller_domain_origin) {
-  SelectAdRequest request;
-
+ProtectedAudienceInput MakeARandomProtectedAudienceInput() {
   BuyerInput buyer_input_1;
   BuyerInput buyer_input_2;
   auto ig_with_two_ads_1 = MakeAnInterestGroupSentFromDevice();
@@ -578,11 +534,18 @@ SelectAdRequest MakeARandomSelectAdRequest(
   buyer_inputs.emplace("ad_tech_B.com", buyer_input_2);
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
       GetEncodedBuyerInputMap(buyer_inputs);
-  request.mutable_raw_protected_audience_input()->set_generation_id(
-      MakeARandomString());
-  *request.mutable_raw_protected_audience_input()->mutable_buyer_input() =
+  ProtectedAudienceInput protected_audience_input;
+  protected_audience_input.set_generation_id(MakeARandomString());
+  *protected_audience_input.mutable_buyer_input() =
       *std::move(encoded_buyer_input);
+  protected_audience_input.set_publisher_name(MakeARandomString());
+  return protected_audience_input;
+}
 
+SelectAdRequest MakeARandomSelectAdRequest(
+    absl::string_view seller_domain_origin,
+    const ProtectedAudienceInput& protected_audience_input) {
+  SelectAdRequest request;
   request.mutable_auction_config()->set_seller_signals(absl::StrCat(
       "{\"seller_signal\": \"", MakeARandomString(), "\"}"));  // 3.
 
@@ -592,19 +555,13 @@ SelectAdRequest MakeARandomSelectAdRequest(
   request.mutable_auction_config()->set_seller(MakeARandomString());
   request.mutable_auction_config()->set_buyer_timeout_ms(1000);
 
-  for (auto& buyer_input_pair :
-       request.raw_protected_audience_input().buyer_input()) {
+  for (auto& buyer_input_pair : protected_audience_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         buyer_input_pair.first;
   }
 
   request.mutable_auction_config()->set_seller(seller_domain_origin);
-
-  request.mutable_raw_protected_audience_input()->set_publisher_name(
-      MakeARandomString());  // 6.
-  // 7.
-  request.set_client_type(SelectAdRequest_ClientType_ANDROID);
-
+  request.set_client_type(SelectAdRequest::BROWSER);
   return request;
 }
 
@@ -650,14 +607,25 @@ BuyerInput MakeARandomBuyerInput() {
   return buyer_input;
 }
 
-ProtectedAudienceInput MakeARandomProtectAudienceInput() {
+ProtectedAudienceInput MakeARandomProtectAudienceInput(
+    SelectAdRequest::ClientType client_type) {
   ProtectedAudienceInput input;
   input.set_publisher_name(MakeARandomString());
   input.set_generation_id(MakeARandomString());
   google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
   buyer_inputs.emplace(MakeARandomString(), MakeARandomBuyerInput());
-  absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
-      GetEncodedBuyerInputMap(buyer_inputs);
+  absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input;
+  switch (client_type) {
+    case SelectAdRequest::BROWSER:
+      encoded_buyer_input = GetEncodedBuyerInputMap(buyer_inputs);
+      break;
+    case SelectAdRequest::ANDROID:
+      encoded_buyer_input = GetProtoEncodedBuyerInputs(buyer_inputs);
+      break;
+    default:
+      break;
+  }
+  GetEncodedBuyerInputMap(buyer_inputs);
   *input.mutable_buyer_input() = *std::move(encoded_buyer_input);
   input.set_enable_debug_reporting(true);
   return input;

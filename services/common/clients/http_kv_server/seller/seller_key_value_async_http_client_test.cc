@@ -41,7 +41,7 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
         do_nothing_done_callback;
     // Create the client
     SellerKeyValueAsyncHttpClient kvHttpClient(
-        this->hostname_, std::move(this->mock_http_fetcher_async_));
+        hostname_, std::move(mock_http_fetcher_async_));
     kvHttpClient.Execute(std::move(keys), {},
                          std::move(do_nothing_done_callback),
                          absl::Milliseconds(5000));
@@ -55,7 +55,7 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           value_checking_done_callback) {
     // Create the client
     SellerKeyValueAsyncHttpClient kvHttpClient(
-        this->hostname_, std::move(this->mock_http_fetcher_async_));
+        hostname_, std::move(mock_http_fetcher_async_));
     kvHttpClient.Execute(std::move(keys), metadata,
                          std::move(value_checking_done_callback),
                          absl::Milliseconds(5000));
@@ -96,7 +96,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   const std::string expectedUrl =
-      this->hostname_ +
+      hostname_ +
       "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2&adComponentRenderUrls=url3,url4";
@@ -190,7 +190,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   const std::string expectedUrl =
-      this->hostname_ +
+      hostname_ +
       "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2&adComponentRenderUrls=url3,url4";
@@ -301,7 +301,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   std::unique_ptr<GetSellerValuesInput> input3 =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
   const std::string expectedUrl =
-      this->hostname_ +
+      hostname_ +
       "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2,url3,url4";
@@ -318,7 +318,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoRenderUrls) {
   std::unique_ptr<GetSellerValuesInput> input3 =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
   const std::string expectedUrl =
-      this->hostname_ +
+      hostname_ +
       "?adComponentRenderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
       "3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
       "3Drtbhfledge,url2,url3,url4";
@@ -361,11 +361,11 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, PrewarmsHTTPClient) {
-  const std::string expectedUrl = absl::StrCat(this->hostname_, "?");
+  const std::string expectedUrl = absl::StrCat(hostname_, "?");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);
   // Create the client
   SellerKeyValueAsyncHttpClient kvHttpClient(
-      this->hostname_, std::move(this->mock_http_fetcher_async_), true);
+      hostname_, std::move(mock_http_fetcher_async_), true);
   absl::SleepFor(absl::Milliseconds(500));
 }
 }  // namespace

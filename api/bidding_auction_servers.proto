@@ -352,11 +352,6 @@ message SelectAdRequest {
   // client integrity.
   // Note: Not all types of clients can be attested.
   ClientType client_type = 3;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  ProtectedAudienceInput raw_protected_audience_input = 4;
 }
 
 // SelectAdResponse is sent from the SellerFrontEndService to the Seller
@@ -368,11 +363,6 @@ message SelectAdResponse {
   // Encrypted AuctionResult from FLEDGE auction. May  contain a real candidate
   // or chaff, depending on ScoreAd() outcomes.
   bytes auction_result_ciphertext = 1;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  AuctionResult raw_response = 2;
 }
 
 // Context useful for logging and debugging requests.
@@ -450,11 +440,6 @@ message GetBidsRequest {
   // needs use private keys corresponding to same key_id to decrypt
   // 'request_ciphertext'.
   string key_id = 2;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  GetBidsRawRequest raw_request = 3;
 }
 
 // Response to GetBidsRequest.
@@ -468,11 +453,6 @@ message GetBidsResponse {
 
   // Encrypted GetBidsRawResponse.
   bytes response_ciphertext = 1;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  GetBidsRawResponse raw_response = 2;
 }
 
 // Bid for an ad candidate.
@@ -637,11 +617,6 @@ message GenerateBidsRequest {
   // needs use private keys corresponding to same key_id to decrypt
   // 'request_ciphertext'.
   string key_id = 2;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  GenerateBidsRawRequest raw_request = 3;
 }
 
 // Encrypted response to GenerateBidsRequest with bid prices corresponding
@@ -657,11 +632,6 @@ message GenerateBidsResponse {
 
   // Encrypted GenerateBidsRawResponse.
   bytes response_ciphertext = 1;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  GenerateBidsRawResponse raw_response = 2;
 }
 
 // Auction service operated by the seller.
@@ -787,11 +757,6 @@ message ScoreAdsRequest {
   // needs use private keys corresponding to same key_id to decrypt
   // 'request_ciphertext'.
   bytes key_id = 2;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  ScoreAdsRawRequest raw_request = 3;
 }
 
 // Encrypted response that includes winning ad candidate.
@@ -895,11 +860,6 @@ message ScoreAdsResponse {
 
   // Encrypted ScoreAdsRawResponse.
   bytes response_ciphertext = 1;
-
-  // Remove.
-  // TODO(b/239242947): Remove this field and reserve, after request encryption / decryption is
-  // incorporated.
-  ScoreAdsRawResponse raw_response = 2;
 }
 
 // The reporting urls registered during the execution of reportResult() and

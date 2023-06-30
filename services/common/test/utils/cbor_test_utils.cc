@@ -27,6 +27,7 @@
 #include "absl/types/span.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "cbor/strings.h"
+#include "glog/logging.h"
 #include "rapidjson/document.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
@@ -251,8 +252,10 @@ absl::Status CborSerializeAdRenderUrls(
               string_val.size()));
         } break;
         default:
-          return absl::InternalError(absl::StrCat(
-              "Found unexpected key in ads (under interest group): ", key));
+          // Ignore any unknown keys.
+          VLOG(2) << "Found unexpected key in ads (under interest group): "
+                  << key;
+          continue;
       }
     }
     if (!cbor_array_push(*ads_encoded, *ad_encoded)) {

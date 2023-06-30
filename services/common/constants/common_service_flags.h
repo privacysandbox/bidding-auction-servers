@@ -37,7 +37,15 @@ ABSL_DECLARE_FLAG(std::optional<std::string>,
                   secondary_coordinator_account_identity);
 ABSL_DECLARE_FLAG(std::optional<std::string>, primary_coordinator_region);
 ABSL_DECLARE_FLAG(std::optional<std::string>, secondary_coordinator_region);
-ABSL_DECLARE_FLAG(std::optional<int>, private_key_cache_ttl_minutes);
+ABSL_DECLARE_FLAG(std::optional<std::string>,
+                  gcp_primary_workload_identity_pool_provider);
+ABSL_DECLARE_FLAG(std::optional<std::string>,
+                  gcp_secondary_workload_identity_pool_provider);
+ABSL_DECLARE_FLAG(std::optional<std::string>,
+                  gcp_primary_key_service_cloud_function_url);
+ABSL_DECLARE_FLAG(std::optional<std::string>,
+                  gcp_secondary_key_service_cloud_function_url);
+ABSL_DECLARE_FLAG(std::optional<int>, private_key_cache_ttl_seconds);
 ABSL_DECLARE_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds);
 ABSL_DECLARE_FLAG(
     std::optional<privacy_sandbox::server_common::metric::TelemetryFlag>,
@@ -60,8 +68,16 @@ inline constexpr char PRIMARY_COORDINATOR_REGION[] =
     "PRIMARY_COORDINATOR_REGION";
 inline constexpr char SECONDARY_COORDINATOR_REGION[] =
     "SECONDARY_COORDINATOR_REGION";
-inline constexpr char PRIVATE_KEY_CACHE_TTL_MINUTES[] =
-    "PRIVATE_KEY_CACHE_TTL_MINUTES";
+inline constexpr char GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER[] =
+    "GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER";
+inline constexpr char GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER[] =
+    "GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER";
+inline constexpr char GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL[] =
+    "GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL";
+inline constexpr char GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL[] =
+    "GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL";
+inline constexpr char PRIVATE_KEY_CACHE_TTL_SECONDS[] =
+    "PRIVATE_KEY_CACHE_TTL_SECONDS";
 inline constexpr char KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS[] =
     "KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS";
 inline constexpr char TELEMETRY_CONFIG[] = "TELEMETRY_CONFIG";
@@ -77,7 +93,11 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     SECONDARY_COORDINATOR_ACCOUNT_IDENTITY,
     PRIMARY_COORDINATOR_REGION,
     SECONDARY_COORDINATOR_REGION,
-    PRIVATE_KEY_CACHE_TTL_MINUTES,
+    GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER,
+    GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER,
+    GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL,
+    GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL,
+    PRIVATE_KEY_CACHE_TTL_SECONDS,
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS,
     TEST_MODE,
     TELEMETRY_CONFIG,

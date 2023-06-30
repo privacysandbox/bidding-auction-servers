@@ -20,7 +20,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 HttpScoringSignalsAsyncProvider::HttpScoringSignalsAsyncProvider(
-    std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
+    std::unique_ptr<
+        AsyncClient<GetSellerValuesInput, GetSellerValuesOutput,
+                    GetSellerValuesRawInput, GetSellerValuesRawOutput>>
         http_seller_kv_async_client)
     : http_seller_kv_async_client_(std::move(http_seller_kv_async_client)) {}
 
@@ -31,8 +33,7 @@ void HttpScoringSignalsAsyncProvider::Get(
     absl::Duration timeout) const {
   auto request = std::make_unique<GetSellerValuesInput>();
   for (const auto& buyer_get_bid_response_pair : buyer_bids) {
-    for (const auto& ad :
-         buyer_get_bid_response_pair.second->raw_response().bids()) {
+    for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
       request->render_urls.emplace_back(ad.render());
       request->ad_component_render_urls.insert(
           request->ad_component_render_urls.end(),

@@ -48,8 +48,8 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
         void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
         on_done,
     absl::Duration timeout) const {
-  HTTPRequest request = BuildSellerKeyValueRequest(
-      this->kv_server_base_address_, metadata, std::move(keys));
+  HTTPRequest request = BuildSellerKeyValueRequest(kv_server_base_address_,
+                                                   metadata, std::move(keys));
   VLOG(2) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
   auto done_callback = [on_done = std::move(on_done)](
                            absl::StatusOr<std::string> resultStr) mutable {
@@ -66,7 +66,7 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
       std::move(on_done)(resultStr.status());
     }
   };
-  this->http_fetcher_async_->FetchUrl(
+  http_fetcher_async_->FetchUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),
       std::move(done_callback));
   return absl::OkStatus();
@@ -79,7 +79,7 @@ SellerKeyValueAsyncHttpClient::SellerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetSellerValuesInput>();
-    this->Execute(
+    Execute(
         std::move(request), {},
         [](absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
                seller_kv_output) mutable {

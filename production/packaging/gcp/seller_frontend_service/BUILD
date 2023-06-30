@@ -29,7 +29,10 @@ load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 
 pkg_files(
     name = "server_executables",
-    srcs = [
+    srcs = select({
+        "//:non_prod_build": ["//production/packaging/common/nonprod"],
+        "//conditions:default": ["//production/packaging/common/prod"],
+    }) + [
         "bin/init_server_basic",
         "//services/seller_frontend_service:server",
         "@com_github_grpc_grpc//test/cpp/util:grpc_cli",

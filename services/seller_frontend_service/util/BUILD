@@ -105,6 +105,10 @@ cc_library(
     testonly = True,
     srcs = ["select_ad_reactor_test_utils.cc"],
     hdrs = ["select_ad_reactor_test_utils.h"],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/compression:gzip",
@@ -115,8 +119,8 @@ cc_library(
         "//services/common/util:context_logger",
         "//services/common/util:error_accumulator",
         "//services/seller_frontend_service",
-        "//services/seller_frontend_service:seller_frontend_config_cc_proto",
         "//services/seller_frontend_service:seller_frontend_data",
+        "//services/seller_frontend_service/test:app_test_utils",
         "//services/seller_frontend_service/util:app_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -132,6 +136,10 @@ cc_library(
     name = "app_utils",
     srcs = ["app_utils.cc"],
     hdrs = ["app_utils.h"],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
     deps = [
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/numeric:bits",

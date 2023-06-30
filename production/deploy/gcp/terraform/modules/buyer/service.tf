@@ -33,25 +33,26 @@ module "security" {
 }
 
 module "autoscaling" {
-  source                          = "../../services/autoscaling"
-  vpc_id                          = module.networking.network_id
-  subnets                         = module.networking.subnets
-  mesh_name                       = module.networking.mesh.name
-  service_account_email           = var.service_account_email
-  environment                     = var.environment
-  operator                        = var.operator
-  backend_tee_image               = var.bidding_image
-  backend_service_port            = tonumber(var.runtime_flags["BIDDING_PORT"])
-  backend_service_name            = "bidding"
-  frontend_tee_image              = var.buyer_frontend_image
-  frontend_service_port           = tonumber(var.runtime_flags["BUYER_FRONTEND_PORT"])
-  frontend_service_name           = "bfe"
-  machine_type                    = var.machine_type
-  min_replicas_per_service_region = var.min_replicas_per_service_region
-  max_replicas_per_service_region = var.max_replicas_per_service_region
-  vm_startup_delay_seconds        = var.vm_startup_delay_seconds
-  cpu_utilization_percent         = var.cpu_utilization_percent
-  use_debug_image                 = var.use_debug_image
+  source                             = "../../services/autoscaling"
+  vpc_id                             = module.networking.network_id
+  subnets                            = module.networking.subnets
+  mesh_name                          = module.networking.mesh.name
+  service_account_email              = var.service_account_email
+  environment                        = var.environment
+  operator                           = var.operator
+  backend_tee_image                  = var.bidding_image
+  backend_service_port               = tonumber(var.runtime_flags["BIDDING_PORT"])
+  backend_service_name               = "bidding"
+  frontend_tee_image                 = var.buyer_frontend_image
+  frontend_service_port              = tonumber(var.runtime_flags["BUYER_FRONTEND_PORT"])
+  frontend_service_name              = "bfe"
+  machine_type                       = var.machine_type
+  min_replicas_per_service_region    = var.min_replicas_per_service_region
+  max_replicas_per_service_region    = var.max_replicas_per_service_region
+  vm_startup_delay_seconds           = var.vm_startup_delay_seconds
+  cpu_utilization_percent            = var.cpu_utilization_percent
+  use_confidential_space_debug_image = var.use_confidential_space_debug_image
+  tee_impersonate_service_accounts   = var.tee_impersonate_service_accounts
 }
 
 module "load_balancing" {

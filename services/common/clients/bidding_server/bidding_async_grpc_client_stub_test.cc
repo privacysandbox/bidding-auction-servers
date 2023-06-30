@@ -28,8 +28,9 @@ using ServiceThread = MockServerThread<BiddingServiceMock, Request, Response>;
 
 using BiddingImplementationType =
     ::testing::Types<AsyncGrpcClientTypeDefinitions<
-        Request, Response, ServiceThread, BiddingAsyncGrpcClient,
-        BiddingServiceClientConfig>>;
+        Request, GenerateBidsRequest::GenerateBidsRawRequest, Response,
+        GenerateBidsResponse::GenerateBidsRawResponse, ServiceThread,
+        BiddingAsyncGrpcClient, BiddingServiceClientConfig>>;
 
 INSTANTIATE_TYPED_TEST_SUITE_P(BiddingAsyncGrpcClientStubTest,
                                AsyncGrpcClientStubTest,

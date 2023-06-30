@@ -406,16 +406,16 @@ ScoreAdsReactor::ScoreAdsReactor(
     CryptoClientWrapperInterface* crypto_client,
     std::unique_ptr<AsyncReporter> async_reporter,
     const AuctionServiceRuntimeConfig& runtime_config)
-    : CodeDispatchReactor<ScoreAdsRequest, ScoreAdsRequest_ScoreAdsRawRequest,
-                          ScoreAdsResponse>(dispatcher, request, response,
-                                            key_fetcher_manager, crypto_client,
-                                            runtime_config.encryption_enabled),
+    : CodeDispatchReactor<ScoreAdsRequest, ScoreAdsRequest::ScoreAdsRawRequest,
+                          ScoreAdsResponse,
+                          ScoreAdsResponse::ScoreAdsRawResponse>(
+          dispatcher, request, response, key_fetcher_manager, crypto_client,
+          runtime_config.encryption_enabled),
       benchmarking_logger_(std::move(benchmarking_logger)),
       async_reporter_(std::move(async_reporter)),
       enable_seller_debug_url_generation_(
           runtime_config.enable_seller_debug_url_generation),
-      roma_timeout_ms_(runtime_config.roma_timeout_ms),
-      logger_(GetLoggingContext(*request)) {
+      roma_timeout_ms_(runtime_config.roma_timeout_ms) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
@@ -424,8 +424,8 @@ ScoreAdsReactor::ScoreAdsReactor(
 }
 
 ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
-    const ScoreAdsRequest& score_ads_request) {
-  const auto& log_context = score_ads_request.raw_request().log_context();
+    const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request) {
+  const auto& log_context = score_ads_request.log_context();
   return {
       {kGenerationId, log_context.generation_id()},
       {kSellerDebugId, log_context.adtech_debug_id()},
@@ -434,6 +434,7 @@ ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
 
 void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
+  logger_ = ContextLogger(GetLoggingContext(raw_request_));
   auto ads = raw_request_.ad_bids();
   if (ads.empty()) {
     Finish(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kNoAdsToScore));
@@ -501,7 +502,6 @@ void ScoreAdsReactor::ScoreAdsCallback(
       }
     }
   }
-  response_->mutable_raw_response();
   benchmarking_logger_->HandleResponseBegin();
 
   // Saving the index of the most desirable ad allows us to only perform the
@@ -589,14 +589,13 @@ void ScoreAdsReactor::ScoreAdsCallback(
       }
     }
     PerformDebugReporting(winning_ad);
-    *response_->mutable_raw_response()->mutable_ad_score() = winning_ad.value();
-    if (encryption_enabled_) {
-      EncryptResponse();
-    }
+    *raw_response_.mutable_ad_score() = winning_ad.value();
+    DCHECK(encryption_enabled_);
+    EncryptResponse();
 
     logger_.vlog(2, "ScoreAdsResponse:\n", response_->DebugString());
     benchmarking_logger_->HandleResponseEnd();
-    Finish(grpc::Status(grpc::Status::OK));
+    FinishWithOkStatus();
   } else {
     LOG(WARNING) << "No ad was selected as most desirable";
     PerformDebugReporting(winning_ad);
@@ -639,4 +638,10 @@ void ScoreAdsReactor::PerformDebugReporting(
     }
   }
 }
+
+void ScoreAdsReactor::FinishWithOkStatus() {
+  metric_context_->SetRequestSuccessful();
+  Finish(grpc::Status::OK);
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -24,6 +24,7 @@
 
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "glog/logging.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
@@ -35,7 +36,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // It stores state relevant to the request and after the
 // response is finished being served, CodeDispatchReactor cleans up all
 // necessary state and grpc releases the reactor from memory.
-template <typename Request, typename RawRequest, typename Response>
+template <typename Request, typename RawRequest, typename Response,
+          typename RawResponse>
 class CodeDispatchReactor : public grpc::ServerUnaryReactor {
  public:
   explicit CodeDispatchReactor(
@@ -45,14 +47,13 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
       CryptoClientWrapperInterface* crypto_client, bool encryption_enabled)
       : dispatcher_(dispatcher),
         request_(request),
-        raw_request_(request->raw_request()),
         response_(response),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
         encryption_enabled_(encryption_enabled) {
-    if (encryption_enabled) {
-      DecryptRequest();
-    }
+    DCHECK(encryption_enabled);
+    VLOG(5) << "Encryption is enabled, decrypting request now";
+    DecryptRequest();
   }
 
   // Polymorphic class => virtual destructor
@@ -78,10 +79,12 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   // successful. If successful, the result is written into 'raw_request_'.
   bool DecryptRequest() {
     if (request_->key_id().empty()) {
+      VLOG(1) << "No key ID found in the request";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError));
       return false;
     } else if (request_->request_ciphertext().empty()) {
+      VLOG(1) << "No ciphertext found in the request";
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kEmptyCiphertextError));
       return false;
@@ -90,6 +93,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     std::optional<server_common::PrivateKey> private_key =
         key_fetcher_manager_->GetPrivateKey(request_->key_id());
     if (!private_key.has_value()) {
+      VLOG(1) << "Unable to fetch private key from the key fetcher manager";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError));
       return false;
@@ -99,6 +103,8 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         decrypt_response = crypto_client_->HpkeDecrypt(
             *private_key, request_->request_ciphertext());
     if (!decrypt_response.ok()) {
+      VLOG(1) << "Unable to decrypt the request ciphertext: "
+              << decrypt_response.status();
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kMalformedCiphertext));
       return false;
@@ -111,17 +117,18 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   // Encrypts `raw_response` and sets the result on the 'response_ciphertext'
   // field in the response. Returns whether encryption was successful.
   bool EncryptResponse() {
-    std::string payload = response_->raw_response().SerializeAsString();
+    std::string payload = raw_response_.SerializeAsString();
     absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
         aead_encrypt = crypto_client_->AeadEncrypt(payload, hpke_secret_);
     if (!aead_encrypt.ok()) {
-      Finish(grpc::Status(grpc::StatusCode::INTERNAL, ""));
+      VLOG(1) << "AEAD encrypt failed: " << aead_encrypt.status();
+      Finish(grpc::Status(grpc::StatusCode::INTERNAL,
+                          aead_encrypt.status().ToString()));
       return false;
     }
 
     response_->set_response_ciphertext(
         aead_encrypt->encrypted_data().ciphertext());
-    response_->clear_raw_response();
     return true;
   }
 
@@ -135,6 +142,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   RawRequest raw_request_;
   // The client response, lifecycle managed by gRPC.
   Response* response_;
+  RawResponse raw_response_;
 
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;

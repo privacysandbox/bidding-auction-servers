@@ -41,18 +41,18 @@ namespace privacy_sandbox::bidding_auction_servers {
 template <class Request, class Response>
 class ClientParams {
  public:
-  // request - Request object for RPC
-  // callback - Final callback executed with the response when RPC is finished
+  // request - Request object for RPC. This will contain the request ciphertext.
+  // callback - Final callback executed with the response when RPC is finished.
   explicit ClientParams(
       std::unique_ptr<Request> request,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
           callback,
       const absl::flat_hash_map<std::string, std::string>& metadata = {}) {
-    this->request_ = std::move(request);
-    this->callback_ = std::move(callback);
-    this->response_ = std::make_unique<Response>();
+    request_ = std::move(request);
+    callback_ = std::move(callback);
+    response_ = std::make_unique<Response>();
     for (const auto& it : metadata) {
-      this->context_.AddMetadata(it.first, it.second);
+      context_.AddMetadata(it.first, it.second);
     }
   }
 
@@ -61,17 +61,17 @@ class ClientParams {
   ClientParams& operator=(const ClientParams&) = delete;
 
   // Allows access to request param by gRPC
-  Request* RequestRef() { return this->request_.get(); }
+  Request* RequestRef() { return request_.get(); }
 
   // Allows access to context param by gRPC
-  grpc::ClientContext* ContextRef() { return &this->context_; }
+  grpc::ClientContext* ContextRef() { return &context_; }
 
   // Allows access to response param by gRPC
-  Response* ResponseRef() { return this->response_.get(); }
+  Response* ResponseRef() { return response_.get(); }
 
   // Sets a deadline for the gRPC request.
   void SetDeadline(absl::Duration timeout) {
-    this->context_.set_deadline(
+    context_.set_deadline(
         std::chrono::system_clock::now() +
         std::chrono::milliseconds(ToInt64Milliseconds(timeout)));
   }
@@ -82,9 +82,9 @@ class ClientParams {
   void OnDone(const grpc::Status& status) {
     // callbacks can only run once
     if (status.ok()) {
-      std::move(this->callback_)(std::move(response_));
+      std::move(callback_)(std::move(response_));
     } else {
-      std::move(this->callback_)(
+      std::move(callback_)(
           absl::Status(static_cast<absl::StatusCode>(status.error_code()),
                        status.error_message()));
     }
@@ -101,8 +101,76 @@ class ClientParams {
   std::unique_ptr<Response> response_;
 
   // callback will only run once for a single gRPC call
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
-      callback_;
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>)&&>
+      callback_ = nullptr;
+};
+
+template <class Request, class Response, class RawResponse>
+class RawClientParams {
+ public:
+  // request - Request object for RPC. This will contain the request ciphertext.
+  // callback - Final callback executed with the response when RPC is finished.
+  explicit RawClientParams(
+      std::unique_ptr<Request> request,
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+          callback,
+      const absl::flat_hash_map<std::string, std::string>& metadata = {}) {
+    request_ = std::move(request);
+    raw_callback_ = std::move(callback);
+    response_ = std::make_unique<Response>();
+    for (const auto& it : metadata) {
+      context_.AddMetadata(it.first, it.second);
+    }
+  }
+
+  // GrpcClientParams is neither copyable nor movable.
+  RawClientParams(const RawClientParams&) = delete;
+  RawClientParams& operator=(const RawClientParams&) = delete;
+
+  // Allows access to request param by gRPC
+  Request* RequestRef() { return request_.get(); }
+
+  // Allows access to context param by gRPC
+  grpc::ClientContext* ContextRef() { return &context_; }
+
+  // Allows access to response param by gRPC
+  Response* ResponseRef() { return response_.get(); }
+
+  // Sets a deadline for the gRPC request.
+  void SetDeadline(absl::Duration timeout) {
+    context_.set_deadline(
+        std::chrono::system_clock::now() +
+        std::chrono::milliseconds(ToInt64Milliseconds(timeout)));
+  }
+
+  void OnDone(const grpc::Status& status) {
+    if (status.ok()) {
+      std::move(raw_callback_)(std::move(raw_response_));
+    } else {
+      std::move(raw_callback_)(
+          absl::Status(static_cast<absl::StatusCode>(status.error_code()),
+                       status.error_message()));
+    }
+    delete this;
+  }
+
+  void SetRawResponse(std::unique_ptr<RawResponse> raw_response) {
+    raw_response_ = std::move(raw_response);
+  }
+
+ private:
+  // Parameters will be accessed by the gRPC code.
+  // Destructed automatically after OnDone
+  grpc::ClientContext context_;
+  std::unique_ptr<Request> request_;
+
+  std::unique_ptr<Response> response_;
+  // Ownership moves to callback in OnDone
+  std::unique_ptr<RawResponse> raw_response_;
+
+  // callback will only run once for a single gRPC call
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>)&&>
+      raw_callback_ = nullptr;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

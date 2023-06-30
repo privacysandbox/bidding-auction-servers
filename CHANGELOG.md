@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.7.0 (2023-06-30)
+
+
+### Features
+
+*  [AWS] add example terraform directory with README
+* [GCP] add example terraform directory with README
+* Add bazel build flag --announce_rc
+* add build_flavor for AWS packaging
+* add build_flavor for packaging
+* include coordinator and attestation support for GCP
+* Upgrade build-system to release-0.30.1
+
+
+### Bug Fixes
+
+* Adjust SFE DCHECKs
+* bidding_service_test
+* Change PeriodicCodeFetcher to use std::string instead of absl::string_view in the parameters
+* refactor the test to share initialization
+* remove unnecessary flags
+* TEE<>TEE fix
+* temporarily eliminate requirement to have device signals to generate bids
+
 ## 0.6.0 (2023-06-23)
 
 

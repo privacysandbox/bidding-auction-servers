@@ -14,6 +14,7 @@
 # limitations under the License.
 
 set -o errexit
+set -x
 
 usage() {
   local exitval=${1-1}
@@ -43,7 +44,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-export GLOG_v=1
+source /server/bin/vlog
 export GLOG_logtostderr=1
 export GLOG_stderrthreshold=0
 export GRPC_DNS_RESOLVER=native

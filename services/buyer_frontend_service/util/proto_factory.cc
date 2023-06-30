@@ -17,19 +17,20 @@
 namespace privacy_sandbox::bidding_auction_servers {
 using GetBidsRawRequest = GetBidsRequest::GetBidsRawRequest;
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
+using GenerateBidsRawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 
 std::unique_ptr<GetBidsRawResponse> ProtoFactory::CreateGetBidsRawResponse(
-    std::unique_ptr<GenerateBidsResponse> response) {
+    std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
+        raw_response) {
   auto get_bids_raw_response = std::make_unique<GetBidsRawResponse>();
 
-  if (!response->IsInitialized() || response->raw_response().bids_size() == 0) {
+  if (!raw_response->IsInitialized() || raw_response->bids_size() == 0) {
     // Initialize empty list.
     get_bids_raw_response->mutable_bids();
     return get_bids_raw_response;
   }
 
-  get_bids_raw_response->mutable_bids()->Swap(
-      response->mutable_raw_response()->mutable_bids());
+  get_bids_raw_response->mutable_bids()->Swap(raw_response->mutable_bids());
   return get_bids_raw_response;
 }
 
@@ -73,12 +74,13 @@ void CopyIGFromDeviceToIGForBidding(
   }
 }
 
-std::unique_ptr<GenerateBidsRequest> ProtoFactory::CreateGenerateBidsRequest(
+std::unique_ptr<GenerateBidsRawRequest>
+ProtoFactory::CreateGenerateBidsRawRequest(
     const GetBidsRawRequest& get_bids_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
     const LogContext& log_context) {
-  auto generate_bids_request = std::make_unique<GenerateBidsRequest>();
+  auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
 
   // 1. Set Interest Group for bidding
   for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
@@ -89,9 +91,7 @@ std::unique_ptr<GenerateBidsRequest> ProtoFactory::CreateGenerateBidsRequest(
     }
     // Add InterestGroupForBidding.
     auto mutable_interest_group_for_bidding =
-        generate_bids_request->mutable_raw_request()
-            ->mutable_interest_group_for_bidding()
-            ->Add();
+        generate_bids_raw_request->mutable_interest_group_for_bidding()->Add();
 
     // Copy from IG from device.
     CopyIGFromDeviceToIGForBidding(interest_group_from_device,
@@ -112,45 +112,39 @@ std::unique_ptr<GenerateBidsRequest> ProtoFactory::CreateGenerateBidsRequest(
   }
 
   // 2. Set Auction Signals.
-  generate_bids_request->mutable_raw_request()->set_auction_signals(
+  generate_bids_raw_request->set_auction_signals(
       get_bids_raw_request.auction_signals());
 
   // 3. Set Buyer Signals.
   if (!get_bids_raw_request.buyer_signals().empty()) {
-    generate_bids_request->mutable_raw_request()->set_buyer_signals(
+    generate_bids_raw_request->set_buyer_signals(
         get_bids_raw_request.buyer_signals());
   } else {
-    generate_bids_request->mutable_raw_request()->set_buyer_signals("");
+    generate_bids_raw_request->set_buyer_signals("");
   }
 
   // 4. Set Bidding Signals
-  generate_bids_request->mutable_raw_request()->set_allocated_bidding_signals(
+  generate_bids_raw_request->set_allocated_bidding_signals(
       bidding_signals->trusted_signals.release());
 
   // 5. Set Debug Reporting Flag
-  generate_bids_request->mutable_raw_request()->set_enable_debug_reporting(
+  generate_bids_raw_request->set_enable_debug_reporting(
       get_bids_raw_request.enable_debug_reporting());
 
-  generate_bids_request->mutable_raw_request()->set_publisher_name(
+  generate_bids_raw_request->set_publisher_name(
       get_bids_raw_request.publisher_name());
-  generate_bids_request->mutable_raw_request()->set_seller(
-      get_bids_raw_request.seller());
+  generate_bids_raw_request->set_seller(get_bids_raw_request.seller());
 
   // 6. Set logging context.
   if (!log_context.adtech_debug_id().empty()) {
-    generate_bids_request->mutable_raw_request()
-        ->mutable_log_context()
-        ->set_adtech_debug_id(log_context.adtech_debug_id());
+    generate_bids_raw_request->mutable_log_context()->set_adtech_debug_id(
+        log_context.adtech_debug_id());
   }
   if (!log_context.generation_id().empty()) {
-    generate_bids_request->mutable_raw_request()
-        ->mutable_log_context()
-        ->set_generation_id(log_context.generation_id());
+    generate_bids_raw_request->mutable_log_context()->set_generation_id(
+        log_context.generation_id());
   }
-
-  // TODO(b/239242947): Set Request ciphertext and keyid.
-
-  return generate_bids_request;
+  return generate_bids_raw_request;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

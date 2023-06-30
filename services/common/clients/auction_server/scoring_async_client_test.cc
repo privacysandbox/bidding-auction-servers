@@ -92,21 +92,22 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
 
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
-  ScoreAdsRequest request;
-  *request.mutable_raw_request() = ScoreAdsRequest_ScoreAdsRawRequest();
+  ScoreAdsRequest::ScoreAdsRawRequest request;
 
   absl::Notification notification;
-  absl::Status execute_result = class_under_test.Execute(
-      std::make_unique<ScoreAdsRequest>(std::move(request)), {},
-      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse>> callback_response) {
+  absl::Status execute_result = class_under_test.ExecuteInternal(
+      std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(std::move(request)),
+      {},
+      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
+              callback_response) {
         std::string difference;
         google::protobuf::util::MessageDifferencer differencer;
         differencer.ReportDifferencesToString(&difference);
         // Verify that after decryption, the raw_response field was set
         // correctly before executing the callback was executed. In this case,
         // we're verifying the 'interest_group_name' field is being set.
-        EXPECT_TRUE(differencer.Compare((*callback_response)->raw_response(),
-                                        score_ads_raw_response))
+        EXPECT_TRUE(
+            differencer.Compare(**callback_response, score_ads_raw_response))
             << difference;
         notification.Notify();
       });
@@ -133,8 +134,14 @@ TEST(ScoringAsyncClientTest,
                                           client_config);
 
   absl::Notification notification;
-  absl::Status execute_result =
-      class_under_test.Execute(std::make_unique<ScoreAdsRequest>(), {}, {});
+  absl::Status execute_result = class_under_test.ExecuteInternal(
+      std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(), {},
+      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
+              callback_response) {
+        EXPECT_FALSE(callback_response.ok());
+        notification.Notify();
+      });
+  notification.WaitForNotification();
   EXPECT_FALSE(execute_result.ok());
 }
 
@@ -187,13 +194,14 @@ TEST(ScoringAsyncClientTest,
 
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
-  ScoreAdsRequest request;
-  *request.mutable_raw_request() = ScoreAdsRequest_ScoreAdsRawRequest();
+  ScoreAdsRequest::ScoreAdsRawRequest request;
 
   absl::Notification notification;
-  absl::Status execute_result = class_under_test.Execute(
-      std::make_unique<ScoreAdsRequest>(std::move(request)), {},
-      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse>> callback_response) {
+  absl::Status execute_result = class_under_test.ExecuteInternal(
+      std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(std::move(request)),
+      {},
+      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
+              callback_response) {
         EXPECT_FALSE(callback_response.ok());
         notification.Notify();
       });

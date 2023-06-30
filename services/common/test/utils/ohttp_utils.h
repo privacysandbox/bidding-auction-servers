@@ -25,15 +25,15 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Hardcoded test id for OHTTP key Config.
-constexpr uint8_t kTestKeyId = 5;
+constexpr uint8_t kTestKeyId = 64;
 
 // Default private key for testing.
 constexpr absl::string_view kDefaultPrivateKey =
-    "b77431ecfa8f4cfc30d6e467aafa06944dffe28cb9dd1409e33a3045f5adc8a1";
+    "e7b292f49df28b8065992cdeadbc9d032a0e09e8476cb6d8d507212e7be3b9b4";
 
 // Default public key for testing.
 constexpr absl::string_view kDefaultPublicKey =
-    "6d21cfe09fbea5122f9ebc2eb2a69fcc4f06408cd54aac934f012e76fcdcef62";
+    "f3b7b2f1764f5c077effecad2afd86154596e63f7375ea522761b881e6c3c323";
 
 std::string GetHpkePrivateKey(
     absl::string_view private_key_hex = kDefaultPrivateKey);
@@ -45,11 +45,6 @@ std::string GetHpkePublicKey(
 absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
     const std::string& plaintext_payload,
     absl::string_view public_key_hex = kDefaultPublicKey);
-
-// HPKE Encrypt response.
-absl::StatusOr<std::string> EncryptAndEncapsulateResponse(
-    std::string plaintext_data, quiche::ObliviousHttpRequest::Context& context,
-    absl::string_view private_key_hex);
 
 // OHTTP Decrypt using passed or default public key.
 absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(

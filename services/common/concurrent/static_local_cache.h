@@ -43,8 +43,7 @@ class StaticLocalCache : public LocalCache<Key, std::shared_ptr<Value>> {
   // Looks up and returns a shared_ptr to the Value if it exists,
   // otherwise returns an empty shared_ptr.
   std::shared_ptr<Value> LookUp(Key key) override {
-    if (auto it = this->static_hash_map_->find(key);
-        it != this->static_hash_map_->end()) {
+    if (auto it = static_hash_map_->find(key); it != static_hash_map_->end()) {
       return it->second;
     } else {
       return std::shared_ptr<Value>();

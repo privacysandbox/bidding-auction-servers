@@ -30,12 +30,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 class SelectAdReactorForApp : public SelectAdReactor {
  public:
-  explicit SelectAdReactorForApp(grpc::CallbackServerContext* context,
-                                 const SelectAdRequest* request,
-                                 SelectAdResponse* response,
-                                 const ClientRegistry& clients,
-                                 const SellerFrontEndConfig& config,
-                                 bool fail_fast = true);
+  explicit SelectAdReactorForApp(
+      grpc::CallbackServerContext* context, const SelectAdRequest* request,
+      SelectAdResponse* response, const ClientRegistry& clients,
+      const TrustedServersConfigClient& config_client, bool fail_fast = true);
   virtual ~SelectAdReactorForApp() = default;
 
   // SelectAdReactorForApp is neither copyable nor movable.

@@ -37,22 +37,21 @@ struct DebugReportingPlaceholder {
 
   // In the case where we do not have highest other bid information,
   // we use this constructor.
-  explicit DebugReportingPlaceholder(float winning_bid, bool made_winning_bid) {
-    this->winning_bid = winning_bid;
-    this->made_winning_bid = made_winning_bid;
-    this->highest_scoring_other_bid = 0.0;
-    this->made_highest_scoring_other_bid = false;
-  }
+  explicit DebugReportingPlaceholder(float in_winning_bid,
+                                     bool in_made_winning_bid)
+      : winning_bid(in_winning_bid),
+        made_winning_bid(in_made_winning_bid),
+        highest_scoring_other_bid(0.0),
+        made_highest_scoring_other_bid(false) {}
 
   // Constructor with all fields.
-  DebugReportingPlaceholder(float winning_bid, bool made_winning_bid,
-                            float highest_scoring_other_bid,
-                            bool made_highest_scoring_other_bid) {
-    this->winning_bid = winning_bid;
-    this->made_winning_bid = made_winning_bid;
-    this->highest_scoring_other_bid = highest_scoring_other_bid;
-    this->made_highest_scoring_other_bid = made_highest_scoring_other_bid;
-  }
+  DebugReportingPlaceholder(float in_winning_bid, bool in_made_winning_bid,
+                            float in_highest_scoring_other_bid,
+                            bool in_made_highest_scoring_other_bid)
+      : winning_bid(in_winning_bid),
+        made_winning_bid(in_made_winning_bid),
+        highest_scoring_other_bid(in_highest_scoring_other_bid),
+        made_highest_scoring_other_bid(in_made_highest_scoring_other_bid) {}
 };
 
 // Returns a unique pointer to post auction signals from winning ad score.

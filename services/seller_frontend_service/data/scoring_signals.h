@@ -24,7 +24,8 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 using BuyerBidsList =
-    absl::flat_hash_map<const std::string, std::unique_ptr<GetBidsResponse>>;
+    absl::flat_hash_map<const std::string,
+                        std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>;
 
 struct ScoringSignals {
   std::unique_ptr<std::string> scoring_signals;

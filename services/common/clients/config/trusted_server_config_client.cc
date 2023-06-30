@@ -109,18 +109,23 @@ absl::Status TrustedServersConfigClient::Init(
   return absl::OkStatus();
 }
 
+bool TrustedServersConfigClient::HasParameter(
+    absl::string_view name) const noexcept {
+  return config_entries_map_.contains(name);
+}
+
 absl::string_view TrustedServersConfigClient::GetStringParameter(
-    absl::string_view name) noexcept {
+    absl::string_view name) const noexcept {
   return config_entries_map_.at(name);
 }
 
 bool TrustedServersConfigClient::GetBooleanParameter(
-    absl::string_view name) noexcept {
+    absl::string_view name) const noexcept {
   return absl::AsciiStrToLower(config_entries_map_.at(name)) == kTrue;
 }
 
 int TrustedServersConfigClient::GetIntParameter(
-    absl::string_view name) noexcept {
+    absl::string_view name) const noexcept {
   return std::stoi(config_entries_map_.at(name));
 }
 

@@ -39,7 +39,6 @@
 #include "services/common/util/error_reporter.h"
 #include "services/common/util/request_metadata.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
-#include "services/seller_frontend_service/seller_frontend_config.pb.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -88,6 +87,29 @@ struct RequestContext {
 
   // OHTTP context generated during request decryption.
   std::unique_ptr<quiche::ObliviousHttpRequest::Context> context;
+
+  server_common::PrivateKey private_key;
+};
+
+enum class CompletedBidState {
+  UNKNOWN,
+  SKIPPED,         // Missing data related to the buyer, hence BFE call skipped.
+  EMPTY_RESPONSE,  // Buyer returned no response for the GetBid call.
+  ERROR,
+  SUCCESS,
+};
+
+struct BidStats {
+  const int initial_bids_count;
+  int pending_bids_count;
+  int successful_bids_count;
+  int empty_bids_count;
+  int skipped_bids_count;
+  int error_bids_count;
+  explicit BidStats(int initial_bids_count_input);
+
+  void BidCompleted(CompletedBidState completed_bid_state);
+  std::string ToString();
 };
 
 // This is a gRPC reactor that serves a single GenerateBidsRequest.
@@ -100,7 +122,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
                            const SelectAdRequest* request,
                            SelectAdResponse* response,
                            const ClientRegistry& clients,
-                           const SellerFrontEndConfig& config,
+                           const TrustedServersConfigClient& config_client,
                            bool fail_fast = true);
 
   // Initiate the asynchronous execution of the SelectingWinningAdRequest.
@@ -115,24 +137,24 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
       const google::protobuf::Map<
           std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
-      const std::optional<AuctionResult::Error>& error);
+      const std::optional<AuctionResult::Error>& error) = 0;
 
   // Decodes the plaintext payload and returns a `ProtectedAudienceInput` proto.
   // Any errors while decoding are reported to error accumulator object.
   virtual ProtectedAudienceInput GetDecodedProtectedAudienceInput(
-      absl::string_view encoded_data);
+      absl::string_view encoded_data) = 0;
+
+  // Returns the decoded BuyerInput from the encoded/compressed BuyerInput.
+  // Any errors while decoding are reported to error accumulator object.
+  virtual absl::flat_hash_map<absl::string_view, BuyerInput>
+  GetDecodedBuyerinputs(const google::protobuf::Map<std::string, std::string>&
+                            encoded_buyer_inputs) = 0;
 
   // Checks if any client visible errors have been observed.
   bool HaveClientVisibleErrors();
 
   // Checks if any ad server visible errors have been observed.
   bool HaveAdServerVisibleErrors();
-
-  // Returns the decoded BuyerInput from the encoded/compressed BuyerInput.
-  // Any errors while decoding are reported to error accumulator object.
-  virtual absl::flat_hash_map<absl::string_view, BuyerInput>
-  GetDecodedBuyerinputs(const google::protobuf::Map<std::string, std::string>&
-                            encoded_buyer_inputs);
 
   // Finishes the RPC call while reporting the error.
   void FinishWithInternalError(absl::string_view error);
@@ -176,13 +198,15 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // response: an error status or response from the GetBid request.
   // buyer_hostname: the hostname of the buyer
   void OnFetchBidsDone(
-      absl::StatusOr<std::unique_ptr<GetBidsResponse>> response,
+      absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
+          response,
       const std::string& buyer_hostname) ABSL_LOCKS_EXCLUDED(bid_data_mu_);
 
   // Updates the state, keeping track of how many bids are still pending.
   // Once the pending bid count reaches zero, we initiate a call
   // to FetchScoringSignals.
-  void UpdatePendingBidsState() ABSL_LOCKS_EXCLUDED(bid_data_mu_);
+  void UpdatePendingBidsState(CompletedBidState completed_bid_state)
+      ABSL_LOCKS_EXCLUDED(bid_data_mu_);
 
   // Initiates the asynchronous grpc request to fetch scoring signals
   // from the key value server. The ad_render_url in the GetBid response from
@@ -208,7 +232,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   //
   // status: the status of the grpc request if failed or the ScoreAdsResponse,
   // which contains the scores for each ad in the auction.
-  void OnScoreAdsDone(absl::StatusOr<std::unique_ptr<ScoreAdsResponse>> status);
+  void OnScoreAdsDone(
+      absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
+          status);
 
   // Gets the bidding groups after scoring is done.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
@@ -257,8 +283,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   const SelectAdRequest* request_;
   ProtectedAudienceInput protected_audience_input_;
   SelectAdResponse* response_;
+  AuctionResult::Error error_;
   const ClientRegistry& clients_;
-  const SellerFrontEndConfig& config_;
+  const TrustedServersConfigClient& config_client_;
 
   // Key Value Fetch Result.
   std::unique_ptr<ScoringSignals> scoring_signals_;
@@ -276,9 +303,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Multiple threads can be writing buyer bid responses, so we use a
   // mutex guard.
   absl::Mutex bid_data_mu_;
-  int pending_bids_count_ ABSL_GUARDED_BY(bid_data_mu_);
-  absl::flat_hash_map<std::string, std::unique_ptr<GetBidsResponse>> buyer_bids_
-      ABSL_GUARDED_BY(bid_data_mu_);
+  absl::flat_hash_map<std::string,
+                      std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
+      buyer_bids_ ABSL_GUARDED_BY(bid_data_mu_);
 
   // Request context needed throughout the lifecycle of the request.
   RequestContext request_context_;
@@ -301,6 +328,12 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // time on the client side since clients will get a holistic report of what is
   // wrong with each input field.
   const bool fail_fast_;
+
+ private:
+  // Keeps track of how many buyer bids were expected initially and how many
+  // were erroneous. If all bids ended up in an error state then that should be
+  // flagged as an error eventually.
+  BidStats bid_stats_ ABSL_GUARDED_BY(bid_data_mu_);
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

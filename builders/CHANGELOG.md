@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.30.1 (2023-06-27)
+
+
+### Bug Fixes
+
+* Use = for --env flag
+* Use = for --env flag for all tools
+
+## 0.30.0 (2023-06-26)
+
+
+### Features
+
+* Install numpy for python3.9
+* Set PYTHON_BIN_PATH/PYTHON_LIB_PATH in build-debian
+* Upgrade AmazonLinux2 to 20230530
+* Upgrade packer to v1.9.1
+
+
+### Bug Fixes
+
+* Add links for llvm-{cov,profdata}
+
+## 0.29.0 (2023-06-05)
+
+
+### Features
+
+* Update pre-commit hook versions
+
+
+### Bug Fixes
+
+* Catch error when shifting multiple args
+* Remove golang from test-tools image
+* Resolve WORKSPACE using realpath
+* Use correct exit code in --fast mode
+
 ## 0.28.0 (2023-05-24)
 
 

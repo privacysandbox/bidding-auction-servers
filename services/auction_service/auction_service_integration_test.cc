@@ -26,15 +26,23 @@
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
+constexpr char kKeyId[] = "key_id";
+constexpr char kSecret[] = "secret";
+
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
+using ::testing::AnyNumber;
 
 constexpr absl::string_view js_code = R"JS_CODE(
     function fibonacci(num) {
@@ -148,7 +156,38 @@ void BuildScoreAdsRequest(
   if (enable_debug_reporting) {
     raw_request.set_enable_debug_reporting(enable_debug_reporting);
   }
-  *request->mutable_raw_request() = raw_request;
+  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request->set_key_id(kKeyId);
+}
+
+void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
+  // Mock the HpkeDecrypt() call on the crypto_client. This is used by the
+  // service to decrypt the incoming request.
+
+  EXPECT_CALL(crypto_client, HpkeDecrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly([](const server_common::PrivateKey& private_key,
+                         const std::string& ciphertext) {
+        google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
+            hpke_decrypt_response;
+        hpke_decrypt_response.set_payload(ciphertext);
+        hpke_decrypt_response.set_secret(kSecret);
+        return hpke_decrypt_response;
+      });
+
+  // Mock the AeadEncrypt() call on the crypto_client. This is used to encrypt
+  // the response coming back from the service.
+  EXPECT_CALL(crypto_client, AeadEncrypt)
+      .Times(AnyNumber())
+      .WillRepeatedly(
+          [](const std::string& plaintext_payload, const std::string& secret) {
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+            data.set_ciphertext(plaintext_payload);
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+                aead_encrypt_response;
+            *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+            return aead_encrypt_response;
+          });
 }
 
 class AuctionServiceIntegrationTest : public ::testing::Test {
@@ -192,9 +231,17 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
             key_fetcher_manager, crypto_client, std::move(async_reporter),
             runtime_config);
       };
-
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         AuctionServiceRuntimeConfig());
+  auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
+  SetupMockCryptoClientWrapper(*crypto_client);
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client), auction_service_runtime_config);
 
   int requests_to_test = 10;
   for (int i = 0; i < requests_to_test; i++) {
@@ -207,7 +254,9 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
     std::this_thread::sleep_for(absl::ToChronoSeconds(absl::Seconds(2)));
 
     // This line may NOT break if the ad_score() object is empty.
-    auto scoredAd = response.raw_response().ad_score();
+    ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+    raw_response.ParseFromString(response.response_ciphertext());
+    const auto& scoredAd = raw_response.ad_score();
     // If no object was returned, the following two lines SHOULD fail.
     EXPECT_GT(scoredAd.desirability(), 0);
     EXPECT_FALSE(scoredAd.interest_group_name().empty());
@@ -256,11 +305,19 @@ void ScoresAdsDebugReportingTestHelper(ScoreAdsResponse* response,
             runtime_config);
       };
 
-  AuctionServiceRuntimeConfig runtime_config = {
-      .enable_seller_debug_url_generation = enable_seller_debug_url_generation};
-
-  AuctionService service(std::move(score_ads_reactor_factory), nullptr, nullptr,
-                         std::move(runtime_config));
+  auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
+  SetupMockCryptoClientWrapper(*crypto_client);
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  AuctionServiceRuntimeConfig auction_service_runtime_config = {
+      .encryption_enabled = true,
+      .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
+  };
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client), auction_service_runtime_config);
 
   ScoreAdsRequest request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
@@ -279,7 +336,9 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
   ScoresAdsDebugReportingTestHelper(&response, js_code_with_debug_urls,
                                     enable_seller_debug_url_generation,
                                     enable_debug_reporting);
-  auto scoredAd = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
   EXPECT_GT(scoredAd.desirability(), 0);
   EXPECT_TRUE(scoredAd.has_debug_report_urls());
   EXPECT_EQ(scoredAd.debug_report_urls().auction_debug_win_url(),
@@ -297,7 +356,9 @@ TEST_F(AuctionServiceIntegrationTest,
   ScoresAdsDebugReportingTestHelper(&response, js_code_with_debug_urls,
                                     enable_seller_debug_url_generation,
                                     enable_debug_reporting);
-  auto scoredAd = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
   EXPECT_GT(scoredAd.desirability(), 0);
   EXPECT_FALSE(scoredAd.has_debug_report_urls());
   EXPECT_GT(scoredAd.ig_owner_highest_scoring_other_bids_map().size(), 0);
@@ -311,7 +372,9 @@ TEST_F(AuctionServiceIntegrationTest,
   ScoresAdsDebugReportingTestHelper(
       &response, js_code_throws_exception_with_debug_urls,
       enable_seller_debug_url_generation, enable_debug_reporting);
-  auto scoredAd = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
   EXPECT_EQ(scoredAd.desirability(), 0);
   // if the script crashes, score is returned as 0 and hence no ad should win.
   EXPECT_FALSE(scoredAd.has_debug_report_urls());
@@ -325,7 +388,9 @@ TEST_F(AuctionServiceIntegrationTest,
   ScoresAdsDebugReportingTestHelper(&response, js_code_throws_exception,
                                     enable_seller_debug_url_generation,
                                     enable_debug_reporting);
-  auto scoredAd = response.raw_response().ad_score();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
   EXPECT_EQ(scoredAd.desirability(), 0);
   EXPECT_FALSE(scoredAd.has_debug_report_urls());
 }

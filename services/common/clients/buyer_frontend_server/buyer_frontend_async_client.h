@@ -28,7 +28,10 @@
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-using BuyerFrontEndAsyncClient = AsyncClient<GetBidsRequest, GetBidsResponse>;
+using BuyerFrontEndAsyncClient =
+    AsyncClient<GetBidsRequest, GetBidsResponse,
+                GetBidsRequest::GetBidsRawRequest,
+                GetBidsResponse::GetBidsRawResponse>;
 
 struct BuyerServiceClientConfig {
   std::string server_addr;
@@ -41,7 +44,8 @@ struct BuyerServiceClientConfig {
 // Compression is disabled by default.
 class BuyerFrontEndAsyncGrpcClient
     : public DefaultAsyncGrpcClient<GetBidsRequest, GetBidsResponse,
-                                    GetBidsResponse_GetBidsRawResponse> {
+                                    GetBidsRequest::GetBidsRawRequest,
+                                    GetBidsResponse::GetBidsRawResponse> {
  public:
   explicit BuyerFrontEndAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -51,10 +55,12 @@ class BuyerFrontEndAsyncGrpcClient
  protected:
   // Sends an asynchronous request via grpc to the Buyer FrontEnd Service.
   //
-  // params: a pointer to the ClientParams object which carries data used
+  // params: a pointer to the RawClientParams object which carries data used
   // by the grpc stub.
-  absl::Status SendRpc(ClientParams<GetBidsRequest, GetBidsResponse>* params,
-                       absl::string_view hpke_secret) const override;
+  absl::Status SendRpc(const std::string& hpke_secret,
+                       RawClientParams<GetBidsRequest, GetBidsResponse,
+                                       GetBidsResponse::GetBidsRawResponse>*
+                           params) const override;
 
   std::unique_ptr<BuyerFrontEnd::Stub> stub_;
 };
