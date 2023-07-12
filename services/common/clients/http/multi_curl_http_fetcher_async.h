@@ -41,7 +41,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Please note: MultiCurlHttpFetcherAsync makes the best effort to reject any
 // calls after the class has started shutting down but does not guarantee
 // thread safety if any method is invoked after destruction.
-using OnDone = absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>;
 class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
  public:
   // Constructs a new multi session for performing HTTP calls.
@@ -78,7 +77,21 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Please note: done_callback will run in a threadpool and is not guaranteed
   // to be the FetchUrl client's thread.
   void FetchUrl(const HTTPRequest& request, int timeout_ms,
-                OnDone done_callback) override
+                OnDoneFetchUrl done_callback) override
+      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+
+  // Fetches provided urls with libcurl.
+  //
+  // requests: The URL and headers for the HTTP GET requests.
+  // timeout: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error. Guaranteed to be invoked
+  // with results in the same order as the corresponding requests.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrls(const std::vector<HTTPRequest>& requests,
+                 absl::Duration timeout, OnDoneFetchUrls done_callback) override
       ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
 
  private:
@@ -95,12 +108,13 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
     struct curl_slist* headers_list_ptr = nullptr;
 
     // The callback function for this request from FetchUrl.
-    OnDone done_callback;
+    OnDoneFetchUrl done_callback;
 
     // The pointer that is used by the req_handle to write the request output.
     std::unique_ptr<std::string> output;
 
-    CurlRequestData(const std::vector<std::string>& headers, OnDone on_done);
+    CurlRequestData(const std::vector<std::string>& headers,
+                    OnDoneFetchUrl on_done);
     ~CurlRequestData();
   };
   // This method adds the curl handle and callback to the callback_map.

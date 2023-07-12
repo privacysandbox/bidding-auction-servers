@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_proto_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
@@ -30,37 +29,13 @@ cc_proto_library(
     deps = [":config_proto"],
 )
 
-string_flag(
-    name = "metric_build",
-    #ToDo(b/279955396): change to prod
-    build_setting_default = "experiment",
-    values = [
-        "prod",
-        "experiment",
-    ],
-)
-
-config_setting(
-    name = "prod",
-    flag_values = {
-        ":metric_build": "prod",
-    },
-)
-
-config_setting(
-    name = "experiment",
-    flag_values = {
-        ":metric_build": "experiment",
-    },
-)
-
 cc_library(
     name = "telemetry_flag",
     srcs = [
         "telemetry_flag.cc",
     ] + select({
-        ":experiment": ["telemetry_flag_experiment.cc"],
-        ":prod": ["telemetry_flag_prod.cc"],
+        "//:non_prod_build": ["telemetry_flag_experiment.cc"],
+        "//conditions:default": ["telemetry_flag_prod.cc"],
     }),
     hdrs = [
         "telemetry_flag.h",
@@ -117,6 +92,7 @@ cc_library(
     ],
     deps = [
         ":definition",
+        ":dp",
         "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -135,6 +111,7 @@ cc_test(
     srcs = ["metric_router_test.cc"],
     deps = [
         ":metric_router",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
@@ -165,7 +142,11 @@ cc_library(
 cc_test(
     name = "context_test",
     timeout = "short",
-    srcs = ["context_test.cc"],
+    srcs = ["context_test.h"] +
+           select({
+               "//:non_prod_build": ["context_nonprod_test.cc"],
+               "//conditions:default": ["context_test.cc"],
+           }),
     deps = [
         ":context",
         "@com_google_absl//absl/log:check",

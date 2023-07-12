@@ -41,9 +41,6 @@ void CopyIGFromDeviceToIGForBidding(
         mutable_ig_for_bidding) {
   mutable_ig_for_bidding->set_name(ig_from_device.name());
 
-  if (ig_from_device.has_ads() && ig_from_device.ads().IsInitialized()) {
-    mutable_ig_for_bidding->mutable_ads()->MergeFrom(ig_from_device.ads());
-  }
   if (!ig_from_device.user_bidding_signals().empty()) {
     mutable_ig_for_bidding->set_user_bidding_signals(
         ig_from_device.user_bidding_signals());
@@ -96,12 +93,6 @@ ProtoFactory::CreateGenerateBidsRawRequest(
     // Copy from IG from device.
     CopyIGFromDeviceToIGForBidding(interest_group_from_device,
                                    mutable_interest_group_for_bidding);
-
-    // Copy Ads from Side Load or KV Server.
-    if (auto it = bidding_signals->ca_ads_map.find(&interest_group_from_device);
-        it != bidding_signals->ca_ads_map.end()) {
-      mutable_interest_group_for_bidding->mutable_ads()->MergeFrom(it->second);
-    }
 
     // Copy User Bidding signals from Side Load or KV Server.
     if (auto it = bidding_signals->ca_user_signals_map.find(

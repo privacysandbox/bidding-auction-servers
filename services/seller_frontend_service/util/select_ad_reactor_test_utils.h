@@ -31,7 +31,7 @@
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
-#include "services/seller_frontend_service/util/app_utils.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -43,9 +43,9 @@ constexpr int kModelingSignals = 0;
 constexpr int kDefaultNumAdComponents = 3;
 constexpr absl::string_view kSampleInterestGroupName = "interest_group";
 constexpr absl::string_view kEmptyBuyer = "";
-constexpr absl::string_view kSampleBuyer = "ad_tech_A.com";
-constexpr absl::string_view kSampleBuyer2 = "ad_tech_B.com";
-constexpr absl::string_view kSampleBuyer3 = "ad_tech_C.com";
+constexpr absl::string_view kSampleBuyer = "https://ad_tech_A.com";
+constexpr absl::string_view kSampleBuyer2 = "https://ad_tech_B.com";
+constexpr absl::string_view kSampleBuyer3 = "https://ad_tech_C.com";
 constexpr absl::string_view kSampleGenerationId = "a-standard-uuid";
 constexpr absl::string_view kSampleSellerDebugId = "sample-seller-debug-id";
 constexpr absl::string_view kSampleBuyerDebugId = "sample-buyer-debug-id";
@@ -86,7 +86,7 @@ AdWithBid BuildNewAdWithBid(
     int number_ad_component_render_urls = kDefaultNumAdComponents);
 
 void SetupScoringProviderMock(
-    const MockAsyncProvider<BuyerBidsList, ScoringSignals>& provider,
+    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsList& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed = false);
@@ -117,7 +117,7 @@ BuyerBidsList GetBuyerClientsAndBidsForReactor(
 std::pair<EncryptedSelectAdRequestWithContext, ClientRegistry>
 GetSelectAdRequestAndClientRegistryForTest(
     SelectAdRequest::ClientType client_type, std::optional<float> buyer_bid,
-    const MockAsyncProvider<BuyerBidsList, ScoringSignals>&
+    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
         scoring_signals_provider,
     const ScoringAsyncClientMock& scoring_client,
     const BuyerFrontEndAsyncClientFactoryMock&
@@ -153,6 +153,9 @@ AuctionResult DecryptAppProtoAuctionResult(
 AuctionResult DecryptBrowserAuctionResult(
     absl::string_view auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context);
+
+absl::StatusOr<std::string> UnframeAndDecompressAuctionResult(
+    absl::string_view framed_response);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

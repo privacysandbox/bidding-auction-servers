@@ -27,8 +27,8 @@ cc_library(
     hdrs = ["periodic_code_fetcher.h"],
     deps = [
         ":code_fetcher_interface",
-        "//services/common/clients:http_fetcher_async",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/http:http_fetcher_async",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status:statusor",
@@ -45,8 +45,8 @@ cc_test(
     deps = [
         ":code_fetcher_interface",
         ":periodic_code_fetcher",
-        "//services/common/clients:http_fetcher_async",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/http:http_fetcher_async",
         "//services/common/test:mocks",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",

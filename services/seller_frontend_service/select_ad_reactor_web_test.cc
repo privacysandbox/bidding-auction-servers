@@ -22,13 +22,13 @@
 #include <vector>
 
 #include <gmock/gmock-matchers.h>
+#include <google/protobuf/util/json_util.h>
 #include <include/gmock/gmock-actions.h>
 #include <include/gmock/gmock-nice-strict.h>
 
 #include "absl/strings/str_format.h"
 #include "gtest/gtest.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
-#include "services/common/compression/gzip.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/cbor_test_utils.h"
@@ -67,8 +67,18 @@ class SelectAdReactorForWebTest : public ::testing::Test {
   }
 };
 
+template <typename T>
+std::string MessageToJson(const T& message) {
+  std::string response_string;
+  auto response_status =
+      google::protobuf::util::MessageToJsonString(message, &response_string);
+  EXPECT_TRUE(response_status.ok()) << "Failed to convert the message to JSON";
+  return response_string;
+}
+
 TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -87,6 +97,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);
+  VLOG(0) << "Encrypted SelectAdResponse:\n"
+          << MessageToJson(response_with_cbor);
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
@@ -102,12 +114,21 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  VLOG(0) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+          << base64_response;
+
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
   EXPECT_TRUE(deserialized_auction_result.ok());
   EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  VLOG(0) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+          << MessageToJson(*deserialized_auction_result);
 
   // Validate that the bidding groups data is present.
   EXPECT_EQ(deserialized_auction_result->bidding_groups().size(), 1);
@@ -126,7 +147,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
 }
 
 TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -162,7 +184,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   EXPECT_TRUE(decompressed_response.ok());
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -193,7 +215,8 @@ auto EqScoreAdsRawRequestWithLogContext(
 }
 
 TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -246,14 +269,14 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   // Setting up simple scoring signals provider so that the call flow can
   // proceed to Ad Scoring.
-  auto MockScoringSignalsProvider = [](const BuyerBidsList& buyer_bids,
-                                       ScoringSignalsDoneCallback on_done,
-                                       absl::Duration timeout) {
-    auto scoring_signals = std::make_unique<ScoringSignals>();
-    scoring_signals->scoring_signals =
-        std::make_unique<std::string>(kSampleScoringSignals);
-    std::move(on_done)(std::move(scoring_signals));
-  };
+  auto MockScoringSignalsProvider =
+      [](const ScoringSignalsRequest& scoring_signals_request,
+         ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+        auto scoring_signals = std::make_unique<ScoringSignals>();
+        scoring_signals->scoring_signals =
+            std::make_unique<std::string>(kSampleScoringSignals);
+        std::move(on_done)(std::move(scoring_signals));
+      };
   EXPECT_CALL(scoring_signals_provider, Get)
       .WillRepeatedly(MockScoringSignalsProvider);
 
@@ -285,7 +308,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 }
 
 TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -355,7 +379,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -372,7 +396,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 }
 
 TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -417,7 +442,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -435,7 +460,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
 
 TEST_F(SelectAdReactorForWebTest,
        VerifyANonEmptyYetMalformedBuyerInputMapIsCaught) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -488,7 +514,7 @@ TEST_F(SelectAdReactorForWebTest,
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);

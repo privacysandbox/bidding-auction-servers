@@ -24,13 +24,16 @@ using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
 BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
-    BuyerServiceClientConfig client_config)
-    : DefaultAsyncGrpcClient(std::move(key_fetcher_manager),
-                             std::move(crypto_client),
-                             client_config.encryption_enabled) {
-  stub_ = BuyerFrontEnd::NewStub(CreateChannel(client_config.server_addr,
-                                               client_config.compression,
-                                               client_config.secure_client));
+    BuyerServiceClientConfig client_config,
+    std::unique_ptr<BuyerFrontEnd::StubInterface> stub)
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
+                             client_config.encryption_enabled),
+      stub_(std::move(stub)) {
+  if (!stub_) {
+    stub_ = BuyerFrontEnd::NewStub(CreateChannel(client_config.server_addr,
+                                                 client_config.compression,
+                                                 client_config.secure_client));
+  }
 }
 
 absl::Status BuyerFrontEndAsyncGrpcClient::SendRpc(

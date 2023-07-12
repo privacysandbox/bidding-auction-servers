@@ -28,6 +28,7 @@
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/service_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -74,39 +75,6 @@ TEST(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
   auto mock = service.GenerateBids(&context, &request, &response);
   init_pending.Wait();
   delete mock;
-}
-
-struct LocalServiceStartResult {
-  int port;
-  std::unique_ptr<grpc::Server> server;
-
-  // Shutdown the server when the test is done.
-  ~LocalServiceStartResult() {
-    if (server) {
-      server->Shutdown();
-    }
-  }
-};
-
-template <class T>
-LocalServiceStartResult StartLocalService(T* service) {
-  grpc::ServerBuilder builder;
-  int port;
-  builder.AddListeningPort("[::]:0",
-                           grpc::experimental::LocalServerCredentials(
-                               grpc_local_connect_type::LOCAL_TCP),
-                           &port);
-  builder.RegisterService(service);
-  std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
-  return {port, std::move(server)};
-}
-
-template <class T>
-auto CreateServiceStub(int port) {
-  std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-      absl::StrFormat("localhost:%d", port),
-      grpc::experimental::LocalCredentials(grpc_local_connect_type::LOCAL_TCP));
-  return T::NewStub(channel);
 }
 
 class BiddingServer : public ::testing::Test {

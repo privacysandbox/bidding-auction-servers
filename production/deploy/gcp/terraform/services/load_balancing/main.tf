@@ -75,6 +75,80 @@ resource "google_compute_health_check" "backend" {
 
 ###############################################################
 #
+#                         Collector LB
+#
+# The external lb uses HTTP/2 (gRPC) with no TLS.
+###############################################################
+
+resource "google_compute_backend_service" "mesh_collector" {
+  name     = "${var.operator}-${var.environment}-mesh-collector-service"
+  provider = google-beta
+
+  port_name             = "otlp"
+  protocol              = "TCP"
+  load_balancing_scheme = "EXTERNAL"
+  timeout_sec           = 10
+  health_checks         = [google_compute_health_check.collector.id]
+
+  dynamic "backend" {
+    for_each = var.collector_instance_groups
+    content {
+      group           = backend.value
+      balancing_mode  = "UTILIZATION"
+      capacity_scaler = 1.0
+    }
+  }
+  depends_on = [var.mesh, google_network_services_grpc_route.default]
+}
+
+resource "google_compute_target_tcp_proxy" "collector" {
+  name            = "${var.operator}-${var.environment}-${var.collector_service_name}-lb-proxy"
+  backend_service = google_compute_backend_service.mesh_collector.id
+}
+
+resource "google_compute_global_forwarding_rule" "collector" {
+  name     = "${var.operator}-${var.environment}-${var.collector_service_name}-forwarding-rule"
+  provider = google-beta
+
+  ip_protocol           = "TCP"
+  port_range            = var.collector_service_port
+  load_balancing_scheme = "EXTERNAL"
+  target                = google_compute_target_tcp_proxy.collector.id
+  ip_address            = var.collector_ip_address
+}
+
+resource "google_dns_record_set" "collector" {
+  name         = "${var.collector_service_name}-${var.operator}-${var.environment}.${var.frontend_domain_name}."
+  managed_zone = var.frontend_dns_zone
+  type         = "A"
+  ttl          = 10
+  rrdatas = [
+    var.collector_ip_address
+  ]
+}
+
+
+resource "google_compute_health_check" "collector" {
+  name = "${var.operator}-${var.environment}-${var.collector_service_name}-lb-hc"
+
+  tcp_health_check {
+    port_name = "otlp"
+    port      = var.collector_service_port
+  }
+
+  timeout_sec         = 3
+  check_interval_sec  = 3
+  healthy_threshold   = 2
+  unhealthy_threshold = 4
+
+  log_config {
+    enable = true
+  }
+}
+
+
+###############################################################
+#
 #                         EXTERNAL LB
 #
 # The external lb uses HTTP/2 (gRPC) with TLS.

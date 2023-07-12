@@ -50,7 +50,8 @@ class BuyerFrontEndAsyncGrpcClient
   explicit BuyerFrontEndAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      BuyerServiceClientConfig client_config);
+      BuyerServiceClientConfig client_config,
+      std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr);
 
  protected:
   // Sends an asynchronous request via grpc to the Buyer FrontEnd Service.
@@ -62,7 +63,7 @@ class BuyerFrontEndAsyncGrpcClient
                                        GetBidsResponse::GetBidsRawResponse>*
                            params) const override;
 
-  std::unique_ptr<BuyerFrontEnd::Stub> stub_;
+  std::unique_ptr<BuyerFrontEnd::StubInterface> stub_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

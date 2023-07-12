@@ -17,9 +17,9 @@
     "generationId": {
       "type": "string",
       "format": "uri"
-    }
+    },
+    "enableDebugReporting": { "type": "boolean" }
   },
-  "enableDebugReporting": { "type": "boolean" },
   "required": [
     "version", "interestGroups", "publisher", "generationId"
   ]

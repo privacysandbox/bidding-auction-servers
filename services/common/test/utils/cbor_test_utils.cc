@@ -14,7 +14,6 @@
 
 #include "services/common/test/utils/cbor_test_utils.h"
 
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -209,71 +208,6 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
   return absl::OkStatus();
 }
 
-absl::Status CborSerializeAdRenderUrls(
-    absl::string_view incoming_key,
-    const google::protobuf::ListValue& ads_list_value, cbor_item_t& root) {
-  ScopedCbor ads_encoded(cbor_new_definite_array(ads_list_value.values_size()));
-  for (const auto& ad_value : ads_list_value.values()) {
-    ScopedCbor ad_encoded(cbor_new_definite_map(kNumAdsFields));
-    // Traversing keys in a sorted fashion to ensure encoded string is the same
-    // everytime. This is important for testing.
-    std::set<std::string> sorted_keys;
-    for (const auto& [key, val] : ad_value.struct_value().fields()) {
-      sorted_keys.insert(key);
-    }
-    for (const auto& key : sorted_keys) {
-      const auto& val = ad_value.struct_value().fields().at(key);
-      int index = FindKeyIndex(kAdsFields, key);
-      switch (index) {
-        case 0: {  // kMetadata
-          ScopedCbor metadata_encoded(
-              cbor_new_definite_array(val.list_value().values_size()));
-          for (const auto& metadata_val : val.list_value().values()) {
-            const auto& string_val = metadata_val.string_value();
-            if (!cbor_array_push(*metadata_encoded,
-                                 cbor_move(cbor_build_stringn(
-                                     string_val.data(), string_val.size())))) {
-              return absl::InvalidArgumentError(
-                  "Unable to serialize one of metadata string value");
-            }
-          }
-          struct cbor_pair kv = {.key = cbor_move(cbor_build_stringn(
-                                     kMetadata, sizeof(kMetadata) - 1)),
-                                 .value = *metadata_encoded};
-          if (!cbor_map_add(*ad_encoded, std::move(kv))) {
-            return absl::InternalError(
-                absl::StrCat("Failed to serialize ", kMetadata, " to CBOR"));
-          }
-        } break;
-        case 1: {  // kRenderUrl
-          const std::string& string_val = val.string_value();
-          PS_RETURN_IF_ERROR(CborSerializeKeyValue(
-              kRenderUrl, &cbor_build_stringn, **ad_encoded, string_val.data(),
-              string_val.size()));
-        } break;
-        default:
-          // Ignore any unknown keys.
-          VLOG(2) << "Found unexpected key in ads (under interest group): "
-                  << key;
-          continue;
-      }
-    }
-    if (!cbor_array_push(*ads_encoded, *ad_encoded)) {
-      return absl::InternalError(
-          absl::StrCat("Failed to serialize one of the ads"));
-    }
-  }
-  struct cbor_pair kv = {.key = cbor_move(cbor_build_stringn(
-                             incoming_key.data(), incoming_key.size())),
-                         .value = *ads_encoded};
-  if (!cbor_map_add(&root, std::move(kv))) {
-    return absl::InternalError(
-        absl::StrCat("Failed to serialize ", incoming_key, " to CBOR"));
-  }
-
-  return absl::OkStatus();
-}
-
 absl::Status CborSerializeInterestGroup(
     const BuyerInput::InterestGroup& interest_group, cbor_item_t& root) {
   cbor_item_t* interest_group_serialized =
@@ -286,8 +220,8 @@ absl::Status CborSerializeInterestGroup(
   PS_RETURN_IF_ERROR(CborSerializeString(kUserBiddingSignals,
                                          interest_group.user_bidding_signals(),
                                          *interest_group_serialized));
-  PS_RETURN_IF_ERROR(CborSerializeAdRenderUrls(kAds, interest_group.ads(),
-                                               *interest_group_serialized));
+  PS_RETURN_IF_ERROR(CborSerializeStringArray(
+      kAds, interest_group.ad_render_ids(), *interest_group_serialized));
   PS_RETURN_IF_ERROR(CborSerializeStringArray(kAdComponents,
                                               interest_group.component_ads(),
                                               *interest_group_serialized));

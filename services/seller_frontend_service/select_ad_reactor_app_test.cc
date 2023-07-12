@@ -36,7 +36,7 @@
 #include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
-#include "services/seller_frontend_service/util/app_utils.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
 #include "src/cpp/communication/ohttp_utils.h"
@@ -61,7 +61,8 @@ class SelectAdReactorForAppTest : public ::testing::Test {
 };
 
 TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -127,7 +128,8 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
 }
 
 TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;
@@ -180,7 +182,8 @@ TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
 }
 
 TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsList expected_buyer_bids;

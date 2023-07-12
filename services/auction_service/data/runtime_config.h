@@ -28,6 +28,17 @@ struct AuctionServiceRuntimeConfig {
   bool enable_seller_debug_url_generation = false;
   // Sets the timeout used by Roma for dispatch requests
   std::string roma_timeout_ms = "10000";
+
+  // Enables Seller Code Wrapper for complete code generation.
+  bool enable_seller_code_wrapper = false;
+  // Enables exporting console.logs from Roma to Auction Service
+  bool enable_adtech_code_logging = false;
+  // Enables execution of reportResult() function from AdTech provided script to
+  // generate the event level reporting urls.
+  bool enable_report_result_url_generation = false;
+  // Enables execution of reportWin() function from AdTech provided script to
+  // generate the event level reporting urls for Buyer.
+  bool enable_report_win_url_generation = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

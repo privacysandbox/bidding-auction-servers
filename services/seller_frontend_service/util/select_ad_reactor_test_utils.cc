@@ -32,6 +32,7 @@
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -125,7 +126,8 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
-    bid.add_ad_component_render(absl::StrCat("fooAds.com/adComponents?id=", i));
+    bid.add_ad_component_render(
+        absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
   if (bid_value.has_value()) {
     bid.set_bid(*bid_value);
@@ -155,33 +157,35 @@ server_common::PrivateKey GetPrivateKey() {
 }
 
 void SetupScoringProviderMock(
-    const MockAsyncProvider<BuyerBidsList, ScoringSignals>& provider,
+    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsList& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed) {
-  auto MockScoringSignalsProvider = [&expected_buyer_bids, ad_render_urls](
-                                        const BuyerBidsList& buyer_bids,
-                                        ScoringSignalsDoneCallback on_done,
-                                        absl::Duration timeout) {
-    EXPECT_EQ(buyer_bids.size(), expected_buyer_bids.size());
-    google::protobuf::util::MessageDifferencer diff;
-    std::string diff_output;
-    diff.ReportDifferencesToString(&diff_output);
+  auto MockScoringSignalsProvider =
+      [&expected_buyer_bids, ad_render_urls](
+          const ScoringSignalsRequest& scoring_signals_request,
+          ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+        EXPECT_EQ(scoring_signals_request.buyer_bids_list_.size(),
+                  expected_buyer_bids.size());
+        google::protobuf::util::MessageDifferencer diff;
+        std::string diff_output;
+        diff.ReportDifferencesToString(&diff_output);
 
-    for (const auto& [unused, get_bid_response] : expected_buyer_bids) {
-      EXPECT_TRUE(
-          std::any_of(buyer_bids.begin(), buyer_bids.end(),
-                      [&diff, expected = get_bid_response.get()](auto& actual) {
-                        return diff.Compare(*actual.second, *expected);
-                      }));
-    }
-    auto scoring_signals = std::make_unique<ScoringSignals>();
-    if (ad_render_urls.has_value()) {
-      scoring_signals->scoring_signals =
-          std::make_unique<std::string>(ad_render_urls.value());
-      std::move(on_done)(std::move(scoring_signals));
-    }
-  };
+        for (const auto& [unused, get_bid_response] : expected_buyer_bids) {
+          EXPECT_TRUE(std::any_of(
+              scoring_signals_request.buyer_bids_list_.begin(),
+              scoring_signals_request.buyer_bids_list_.end(),
+              [&diff, expected = get_bid_response.get()](auto& actual) {
+                return diff.Compare(*actual.second, *expected);
+              }));
+        }
+        auto scoring_signals = std::make_unique<ScoringSignals>();
+        if (ad_render_urls.has_value()) {
+          scoring_signals->scoring_signals =
+              std::make_unique<std::string>(ad_render_urls.value());
+          std::move(on_done)(std::move(scoring_signals));
+        }
+      };
   if (repeated_get_allowed) {
     EXPECT_CALL(provider, Get).WillRepeatedly(MockScoringSignalsProvider);
   } else {
@@ -298,7 +302,7 @@ BuyerBidsList GetBuyerClientsAndBidsForReactor(
 std::pair<EncryptedSelectAdRequestWithContext, ClientRegistry>
 GetSelectAdRequestAndClientRegistryForTest(
     SelectAdRequest::ClientType client_type, std::optional<float> buyer_bid,
-    const MockAsyncProvider<BuyerBidsList, ScoringSignals>&
+    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
         scoring_signals_provider,
     const ScoringAsyncClientMock& scoring_client,
     const BuyerFrontEndAsyncClientFactoryMock&
@@ -346,6 +350,7 @@ GetSelectAdRequestAndClientRegistryForTest(
               score->set_desirability(kNonZeroDesirability);
               score->set_buyer_bid(bid_value);
               score->set_interest_group_name(bid.interest_group_name());
+              score->set_interest_group_owner(kSampleBuyer);
               std::move(on_done)(std::move(response));
               // Expect only one bid.
               break;
@@ -368,25 +373,7 @@ GetSelectAdRequestAndClientRegistryForTest(
 // Gets the encoded and encrypted request as well as the OHTTP context used
 // for encrypting the request.
 std::pair<std::string, quiche::ObliviousHttpRequest::Context>
-GetCborEncodedEncryptedInputAndOhttpContext(
-    const ProtectedAudienceInput& protected_audience_input) {
-  // Set up the encoded cipher text in the request.
-  absl::StatusOr<std::string> encoded_request =
-      CborEncodeProtectedAudienceProto(protected_audience_input);
-  EXPECT_TRUE(encoded_request.ok()) << encoded_request.status().message();
-  auto ohttp_request = CreateValidEncryptedRequest(std::move(*encoded_request));
-  EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
-  std::string encrypted_request = ohttp_request->EncapsulateAndSerialize();
-  auto context = std::move(*ohttp_request).ReleaseContext();
-  return {std::move(encrypted_request), std::move(context)};
-}
-
-// Gets the encoded and encrypted request as well as the OHTTP context used
-// for encrypting the request.
-std::pair<std::string, quiche::ObliviousHttpRequest::Context>
-GetProtoEncodedEncryptedInputAndOhttpContext(
-    const ProtectedAudienceInput& protected_audience_input) {
-  std::string encoded_request = protected_audience_input.SerializeAsString();
+GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
   absl::StatusOr<std::string> framed_request =
       server_common::EncodeResponsePayload(
           server_common::CompressionType::kGzip, encoded_request,
@@ -399,6 +386,24 @@ GetProtoEncodedEncryptedInputAndOhttpContext(
   return {std::move(encrypted_request), std::move(context)};
 }
 
+std::pair<std::string, quiche::ObliviousHttpRequest::Context>
+GetCborEncodedEncryptedInputAndOhttpContext(
+    const ProtectedAudienceInput& protected_audience_input) {
+  absl::StatusOr<std::string> encoded_request =
+      CborEncodeProtectedAudienceProto(protected_audience_input);
+  EXPECT_TRUE(encoded_request.ok()) << encoded_request.status();
+  return GetFramedInputAndOhttpContext(*encoded_request);
+}
+
+// Gets the encoded and encrypted request as well as the OHTTP context used
+// for encrypting the request.
+std::pair<std::string, quiche::ObliviousHttpRequest::Context>
+GetProtoEncodedEncryptedInputAndOhttpContext(
+    const ProtectedAudienceInput& protected_audience_input) {
+  return GetFramedInputAndOhttpContext(
+      protected_audience_input.SerializeAsString());
+}
+
 AuctionResult DecryptAppProtoAuctionResult(
     absl::string_view auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
@@ -407,15 +412,9 @@ AuctionResult DecryptAppProtoAuctionResult(
       DecryptEncapsulatedResponse(auction_result_ciphertext, context);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
-  // Unframe the framed response.
-  absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(
-          decrypted_response->GetPlaintextData());
-  EXPECT_TRUE(unframed_response.ok()) << unframed_response.status().message();
-
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(unframed_response->compressed_data);
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   EXPECT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
 
@@ -436,7 +435,7 @@ AuctionResult DecryptBrowserAuctionResult(
 
   // Decompress the encoded response.
   auto decompressed_response =
-      GzipDecompress(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
   EXPECT_TRUE(decompressed_response.ok()) << decompressed_response.status();
 
   absl::StatusOr<AuctionResult> deserialized_auction_result =
@@ -444,6 +443,17 @@ AuctionResult DecryptBrowserAuctionResult(
   EXPECT_TRUE(deserialized_auction_result.ok())
       << deserialized_auction_result.status();
   return *deserialized_auction_result;
+}
+
+absl::StatusOr<std::string> UnframeAndDecompressAuctionResult(
+    absl::string_view framed_response) {
+  // Unframe the framed response.
+  absl::StatusOr<server_common::DecodedRequest> unframed_response =
+      server_common::DecodeRequestPayload(framed_response);
+  EXPECT_TRUE(unframed_response.ok()) << unframed_response.status().message();
+
+  // Decompress the encoded response.
+  return GzipDecompress(unframed_response->compressed_data);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

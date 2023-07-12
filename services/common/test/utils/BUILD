@@ -53,3 +53,12 @@ cc_library(
         "@rapidjson",
     ],
 )
+
+cc_library(
+    name = "service_utils",
+    hdrs = ["service_utils.h"],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "@com_google_absl//absl/strings",
+    ],
+)

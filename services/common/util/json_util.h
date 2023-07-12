@@ -86,6 +86,16 @@ absl::StatusOr<std::shared_ptr<std::string>> SerializeJsonDoc(
   return absl::InternalError("Unknown JSON to string serialization error");
 }
 
+// Converts rapidjson::Value& to a string
+absl::StatusOr<std::string> SerializeJsonDoc(const rapidjson::Value& document) {
+  rapidjson::StringBuffer string_buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
+  if (document.Accept(writer)) {
+    return std::string(string_buffer.GetString());
+  }
+  return absl::InternalError("Error converting inner Json to String.");
+}
+
 // Converts rapidjson::Document to a string.
 absl::StatusOr<std::string> SerializeJsonDoc(
     const rapidjson::Document& document) {

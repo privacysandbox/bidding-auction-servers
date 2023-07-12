@@ -48,7 +48,6 @@ variable "frontend_ip_address" {
   description = "Frontend ip address"
   type        = string
 }
-
 variable "frontend_domain_ssl_certificate_id" {
   description = "A GCP ssl certificate id. Example: projects/bas-dev-383721/global/sslCertificates/dev. Used to terminate client-to-external-LB connections."
   type        = string
@@ -83,5 +82,24 @@ variable "backend_service_name" {
 
 variable "backend_service_port" {
   description = "The grpc port that receives traffic destined for the backend service."
+  type        = number
+}
+
+variable "collector_ip_address" {
+  description = "Collector IP address"
+  type        = string
+}
+
+variable "collector_instance_groups" {
+  description = "OpenTelemetry collector instance group URLs created by instance group managers."
+  type        = set(string)
+}
+
+variable "collector_service_name" {
+  type = string
+}
+
+variable "collector_service_port" {
+  description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
   type        = number
 }

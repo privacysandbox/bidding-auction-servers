@@ -27,12 +27,13 @@ HttpScoringSignalsAsyncProvider::HttpScoringSignalsAsyncProvider(
     : http_seller_kv_async_client_(std::move(http_seller_kv_async_client)) {}
 
 void HttpScoringSignalsAsyncProvider::Get(
-    const BuyerBidsList& buyer_bids,
+    const ScoringSignalsRequest& scoring_signals_request,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>
         on_done,
     absl::Duration timeout) const {
   auto request = std::make_unique<GetSellerValuesInput>();
-  for (const auto& buyer_get_bid_response_pair : buyer_bids) {
+  for (const auto& buyer_get_bid_response_pair :
+       scoring_signals_request.buyer_bids_list_) {
     for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
       request->render_urls.emplace_back(ad.render());
       request->ad_component_render_urls.insert(
@@ -41,7 +42,7 @@ void HttpScoringSignalsAsyncProvider::Get(
     }
   }
   http_seller_kv_async_client_->Execute(
-      std::move(request), {},
+      std::move(request), scoring_signals_request.filtering_metadata_,
       [on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
               kv_output) mutable {

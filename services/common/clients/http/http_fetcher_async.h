@@ -20,6 +20,7 @@
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
+#include "absl/time/time.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -28,6 +29,10 @@ struct HTTPRequest {
   // Optional
   std::vector<std::string> headers = {};
 };
+
+using OnDoneFetchUrl = absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>;
+using OnDoneFetchUrls =
+    absl::AnyInvocable<void(std::vector<absl::StatusOr<std::string>>) &&>;
 
 class HttpFetcherAsync {
  public:
@@ -45,8 +50,21 @@ class HttpFetcherAsync {
   // threadpool and is not guaranteed to be the FetchUrl client's thread.
   // Clients can expect done_callback to be called exactly once.
   virtual void FetchUrl(const HTTPRequest& http_request, int timeout_ms,
-                        absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                            done_callback) = 0;
+                        OnDoneFetchUrl done_callback) = 0;
+
+  // Fetches the specified urls.
+  //
+  // requests: The URL and headers for the HTTP GET request.
+  // timeout: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. Please note that done_callback may run in a
+  // threadpool and is not guaranteed to be the FetchUrl client's thread.
+  // Clients can expect done_callback to be called exactly once and are
+  // guaranteed that the order of the reuslts exactly corresponds with the order
+  // of requests.
+  virtual void FetchUrls(const std::vector<HTTPRequest>& requests,
+                         absl::Duration timeout,
+                         OnDoneFetchUrls done_callback) = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

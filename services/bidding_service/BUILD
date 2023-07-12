@@ -19,6 +19,7 @@ cc_library(
     hdrs = [
         "runtime_flags.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         "//services/common/constants:common_service_flags",
         "@com_google_absl//absl/strings",
@@ -102,6 +103,7 @@ cc_test(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
+        "//services/common/test/utils:service_utils",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
@@ -118,6 +120,7 @@ cc_test(
         ":generate_bids_reactor",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper_test",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
@@ -139,6 +142,7 @@ cc_library(
     hdrs = [
         "bidding_service.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":bidding_adtech_code_wrapper",
         ":generate_bids_reactor",
@@ -169,9 +173,10 @@ cc_binary(
         "//api:bidding_auction_servers_cc_proto",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
-        "//services/common/clients:multi_curl_http_fetcher_async",
         "//services/common/clients/config:config_client_util",
+        "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/code_fetch:periodic_code_fetcher",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",

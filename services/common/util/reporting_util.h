@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_COMMON_UTIL_DEBUG_REPORTING_UTIL_H
-#define SERVICES_COMMON_UTIL_DEBUG_REPORTING_UTIL_H
+#ifndef SERVICES_COMMON_UTIL_REPORTING_UTIL_H
+#define SERVICES_COMMON_UTIL_REPORTING_UTIL_H
 
 #include <memory>
 
@@ -74,4 +74,4 @@ GetPlaceholderDataForInterestGroupOwner(
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_COMMON_UTIL_DEBUG_REPORTING_UTIL_H
+#endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

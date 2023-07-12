@@ -23,6 +23,7 @@
 
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "gmock/gmock.h"
 #include "include/grpc/event_engine/event_engine.h"
@@ -150,11 +151,14 @@ using BiddingAsyncClientMock =
 // Utility class to be used by anything that relies on an HttpFetcherAsync.
 class MockHttpFetcherAsync : public HttpFetcherAsync {
  public:
-  MOCK_METHOD(
-      void, FetchUrl,
-      (const HTTPRequest& http_request, int timeout_ms,
-       absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> done_callback),
-      (override));
+  MOCK_METHOD(void, FetchUrl,
+              (const HTTPRequest& http_request, int timeout_ms,
+               OnDoneFetchUrl done_callback),
+              (override));
+  MOCK_METHOD(void, FetchUrls,
+              (const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+               OnDoneFetchUrls done_callback),
+              (override));
 };
 
 // Utility class to be used to mock AsyncReporter.

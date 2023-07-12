@@ -20,6 +20,9 @@ test --test_verbose_timeout_warnings
 build:instance_local  --//:instance=local
 build:instance_local --@google_privacysandbox_servers_common//:instance=local
 
+build:instance_gcp --//:instance=gcp
+build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
+
 build:instance_aws  --//:instance=aws
 build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
@@ -32,8 +35,7 @@ build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
 build:platform_aws --@control_plane_shared//cc/public/cpio/interface:platform=aws
 
 build:platform_gcp --//:platform=gcp
-# TODO(b/285960898): Update platform to gcp when common repo supports gcp.
-build:platform_gcp --@google_privacysandbox_servers_common//:platform=local
+build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
 build:platform_gcp --@control_plane_shared//cc/public/cpio/interface:platform=gcp
 
 build:local_aws --config=instance_local
@@ -42,6 +44,9 @@ build:local_aws --config=platform_aws
 build:local_gcp --config=instance_local
 build:local_gcp --config=platform_gcp
 
+build:gcp_gcp --config=instance_gcp
+build:gcp_gcp --config=platform_gcp
+
 build:local_local --config=instance_local
 build:local_local --config=platform_local
 
@@ -49,7 +54,7 @@ build:aws_aws --config=instance_aws
 build:aws_aws --config=platform_aws
 
 # Address sanitizer
-# bazel build --config asan
+build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1
 build:asan --strip=never
 build:asan --copt -fsanitize=address
 build:asan --copt -DADDRESS_SANITIZER
@@ -61,7 +66,7 @@ build:asan --linkopt=-fuse-ld=lld
 build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
 
 # Memory sanitizer
-# bazel build --config msan
+build:msan --action_env=PRIVACY_SANDBOX_SERVERS_MSAN=1
 build:msan --strip=never
 build:msan --copt -fsanitize=memory
 build:msan --copt -DMEMORY_SANITIZER
@@ -70,7 +75,7 @@ build:msan --copt -fno-omit-frame-pointer
 build:msan --linkopt -fsanitize=memory
 
 # Undefined Behavior Sanitizer
-# bazel build --config ubsan
+build:ubsan --action_env=PRIVACY_SANDBOX_SERVERS_UBSAN=1
 build:ubsan --strip=never
 build:ubsan --copt -fsanitize=undefined
 build:ubsan --copt -DUNDEFINED_BEHAVIOR_SANITIZER
@@ -80,7 +85,7 @@ build:ubsan --linkopt -fsanitize=undefined
 build:ubsan --linkopt -lubsan
 
 # Thread Sanitizer
-# bazel build --config tsan
+build:tsan --action_env=PRIVACY_SANDBOX_SERVERS_TSAN=1
 build:tsan --strip=never
 build:tsan --copt=-fsanitize=thread
 build:tsan --copt=-fno-omit-frame-pointer
@@ -94,6 +99,7 @@ build:tsan --test_env=TSAN_OPTIONS=report_atomic_races=0
 
 test:coretests --test_tag_filters=-flaky
 
+build:small-tests --action_env=PRIVACY_SANDBOX_SERVERS_SMALL_TESTS=1
 build:small-tests --compilation_mode=dbg
 test:small-tests --build_tests_only
 test:small-tests --test_size_filters=-large,-enormous
@@ -103,7 +109,8 @@ test:small-tests --flaky_test_attempts=2
 test:small-tests --runs_per_test_detects_flakes
 test:small-tests --test_summary=detailed
 
-build:all-tests --compilation_mode=dbg
+build:all-tests --action_env=PRIVACY_SANDBOX_SERVERS_ALL_TESTS=1
+build:all-tests --compilation_mode=opt
 test:all-tests --build_tests_only
 test:all-tests --test_summary=detailed
 

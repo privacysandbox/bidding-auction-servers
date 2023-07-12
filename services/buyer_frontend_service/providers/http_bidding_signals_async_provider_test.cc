@@ -30,8 +30,8 @@ using ::testing::An;
 GetBidsRequest::GetBidsRawRequest GetRequest() {
   GetBidsRequest::GetBidsRawRequest request;
   for (int i = 0; i < MakeARandomInt(1, 10); i++) {
-    *request.mutable_buyer_input()->add_interest_groups() =
-        MakeARandomInterestGroupFromBrowser();
+    request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+        MakeARandomInterestGroupFromBrowser().release());
   }
   return request;
 }
@@ -138,8 +138,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
       AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
                       GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
   auto request = GetRequest();
-  *request.mutable_buyer_input()->add_interest_groups() =
-      MakeARandomInterestGroupFromBrowser();
+  request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      MakeARandomInterestGroupFromBrowser().release());
   absl::Notification notification;
   std::string expected_output = MakeARandomString();
 

@@ -102,6 +102,13 @@ class ScoreAdsReactor
   std::unique_ptr<metric::AuctionContext> metric_context_;
 
   std::vector<std::unique_ptr<ScoreAdsResponse::AdScore>> ad_scores_;
+
+  // Flags needed to be passed as input to the code which wraps AdTech provided
+  // code.
+  bool enable_seller_code_wrapper_;
+  bool enable_adtech_code_logging_;
+  bool enable_report_result_url_generation_;
+  bool enable_report_win_url_generation_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

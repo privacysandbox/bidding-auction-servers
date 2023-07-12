@@ -20,6 +20,7 @@
 #include <curl/curl.h>
 
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "glog/logging.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -157,8 +158,50 @@ static size_t WriteCallback(char* data, size_t size, size_t number_elements,
   return size * number_elements;
 }
 
+// FetchUrlsLifetime manages a single FetchUrls request and encapsulates
+// all of the data each individual FetchUrl callback will need.
+struct FetchUrlsLifetime {
+  OnDoneFetchUrls all_done_callback;
+  // Results will be passed into all_done_callback.
+  std::vector<absl::StatusOr<std::string>> results;
+  // This is used to guard pending_results
+  // to keep the count accurate when updated by
+  // different threads.
+  absl::Mutex results_mu;
+  int pending_results;
+};
+
+void MultiCurlHttpFetcherAsync::FetchUrls(
+    const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+    OnDoneFetchUrls done_callback) {
+  // The FetchUrl lambdas are the owners of the underlying FetchUrlsLifetime and
+  // this shared_ptr will be destructed once the last FetchUrl lambda finishes.
+  // Using a shared_ptr here allows us to avoid making MultiCurlHttpFetcherAsync
+  // the owner of the FetchUrlsLifetime, which would complicate cleanup on
+  // MultiCurlHttpFetcherAsync destruction during a pending FetchUrls call.
+  std::shared_ptr<FetchUrlsLifetime> shared_lifetime =
+      std::make_shared<FetchUrlsLifetime>();
+  shared_lifetime->pending_results = requests.size();
+  shared_lifetime->all_done_callback = std::move(done_callback);
+  shared_lifetime->results =
+      std::vector<absl::StatusOr<std::string>>(requests.size());
+
+  for (int i = 0; i < requests.size(); i++) {
+    FetchUrl(requests.at(i), absl::ToInt64Milliseconds(timeout),
+             [i, shared_lifetime](absl::StatusOr<std::string> result) {
+               absl::MutexLock lock_results(&shared_lifetime->results_mu);
+               shared_lifetime->results[i] = std::move(result);
+               if (--shared_lifetime->pending_results == 0) {
+                 std::move(shared_lifetime->all_done_callback)(
+                     std::move(shared_lifetime->results));
+               }
+             });
+  }
+}
+
 void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
-                                         int timeout_ms, OnDone done_callback)
+                                         int timeout_ms,
+                                         OnDoneFetchUrl done_callback)
     ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
   auto curl_request_data = std::make_unique<CurlRequestData>(
       request.headers, std::move(done_callback));
@@ -272,7 +315,7 @@ void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
 }
 
 MultiCurlHttpFetcherAsync::CurlRequestData::CurlRequestData(
-    const std::vector<std::string>& headers, OnDone on_done) {
+    const std::vector<std::string>& headers, OnDoneFetchUrl on_done) {
   // Space for the fetch output must be heap allocated.
   // It can (potentially) be multiple megabytes in size, and many simultaneous
   // requests can be in flight due to the async nature of FetchUrl.

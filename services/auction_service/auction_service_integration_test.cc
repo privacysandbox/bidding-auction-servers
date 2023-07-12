@@ -24,6 +24,7 @@
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
@@ -268,17 +269,25 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
-void ScoresAdsDebugReportingTestHelper(ScoreAdsResponse* response,
-                                       absl::string_view adtech_code_blob,
-                                       bool enable_seller_debug_url_generation,
-                                       bool enable_debug_reporting) {
+void SellerCodeWrappingTestHelper(
+    ScoreAdsResponse* response, absl::string_view adtech_code_blob,
+    bool enable_seller_debug_url_generation, bool enable_debug_reporting,
+    bool enable_seller_code_wrapper = false,
+    bool enable_adtech_code_logging = false,
+    bool enable_report_result_url_generation = false) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
   DispatchConfig config;
   ASSERT_TRUE(dispatcher.Init(config).ok());
-  std::string wrapper_js_blob =
-      GetWrappedAdtechCodeForScoring(adtech_code_blob);
+  std::string wrapper_js_blob;
+  if (enable_seller_code_wrapper && enable_report_result_url_generation) {
+    wrapper_js_blob = kExpectedFinalCode;
+  } else if (enable_seller_code_wrapper) {
+    wrapper_js_blob = kExpectedCodeWithReportingDisabled;
+  } else {
+    wrapper_js_blob = GetWrappedAdtechCodeForScoring(adtech_code_blob);
+  }
   ASSERT_TRUE(dispatcher.LoadSync(1, wrapper_js_blob).ok());
 
   auto score_ads_reactor_factory =
@@ -314,7 +323,8 @@ void ScoresAdsDebugReportingTestHelper(ScoreAdsResponse* response,
   AuctionServiceRuntimeConfig auction_service_runtime_config = {
       .encryption_enabled = true,
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
-  };
+      .enable_seller_code_wrapper = enable_seller_code_wrapper,
+      .enable_adtech_code_logging = enable_adtech_code_logging};
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -333,9 +343,9 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
   ScoreAdsResponse response;
-  ScoresAdsDebugReportingTestHelper(&response, js_code_with_debug_urls,
-                                    enable_seller_debug_url_generation,
-                                    enable_debug_reporting);
+  SellerCodeWrappingTestHelper(&response, js_code_with_debug_urls,
+                               enable_seller_debug_url_generation,
+                               enable_debug_reporting);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scoredAd = raw_response.ad_score();
@@ -353,9 +363,9 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = false;
   ScoreAdsResponse response;
-  ScoresAdsDebugReportingTestHelper(&response, js_code_with_debug_urls,
-                                    enable_seller_debug_url_generation,
-                                    enable_debug_reporting);
+  SellerCodeWrappingTestHelper(&response, js_code_with_debug_urls,
+                               enable_seller_debug_url_generation,
+                               enable_debug_reporting);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scoredAd = raw_response.ad_score();
@@ -369,7 +379,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
   ScoreAdsResponse response;
-  ScoresAdsDebugReportingTestHelper(
+  SellerCodeWrappingTestHelper(
       &response, js_code_throws_exception_with_debug_urls,
       enable_seller_debug_url_generation, enable_debug_reporting);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
@@ -385,14 +395,67 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
   ScoreAdsResponse response;
-  ScoresAdsDebugReportingTestHelper(&response, js_code_throws_exception,
-                                    enable_seller_debug_url_generation,
-                                    enable_debug_reporting);
+  SellerCodeWrappingTestHelper(&response, js_code_throws_exception,
+                               enable_seller_debug_url_generation,
+                               enable_debug_reporting);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scoredAd = raw_response.ad_score();
   EXPECT_EQ(scoredAd.desirability(), 0);
   EXPECT_FALSE(scoredAd.has_debug_report_urls());
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ScoresAdsReturnsSuccessFullyWithLogsWrapper) {
+  bool enable_seller_debug_url_generation = false;
+  bool enable_debug_reporting = false;
+  bool enable_adtech_code_logging = true;
+  bool enable_seller_code_wrapper = true;
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &response, kExpectedFinalCode, enable_seller_debug_url_generation,
+      enable_debug_reporting, enable_seller_code_wrapper,
+      enable_adtech_code_logging);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_GT(scoredAd.desirability(), 0);
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ScoresAdsReturnsSuccessFullyWithLoggingDisabled) {
+  bool enable_seller_debug_url_generation = false;
+  bool enable_debug_reporting = false;
+  bool enable_adtech_code_logging = false;
+  bool enable_seller_code_wrapper = true;
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &response, kExpectedFinalCode, enable_seller_debug_url_generation,
+      enable_debug_reporting, enable_seller_code_wrapper,
+      enable_adtech_code_logging);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_GT(scoredAd.desirability(), 0);
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ScoresAdsReturnsSuccessFullyWithReportingEnabled) {
+  bool enable_seller_debug_url_generation = false;
+  bool enable_debug_reporting = false;
+  bool enable_adtech_code_logging = false;
+  bool enable_seller_code_wrapper = true;
+  bool enable_report_result_url_generation = true;
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &response, kExpectedFinalCode, enable_seller_debug_url_generation,
+      enable_debug_reporting, enable_seller_code_wrapper,
+      enable_adtech_code_logging, enable_report_result_url_generation);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_GT(scoredAd.desirability(), 0);
+  // Todo: Test for reporting urls
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

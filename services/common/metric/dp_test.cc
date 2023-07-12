@@ -70,13 +70,13 @@ class MockMetricRouter {
 class NoNoiseTest : public ::testing::Test {
  protected:
   void SetUp() override {}
-  virtual PrivacyBudget multiplier() { return PrivacyBudget{1e10}; }
+  virtual PrivacyBudget fraction() { return PrivacyBudget{1e10}; }
   StrictMock<MockMetricRouter> mock_metric_router_;
 };
 
 TEST_F(NoNoiseTest, DPCounterReset) {
   internal::DpAggregator d(&mock_metric_router_, &kIntUnSafeCounter,
-                           multiplier());
+                           fraction());
   for (int i = 0; i < 10; ++i) {
     CHECK_OK(d.Aggregate(1, ""));
   }
@@ -103,7 +103,7 @@ TEST_F(NoNoiseTest, DPCounterReset) {
 TEST_F(NoNoiseTest, DPCounterBound) {
   {
     internal::DpAggregator d(&mock_metric_router_, &kIntUnSafeCounter,
-                             multiplier());
+                             fraction());
     CHECK_OK(d.Aggregate(5, ""));   // bounded to [1:2]
     CHECK_OK(d.Aggregate(10, ""));  // bounded to [1:2]
     EXPECT_CALL(
@@ -115,7 +115,7 @@ TEST_F(NoNoiseTest, DPCounterBound) {
   }
   {
     internal::DpAggregator d(&mock_metric_router_, &kIntUnSafeCounter,
-                             multiplier());
+                             fraction());
     CHECK_OK(d.Aggregate(0, ""));  // bounded to [1:2]
     CHECK_OK(d.Aggregate(0, ""));  // bounded to [1:2]
     EXPECT_CALL(
@@ -129,7 +129,7 @@ TEST_F(NoNoiseTest, DPCounterBound) {
 
 TEST_F(NoNoiseTest, PartitionedCounter) {
   internal::DpAggregator d(&mock_metric_router_, &kUnitPartionCounter,
-                           multiplier());
+                           fraction());
   for (int i = 0; i < 10; ++i) {
     CHECK_OK(d.Aggregate(1, "buyer_1"));
   }
@@ -156,11 +156,11 @@ TEST_F(NoNoiseTest, PartitionedCounter) {
 
 class NoiseTest : public NoNoiseTest {
  protected:
-  virtual PrivacyBudget multiplier() { return PrivacyBudget{1}; }
+  virtual PrivacyBudget fraction() { return PrivacyBudget{1}; }
 };
 
 TEST_F(NoiseTest, DPCounterNoise) {
-  internal::DpAggregator d(&mock_metric_router_, &kUnitCounter, multiplier());
+  internal::DpAggregator d(&mock_metric_router_, &kUnitCounter, fraction());
   for (int i = 0; i < 100; ++i) {
     CHECK_OK(d.Aggregate(1, ""));
   }
@@ -178,7 +178,7 @@ TEST_F(NoiseTest, DPCounterNoise) {
 
 TEST_F(NoiseTest, DPPartitionCounterNoise) {
   internal::DpAggregator d(&mock_metric_router_, &kUnitPartionCounter,
-                           multiplier());
+                           fraction());
   for (int i = 0; i < 100; ++i) {
     CHECK_OK(d.Aggregate(1, "buyer_1"));
     CHECK_OK(d.Aggregate(1, "buyer_2"));
@@ -197,8 +197,7 @@ TEST_F(NoiseTest, DPPartitionCounterNoise) {
 }
 
 TEST_F(NoNoiseTest, DifferentiallyPrivate) {
-  DifferentiallyPrivate dp(&mock_metric_router_, multiplier(),
-                           absl::Seconds(60));
+  DifferentiallyPrivate dp(&mock_metric_router_, fraction(), absl::Seconds(60));
 
   CHECK_OK(dp.Aggregate(&kIntUnSafeCounter, 1, ""));
   CHECK_OK(dp.Aggregate(&kIntUnSafeCounter, 2, ""));
@@ -225,7 +224,7 @@ class ThreadTest : public NoNoiseTest {};
 // multi thread log to same `DpAggregator`
 TEST_F(ThreadTest, DpAggregator) {
   internal::DpAggregator d(&mock_metric_router_, &kIntUnSafeCounter,
-                           multiplier());
+                           fraction());
   std::vector<std::future<absl::Status>> f;
   absl::Notification start, done;
   constexpr int kThread = 10, kRepeat = 5;
@@ -277,7 +276,7 @@ TEST_F(ThreadTest, DifferentiallyPrivate) {
   const DefinitionUnSafe* kMetricList[] = {&kIntUnSafeCounter, &kUnitCounter,
                                            &kUnitCounter2, &kUnitCounter3};
   absl::Span<const DefinitionUnSafe* const> metric_span = kMetricList;
-  DifferentiallyPrivate dp(&mock_metric_router_, multiplier(),
+  DifferentiallyPrivate dp(&mock_metric_router_, fraction(),
                            absl::Milliseconds(1));
   std::vector<std::future<absl::Status>> f;
   absl::Notification start;

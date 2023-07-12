@@ -29,7 +29,9 @@ namespace privacy_sandbox::server_common::metric {
 namespace sdk = ::opentelemetry::sdk::metrics;
 namespace api = ::opentelemetry::metrics;
 
-MetricRouter::MetricRouter(Meter* meter) : meter_(meter) {
+MetricRouter::MetricRouter(Meter* meter, PrivacyBudget fraction,
+                           absl::Duration dp_output_period)
+    : meter_(meter), dp_(this, fraction, dp_output_period) {
   if (meter_ != nullptr) {
     return;
   }

@@ -193,5 +193,6 @@ resource "aws_ssm_parameter" "runtime_flags" {
   name      = "${var.operator}-${var.environment}-${each.key}"
   type      = "String"
   value     = each.value
+  tier      = "Intelligent-Tiering"
   overwrite = true
 }

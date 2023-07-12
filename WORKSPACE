@@ -88,6 +88,7 @@ http_archive(
 
 http_archive(
     name = "com_google_differential_privacy",
+    sha256 = "b2e9afb2ea9337bb7c6302545b72e938707e8cdb3558ef38ce5cdd12fe2f182c",
     strip_prefix = "differential-privacy-2.1.0",
     url = "https://github.com/google/differential-privacy/archive/refs/tags/v2.1.0.tar.gz",
 )
@@ -96,6 +97,7 @@ http_archive(
     name = "com_google_cc_differential_privacy",
     patch_args = ["-p1"],
     patches = ["//third_party:differential_privacy.patch"],
+    sha256 = "b2e9afb2ea9337bb7c6302545b72e938707e8cdb3558ef38ce5cdd12fe2f182c",
     strip_prefix = "differential-privacy-2.1.0/cc",
     urls = ["https://github.com/google/differential-privacy/archive/refs/tags/v2.1.0.tar.gz"],
 )

@@ -29,6 +29,10 @@ cc_library(
     hdrs = [
         "common_service_flags.h",
     ],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
     deps = [
         "//services/common/metric:telemetry_flag",
         "@com_google_absl//absl/flags:flag",

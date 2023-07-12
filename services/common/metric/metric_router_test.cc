@@ -14,9 +14,12 @@
 
 #include "services/common/metric/metric_router.h"
 
+#include <regex>
 #include <sstream>
 #include <string>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/time/clock.h"
@@ -82,7 +85,8 @@ class MetricRouterTest : public ::testing::Test {
     test_instance_ =
         std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
                                            ->GetMeter("not used name", "0.0.1")
-                                           .get());
+                                           .get(),
+                                       PrivacyBudget{0}, absl::Minutes(5));
   }
 
   static std::stringstream& GetSs() {
@@ -92,6 +96,11 @@ class MetricRouterTest : public ::testing::Test {
   }
   std::string ReadSs() {
     absl::SleepFor(absl::Milliseconds(kExportIntervalMillis * 2));
+
+    // Shut down metric reader now to avoid concurrent access of Ss.
+    metrics_api::Provider::SetMeterProvider(
+        (std::shared_ptr<metrics_api::MeterProvider>)
+            std::make_shared<metrics_api::NoopMeterProvider>());
     std::string output = GetSs().str();
     GetSs().str("");
     return output;
@@ -189,6 +198,88 @@ TEST_F(MetricRouterTest, LogSafePartitionedDouble) {
           "instrument name[ \t]+:[ \t]+safe_partitioned_double_counter"));
   EXPECT_THAT(output, ContainsRegex("value[ \t]+:[ \t]+3.21"));
   EXPECT_THAT(output, ContainsRegex("buyer_name_double[ \t]*:[ \t]*buyer_3"));
+}
+
+class MetricRouterDpNoNoiseTest : public MetricRouterTest {
+ protected:
+  void SetUp() override {
+    MetricRouterTest::SetUp();
+    test_instance_ =
+        std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
+                                           ->GetMeter("not used name", "0.0.1")
+                                           .get(),
+                                       PrivacyBudget{1e10}, kDpInterval);
+  }
+  absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
+};
+
+constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
+    kUnsafePartitioned(/*name*/ "kUnsafePartitioned", "",
+                       /*partition_type*/ "buyer_name",
+                       /*max_partitions_contributed*/ 2,
+                       /*public_partitions*/ buyer_public_partitions,
+                       /*upper_bound*/ 2,
+                       /*lower_bound*/ 0);
+
+TEST_F(MetricRouterDpNoNoiseTest, LogPartitioned) {
+  for (int i = 0; i < 100; ++i) {
+    CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 111, "buyer_1"));
+    CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 22, "buyer_2"));
+  }
+
+  absl::SleepFor(kDpInterval);
+  std::string output = ReadSs();
+  EXPECT_THAT(output,
+              ContainsRegex("instrument name[ \t]*:[ \t]*kUnsafePartitioned"));
+  EXPECT_THAT(output, ContainsRegex("value[ \t]*:[ \t]*200"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_1"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_2"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_3"));
+}
+
+class MetricRouterDpNoiseTest : public MetricRouterTest {
+ protected:
+  void SetUp() override {
+    MetricRouterTest::SetUp();
+    test_instance_ =
+        std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
+                                           ->GetMeter("not used name", "0.0.1")
+                                           .get(),
+                                       PrivacyBudget{1}, kDpInterval);
+  }
+  absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
+};
+
+TEST_F(MetricRouterDpNoiseTest, LogPartitioned) {
+  for (int i = 0; i < 100; ++i) {
+    CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 111, "buyer_1"));
+    CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 22, "buyer_2"));
+    CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 22, "buyer_3"));
+  }
+
+  absl::SleepFor(kDpInterval);
+  std::string output = ReadSs();
+  EXPECT_THAT(output,
+              ContainsRegex("instrument name[ \t]*:[ \t]*kUnsafePartitioned"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_1"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_2"));
+  EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_3"));
+
+  std::regex r("value[ \t]*:[ \t]*([0-9]+)");
+  std::smatch sm;
+  std::vector<int> results;
+  ABSL_LOG(ERROR) << output;
+  for (int i = 0; i < 3; ++i) {
+    regex_search(output, sm, r);
+    results.push_back(stoi(sm[1]));
+    EXPECT_THAT((double)results.back(), testing::DoubleNear(200, 50));
+    output = sm.suffix();
+  }
+  bool at_least_one_not_200 = false;
+  for (int i : results) {
+    if (i != 200) at_least_one_not_200 = true;
+  }
+  EXPECT_TRUE(at_least_one_not_200);
 }
 }  // namespace
 }  // namespace privacy_sandbox::server_common::metric

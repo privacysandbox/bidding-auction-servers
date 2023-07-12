@@ -33,3 +33,8 @@ variable "subnets" {
   description = "A list of all subnets. Used to allow ingress through the service mesh."
   type        = any
 }
+
+variable "collector_service_port" {
+  description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
+  type        = number
+}

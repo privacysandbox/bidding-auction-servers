@@ -80,6 +80,7 @@ void GetBidsUnaryReactor::Execute() {
     VLOG(1) << "Decrypting the request failed";
     return;
   }
+  VLOG(5) << "Successfully decrypted the request";
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
   // Get Bidding Signals.
@@ -121,14 +122,15 @@ void GetBidsUnaryReactor::PrepareAndGenerateBid(
              std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
                  raw_response) {
         if (!raw_response.ok()) {
+          const std::string err_msg = absl::StrCat(
+              "Execution of GenerateBids request failed with status: ",
+              raw_response.status().message());
           // Return error to client.
-          logger_.vlog(1,
-                       "Execution of GenerateBids request failed with status: ",
-                       raw_response.status());
+          logger_.vlog(1, err_msg);
           benchmarking_logger_->End();
           Finish(grpc::Status(
               static_cast<grpc::StatusCode>(raw_response.status().code()),
-              std::string(raw_response.status().message())));
+              std::move(err_msg)));
           return;
         }
         logger_.vlog(2, "Raw response received by bidding async client:\n",

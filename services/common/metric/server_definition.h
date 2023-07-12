@@ -24,6 +24,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace metric {
 
+inline constexpr server_common::metric::PrivacyBudget server_total_budget{
+    /*epsilon*/ 5};
+
 // Metric Definitions that are specific to bidding & auction servers.
 inline constexpr double kV8TimeHistogram[] = {50, 100, 200, 400, 800};
 inline constexpr server_common::metric::Definition<
@@ -48,7 +51,7 @@ inline auto* BiddingContextMap(
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const GenerateBidsRequest,
                                               kBiddingMetricSpan>(
-      std::move(config), meter);
+      std::move(config), meter, server_total_budget);
 }
 using BiddingContext = server_common::metric::ServerContext<kBiddingMetricSpan>;
 
@@ -68,8 +71,8 @@ inline auto* BfeContextMap(
         std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const GetBidsRequest,
-                                              kBfeMetricSpan>(std::move(config),
-                                                              meter);
+                                              kBfeMetricSpan>(
+      std::move(config), meter, server_total_budget);
 }
 using BfeContext = server_common::metric::ServerContext<kBfeMetricSpan>;
 
@@ -89,8 +92,8 @@ inline auto* SfeContextMap(
         std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const SelectAdRequest,
-                                              kSfeMetricSpan>(std::move(config),
-                                                              meter);
+                                              kSfeMetricSpan>(
+      std::move(config), meter, server_total_budget);
 }
 using SfeContext = server_common::metric::ServerContext<kSfeMetricSpan>;
 
@@ -111,7 +114,7 @@ inline auto* AuctionContextMap(
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const ScoreAdsRequest,
                                               kAuctionMetricSpan>(
-      std::move(config), meter);
+      std::move(config), meter, server_total_budget);
 }
 using AuctionContext = server_common::metric::ServerContext<kAuctionMetricSpan>;
 

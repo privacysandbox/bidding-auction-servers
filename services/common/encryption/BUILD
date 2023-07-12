@@ -110,6 +110,10 @@ cc_library(
     srcs = [
         "mock_crypto_client_wrapper.h",
     ],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
     deps = [
         ":crypto_client_wrapper",
         ":crypto_client_wrapper_interface",

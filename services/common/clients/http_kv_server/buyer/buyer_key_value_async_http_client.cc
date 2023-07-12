@@ -56,8 +56,8 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   auto done_callback = [on_done = std::move(on_done)](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
-      VLOG(2) << "BuyerKeyValueAsyncHttpClient Success Response: "
-              << resultStr.value();
+      VLOG(2) << "\n\nBuyerKeyValueAsyncHttpClient Success Response:\n"
+              << resultStr.value() << "\n";
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
           std::make_unique<GetBuyerValuesOutput>(
               GetBuyerValuesOutput({std::move(resultStr.value())}));
@@ -68,6 +68,10 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
       std::move(on_done)(resultStr.status());
     }
   };
+  VLOG(2) << "\n\nBTS Request Url:\n" << request.url << "\nHeaders:\n";
+  for (const auto& header : request.headers) {
+    VLOG(2) << header;
+  }
   http_fetcher_async_->FetchUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),
       std::move(done_callback));

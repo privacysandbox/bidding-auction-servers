@@ -58,8 +58,6 @@ inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
 inline constexpr char kSampleErrorMessage[] = "BadError";
 inline constexpr int32_t kSampleErrorCode = 400;
-inline constexpr char kSingleAd[] =
-    R"json([{"metadata":["134256827445"],"renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?cv_id=4"}])json";
 
 using ErrorVisibility::CLIENT_VISIBLE;
 
@@ -98,13 +96,6 @@ cbor_pair BuildStringArrayMapPair(
           cbor_move(array)};
 }
 
-google::protobuf::ListValue GetSingleSampleAd() {
-  google::protobuf::ListValue ads;
-  auto result = google::protobuf::util::JsonStringToMessage(kSingleAd, &ads);
-  EXPECT_TRUE(result.ok()) << result;
-  return ads;
-}
-
 struct cbor_item_t* BuildSampleCborInterestGroup() {
   cbor_item_t* interest_group = cbor_new_definite_map(kNumInterestGroupKeys);
   EXPECT_TRUE(
@@ -116,39 +107,9 @@ struct cbor_item_t* BuildSampleCborInterestGroup() {
   EXPECT_TRUE(cbor_map_add(
       interest_group,
       BuildStringMapPair(kUserBiddingSignals, kSampleUserBiddingSignals)));
-
-  google::protobuf::ListValue sample_ads = GetSingleSampleAd();
-  ScopedCbor ads(cbor_new_definite_array(1));
-  ScopedCbor single_ad(cbor_new_definite_map(kNumAdsFields));
-  const auto& metadata =
-      sample_ads.values().begin()->struct_value().fields().at(kMetadata);
-  ScopedCbor serialized_metadata(
-      cbor_new_definite_array(metadata.list_value().values_size()));
-  for (auto const& value : metadata.list_value().values()) {
-    const auto& string_val = value.string_value();
-    cbor_item_t* array_entry =
-        cbor_build_stringn(string_val.data(), string_val.size());
-    EXPECT_TRUE(cbor_array_push(*serialized_metadata, cbor_move(array_entry)));
-  }
-  cbor_pair metadata_kv = {
-      cbor_move(cbor_build_stringn(kMetadata, sizeof(kMetadata) - 1)),
-      *serialized_metadata};
-  EXPECT_TRUE(cbor_map_add(*single_ad, std::move(metadata_kv)));
-  const std::string& render_url = sample_ads.values()
-                                      .begin()
-                                      ->struct_value()
-                                      .fields()
-                                      .at(kRenderUrl)
-                                      .string_value();
-  EXPECT_TRUE(
-      cbor_map_add(*single_ad, BuildStringMapPair(kRenderUrl, render_url)));
-  EXPECT_TRUE(cbor_array_push(*ads, *single_ad));
-
-  cbor_pair ads_kv = {
-      .key = cbor_move(cbor_build_stringn(kAds, sizeof(kAds) - 1)),
-      .value = *ads,
-  };
-  EXPECT_TRUE(cbor_map_add(interest_group, std::move(ads_kv)));
+  EXPECT_TRUE(cbor_map_add(
+      interest_group,
+      BuildStringArrayMapPair(kAds, {kSampleAdRenderId1, kSampleAdRenderId2})));
   EXPECT_TRUE(cbor_map_add(
       interest_group,
       BuildStringArrayMapPair(kAdComponents, {kSampleAdComponentRenderId1,
@@ -253,10 +214,11 @@ TEST(ChromeRequestUtils, Decode_Success) {
   expected_ig.set_name(kSampleIgName);
   expected_ig.add_bidding_signals_keys(kSampleBiddingSignalKey1);
   expected_ig.add_bidding_signals_keys(kSampleBiddingSignalKey2);
+  expected_ig.add_ad_render_ids(kSampleAdRenderId1);
+  expected_ig.add_ad_render_ids(kSampleAdRenderId2);
   expected_ig.add_component_ads(kSampleAdComponentRenderId1);
   expected_ig.add_component_ads(kSampleAdComponentRenderId2);
   expected_ig.set_user_bidding_signals(kSampleUserBiddingSignals);
-  *expected_ig.mutable_ads() = GetSingleSampleAd();
 
   BrowserSignals* signals = expected_ig.mutable_browser_signals();
   signals->set_join_count(kSampleJoinCount);
@@ -302,12 +264,10 @@ TEST(ChromeRequestUtils, Decode_Success) {
     google::protobuf::util::MessageDifferencer bi_differencer;
     bi_differencer.ReportDifferencesToString(&bi_differences);
     VLOG(1) << "\nExpected BuyerInput:\n" << expected_buyer_input.DebugString();
-    auto actual_buyer_inputs =
-        DecodeBuyerInputs(actual.buyer_input(), error_accumulator);
-    ASSERT_FALSE(error_accumulator.HasErrors()) << absl::StrJoin(
-        error_accumulator.GetErrors(CLIENT_VISIBLE).at(ErrorCode::CLIENT_SIDE),
-        kErrorDelimiter);
-    auto actual_buyer_input = actual_buyer_inputs.begin()->second;
+    BuyerInput actual_buyer_input =
+        DecodeBuyerInputs(actual.buyer_input(), error_accumulator)
+            .begin()
+            ->second;
     VLOG(1) << "\nActual BuyerInput:\n" << actual_buyer_input.DebugString();
     EXPECT_TRUE(
         !bi_differencer.Compare(actual_buyer_input, expected_buyer_input))

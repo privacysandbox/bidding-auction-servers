@@ -121,7 +121,7 @@ cc_library(
         "//services/seller_frontend_service",
         "//services/seller_frontend_service:seller_frontend_data",
         "//services/seller_frontend_service/test:app_test_utils",
-        "//services/seller_frontend_service/util:app_utils",
+        "//services/seller_frontend_service/util:framing_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -133,9 +133,9 @@ cc_library(
 )
 
 cc_library(
-    name = "app_utils",
-    srcs = ["app_utils.cc"],
-    hdrs = ["app_utils.h"],
+    name = "framing_utils",
+    srcs = ["framing_utils.cc"],
+    hdrs = ["framing_utils.h"],
     visibility = [
         "//services:__subpackages__",
         "//tools/secure_invoke:__subpackages__",

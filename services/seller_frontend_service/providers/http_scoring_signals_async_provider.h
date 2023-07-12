@@ -40,7 +40,7 @@ class HttpScoringSignalsAsyncProvider final
   // Obtains bidding signals by batching the keys in the buyer input
   // interest groups. When the output from all Key Value servers is obtained,
   // the on_done function is invoked with the results.
-  void Get(const BuyerBidsList& buyer_bids,
+  void Get(const ScoringSignalsRequest& scoring_signals_request,
            absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
 
                                        ScoringSignals>>) &&>

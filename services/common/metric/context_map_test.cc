@@ -100,5 +100,22 @@ TEST_F(ContextMapTest, CheckListOrderHistogram) {
                HasSubstr("kHistogram histogram"));
 }
 
+constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>
+    kUnsafe1("kUnsafe1", "", 0, 0);
+constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>
+    kUnsafe2("kUnsafe2", "", 0, 0);
+constexpr const DefinitionName* unsafe_list[] = {&kUnsafe1, &kUnsafe2,
+                                                 &kIntExactCounter};
+constexpr absl::Span<const DefinitionName* const> unsafe_list_span =
+    unsafe_list;
+
+TEST_F(ContextMapTest, GetContextMapPrivacyBudget) {
+  constexpr server_common::metric::PrivacyBudget budget{/*epsilon*/ 5};
+  auto c =
+      GetContextMap<Foo, unsafe_list_span>(*metric_config_, nullptr, budget);
+  EXPECT_DOUBLE_EQ(c->metric_router()->dp().fraction_of_total_budget().epsilon,
+                   2.5);
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::server_common::metric

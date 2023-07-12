@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.8.0 (2023-07-12)
+
+
+### Features
+
+* add FetchUrls utility to MultiCurlHttpFetcher
+* enable counter metrics with dp aggregation
+* update multi-region.tf to use prod js urls and test mode true
+* use //:non_prod_build to configure build
+
+
+### Bug Fixes
+
+* Adjust all/small test configs
+* Adjust sanitizer configs
+* Correct example BFE hostname
+* Correct license block
+* Ensure --gcp-image flags are specified for gcp
+* Ensure --instance flag is specified
+* fix missing telemetry flag and readme
+* Improve build_and_test_all_in_docker usage text
+
 ## 0.7.0 (2023-06-30)
 
 

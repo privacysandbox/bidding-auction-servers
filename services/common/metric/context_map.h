@@ -108,11 +108,18 @@ class ContextMap {
 // meter without metric exporting.
 template <typename T, const absl::Span<const DefinitionName* const>& L>
 inline auto* GetContextMap(std::optional<BuildDependentConfig> config,
-                           MetricRouter::Meter* meter) {
-  static auto* context_map = [=]() {
+                           MetricRouter::Meter* meter, PrivacyBudget budget,
+                           absl::Duration dp_output_period = absl::Minutes(5)) {
+  static auto* context_map = [=]() mutable {
     CHECK(config != std::nullopt) << "cannot be null at initialization";
+    double total_weight =
+        absl::c_accumulate(L, 0.0, [](double total, auto* definition) {
+          return total += definition->privacy_budget_weight_copy_;
+        });
+    budget.epsilon /= total_weight;
     return new ContextMap<T, L, MetricRouter>(
-        std::make_unique<MetricRouter>(meter), *config);
+        std::make_unique<MetricRouter>(meter, budget, dp_output_period),
+        *config);
   }();
   CHECK(config == std::nullopt ||
         config->IsDebug() == context_map->metric_config().IsDebug())
