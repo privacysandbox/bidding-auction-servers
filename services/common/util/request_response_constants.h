@@ -40,11 +40,11 @@ inline constexpr char kVersion[] = "version";
 inline constexpr char kPublisher[] = "publisher";
 inline constexpr char kGenerationId[] = "generationId";
 inline constexpr char kAdtechDebugId[] = "adtechDebugId";
-inline constexpr char kAdRenderId[] = "adRenderId";
 inline constexpr char kSellerDebugId[] = "sellerDebugId";
 inline constexpr char kBuyerDebugId[] = "buyerDebugId";
 inline constexpr char kDebugReporting[] = "enableDebugReporting";
 inline constexpr char kInterestGroups[] = "interestGroups";
+inline constexpr char kAdRenderId[] = "ad_render_id";
 inline constexpr char kName[] = "name";
 inline constexpr char kBiddingSignalsKeys[] = "biddingSignalsKeys";
 inline constexpr char kUserBiddingSignals[] = "userBiddingSignals";
@@ -92,14 +92,6 @@ inline constexpr char kCode[] = "code";
 inline constexpr std::array<absl::string_view, kNumErrorKeys> kErrorKeys = {
     kMessage,
     kCode,
-};
-
-inline constexpr int kNumAdsFields = 2;
-inline constexpr char kMetadata[] = "metadata";
-inline constexpr char kRenderUrl[] = "renderUrl";
-inline constexpr std::array<absl::string_view, kNumAdsFields> kAdsFields = {
-    kMetadata,
-    kRenderUrl,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

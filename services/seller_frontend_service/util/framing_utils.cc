@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "services/seller_frontend_service/util/app_utils.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 
 #include <algorithm>
 

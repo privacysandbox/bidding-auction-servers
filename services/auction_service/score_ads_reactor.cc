@@ -35,7 +35,8 @@
 #include "rapidjson/pointer.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "services/common/util/debug_reporting_util.h"
+#include "services/common/util/json_util.h"
+#include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/status_macros.h"
 #include "services/common/util/status_util.h"
@@ -50,10 +51,13 @@ using AdWithBidMetadata =
 constexpr char DispatchHandlerFunctionName[] = "scoreAd";
 constexpr char DispatchWrapperHandlerFunctionName[] = "scoreAdWrapper";
 constexpr char kAdComponentRenderUrlsProperty[] = "adComponentRenderUrls";
+constexpr char DispatchHandlerFunctionWithSellerWrapper[] =
+    "scoreAdEntryFunction";
 constexpr char kRenderUrlsPropertyForKVResponse[] = "renderUrls";
 constexpr char kRenderUrlsPropertyForScoreAd[] = "renderUrl";
 constexpr char kRomaTimeoutMs[] = "TimeoutMs";
-
+constexpr int kArgSizeDefault = 6;
+constexpr int kArgSizeWithWrapper = 7;
 // TODO(b/259610873): Revert hardcoded device signals.
 std::string MakeDeviceSignals(
     absl::string_view publisher_hostname,
@@ -90,6 +94,7 @@ enum class ScoreAdArgs : int {
   // This is only added to prevent errors in the score ad script, and
   // will always be an empty object.
   kDirectFromSellerSignals,
+  kEnableAdTechCodeLogging,
 };
 
 constexpr int ScoreArgIndex(ScoreAdArgs arg) {
@@ -111,8 +116,14 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
     const absl::string_view publisher_hostname,
     const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
         scoring_signals,
-    const ContextLogger& logger) {
-  std::vector<std::shared_ptr<std::string>> input(6);  // ScoreAdArgs size
+    const ContextLogger& logger, bool enable_seller_code_wrapper,
+    bool enable_adtech_code_logging) {
+  int input_size = kArgSizeDefault;
+  if (enable_seller_code_wrapper) {
+    input_size = kArgSizeWithWrapper;
+  }
+  std::vector<std::shared_ptr<std::string>> input(
+      input_size);  // ScoreAdArgs size
 
   // TODO: b/260265272
   std::string adMetadataAsJson;
@@ -137,6 +148,16 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
   // will always be an empty object.
   input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)] =
       std::make_shared<std::string>("{}");
+  if (enable_seller_code_wrapper) {
+    // Converting the bool value to a string so that it can be passed as an
+    // input arg.
+    std::string enable_adtech_code_logging_ = "false";
+    if (enable_adtech_code_logging) {
+      enable_adtech_code_logging_ = "true";
+    }
+    input[ScoreArgIndex(ScoreAdArgs::kEnableAdTechCodeLogging)] =
+        std::make_shared<std::string>(enable_adtech_code_logging_);
+  }
   if (VLOG_IS_ON(2)) {
     logger.vlog(2, "\n\nScore Ad Input Args:", "\nAdMetadata:\n",
                 *(input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]), "\nBid:\n",
@@ -158,20 +179,25 @@ DispatchRequest BuildScoreAdRequest(
     const absl::string_view publisher_hostname,
     const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
         scoring_signals,
-    const bool enable_debug_reporting, const ContextLogger& logger) {
+    const bool enable_debug_reporting, const ContextLogger& logger,
+    const bool enable_seller_code_wrapper,
+    const bool enable_adtech_code_logging) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest score_ad_request;
   // TODO(b/250893468) Revisit dispatch id.
   score_ad_request.id = ad.render();
   // TODO(b/258790164) Update after code is fetched periodically.
   score_ad_request.version_num = 1;
-  if (enable_debug_reporting) {
+  if (enable_seller_code_wrapper) {
+    score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
+  } else if (enable_debug_reporting) {
     score_ad_request.handler_name = DispatchWrapperHandlerFunctionName;
   } else {
     score_ad_request.handler_name = DispatchHandlerFunctionName;
   }
-  score_ad_request.input = ScoreAdInput(ad, auction_config, publisher_hostname,
-                                        scoring_signals, logger);
+  score_ad_request.input = ScoreAdInput(
+      ad, auction_config, publisher_hostname, scoring_signals, logger,
+      enable_seller_code_wrapper, enable_adtech_code_logging);
   return score_ad_request;
 }
 
@@ -396,6 +422,26 @@ std::shared_ptr<std::string> BuildAuctionConfig(
                                               : raw_request.seller_signals()),
       "}"));
 }
+
+absl::StatusOr<std::string> ParseAndGetScoreAdResponseJson(
+    bool enable_seller_code_wrapper, bool enable_adtech_code_logging,
+    const std::string& response, const ContextLogger& logger) {
+  if (!enable_seller_code_wrapper) {
+    return response;
+  }
+  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
+  rapidjson::Value& response_obj = document["response"];
+  std::string response_json;
+  PS_ASSIGN_OR_RETURN(response_json, SerializeJsonDoc(response_obj));
+  if (enable_adtech_code_logging) {
+    const rapidjson::Value& logs = document["logs"];
+    for (const auto& log : logs.GetArray()) {
+      logger.vlog(1, "Logs: ", log.GetString());
+    }
+  }
+  return response_json;
+}
+
 }  // namespace
 
 ScoreAdsReactor::ScoreAdsReactor(
@@ -415,6 +461,12 @@ ScoreAdsReactor::ScoreAdsReactor(
       async_reporter_(std::move(async_reporter)),
       enable_seller_debug_url_generation_(
           runtime_config.enable_seller_debug_url_generation),
+      enable_seller_code_wrapper_(runtime_config.enable_seller_code_wrapper),
+      enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
+      enable_report_result_url_generation_(
+          runtime_config.enable_report_result_url_generation),
+      enable_report_win_url_generation_(
+          runtime_config.enable_report_win_url_generation),
       roma_timeout_ms_(runtime_config.roma_timeout_ms) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
@@ -460,7 +512,8 @@ void ScoreAdsReactor::Execute() {
       DispatchRequest dispatch_request;
       dispatch_request = BuildScoreAdRequest(
           *ad, auction_config, raw_request_.publisher_hostname(),
-          scoring_signals.value(), enable_debug_reporting, logger_);
+          scoring_signals.value(), enable_debug_reporting, logger_,
+          enable_seller_code_wrapper_, enable_adtech_code_logging_);
       ad_data_.emplace(dispatch_request.id, std::move(ad));
       dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
       dispatch_requests_.push_back(std::move(dispatch_request));
@@ -519,8 +572,17 @@ void ScoreAdsReactor::ScoreAdsCallback(
       // Set the fields that the response includes automatically.
       google::protobuf::json::ParseOptions parse_options;
       parse_options.ignore_unknown_fields = true;
+      absl::StatusOr<std::string> response_json =
+          ParseAndGetScoreAdResponseJson(
+              enable_seller_code_wrapper_, enable_adtech_code_logging_,
+              responses[index].value().resp, logger_);
+      if (!response_json.ok()) {
+        logger_.vlog(0, "Failed to parse response from Roma ",
+                     response_json.status().ToString(
+                         absl::StatusToStringMode::kWithEverything));
+      }
       auto valid = google::protobuf::util::JsonStringToMessage(
-          responses[index].value().resp, &score_ads_response, parse_options);
+          response_json.value(), &score_ads_response, parse_options);
       const AdWithBidMetadata* ad =
           ad_data_.at(responses[index].value().id).get();
       if (valid.ok()) {

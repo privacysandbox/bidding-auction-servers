@@ -33,6 +33,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/test/utils/service_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
@@ -62,38 +63,6 @@ using ScoreAdsDoneCallback =
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
-struct LocalSfeStartResult {
-  int port;
-  std::unique_ptr<grpc::Server> server;
-
-  // Shutdown the server when the test is done.
-  ~LocalSfeStartResult() {
-    if (server) {
-      server->Shutdown();
-    }
-  }
-};
-
-LocalSfeStartResult StartLocalSfe(
-    SellerFrontEndService* seller_frontend_service) {
-  grpc::ServerBuilder builder;
-  int port;
-  builder.AddListeningPort("[::]:0",
-                           grpc::experimental::LocalServerCredentials(
-                               grpc_local_connect_type::LOCAL_TCP),
-                           &port);
-  builder.RegisterService(seller_frontend_service);
-  std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
-  return {port, std::move(server)};
-}
-
-std::unique_ptr<SellerFrontEnd::StubInterface> CreateSfeStub(int port) {
-  std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-      absl::StrFormat("localhost:%d", port),
-      grpc::experimental::LocalCredentials(grpc_local_connect_type::LOCAL_TCP));
-  return SellerFrontEnd::NewStub(channel);
-}
-
 class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -121,16 +90,15 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   SelectAdRequest request;
@@ -152,17 +120,16 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   SelectAdRequest request;
@@ -184,17 +151,16 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
           std::make_unique<MockHttpFetcherAsync>());
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   SelectAdRequest request;
@@ -219,17 +185,16 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   auto [protected_audience_input, request, encryption_context] =
@@ -259,17 +224,16 @@ TEST_F(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   SelectAdRequest request;
@@ -315,16 +279,15 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  auto async_provider = MockAsyncProvider<BuyerBidsList, ScoringSignals>();
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   ClientRegistry clients{async_provider, scoring, client_factory_mock,
                          key_fetcher_manager, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   auto [protected_audience_input, request, encryption_context] =
@@ -388,7 +351,8 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   }
 
   // Scoring signals provider
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   EXPECT_CALL(scoring_signals_provider, Get).Times(0);
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, Execute).Times(0);
@@ -405,10 +369,8 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
                          std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   SelectAdResponse response;
   grpc::ClientContext context;
@@ -527,7 +489,8 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
 
   // Scoring signals provider
   std::string ad_render_urls = "test scoring signals";
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            ad_render_urls);
   ScoringAsyncClientMock scoring_client;
@@ -553,10 +516,8 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
                          std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   SelectAdResponse response;
   grpc::ClientContext context;
@@ -612,7 +573,8 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
   }
 
   // Scoring signals provider mock.
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, Execute).Times(0);
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -627,10 +589,8 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
                          std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   SelectAdResponse response;
   grpc::ClientContext context;
@@ -675,7 +635,8 @@ TEST_F(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   }
 
   // Scoring signals provider mock.
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, Execute).Times(0);
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -690,10 +651,8 @@ TEST_F(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
                          std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
-  LocalSfeStartResult start_sfe_result =
-      StartLocalSfe(&seller_frontend_service);
-  std::unique_ptr<SellerFrontEnd::StubInterface> stub =
-      CreateSfeStub(start_sfe_result.port);
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   SelectAdResponse response;
   grpc::ClientContext context;

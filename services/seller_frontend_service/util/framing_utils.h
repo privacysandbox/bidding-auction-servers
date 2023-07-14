@@ -13,14 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef SERVICES_SELLER_FRONTEND_SERVICE_UTIL_APP_UTILS_H_
-#define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_APP_UTILS_H_
+
+#ifndef SERVICES_SELLER_FRONTEND_SERVICE_UTIL_FRAMING_UTILS_H_
+#define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_FRAMING_UTILS_H_
+
 #include <stddef.h>
+
 namespace privacy_sandbox::bidding_auction_servers {
+
 // Gets size of the complete payload including the preamble expected by
-// android, which is: 1 byte (containing version, compression details), 4 bytes
+// client, which is: 1 byte (containing version, compression details), 4 bytes
 // indicating the length of the actual encoded response and any other padding
 // required to make the complete payload a power of 2.
 size_t GetEncodedDataSize(size_t encapsulated_payload_size);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
-#endif  // SERVICES_SELLER_FRONTEND_SERVICE_UTIL_APP_UTILS_H_
+
+#endif  // SERVICES_SELLER_FRONTEND_SERVICE_UTIL_FRAMING_UTILS_H_

@@ -27,6 +27,10 @@ output "frontend_address" {
   value = google_compute_global_address.frontend.address
 }
 
+output "collector_address" {
+  value = google_compute_global_address.collector.address
+}
+
 output "mesh" {
   value = google_network_services_mesh.default
 }

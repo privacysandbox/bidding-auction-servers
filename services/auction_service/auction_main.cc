@@ -35,6 +35,7 @@
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/runtime_flags.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
@@ -71,6 +72,15 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::optional<std::int64_t>, js_time_out_ms, std::nullopt,
     "A time out limit for HttpsFetcherAsyc client to stop executing FetchUrl.");
+ABSL_FLAG(std::optional<bool>, enable_adtech_code_logging, std::nullopt,
+          "Allow handling of console.logs from AdTech script execution");
+ABSL_FLAG(std::optional<bool>, enable_seller_code_wrapper, std::nullopt,
+          "Enables use of code wrapper");
+ABSL_FLAG(std::optional<bool>, enable_report_result_url_generation,
+          std::nullopt,
+          "Enables executing reportResult function from Seller's script");
+ABSL_FLAG(std::optional<bool>, enable_report_win_url_generation, std::nullopt,
+          "Enables executing reportResult function from Seller's script");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -122,6 +132,14 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_js_url, JS_URL);
   config_client.SetFlag(FLAGS_js_url_fetch_period_ms, JS_URL_FETCH_PERIOD_MS);
   config_client.SetFlag(FLAGS_js_time_out_ms, JS_TIME_OUT_MS);
+  config_client.SetFlag(FLAGS_enable_adtech_code_logging,
+                        ENABLE_ADTECH_CODE_LOGGING);
+  config_client.SetFlag(FLAGS_enable_seller_code_wrapper,
+                        ENABLE_SELLER_CODE_WRAPPER);
+  config_client.SetFlag(FLAGS_enable_report_result_url_generation,
+                        ENABLE_REPORT_RESULT_URL_GENERATION);
+  config_client.SetFlag(FLAGS_enable_report_win_url_generation,
+                        ENABLE_REPORT_WIN_URL_GENERATION);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -156,14 +174,28 @@ absl::Status RunServer() {
 
   bool enable_seller_debug_url_generation =
       config_client.GetBooleanParameter(ENABLE_SELLER_DEBUG_URL_GENERATION);
+  bool enable_seller_code_wrapper =
+      config_client.GetBooleanParameter(ENABLE_SELLER_CODE_WRAPPER);
+  bool enable_adtech_code_logging =
+      config_client.GetBooleanParameter(ENABLE_ADTECH_CODE_LOGGING);
+  bool enable_report_result_url_generation =
+      config_client.GetBooleanParameter(ENABLE_REPORT_RESULT_URL_GENERATION);
+  bool enable_report_win_url_generation =
+      config_client.GetBooleanParameter(ENABLE_REPORT_WIN_URL_GENERATION);
 
   std::unique_ptr<CodeFetcherInterface> code_fetcher;
 
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
   if (!config_client.GetStringParameter(JS_URL).empty()) {
-    auto WrapCode = [enable_seller_debug_url_generation](
-                        const std::string& adtech_code_blob) {
+    auto wrap_code = [enable_seller_code_wrapper,
+                      enable_seller_debug_url_generation,
+                      enable_report_result_url_generation](
+                         const std::string& adtech_code_blob) {
+      if (enable_seller_code_wrapper) {
+        return GetSellerWrappedCode(adtech_code_blob,
+                                    enable_report_result_url_generation);
+      }
       return enable_seller_debug_url_generation
                  ? GetWrappedAdtechCodeForScoring(adtech_code_blob)
                  : adtech_code_blob;
@@ -175,18 +207,21 @@ absl::Status RunServer() {
             config_client.GetIntParameter(JS_URL_FETCH_PERIOD_MS)),
         std::move(http_fetcher), dispatcher, executor.get(),
         absl::Milliseconds(config_client.GetIntParameter(JS_TIME_OUT_MS)),
-        WrapCode);
+        wrap_code);
 
     code_fetcher->Start();
   } else {
     std::ifstream ifs(config_client.GetStringParameter(JS_PATH).data());
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
-
-    if (enable_seller_debug_url_generation) {
-      adtech_code_blob = GetWrappedAdtechCodeForScoring(adtech_code_blob);
+    if (enable_seller_code_wrapper) {
+      adtech_code_blob = GetSellerWrappedCode(
+          adtech_code_blob, enable_report_result_url_generation);
+    } else {
+      adtech_code_blob = enable_seller_debug_url_generation
+                             ? GetWrappedAdtechCodeForScoring(adtech_code_blob)
+                             : adtech_code_blob;
     }
-
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
   }
@@ -199,12 +234,15 @@ absl::Status RunServer() {
           .GetCustomParameter<server_common::metric::TelemetryFlag>(
               TELEMETRY_CONFIG)
           .server_config);
+  std::string collector_endpoint =
+      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions());
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util));
+                                  CreateMetricsOptions(), collector_endpoint);
+  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
   metric::AuctionContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()
@@ -238,6 +276,11 @@ absl::Status RunServer() {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
+      .enable_seller_code_wrapper = enable_seller_code_wrapper,
+      .enable_adtech_code_logging = enable_adtech_code_logging,
+      .enable_report_result_url_generation =
+          enable_report_result_url_generation,
+      .enable_report_win_url_generation = enable_report_win_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};
   AuctionService auction_service(std::move(score_ads_reactor_factory),

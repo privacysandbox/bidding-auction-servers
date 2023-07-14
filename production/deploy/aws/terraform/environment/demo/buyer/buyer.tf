@@ -47,7 +47,7 @@ module "buyer" {
   runtime_flags = {
     BIDDING_PORT        = "50051" # Do not change unless you are modifying the default GCP architecture.
     BUYER_FRONTEND_PORT = "50051" # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS     = "flase" # Do not change unless you are modifying the default GCP architecture.
+    BFE_INGRESS_TLS     = "false" # Do not change unless you are modifying the default GCP architecture.
     BIDDING_EGRESS_TLS  = "true"  # Do not change unless you are modifying the default GCP architecture.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
@@ -66,6 +66,12 @@ module "buyer" {
     JS_URL_FETCH_PERIOD_MS             = "" # Example: "3600000"
     JS_TIME_OUT_MS                     = "" # Example: "30000"
     ROMA_TIMEOUT_MS                    = "" # Example: "10000"
+    # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
+    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
+    # and additional latency for parsing the logs.
+    ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
+    ENABLE_BUYER_CODE_WRAPPER  = "" # Example: "true"
+
 
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
@@ -75,7 +81,7 @@ module "buyer" {
     SECONDARY_COORDINATOR_ACCOUNT_IDENTITY     = "" # Example: "arn:aws:iam::574738241111:role/mp-sec-ba_574738241111_coordinator_assume_role"
     PRIMARY_COORDINATOR_REGION                 = "" # Example: "us-east-1"
     SECONDARY_COORDINATOR_REGION               = "" # Example: "us-east-1"
-    PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "64800"
+    PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "3974400" (46 days)
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
   }
 }

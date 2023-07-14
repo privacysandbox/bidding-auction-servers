@@ -23,3 +23,7 @@ output "frontend_instance_groups" {
 output "backend_instance_groups" {
   value = toset([for manager in google_compute_region_instance_group_manager.backends : manager.instance_group])
 }
+
+output "collector_instance_groups" {
+  value = toset([for manager in google_compute_region_instance_group_manager.collector : manager.instance_group])
+}

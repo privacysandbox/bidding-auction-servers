@@ -23,9 +23,6 @@ package(
 
 cc_library(
     name = "json_util",
-    srcs = [
-        "json_util.h",
-    ],
     hdrs = [
         "json_util.h",
     ],
@@ -293,15 +290,15 @@ cc_library(
 )
 
 cc_library(
-    name = "debug_reporting_util",
-    srcs = ["debug_reporting_util.cc"],
+    name = "reporting_util",
+    srcs = ["reporting_util.cc"],
     hdrs = [
-        "debug_reporting_util.h",
+        "reporting_util.h",
     ],
     deps = [
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/common/clients:http_fetcher_async",
+        "//services/common/clients/http:http_fetcher_async",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -310,11 +307,11 @@ cc_library(
 )
 
 cc_test(
-    name = "debug_reporting_util_test",
+    name = "reporting_util_test",
     size = "small",
-    srcs = ["debug_reporting_util_test.cc"],
+    srcs = ["reporting_util_test.cc"],
     deps = [
-        ":debug_reporting_util",
+        ":reporting_util",
         "//services/common/test:random",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",

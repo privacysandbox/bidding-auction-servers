@@ -51,6 +51,7 @@ ABSL_DECLARE_FLAG(
     std::optional<privacy_sandbox::server_common::metric::TelemetryFlag>,
     telemetry_config);
 ABSL_DECLARE_FLAG(std::optional<std::string>, roma_timeout_ms);
+ABSL_DECLARE_FLAG(std::optional<std::string>, collector_endpoint);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -83,6 +84,7 @@ inline constexpr char KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS[] =
 inline constexpr char TELEMETRY_CONFIG[] = "TELEMETRY_CONFIG";
 inline constexpr char TEST_MODE[] = "TEST_MODE";
 inline constexpr char ROMA_TIMEOUT_MS[] = "ROMA_TIMEOUT_MS";
+inline constexpr char COLLECTOR_ENDPOINT[] = "COLLECTOR_ENDPOINT";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     ENABLE_ENCRYPTION,
@@ -102,6 +104,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     TEST_MODE,
     TELEMETRY_CONFIG,
     ROMA_TIMEOUT_MS,
+    COLLECTOR_ENDPOINT,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

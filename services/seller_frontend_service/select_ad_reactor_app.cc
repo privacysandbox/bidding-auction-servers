@@ -20,7 +20,7 @@
 #include "glog/logging.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/util/status_macros.h"
-#include "services/seller_frontend_service/util/app_utils.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

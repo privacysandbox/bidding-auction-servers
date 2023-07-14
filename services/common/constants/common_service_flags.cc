@@ -72,3 +72,5 @@ ABSL_FLAG(std::optional<privacy_sandbox::server_common::metric::TelemetryFlag>,
           telemetry_config, std::nullopt, "configure telemetry.");
 ABSL_FLAG(std::optional<std::string>, roma_timeout_ms, std::nullopt,
           "The timeout used by Roma for dispatch requests");
+ABSL_FLAG(std::optional<std::string>, FLAGS_collector_endpoint, std::nullopt,
+          "The endpoint of the OpenTelemetry Collector");

@@ -23,7 +23,7 @@ cc_library(
     ],
     hdrs = ["async_reporter.h"],
     deps = [
-        "//services/common/clients:http_fetcher_async",
+        "//services/common/clients/http:http_fetcher_async",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -39,7 +39,7 @@ cc_test(
     ],
     deps = [
         ":async_reporter",
-        "//services/common/clients:multi_curl_http_fetcher_async",
+        "//services/common/clients/http:multi_curl_http_fetcher_async",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

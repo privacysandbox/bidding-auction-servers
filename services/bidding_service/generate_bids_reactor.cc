@@ -49,7 +49,14 @@ using TrustedBiddingSignalsByIg =
 constexpr char kDispatchHandlerFunctionName[] = "generateBid";
 
 constexpr char kDispatchHandlerWrapperFunctionName[] = "generateBidWrapper";
+constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
+    "generateBidEntryFunction";
 constexpr char kRomaTimeoutMs[] = "TimeoutMs";
+
+constexpr int kArgsSizeDefault = 5;
+constexpr int kArgsSizeWithWrapper = 6;
+constexpr char kDisableAdTechCodeLogging[] = "false";
+constexpr char kEnableAdTechCodeLogging[] = "true";
 
 std::string ProtoToJson(const google::protobuf::Message& proto) {
   auto options = google::protobuf::util::JsonPrintOptions();
@@ -157,7 +164,6 @@ constexpr char kTrustedBiddingSignalsKeys[] = "trustedBiddingSignalsKeys";
 constexpr char kAdRenderIds[] = "adRenderIds";
 constexpr char kAdComponentRenderIds[] = "adComponentRenderIds";
 constexpr char kUserBiddingSignals[] = "userBiddingSignals";
-constexpr char kAds[] = "ads";
 
 // Manual/Custom serializer for Interest Group.
 // Empty fields will not be included at all in the serialized JSON.
@@ -205,11 +211,6 @@ absl::StatusOr<std::string> SerializeIG(IGForBidding ig) {
                                     ig.user_bidding_signals()));
   }
   // Device signals do not have to be serialized.
-  // Ads from device:
-  if (ig.has_ads() && ig.ads().IsInitialized()) {
-    absl::StrAppend(&serialized_ig, absl::StrFormat(R"JSON(,"%s":%s)JSON", kAds,
-                                                    ProtoToJson(ig.ads())));
-  }
   absl::StrAppend(&serialized_ig, "}");
   return serialized_ig;
 }
@@ -258,6 +259,7 @@ enum class GenerateBidArgs : int {
   kBuyerSignals,
   kTrustedBiddingSignals,
   kDeviceSignals,
+  kEnableLogging
 };
 
 constexpr int BidArgIndex(GenerateBidArgs arg) {
@@ -273,9 +275,13 @@ constexpr int BidArgIndex(GenerateBidArgs arg) {
 // shared by all dispatch requests are left empty, to be  filled in with values
 // specific to the request.
 std::vector<std::shared_ptr<std::string>> BuildBaseInput(
-    const RawRequest& raw_request) {
+    const RawRequest& raw_request, bool enable_buyer_code_wrapper) {
+  int args_size = kArgsSizeDefault;
+  if (enable_buyer_code_wrapper) {
+    args_size = kArgsSizeWithWrapper;
+  }
   std::vector<std::shared_ptr<std::string>> input(
-      5, std::make_shared<std::string>());  // GenerateBidArgs size.
+      args_size, std::make_shared<std::string>());  // GenerateBidArgs size.
   input[BidArgIndex(GenerateBidArgs::kAuctionSignals)] =
       std::make_shared<std::string>((raw_request.auction_signals().empty())
                                         ? "\"\""
@@ -292,7 +298,9 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     IGForBidding& interest_group, const RawRequest& raw_request,
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
-    const bool enable_buyer_debug_url_generation, const ContextLogger& logger) {
+    const bool enable_buyer_debug_url_generation, const ContextLogger& logger,
+    const bool enable_buyer_code_wrapper,
+    const bool enable_adtech_code_logging) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
@@ -348,10 +356,21 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(R"JSON("")JSON");
   }
+  if (enable_buyer_code_wrapper) {
+    std::string enable_logging = kDisableAdTechCodeLogging;
+    if (enable_adtech_code_logging) {
+      enable_logging = kEnableAdTechCodeLogging;
+    }
+    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kEnableLogging)] =
+        std::make_shared<std::string>(enable_logging);
+  }
 
   // Wrap buyer code to add reporting URLs to generateBid response.
-  if (enable_buyer_debug_url_generation &&
-      raw_request.enable_debug_reporting()) {
+  if (enable_buyer_code_wrapper) {
+    generate_bid_request.handler_name =
+        kDispatchHandlerFunctionNameWithCodeWrapper;
+  } else if (enable_buyer_debug_url_generation &&
+             raw_request.enable_debug_reporting()) {
     generate_bid_request.handler_name = kDispatchHandlerWrapperFunctionName;
   } else {
     generate_bid_request.handler_name = kDispatchHandlerFunctionName;
@@ -385,6 +404,25 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   return generate_bid_request;
 }
 
+absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
+    bool enable_buyer_code_wrapper, bool enable_adtech_code_logging,
+    const std::string& response, const ContextLogger& logger) {
+  if (!enable_buyer_code_wrapper) {
+    return response;
+  }
+  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
+  rapidjson::Value& response_obj = document["response"];
+  std::string response_json;
+  PS_ASSIGN_OR_RETURN(response_json, SerializeJsonDoc(response_obj));
+  if (enable_adtech_code_logging) {
+    const rapidjson::Value& logs = document["logs"];
+    for (const auto& log : logs.GetArray()) {
+      logger.vlog(1, "Logs: ", log.GetString());
+    }
+  }
+  return response_json;
+}
+
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
@@ -402,6 +440,8 @@ GenerateBidsReactor::GenerateBidsReactor(
       benchmarking_logger_(std::move(benchmarking_logger)),
       enable_buyer_debug_url_generation_(
           runtime_config.enable_buyer_debug_url_generation),
+      enable_buyer_code_wrapper_(runtime_config.enable_buyer_code_wrapper),
+      enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
       roma_timeout_ms_(runtime_config.roma_timeout_ms) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
@@ -428,12 +468,13 @@ void GenerateBidsReactor::Execute() {
 
   // Build base input.
   std::vector<std::shared_ptr<std::string>> base_input =
-      BuildBaseInput(raw_request_);
+      BuildBaseInput(raw_request_, enable_buyer_code_wrapper_);
   for (int i = 0; i < interest_groups.size(); i++) {
     absl::StatusOr<DispatchRequest> generate_bid_request =
-        BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
-                                ig_trusted_signals_map.value(),
-                                enable_buyer_debug_url_generation_, logger_);
+        BuildGenerateBidRequest(
+            interest_groups.at(i), raw_request_, base_input,
+            ig_trusted_signals_map.value(), enable_buyer_debug_url_generation_,
+            logger_, enable_buyer_code_wrapper_, enable_adtech_code_logging_);
     if (!generate_bid_request.ok()) {
       if (VLOG_IS_ON(3)) {
         logger_.vlog(3, "Unable to build GenerateBidRequest: ",
@@ -491,8 +532,17 @@ void GenerateBidsReactor::GenerateBidsCallback(
     auto& result = output.at(i);
     if (result.ok()) {
       AdWithBid bid;
-      auto valid =
-          google::protobuf::util::JsonStringToMessage(result->resp, &bid);
+      absl::StatusOr<std::string> generate_bid_response =
+          ParseAndGetGenerateBidResponseJson(enable_buyer_code_wrapper_,
+                                             enable_adtech_code_logging_,
+                                             result->resp, logger_);
+      if (!generate_bid_response.ok()) {
+        logger_.vlog(0, "Failed to parse response from Roma ",
+                     generate_bid_response.status().ToString(
+                         absl::StatusToStringMode::kWithEverything));
+      }
+      auto valid = google::protobuf::util::JsonStringToMessage(
+          generate_bid_response.value(), &bid);
       const std::string interest_group_name = result->id;
       if (valid.ok()) {
         if (bid.bid() == 0.0f && !bid.has_debug_report_urls()) {

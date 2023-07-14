@@ -24,7 +24,9 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/status_macros.h"
+#include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
+#include "src/cpp/communication/encoding_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -61,15 +63,23 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     return absl::InternalError("");
   }
 
-  // Pad data so that its size becomes the next smallest power of 2.
-  compressed_data->resize(std::max(absl::bit_ceil(compressed_data->size()),
-                                   kMinAuctionResultBytes));
-  return std::move(*compressed_data);
+  return server_common::EncodeResponsePayload(
+      server_common::CompressionType::kGzip, *compressed_data,
+      GetEncodedDataSize(compressed_data->size()));
 }
 
 ProtectedAudienceInput SelectAdReactorForWeb::GetDecodedProtectedAudienceInput(
     absl::string_view encoded_data) {
-  return Decode(encoded_data, error_accumulator_, fail_fast_);
+  absl::StatusOr<server_common::DecodedRequest> decoded_request =
+      server_common::DecodeRequestPayload(encoded_data);
+  if (!decoded_request.ok()) {
+    ReportError(ErrorVisibility::CLIENT_VISIBLE,
+                std::string(decoded_request.status().message()),
+                ErrorCode::CLIENT_SIDE);
+    return ProtectedAudienceInput{};
+  }
+  std::string payload = std::move(decoded_request->compressed_data);
+  return Decode(payload, error_accumulator_, fail_fast_);
 }
 
 DecodedBuyerInputs SelectAdReactorForWeb::GetDecodedBuyerinputs(

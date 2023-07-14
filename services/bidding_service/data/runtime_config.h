@@ -28,6 +28,13 @@ struct BiddingServiceRuntimeConfig {
   bool enable_buyer_debug_url_generation = false;
   // Sets the timeout used by Roma for dispatch requests
   std::string roma_timeout_ms = "10000";
+  // Enables Buyer Code Wrapper for wrapping the AdTech code before loading it
+  // in Roma. This wrapper can be used to enable multiple features such as :
+  // - Exporting console.logs from Roma
+  // - Event level debug win and loss reporting
+  bool enable_buyer_code_wrapper = false;
+  // Enables exporting console.logs from Roma to Bidding Service
+  bool enable_adtech_code_logging = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

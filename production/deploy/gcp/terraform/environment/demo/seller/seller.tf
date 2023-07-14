@@ -69,7 +69,8 @@ module "seller" {
     JS_URL_FETCH_PERIOD_MS = "" # Example: "3600000"
     JS_TIME_OUT_MS         = "" # Example: "30000"
     ROMA_TIMEOUT_MS        = "" # Example: "10000"
-
+    TELEMETRY_CONFIG       = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT     = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
 
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
@@ -83,8 +84,10 @@ module "seller" {
     GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "" # Example: "projects/78910/locations/global/workloadIdentityPools/staging-b-opwip/providers/staging-b-opwip-pvdr"
     GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "" # Example: "https://staging-a-us-central1-encryption-key-service-test-uc.a.run.app"
     GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "" # Example: "https://staging-b-us-central1-encryption-key-service-test-uc.a.run.app"
-    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "" # Example:  "600000"
+    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "" # Example:  "3974400" (46 days)
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "" # Example: "20000"
+    ENABLE_REPORT_RESULT_URL_GENERATION           = "" # Example: "false"
+    ENABLE_REPORT_WIN_URL_GENERATION              = "" # Example: "false"
 
     SFE_TLS_KEY  = "" # You can either set this here or via a secrets.auto.tfvars.
     SFE_TLS_CERT = "" # You can either set this here or via a secrets.auto.tfvars.
@@ -105,4 +108,5 @@ module "seller" {
   cpu_utilization_percent            = 0.8   # Example: 0.8
   use_confidential_space_debug_image = false # Example: false
   tee_impersonate_service_accounts   = "staging-a-opallowedusr@coordinator1.iam.gserviceaccount.com,staging-b-opallowedusr@coordinator2.iam.gserviceaccount.com"
+  collector_service_port             = 4317
 }

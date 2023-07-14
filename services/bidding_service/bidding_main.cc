@@ -32,6 +32,7 @@
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_adtech_code_wrapper.h"
 #include "services/bidding_service/bidding_service.h"
+#include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/bidding_service/runtime_flags.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
@@ -68,7 +69,10 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::optional<std::int64_t>, js_time_out_ms, std::nullopt,
     "A time out limit for HttpsFetcherAsyc client to stop executing FetchUrl.");
-
+ABSL_FLAG(std::optional<bool>, enable_adtech_code_logging, std::nullopt,
+          "Allow handling of console.logs from AdTech script execution");
+ABSL_FLAG(std::optional<bool>, enable_buyer_code_wrapper, std::nullopt,
+          "Enables use of code wrapper");
 namespace privacy_sandbox::bidding_auction_servers {
 
 using ::google::scp::cpio::Cpio;
@@ -119,6 +123,10 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_js_url, JS_URL);
   config_client.SetFlag(FLAGS_js_url_fetch_period_ms, JS_URL_FETCH_PERIOD_MS);
   config_client.SetFlag(FLAGS_js_time_out_ms, JS_TIME_OUT_MS);
+  config_client.SetFlag(FLAGS_enable_buyer_code_wrapper,
+                        ENABLE_BUYER_CODE_WRAPPER);
+  config_client.SetFlag(FLAGS_enable_adtech_code_logging,
+                        ENABLE_ADTECH_CODE_LOGGING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -156,12 +164,20 @@ absl::Status RunServer() {
 
   bool enable_buyer_debug_url_generation =
       config_client.GetBooleanParameter(ENABLE_BUYER_DEBUG_URL_GENERATION);
+  bool enable_buyer_code_wrapper =
+      config_client.GetBooleanParameter(ENABLE_BUYER_CODE_WRAPPER);
+  bool enable_adtech_code_logging =
+      config_client.GetBooleanParameter(ENABLE_ADTECH_CODE_LOGGING);
 
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
   if (!config_client.GetStringParameter(JS_URL).empty()) {
-    auto WrapCode = [enable_buyer_debug_url_generation](
-                        const std::string& adtech_code_blob) {
+    auto wrap_code = [enable_buyer_code_wrapper,
+                      enable_buyer_debug_url_generation](
+                         const std::string& adtech_code_blob) {
+      if (enable_buyer_code_wrapper) {
+        return GetBuyerWrappedCode(adtech_code_blob);
+      }
       return enable_buyer_debug_url_generation
                  ? GetWrappedAdtechCodeForBidding(adtech_code_blob)
                  : adtech_code_blob;
@@ -173,15 +189,16 @@ absl::Status RunServer() {
             config_client.GetIntParameter(JS_URL_FETCH_PERIOD_MS)),
         std::move(http_fetcher), dispatcher, executor.get(),
         absl::Milliseconds(config_client.GetIntParameter(JS_TIME_OUT_MS)),
-        WrapCode);
+        wrap_code);
 
     code_fetcher->Start();
   } else {
     std::ifstream ifs(config_client.GetStringParameter(JS_PATH).data());
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
-
-    if (enable_buyer_debug_url_generation) {
+    if (enable_buyer_code_wrapper) {
+      adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob);
+    } else if (enable_buyer_debug_url_generation) {
       adtech_code_blob = GetWrappedAdtechCodeForBidding(adtech_code_blob);
     }
 
@@ -197,12 +214,15 @@ absl::Status RunServer() {
           .GetCustomParameter<server_common::metric::TelemetryFlag>(
               TELEMETRY_CONFIG)
           .server_config);
+  std::string collector_endpoint =
+      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions());
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util));
+                                  CreateMetricsOptions(), collector_endpoint);
+  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
   metric::BiddingContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()
@@ -232,6 +252,8 @@ absl::Status RunServer() {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .enable_buyer_code_wrapper = enable_buyer_code_wrapper,
+      .enable_adtech_code_logging = enable_adtech_code_logging,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};
 

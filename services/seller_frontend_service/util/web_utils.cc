@@ -81,7 +81,8 @@ int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
 bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
                  const cbor_item_t* item, absl::string_view field_name,
                  absl::string_view expected_type,
-                 ErrorAccumulator& error_accumulator) {
+                 ErrorAccumulator& error_accumulator,
+                 SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG) {
   if (!is_valid_type(item)) {
     absl::string_view actual_type = kUnknownDataType;
     if (item->type < kCborDataTypesLookup.size()) {
@@ -90,6 +91,8 @@ bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
 
     std::string error = absl::StrFormat(kInvalidTypeError, field_name,
                                         expected_type, actual_type);
+    VLOG(3) << "CBOR type validation failure at: " << location.file_name()
+            << ":" << location.line();
     error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
                                   ErrorCode::CLIENT_SIDE);
     return false;
@@ -672,90 +675,6 @@ DecodedBuyerInputs DecodeBuyerInputs(
   return decoded_buyer_inputs;
 }
 
-google::protobuf::ListValue ConvertAdsToListValue(
-    absl::Span<cbor_item_t*> span, absl::string_view field_name,
-    ErrorAccumulator& error_accumulator, bool fail_fast) {
-  google::protobuf::ListValue ads;
-  for (const cbor_item_t* ad_entry : span) {
-    bool is_valid = IsTypeValid(&cbor_isa_map, ad_entry, field_name, kMap,
-                                error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, ads);
-    if (!is_valid) {
-      continue;
-    }
-
-    google::protobuf::Struct ad;
-    absl::Span<cbor_pair> ad_entries(cbor_map_handle(ad_entry),
-                                     cbor_map_size(ad_entry));
-    for (const cbor_pair& metadata_or_render_url : ad_entries) {
-      bool is_key_valid_type =
-          IsTypeValid(&cbor_isa_string, metadata_or_render_url.key, kAds,
-                      kString, error_accumulator);
-      RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, ads);
-
-      if (!is_key_valid_type) {
-        continue;
-      }
-
-      std::string decoded_key = DecodeCborString(metadata_or_render_url.key);
-      const int index = FindItemIndex(kAdsFields, decoded_key);
-      switch (index) {
-        case 0: {  // kMetadata
-          bool is_valid_type =
-              IsTypeValid(&cbor_isa_array, metadata_or_render_url.value,
-                          kMetadata, kArray, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, ads);
-
-          google::protobuf::ListValue metadatum;
-          if (is_valid_type) {
-            absl::Span<cbor_item_t*> metadata_entries(
-                cbor_array_handle(metadata_or_render_url.value),
-                cbor_array_size(metadata_or_render_url.value));
-            for (const cbor_item_t* metadata_entry : metadata_entries) {
-              bool is_valid_val_type =
-                  IsTypeValid(&cbor_isa_string, metadata_entry, kMetadata,
-                              kString, error_accumulator);
-              RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, ads);
-
-              if (!is_valid_val_type) {
-                continue;
-              }
-
-              metadatum.add_values()->set_string_value(
-                  DecodeCborString(metadata_entry));
-            }
-            google::protobuf::Value metadata_value;
-            *metadata_value.mutable_list_value() = metadatum;
-            ad.mutable_fields()->try_emplace(kMetadata, metadata_value);
-          }
-        } break;
-        case 1: {  // kRenderUrl
-          bool is_valid_type =
-              IsTypeValid(&cbor_isa_string, metadata_or_render_url.value,
-                          kRenderUrl, kString, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, ads);
-
-          if (is_valid_type) {
-            google::protobuf::Value ad_render_url_value;
-            ad_render_url_value.set_string_value(
-                DecodeCborString(metadata_or_render_url.value));
-            ad.mutable_fields()->emplace(kRenderUrl, ad_render_url_value);
-          }
-        } break;
-        default:
-          error_accumulator.ReportError(
-              ErrorVisibility::CLIENT_VISIBLE,
-              absl::StrCat("Unexpected key: ", decoded_key),
-              ErrorCode::CLIENT_SIDE);
-          break;
-      }
-    }
-    *ads.mutable_values()->Add()->mutable_struct_value() = ad;
-  }
-
-  return ads;
-}
-
 BuyerInput DecodeBuyerInput(absl::string_view owner,
                             absl::string_view compressed_buyer_input,
                             ErrorAccumulator& error_accumulator,
@@ -865,10 +784,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
           if (is_ad_render_valid_type) {
             absl::Span<cbor_item_t*> ads(cbor_array_handle(ig_entry.value),
                                          cbor_array_size(ig_entry.value));
-            // Populate the ListValue field. This needs to be removed
-            // in the open source version and is here just as a stop-gap.
-            *buyer_interest_group->mutable_ads() =
-                ConvertAdsToListValue(ads, kAds, error_accumulator, fail_fast);
+            *buyer_interest_group->mutable_ad_render_ids() = DecodeStringArray(
+                ads, kAdRenderId, error_accumulator, fail_fast);
           }
           break;
         }

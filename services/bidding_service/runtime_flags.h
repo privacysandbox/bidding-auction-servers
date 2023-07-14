@@ -32,6 +32,9 @@ inline constexpr char ENABLE_BUYER_DEBUG_URL_GENERATION[] =
 inline constexpr char JS_URL[] = "JS_URL";
 inline constexpr char JS_URL_FETCH_PERIOD_MS[] = "JS_URL_FETCH_PERIOD_MS";
 inline constexpr char JS_TIME_OUT_MS[] = "JS_TIME_OUT_MS";
+inline constexpr char ENABLE_BUYER_CODE_WRAPPER[] = "ENABLE_BUYER_CODE_WRAPPER";
+inline constexpr char ENABLE_ADTECH_CODE_LOGGING[] =
+    "ENABLE_ADTECH_CODE_LOGGING";
 
 inline constexpr absl::string_view kFlags[] = {
     PORT,
@@ -40,7 +43,9 @@ inline constexpr absl::string_view kFlags[] = {
     ENABLE_BUYER_DEBUG_URL_GENERATION,
     JS_URL,
     JS_URL_FETCH_PERIOD_MS,
-    JS_TIME_OUT_MS};
+    JS_TIME_OUT_MS,
+    ENABLE_ADTECH_CODE_LOGGING,
+    ENABLE_BUYER_CODE_WRAPPER};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);

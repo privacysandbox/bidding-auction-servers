@@ -78,6 +78,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
 struct MockRawRequest {
   std::string value;
   std::string SerializeAsString() { return value; }
+  std::string DebugString() { return value; }
 };
 
 struct MockRequest {

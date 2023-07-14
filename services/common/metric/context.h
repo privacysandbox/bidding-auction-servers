@@ -17,12 +17,15 @@
 #ifndef SERVICES_COMMON_METRIC_CONTEXT_H_
 #define SERVICES_COMMON_METRIC_CONTEXT_H_
 
+#include <algorithm>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/absl_log.h"
 #include "absl/status/status.h"
@@ -165,8 +168,8 @@ class Context {
  private:
   friend class ContextTest;
   friend class ContextTest_LogBeforeDecrypt_Test;
-  friend class ContextTest_LogPartition_Test;
   friend class ContextTest_LogAfterDecrypt_Test;
+  friend class ExperimentTest_LogAfterDecrypt_Test;
 
   explicit Context(U* metric_router, const BuildDependentConfig& config)
       : metric_router_(metric_router), metric_config_(config) {}
@@ -181,6 +184,16 @@ class Context {
           "cannot log safe after request being decrypted");
     if (metric_config_.IsDebug()) return true;
     return !decrypted_ && privacy == Privacy::kNonImpacting;
+  }
+
+  absl::Status IsLogged(const DefinitionName& definition)
+      ABSL_LOCKS_EXCLUDED(mutex_) {
+    absl::MutexLock mutex_lock(&mutex_);
+    if (!logged_metric_.insert(&definition).second) {
+      return absl::AlreadyExistsError(
+          absl::StrCat(definition.name_, " can only log once for a request."));
+    }
+    return absl::OkStatus();
   }
 
   template <const auto& definition, typename T>
@@ -199,6 +212,7 @@ class Context {
   absl::Status LogMetric(T value,
                          std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr) {
     CheckDefinition<definition, T>();
+    PS_RETURN_IF_ERROR(IsLogged(definition));
     static_assert(definition.type_instrument !=
                   Instrument::kPartitionedCounter);
     return LogMetricInternal(value, definition, "");
@@ -209,12 +223,24 @@ class Context {
                 std::remove_reference_t<decltype(definition)>>::TypeT>
   absl::Status LogMetric(const absl::flat_hash_map<std::string, T>& value) {
     CheckDefinition<definition, T>();
+    PS_RETURN_IF_ERROR(IsLogged(definition));
     static_assert(definition.type_instrument ==
                   Instrument::kPartitionedCounter);
-    for (auto& [partition, numeric] : value) {
+    for (auto& [partition, numeric] :
+         BoundPartitionsContributed(value, definition)) {
       PS_RETURN_IF_ERROR(LogMetricInternal(numeric, definition, partition));
     }
     return absl::OkStatus();
+  }
+
+  template <typename T, Privacy privacy, Instrument instrument>
+  absl::Status LogSafe(const Definition<T, privacy, instrument>& definition,
+                       T value, absl::string_view partition) {
+    absl::flat_hash_map<std::string, std::string> attribute;
+    if constexpr (privacy == Privacy::kImpacting) {
+      attribute.emplace("Debugging", "Yes");
+    }
+    return metric_router_->LogSafe(definition, value, partition, attribute);
   }
 
   template <typename T, Privacy privacy, Instrument instrument>
@@ -223,10 +249,12 @@ class Context {
       absl::string_view partition) {
     PS_ASSIGN_OR_RETURN(const bool log_safe, ShouldLogSafe<privacy>());
     if (log_safe) {
-      return metric_router_->LogSafe(definition, value, partition);
-    } else {
-      return metric_router_->LogUnSafe(definition, value, partition);
+      PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
+      if (metric_config_.MetricMode() != ServerConfig::COMPARE) {
+        return absl::OkStatus();
+      }
     }
+    return metric_router_->LogUnSafe(definition, value, partition);
   }
 
   // Same as `LogMetric`, instead providing a value, a callback is used to get
@@ -241,6 +269,7 @@ class Context {
       std::enable_if_t<!std::is_lvalue_reference_v<T>>* = nullptr) {
     using Result = std::invoke_result_t<T>;
     CheckDefinition<definition, Result>();
+    PS_RETURN_IF_ERROR(IsLogged(definition));
     return LogMetricDeferredInternal<Result>(
         [callback = std::move(
              callback)]() mutable -> absl::flat_hash_map<std::string, Result> {
@@ -261,6 +290,7 @@ class Context {
                                            typename Result::mapped_type>,
                        std::remove_cv_t<Result>>);
     CheckDefinition<definition, typename Result::mapped_type>();
+    PS_RETURN_IF_ERROR(IsLogged(definition));
     static_assert(definition.type_instrument ==
                   Instrument::kPartitionedCounter);
     return LogMetricDeferredInternal<typename Result::mapped_type>(
@@ -277,14 +307,19 @@ class Context {
     absl::MutexLock mutex_lock(&mutex_);
     callbacks_.push_back([callback = std::move(callback), &definition, log_safe,
                           this]() mutable -> absl::Status {
-      for (auto& [partition, value] : std::move(callback)()) {
-        if (log_safe) {
-          PS_RETURN_IF_ERROR(
-              metric_router_->LogSafe(definition, value, partition));
-        } else {
-          PS_RETURN_IF_ERROR(
-              metric_router_->LogUnSafe(definition, value, partition));
+      absl::flat_hash_map<std::string, T> values = std::move(callback)();
+      if (log_safe) {
+        for (auto& [partition, value] : values) {
+          PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
         }
+        if (metric_config_.MetricMode() != ServerConfig::COMPARE) {
+          return absl::OkStatus();
+        }
+      }
+      for (auto& [partition, value] :
+           BoundPartitionsContributed(values, definition)) {
+        PS_RETURN_IF_ERROR(
+            metric_router_->LogUnSafe(definition, value, partition));
       }
       return absl::OkStatus();
     });
@@ -298,7 +333,42 @@ class Context {
   absl::Mutex mutex_;
   std::vector<absl::AnyInvocable<absl::Status() &&>> callbacks_
       ABSL_GUARDED_BY(mutex_);
+  absl::flat_hash_set<const DefinitionName*> logged_metric_
+      ABSL_GUARDED_BY(mutex_);
 };
+
+// For Privacy kImpacting partitioned metrics, partitions must be in defined
+// `public_partitions_`, the number of partitions contributed by each privacy
+// unit is limited to `max_partitions_contributed_`; Returns the metric values
+// with upto limited number of partitions.
+template <typename T>
+std::vector<std::pair<std::string, T>> BoundPartitionsContributed(
+    const absl::flat_hash_map<std::string, T>& value,
+    const internal::Partitioned& partitioned) {
+  std::vector<std::pair<std::string, T>> ret;
+  if (!partitioned.public_partitions_.empty()) {
+    for (auto& [partition, numeric] : value) {
+      if (absl::c_binary_search(partitioned.public_partitions_, partition)) {
+        ret.emplace_back(partition, numeric);
+      } else {
+        ABSL_LOG_EVERY_N_SEC(WARNING, 60)
+            << partition << " is not in public_partitions_ of "
+            << partitioned.partition_type_;
+      }
+      if (ret.size() >= partitioned.max_partitions_contributed_) {
+        break;
+      }
+    }
+  } else {
+    ABSL_LOG_EVERY_N_SEC(WARNING, 600)
+        << "public_partitions_ not defined, to be implemented";
+    ret.insert(ret.begin(), value.begin(), value.end());
+    if (ret.size() >= partitioned.max_partitions_contributed_) {
+      ret.resize(partitioned.max_partitions_contributed_);
+    }
+  }
+  return ret;
+}
 
 }  // namespace privacy_sandbox::server_common::metric
 

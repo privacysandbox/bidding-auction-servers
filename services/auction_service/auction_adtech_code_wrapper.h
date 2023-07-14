@@ -42,11 +42,12 @@ constexpr absl::string_view KScoreAdWrapperJavascriptWasm = R"JS_CODE(
                              bid,
                              auction_config,
                              scoring_signals,
-                             device_signals) {
+                             device_signals,
+                             direct_from_seller_signals) {
       var scoreAdResponse = {};
       try {
         scoreAdResponse = scoreAd(ad_metadata, bid, auction_config,
-              scoring_signals, device_signals);
+              scoring_signals, device_signals, direct_from_seller_signals);
       } catch(ignored) {
 
       } finally {

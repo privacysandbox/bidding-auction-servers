@@ -94,8 +94,8 @@ cc_library(
     deps = [
         "client_params_template",
         ":async_client",
-        ":http_fetcher_async",
         ":http_kv_server_gen_url_utils",
+        "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
@@ -113,8 +113,8 @@ cc_library(
     deps = [
         "client_params_template",
         ":async_client",
-        ":http_fetcher_async",
         ":http_kv_server_gen_url_utils",
+        "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
@@ -151,176 +151,6 @@ cc_test(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "multi_curl_http_fetcher_async",
-    srcs = [
-        "http/multi_curl_http_fetcher_async.cc",
-        "http/multi_curl_request_manager.cc",
-        "http/multi_curl_request_manager.h",
-    ],
-    hdrs = [
-        "http/http_fetcher_async.h",
-        "http/multi_curl_http_fetcher_async.h",
-    ],
-    deps = [
-        "@com_github_google_glog//:glog",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@curl",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-    ],
-)
-
-cc_test(
-    name = "multi_curl_http_fetcher_async_test",
-    size = "medium",
-    srcs = ["http/multi_curl_http_fetcher_async_test.cc"],
-    tags = [
-        "requires-network",
-    ],
-    deps = [
-        ":multi_curl_http_fetcher_async",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@rapidjson",
-    ],
-)
-
-cc_library(
-    name = "http_fetcher_async",
-    hdrs = [
-        "http/http_fetcher_async.h",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "bidding_async_client",
-    srcs = ["bidding_server/bidding_async_client.cc"],
-    hdrs = ["bidding_server/bidding_async_client.h"],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/common/clients/async_grpc:default_async_grpc_client",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/time",
-    ],
-)
-
-cc_test(
-    name = "bidding_async_grpc_client_stub_test",
-    size = "large",
-    srcs = [
-        "bidding_server/bidding_async_grpc_client_stub_test.cc",
-    ],
-    tags = [
-        "flaky",
-    ],
-    deps = [
-        ":bidding_async_client",
-        "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",
-        "//services/common/test:mocks",
-        "//services/common/test:random",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "scoring_async_client",
-    srcs = ["auction_server/scoring_async_client.cc"],
-    hdrs = ["auction_server/scoring_async_client.h"],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/common/clients/async_grpc:default_async_grpc_client",
-        "//services/common/encryption:crypto_client_wrapper",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-    ],
-)
-
-cc_test(
-    name = "scoring_async_client_test",
-    size = "large",
-    srcs = [
-        "auction_server/scoring_async_client_test.cc",
-    ],
-    deps = [
-        ":scoring_async_client",
-        "//services/common/encryption:mock_crypto_client_wrapper",
-        "//services/common/test:mocks",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
-    ],
-)
-
-cc_test(
-    name = "scoring_async_grpc_client_stub_test",
-    size = "large",
-    srcs = [
-        "auction_server/scoring_async_grpc_client_stub_test.cc",
-    ],
-    tags = [
-        "flaky",
-    ],
-    deps = [
-        ":scoring_async_client",
-        "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",
-        "//services/common/test:mocks",
-        "//services/common/test:random",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "seller_frontend_async_client",
-    srcs = ["seller_frontend_server/seller_frontend_async_client.cc"],
-    hdrs = ["seller_frontend_server/seller_frontend_async_client.h"],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/common/clients/async_grpc:default_async_grpc_client",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/time",
-    ],
-)
-
-cc_test(
-    name = "seller_frontend_async_grpc_client_stub_test",
-    size = "medium",
-    srcs = [
-        "seller_frontend_server/seller_frontend_async_grpc_client_test.cc",
-    ],
-    tags = [
-        "flaky",
-    ],
-    deps = [
-        ":seller_frontend_async_client",
-        "//services/common/clients/async_grpc:default_raw_async_grpc_client_integration_test_utils",
-        "//services/common/test:mocks",
-        "//services/common/test:random",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
 )

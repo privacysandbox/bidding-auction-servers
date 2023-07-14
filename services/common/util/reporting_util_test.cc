@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "services/common/util/debug_reporting_util.h"
+#include "services/common/util/reporting_util.h"
 
 #include <memory>
 #include <utility>

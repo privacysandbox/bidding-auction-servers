@@ -35,7 +35,7 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/reporters/async_reporter.h"
-#include "services/common/util/debug_reporting_util.h"
+#include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/cpp/communication/ohttp_utils.h"
@@ -520,8 +520,11 @@ void SelectAdReactor::UpdatePendingBidsState(
 }
 
 void SelectAdReactor::FetchScoringSignals() {
+  ScoringSignalsRequest scoring_signals_request(buyer_bids_list_,
+                                                buyer_metadata_);
+
   clients_.scoring_signals_async_provider.Get(
-      buyer_bids_list_,
+      scoring_signals_request,
       [this](absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
         OnFetchScoringSignalsDone(std::move(result));
       },

@@ -37,3 +37,7 @@ variable "regions" {
   description = "Regions to deploy to."
   type        = set(string)
 }
+
+variable "collector_service_name" {
+  type = string
+}

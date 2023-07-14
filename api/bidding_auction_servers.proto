@@ -97,18 +97,6 @@ message BuyerInput {
       // bidding.
       BrowserSignals browser_signals = 7;
     }
-
-    // Remove.
-    // To be removed once ad_render_id data for testing is available. Should not
-    // be in open source version.
-    //
-    // The object "ads" is a JSON object that is an argument to GenerateBid.
-    // This object contains multiple ad objects. Each ad contains "renderUrl"
-    // and "metadata" as objects. This is a JSON array.
-    //
-    // Note: Our goal is to optimize and work with Adtechs to find solutions
-    // such that less data is passed in the `ads` object from the client.
-    google.protobuf.ListValue ads = 8;
   }
   // The Interest Groups (a.k.a Custom Audiences) owned by the buyer.
   repeated InterestGroup interest_groups = 1;
@@ -437,7 +425,7 @@ message GetBidsRequest {
   bytes request_ciphertext = 1;
 
   // Version of the public key used for request encryption. The service
-  // needs use private keys corresponding to same key_id to decrypt
+  // needs to use private keys corresponding to same key_id to decrypt
   // 'request_ciphertext'.
   string key_id = 2;
 }
@@ -560,13 +548,6 @@ message GenerateBidsRequest {
         // information.
         BrowserSignals browser_signals = 7;
       }
-
-      // Remove.
-      // The object "ads" is part of top level InterestGroup JSON object that is
-      // an argument to GenerateBid. This object contains multiple ad objects.
-      // Each ad contains "renderUrl" and "metadata" as objects.
-      // This is a JSON array.
-      google.protobuf.ListValue ads = 8;
     }
 
     // Interest Group is an input to bidding code.

@@ -26,6 +26,7 @@
 #include "absl/synchronization/mutex.h"
 #include "opentelemetry/metrics/meter.h"
 #include "services/common/metric/definition.h"
+#include "services/common/metric/dp.h"
 
 namespace privacy_sandbox::server_common::metric {
 
@@ -36,7 +37,8 @@ class MetricRouter {
  public:
   using Meter = ::opentelemetry::metrics::Meter;
 
-  explicit MetricRouter(Meter* meter);
+  explicit MetricRouter(Meter* meter, PrivacyBudget fraction,
+                        absl::Duration dp_output_period);
 
   ~MetricRouter() = default;
 
@@ -46,17 +48,18 @@ class MetricRouter {
 
   // For non-partitioned metrics, `partition` be an empty string and not used.
   template <typename T, Privacy privacy, Instrument instrument>
-  absl::Status LogSafe(const Definition<T, privacy, instrument>& definition,
-                       T value, absl::string_view partition);
+  absl::Status LogSafe(
+      const Definition<T, privacy, instrument>& definition, T value,
+      absl::string_view partition,
+      absl::flat_hash_map<std::string, std::string> attribute = {});
 
   // For non-partitioned metrics, `partition` be an empty string and not used.
   template <typename T, Privacy privacy, Instrument instrument>
   absl::Status LogUnSafe(const Definition<T, privacy, instrument>& definition,
-                         T value, absl::string_view partition) {
-    return absl::UnimplementedError("unsafe not done");
-  }
+                         T value, absl::string_view partition);
 
-  const Meter* meter() const { return meter_; }
+  const Meter& meter() const { return *meter_; }
+  const DifferentiallyPrivate<MetricRouter>& dp() const { return dp_; }
 
  private:
   void AddHistogramView(absl::string_view instrument_name,
@@ -79,6 +82,7 @@ class MetricRouter {
       std::unique_ptr<opentelemetry::metrics::SynchronousInstrument>>
       instrument_ ABSL_GUARDED_BY(mutex_);
   Meter* meter_;
+  DifferentiallyPrivate<MetricRouter> dp_;
 };
 
 // This is used to make compile error in certain condition.
@@ -146,21 +150,37 @@ T* MetricRouter::GetInstrument(
 template <typename T, Privacy privacy, Instrument instrument>
 absl::Status MetricRouter::LogSafe(
     const Definition<T, privacy, instrument>& definition, T value,
-    absl::string_view partition) {
+    absl::string_view partition,
+    absl::flat_hash_map<std::string, std::string> attribute) {
   absl::string_view metric_name = definition.name_;
   if constexpr (instrument == Instrument::kHistogram) {
     GetHistogramInstrument(metric_name, value, definition)
-        ->Record(value, opentelemetry::context::Context());
+        ->Record(value, opentelemetry::common::KeyValueIterableView(attribute),
+                 opentelemetry::context::Context());
   } else if constexpr (instrument == Instrument::kUpDownCounter) {
-    GetCounterInstrument(metric_name, value)->Add(value);
+    GetCounterInstrument(metric_name, value)->Add(value, attribute);
   } else if constexpr (instrument == Instrument::kPartitionedCounter) {
-    GetCounterInstrument(metric_name, value)
-        ->Add(value, {{definition.partition_type_.data(), partition.data()}});
+    attribute.emplace(definition.partition_type_, partition);
+    GetCounterInstrument(metric_name, value)->Add(value, attribute);
   } else if constexpr (instrument == Instrument::kGauge) {
     return absl::UnimplementedError("gauge not done");
   } else {
     static_assert(dependent_false_v<T>);
   }
+  return absl::OkStatus();
+}
+
+template <typename T, Privacy privacy, Instrument instrument>
+absl::Status MetricRouter::LogUnSafe(
+    const Definition<T, privacy, instrument>& definition, T value,
+    absl::string_view partition) {
+  absl::string_view metric_name = definition.name_;
+  if constexpr (instrument != Instrument::kUpDownCounter &&
+                instrument != Instrument::kPartitionedCounter) {
+    // ToDo(b/279955396): implement
+    return absl::UnimplementedError("instrument type not done");
+  }
+  dp_.Aggregate(&definition, value, partition);
   return absl::OkStatus();
 }
 

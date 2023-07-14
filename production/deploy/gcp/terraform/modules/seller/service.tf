@@ -15,19 +15,21 @@
  */
 
 module "networking" {
-  source           = "../../services/networking"
-  frontend_service = "sfe"
-  operator         = var.operator
-  environment      = var.environment
-  regions          = var.regions
+  source                 = "../../services/networking"
+  frontend_service       = "sfe"
+  operator               = var.operator
+  environment            = var.environment
+  regions                = var.regions
+  collector_service_name = "collector"
 }
 
 module "security" {
-  source      = "../../services/security"
-  network_id  = module.networking.network_id
-  subnets     = module.networking.subnets
-  operator    = var.operator
-  environment = var.environment
+  source                 = "../../services/security"
+  network_id             = module.networking.network_id
+  subnets                = module.networking.subnets
+  operator               = var.operator
+  environment            = var.environment
+  collector_service_port = var.collector_service_port
 }
 
 module "autoscaling" {
@@ -45,6 +47,8 @@ module "autoscaling" {
   frontend_tee_image                 = var.seller_frontend_image
   frontend_service_port              = var.envoy_port
   frontend_service_name              = "sfe"
+  collector_service_name             = "collector"
+  collector_service_port             = var.collector_service_port
   machine_type                       = var.machine_type
   min_replicas_per_service_region    = var.min_replicas_per_service_region
   max_replicas_per_service_region    = var.max_replicas_per_service_region
@@ -70,6 +74,10 @@ module "load_balancing" {
   backend_address                    = var.runtime_flags["AUCTION_SERVER_HOST"]
   backend_service_name               = "auction"
   backend_service_port               = tonumber(var.runtime_flags["AUCTION_PORT"])
+  collector_ip_address               = module.networking.collector_address
+  collector_instance_groups          = module.autoscaling.collector_instance_groups
+  collector_service_name             = "collector"
+  collector_service_port             = var.collector_service_port
 }
 
 resource "google_secret_manager_secret" "runtime_flag_secrets" {

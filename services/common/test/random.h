@@ -104,15 +104,6 @@ google::protobuf::Struct MakeAnAd(std::string render_url,
   return ad;
 }
 
-google::protobuf::ListValue MakeARandomListOfAds() {
-  google::protobuf::ListValue output;
-  for (int i = 0; i < MakeARandomInt(1, 10); i++) {
-    output.mutable_values()->Add()->mutable_struct_value()->MergeFrom(
-        MakeAnAd(MakeARandomString(), MakeARandomString(), i));
-  }
-  return output;
-}
-
 // Consistent to aid latency benchmarking.
 std::string MakeAFixedSetOfUserBiddingSignals(int num_ads) {
   std::string output = "{";
@@ -123,16 +114,6 @@ std::string MakeAFixedSetOfUserBiddingSignals(int num_ads) {
     }
   }
   absl::StrAppend(&output, "}");
-  return output;
-}
-
-// Consistent to aid latency benchmarking.
-google::protobuf::ListValue MakeAFixedSetOfAds(int num_ads) {
-  google::protobuf::ListValue output;
-  for (int i = 0; i < num_ads; i++) {
-    output.mutable_values()->Add()->mutable_struct_value()->MergeFrom(
-        MakeAnAd("barStandardAds.com/id=1776", "creationIndex", i));
-  }
   return output;
 }
 
@@ -184,7 +165,7 @@ BrowserSignals MakeRandomBrowserSignalsForIG(
 }
 
 constexpr char test_ig_with_two_ads[] =
-    R"json({"ads":[{"metadata":["134256827445","594352291621","4","16996677067"],"renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=134256827445&cr_id=594352291621&cv_id=4"},{"metadata":["134256827445","605048329089","2","16996677067"],"renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=134256827445&cr_id=605048329089&cv_id=2"}],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
+    R"json({"ad_render_ids":["adg_id=134256827445&cr_id=594352291621&cv_id=4", "adg_id=134256827445&cr_id=605048329089&cv_id=2"],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
 
 // Must manually delete/take ownership of underlying pointer
 std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice() {
@@ -213,7 +194,8 @@ MakeAnInterestGroupForBiddingSentFromDevice() {
   ig_for_bidding_from_device->set_name(ig_with_two_ads->name());
   ig_for_bidding_from_device->mutable_browser_signals()->CopyFrom(
       ig_with_two_ads->browser_signals());
-  ig_for_bidding_from_device->mutable_ads()->MergeFrom(ig_with_two_ads->ads());
+  ig_for_bidding_from_device->mutable_ad_render_ids()->MergeFrom(
+      ig_with_two_ads->ad_render_ids());
   ig_for_bidding_from_device->mutable_trusted_bidding_signals_keys()->Add(
       MakeARandomString());
   return ig_for_bidding_from_device;
@@ -254,7 +236,6 @@ MakeARandomInterestGroupForBidding(
           std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest::
                                InterestGroupForBidding>();
   ig_for_bidding->set_name(MakeARandomString());
-  ig_for_bidding->mutable_ads()->MergeFrom(MakeARandomListOfAds());
   ig_for_bidding->mutable_trusted_bidding_signals_keys()->Add(
       MakeARandomString());
   if (!set_user_bidding_signals_to_empty_struct) {
@@ -310,8 +291,6 @@ MakeALargeInterestGroupForBiddingForLatencyTesting() {
   // Device signals.
   ig_for_bidding->mutable_browser_signals()->CopyFrom(
       MakeRandomBrowserSignalsForIG(ig_for_bidding->ad_render_ids()));
-  // Ads.
-  ig_for_bidding->mutable_ads()->MergeFrom(MakeAFixedSetOfAds(num_ads));
   return ig_for_bidding;
 }
 
@@ -384,7 +363,8 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
   for (int i = 0; i < num_ad_components; i++) {
     ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
   }
-
+  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+  ad_with_bid.set_modeling_signals(MakeARandomInt(0, 100));
   return ad_with_bid;
 }
 
@@ -470,34 +450,38 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
 
 // Must manually delete/take ownership of underlying pointer
 // build_android_signals: If false, will build browser signals instead.
-BuyerInput::InterestGroup MakeARandomInterestGroup(bool build_android_signals) {
-  BuyerInput::InterestGroup interest_group;
-  interest_group.set_name(MakeARandomString());                             // 1
-  interest_group.mutable_bidding_signals_keys()->Add(MakeARandomString());  // 2
-  interest_group.mutable_bidding_signals_keys()->Add(MakeARandomString());  // 2
-  interest_group.mutable_ads()->MergeFrom(MakeARandomListOfAds());
-  interest_group.set_allocated_user_bidding_signals(
+std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
+    bool build_android_signals) {
+  auto interest_group = std::make_unique<BuyerInput::InterestGroup>();
+  interest_group->set_name(MakeARandomString());  // 1
+  interest_group->mutable_bidding_signals_keys()->Add(
+      MakeARandomString());  // 2
+  interest_group->mutable_bidding_signals_keys()->Add(
+      MakeARandomString());  // 2
+  interest_group->set_allocated_user_bidding_signals(
       MakeARandomStructJsonString(5).release());
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);
   for (int i = 0; i < ad_render_ids_to_generate; i++) {
-    *interest_group.mutable_ad_render_ids()->Add() =
+    *interest_group->mutable_ad_render_ids()->Add() =
         absl::StrCat("ad_render_id_", MakeARandomString());
   }
   if (build_android_signals) {
     // Empty field right now.
-    interest_group.mutable_android_signals();
+    interest_group->mutable_android_signals();
   } else {
-    interest_group.mutable_browser_signals()->CopyFrom(
-        MakeRandomBrowserSignalsForIG(interest_group.ad_render_ids()));
+    interest_group->mutable_browser_signals()->CopyFrom(
+        MakeRandomBrowserSignalsForIG(interest_group->ad_render_ids()));
   }
   return interest_group;
 }
 
-BuyerInput::InterestGroup MakeARandomInterestGroupFromAndroid() {
+std::unique_ptr<BuyerInput::InterestGroup>
+MakeARandomInterestGroupFromAndroid() {
   return MakeARandomInterestGroup(true);
 }
 
-BuyerInput::InterestGroup MakeARandomInterestGroupFromBrowser() {
+std::unique_ptr<BuyerInput::InterestGroup>
+MakeARandomInterestGroupFromBrowser() {
   return MakeARandomInterestGroup(false);
 }
 
@@ -587,23 +571,9 @@ google::protobuf::Value MakeAListValue(
 }
 
 BuyerInput MakeARandomBuyerInput() {
-  BuyerInput_InterestGroup interest_group;
-  interest_group.set_name(MakeARandomString());
-  interest_group.add_bidding_signals_keys(MakeARandomString());
-  interest_group.add_bidding_signals_keys(MakeARandomString());
-  interest_group.add_component_ads(MakeARandomString());
-  interest_group.add_component_ads(MakeARandomString());
-  interest_group.set_user_bidding_signals(MakeARandomString());
-  interest_group.mutable_ads();
-
-  BrowserSignals* signals = interest_group.mutable_browser_signals();
-  signals->set_join_count(MakeARandomInt(0, 10));
-  signals->set_bid_count(MakeARandomInt(0, 10));
-  signals->set_recency(MakeARandomInt(0, 10));
-  signals->set_prev_wins("[]");
-
   BuyerInput buyer_input;
-  *buyer_input.add_interest_groups() = std::move(interest_group);
+  buyer_input.mutable_interest_groups()->AddAllocated(
+      MakeARandomInterestGroup(false).release());
   return buyer_input;
 }
 

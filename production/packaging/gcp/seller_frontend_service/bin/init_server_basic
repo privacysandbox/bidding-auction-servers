@@ -23,7 +23,7 @@ set -x
 #########################################################################
 
 # Get credentials (to be used for fetching secrets)
-export GOOGLE_APPLICATION_CREDENTIALS=$(wget -q --header "Metadata-Flavor: Google"  --output-document -  \
+export ACCESS_TOKEN=$(wget -q --header "Metadata-Flavor: Google"  --output-document -  \
 "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
 | /server/bin/jq -r '.access_token')
 
@@ -37,13 +37,13 @@ export PROJECT_ID=$(wget -q --header "Metadata-Flavor: Google" --output-document
 
 # Get our secrets, parse, decode, and write the secret strings to files that the Envoy config will read.
 ## TLS Key
-wget -q --header "Authorization: Bearer ${GOOGLE_APPLICATION_CREDENTIALS}" --output-document - \
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
 https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${OPERATOR}-${ENV}-SFE_TLS_KEY/versions/latest:access \
 | /server/bin/jq -r ".payload.data" \
 | base64 -d > /etc/envoy/key.pem
 
 ## TLS Cert
-wget -q --header "Authorization: Bearer ${GOOGLE_APPLICATION_CREDENTIALS}" --output-document - \
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
 https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${OPERATOR}-${ENV}-SFE_TLS_CERT/versions/latest:access \
 | /server/bin/jq -r ".payload.data" \
 | base64 -d > /etc/envoy/cert.pem

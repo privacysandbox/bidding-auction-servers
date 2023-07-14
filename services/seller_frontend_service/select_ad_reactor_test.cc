@@ -147,7 +147,7 @@ TEST_F(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -219,7 +219,7 @@ TEST_F(SellerFrontEndServiceTest,
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -304,7 +304,8 @@ TEST_F(SellerFrontEndServiceTest,
   }
 
   // Scoring Signals Provider
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            std::nullopt);
 
@@ -345,7 +346,8 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
 
   // Scoring signals provider
   std::string ad_render_urls = "test scoring signals";
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            ad_render_urls);
   // Scoring Client
@@ -423,7 +425,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   }
 
   // Scoring signal provider
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   std::string ad_render_urls;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            ad_render_urls);
@@ -550,7 +553,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   request_.set_client_type(SelectAdRequest_ClientType_ANDROID);
 
   // KV Client
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -583,7 +586,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
 
   // Scoring signals provider
   std::string ad_render_urls = "test scoring signals";
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            ad_render_urls);
 
@@ -675,7 +679,8 @@ TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
   }
 
   // Scoring signal provider
-  MockAsyncProvider<BuyerBidsList, ScoringSignals> scoring_signals_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
   std::string ad_render_urls;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            ad_render_urls);

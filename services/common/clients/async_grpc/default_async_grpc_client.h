@@ -58,6 +58,9 @@ class DefaultAsyncGrpcClient
           on_done,
       absl::Duration timeout = max_timeout) const override {
     DCHECK(encryption_enabled_);
+    if (VLOG_IS_ON(6)) {
+      VLOG(6) << "Raw request:\n" << raw_request->DebugString();
+    }
     VLOG(5) << "Encrypting request ...";
     auto secret_request = EncryptRequest(raw_request.get());
     if (!secret_request.ok()) {
@@ -67,7 +70,7 @@ class DefaultAsyncGrpcClient
       return error_status;
     }
     auto& [hpke_secret, request] = *secret_request;
-    VLOG(5) << "Encrypting completed ...";
+    VLOG(5) << "Encryption completed ...";
 
     auto params =
         std::make_unique<RawClientParams<Request, Response, RawResponse>>(

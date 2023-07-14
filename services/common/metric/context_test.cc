@@ -12,112 +12,45 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "services/common/metric/context.h"
-
-#include "absl/log/absl_log.h"
-#include "absl/log/check.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "services/common/metric/context_test.h"
 
 namespace privacy_sandbox::server_common::metric {
 
-using ::testing::_;
-using ::testing::Eq;
-using ::testing::Matcher;
-using ::testing::Ref;
-using ::testing::Return;
-using ::testing::StartsWith;
-using ::testing::StrictMock;
-
-using DefinitionSafe =
-    Definition<int, Privacy::kNonImpacting, Instrument::kUpDownCounter>;
-using DefinitionUnSafe =
-    Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>;
-using DefinitionPartition =
-    Definition<int, Privacy::kNonImpacting, Instrument::kPartitionedCounter>;
-using DefinitionHistogram =
-    Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>;
-using DefinitionGauge =
-    Definition<int, Privacy::kNonImpacting, Instrument::kGauge>;
-
-constexpr DefinitionSafe kIntExactCounter("kIntExactCounter", "description");
-constexpr DefinitionUnSafe kIntApproximateCounter("kIntApproximateCounter",
-                                                  "description", 0, 1);
-
-constexpr absl::string_view pv[] = {"buyer_1", "buyer_2"};
-constexpr DefinitionPartition kIntExactPartitioned("kIntExactPartitioned",
-                                                   "description", "buyer_name",
-                                                   pv);
-
-constexpr double hb[] = {50, 100, 200};
-constexpr DefinitionHistogram kIntExactHistogram("kIntExactHistogram",
-                                                 "description", hb);
-
-constexpr DefinitionGauge kIntExactGauge("kIntExactGauge", "description");
-
-constexpr const DefinitionName* metric_list[] = {
-    &kIntExactCounter, &kIntApproximateCounter, &kIntExactPartitioned,
-    &kIntExactHistogram, &kIntExactGauge};
-constexpr absl::Span<const DefinitionName* const> metric_list_span =
-    metric_list;
-[[maybe_unused]] constexpr DefinitionSafe kNotInList("kNotInList",
-                                                     "description");
-
-class MockMetricRouter {
- public:
-  MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionSafe&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionUnSafe&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionPartition&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionHistogram&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionGauge&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogUnSafe,
-              ((const DefinitionUnSafe&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogUnSafe,
-              ((const DefinitionSafe&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogUnSafe,
-              ((const DefinitionPartition&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogUnSafe,
-              ((const DefinitionHistogram&), int, absl::string_view));
-  MOCK_METHOD(absl::Status, LogUnSafe,
-              ((const DefinitionGauge&), int, absl::string_view));
-};
-
-class BaseTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    ServerConfig config_proto;
-    config_proto.set_mode(ServerConfig::PROD);
-    static BuildDependentConfig metric_config(config_proto);
-    context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
-        &mock_metric_router_, metric_config);
+TEST(BoundPartitionsContributed, Bound) {
+  absl::flat_hash_map<std::string, int> m;
+  for (int i = 1; i < 10; ++i) {
+    m.emplace(absl::StrCat("buyer_", i), i);
+    std::vector<std::pair<std::string, int>> ret1 =
+        BoundPartitionsContributed(m, kIntUnSafePartitioned);
+    EXPECT_EQ(ret1.size(),
+              std::min(kIntUnSafePartitioned.max_partitions_contributed_, i));
   }
+}
 
-  StrictMock<MockMetricRouter> mock_metric_router_;
-  std::unique_ptr<Context<metric_list_span, MockMetricRouter>> context_;
-};
+TEST(BoundPartitionsContributed, Filter) {
+  absl::flat_hash_map<std::string, int> m = {{"private partition", 1}};
+  EXPECT_THAT(BoundPartitionsContributed(m, kIntUnSafePartitioned), IsEmpty());
+  EXPECT_THAT(BoundPartitionsContributed(m, kIntUnSafePrivatePartitioned),
+              SizeIs(1));
+}
 
 TEST_F(BaseTest, LogUpDownCounter) {
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)), Eq(1), _))
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)),
+                      Eq(1), _, _))
       .WillOnce(Return(absl::OkStatus()));
-  EXPECT_TRUE(context_->LogUpDownCounter<kIntExactCounter>(1).ok());
+  CHECK_OK(context_->LogUpDownCounter<kIntExactCounter>(1));
   // auto e1 = context_->LogUpDownCounter<kIntExactGauge>(1);  // compile errors
   // auto e2 = context_->LogUpDownCounterDeferred<kIntExactGauge>(
   //     []() mutable { return 2; });  // compile errors
+}
 
-  EXPECT_TRUE((context_
-                   ->LogUpDownCounterDeferred<kIntExactCounter>(
-                       []() mutable { return 2; })
-                   .ok()));
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)), Eq(2), _))
+TEST_F(BaseTest, LogUpDownCounterDeferred) {
+  CHECK_OK(context_->LogUpDownCounterDeferred<kIntExactCounter>(
+      []() mutable { return 2; }));
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)),
+                      Eq(2), _, _))
       .WillOnce(Return(absl::OkStatus()));
 }
 
@@ -125,29 +58,29 @@ TEST_F(BaseTest, LogPartitionedCounter) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kIntExactPartitioned)),
-              Eq(1), StartsWith("buyer_")))
+              Eq(1), StartsWith("buyer_"), _))
+      .Times(Exactly(2))
       .WillRepeatedly(Return(absl::OkStatus()));
-  EXPECT_TRUE(context_
-                  ->LogUpDownCounter<kIntExactPartitioned>(
-                      {{"buyer_1", 1}, {"buyer_2", 1}})
-                  .ok());
+  CHECK_OK(context_->LogUpDownCounter<kIntExactPartitioned>(
+      {{"buyer_1", 1}, {"buyer_2", 1}}));
   // auto e1 = context_->LogUpDownCounter<kIntExactCounter>(
   //     {{"buyer_1", 1}, {"buyer_2", 1}});  // compile errors
   // auto e2 = context_->LogUpDownCounterDeferred<kIntExactCounter>(
   //     []() -> absl::flat_hash_map<std::string, int> {
   //       return {{"buyer_3", 2}, {"buyer_4", 2}};
   //     });  // compile errors
+}
 
-  EXPECT_TRUE(context_
-                  ->LogUpDownCounterDeferred<kIntExactPartitioned>(
-                      []() -> absl::flat_hash_map<std::string, int> {
-                        return {{"buyer_3", 2}, {"buyer_4", 2}};
-                      })
-                  .ok());
+TEST_F(BaseTest, LogPartitionedCounterDeferred) {
+  CHECK_OK(context_->LogUpDownCounterDeferred<kIntExactPartitioned>(
+      []() -> absl::flat_hash_map<std::string, int> {
+        return {{"buyer_3", 2}, {"buyer_4", 2}};
+      }));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kIntExactPartitioned)),
-              Eq(2), StartsWith("buyer_")))
+              Eq(2), StartsWith("buyer_"), _))
+      .Times(Exactly(2))
       .WillRepeatedly(Return(absl::OkStatus()));
 }
 
@@ -155,80 +88,98 @@ TEST_F(BaseTest, LogHistogram) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kIntExactHistogram)),
-              Eq(1), _))
+              Eq(1), _, _))
       .WillOnce(Return(absl::OkStatus()));
-  EXPECT_TRUE(context_->LogHistogram<kIntExactHistogram>(1).ok());
+  CHECK_OK(context_->LogHistogram<kIntExactHistogram>(1));
   // auto e1 = context_->LogHistogram<kIntExactGauge>(1);  // compile errors
   // auto e2 = context_->LogHistogramDeferred<kIntExactGauge>(
   //     []() mutable { return 2; });  // compile errors
+}
 
-  EXPECT_TRUE((
-      context_
-          ->LogHistogramDeferred<kIntExactHistogram>([]() mutable { return 2; })
-          .ok()));
+TEST_F(BaseTest, LogHistogramDeferred) {
+  CHECK_OK(context_->LogHistogramDeferred<kIntExactHistogram>(
+      []() mutable { return 2; }));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kIntExactHistogram)),
-              Eq(2), _))
+              Eq(2), _, _))
       .WillOnce(Return(absl::OkStatus()));
 }
 
 TEST_F(BaseTest, LogGauge) {
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionGauge&>(Ref(kIntExactGauge)), Eq(1), _))
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionGauge&>(Ref(kIntExactGauge)),
+                      Eq(1), _, _))
       .WillOnce(Return(absl::OkStatus()));
-  EXPECT_TRUE(context_->LogGauge<kIntExactGauge>(1).ok());
+  CHECK_OK(context_->LogGauge<kIntExactGauge>(1));
   // auto e1 = context_->LogGauge<kIntExactCounter>(1);  // compile errors
   // auto e2 = context_->LogGaugeDeferred<kIntExactCounter>(
   //     []() mutable { return 2; });  // compile errors
+}
 
-  EXPECT_TRUE(
-      (context_->LogGaugeDeferred<kIntExactGauge>([]() mutable { return 2; })
-           .ok()));
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionGauge&>(Ref(kIntExactGauge)), Eq(2), _))
+TEST_F(BaseTest, LogGaugeDeferred) {
+  CHECK_OK(
+      context_->LogGaugeDeferred<kIntExactGauge>([]() mutable { return 2; }));
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionGauge&>(Ref(kIntExactGauge)),
+                      Eq(2), _, _))
       .WillOnce(Return(absl::OkStatus()));
 }
 
-class ContextTest : public BaseTest {
- protected:
-  void LogUnSafeForApproximate() {
-    EXPECT_CALL(
-        mock_metric_router_,
-        LogUnSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntApproximateCounter)),
-                  Eq(1), _))
-        .WillOnce(Return(absl::OkStatus()));
-    EXPECT_TRUE(context_->LogMetric<kIntApproximateCounter>(1).ok());
+TEST_F(BaseTest, LogPartitionedFiltered) {
+  EXPECT_CALL(mock_metric_router_,
+              LogUnSafe(Matcher<const DefinitionPartitionUnsafe&>(
+                            Ref(kIntUnSafePartitioned)),
+                        Eq(1), StartsWith("buyer_1")))
+      .WillOnce(Return(absl::OkStatus()));
+  CHECK_OK(context_->LogUpDownCounter<kIntUnSafePartitioned>(
+      {{"buyer_1", 1}, {"buyer_100", 1}}));
+}
 
-    EXPECT_TRUE(context_
-                    ->LogMetricDeferred<kIntApproximateCounter>(
-                        []() mutable { return 2; })
-                    .ok());
-    EXPECT_CALL(
-        mock_metric_router_,
-        LogUnSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntApproximateCounter)),
-                  Eq(2), _))
-        .WillOnce(Return(absl::OkStatus()));
+TEST_F(BaseTest, LogPartitionedBounded) {
+  absl::flat_hash_map<std::string, int> m;
+  for (int i = 1; i < 10; ++i) {
+    m.emplace(absl::StrCat("buyer_", i), i);
   }
-};
+  EXPECT_CALL(mock_metric_router_,
+              LogUnSafe(Matcher<const DefinitionPartitionUnsafe&>(
+                            Ref(kIntUnSafePartitioned)),
+                        A<int>(), StartsWith("buyer_")))
+      .Times(Exactly(kIntUnSafePartitioned.max_partitions_contributed_))
+      .WillRepeatedly(Return(absl::OkStatus()));
+  CHECK_OK(context_->LogUpDownCounter<kIntUnSafePartitioned>(m));
+}
+
+TEST_F(BaseTest, LogPartitionedCounterDeferredBounded) {
+  CHECK_OK(context_->LogUpDownCounterDeferred<kIntUnSafePartitioned>([]() {
+    absl::flat_hash_map<std::string, int> m;
+    for (int i = 1; i < 10; ++i) {
+      m.emplace(absl::StrCat("buyer_", i), i);
+    }
+    return m;
+  }));
+  EXPECT_CALL(mock_metric_router_,
+              LogUnSafe(Matcher<const DefinitionPartitionUnsafe&>(
+                            Ref(kIntUnSafePartitioned)),
+                        A<int>(), StartsWith("buyer_")))
+      .Times(Exactly(kIntUnSafePartitioned.max_partitions_contributed_))
+      .WillRepeatedly(Return(absl::OkStatus()));
+}
 
 TEST_F(ContextTest, LogBeforeDecrypt) {
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)), Eq(1), _))
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)),
+                      Eq(1), _, _))
       .WillOnce(Return(absl::OkStatus()));
-  EXPECT_TRUE(context_->LogMetric<kIntExactCounter>(1).ok());
+  CHECK_OK(context_->LogMetric<kIntExactCounter>(1));
   // auto e1 = context_->LogMetric<kIntExactCounter>(1.2);  // compile errors
   // auto e2 = context_->LogMetric<kNotInList>(1);          // compile errors
 
-  EXPECT_TRUE(
-      (context_->LogMetricDeferred<kIntExactCounter>([]() mutable { return 2; })
-           .ok()));
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)), Eq(2), _))
+  CHECK_OK(context_->LogMetricDeferred<kIntExactCounter2>(
+      []() mutable { return 2; }));
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter2)),
+                      Eq(2), _, _))
       .WillOnce(Return(absl::OkStatus()));
   // absl::AnyInvocable<int() &&> cb = []() mutable { return 2; };
   // auto e1 = context_->LogMetricDeferred<kIntExactCounter>(cb);  // compile
@@ -239,38 +190,8 @@ TEST_F(ContextTest, LogBeforeDecrypt) {
 
 TEST_F(ContextTest, LogAfterDecrypt) {
   context_->SetDecrypted();
-  EXPECT_EQ(context_->LogMetric<kIntExactCounter>(1).code(),
-            absl::StatusCode::kFailedPrecondition);
-  EXPECT_EQ(
-      context_->LogMetricDeferred<kIntExactCounter>([]() mutable { return 2; })
-          .code(),
-      absl::StatusCode::kFailedPrecondition);
-
+  ErrorLogSafeAfterDecrypt();
   LogUnSafeForApproximate();
-}
-
-TEST_F(ContextTest, LogPartition) {
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionPartition&>(Ref(kIntExactPartitioned)),
-              Eq(1), StartsWith("buyer_")))
-      .WillRepeatedly(Return(absl::OkStatus()));
-  EXPECT_TRUE(
-      context_
-          ->LogMetric<kIntExactPartitioned>({{"buyer_1", 1}, {"buyer_2", 1}})
-          .ok());
-
-  EXPECT_TRUE(context_
-                  ->LogMetricDeferred<kIntExactPartitioned>(
-                      []() -> absl::flat_hash_map<std::string, int> {
-                        return {{"buyer_3", 2}, {"buyer_4", 2}};
-                      })
-                  .ok());
-  EXPECT_CALL(
-      mock_metric_router_,
-      LogSafe(Matcher<const DefinitionPartition&>(Ref(kIntExactPartitioned)),
-              Eq(2), StartsWith("buyer_")))
-      .WillRepeatedly(Return(absl::OkStatus()));
 }
 
 }  // namespace privacy_sandbox::server_common::metric

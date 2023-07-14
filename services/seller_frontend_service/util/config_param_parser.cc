@@ -29,58 +29,61 @@ absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
   absl::flat_hash_map<std::string, std::string> ig_owner_to_bfe_domain_map;
   rapidjson::Document ig_owner_to_bfe_domain_json_value;
-  if (!ig_owner_to_bfe_domain.empty()) {
-    rapidjson::ParseResult parse_result =
-        ig_owner_to_bfe_domain_json_value
-            .Parse<rapidjson::kParseFullPrecisionFlag>(
-                ig_owner_to_bfe_domain.data());
-    if (parse_result.IsError()) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Malformed IG Owner to BFE domain map, error: ",
-                       rapidjson::GetParseError_En(parse_result.Code())));
-    }
-    if (ig_owner_to_bfe_domain_json_value.MemberCount() < 1) {
-      return absl::InvalidArgumentError("Empty IG Owner to BFE domain map");
-    }
-    for (rapidjson::Value::MemberIterator itr =
-             ig_owner_to_bfe_domain_json_value.MemberBegin();
-         itr != ig_owner_to_bfe_domain_json_value.MemberEnd(); ++itr) {
-      if (itr->name.IsString()) {
-        const std::string& ig_owner = itr->name.GetString();
-        if (!ig_owner.empty()) {
-          if (itr->value.IsString()) {
-            const std::string& bfe_host_addr = itr->value.GetString();
-            if (!bfe_host_addr.empty()) {
-              auto [it_2, inserted] = ig_owner_to_bfe_domain_map.try_emplace(
-                  ig_owner, bfe_host_addr);
-              if (!inserted) {
-                return absl::InvalidArgumentError(
-                    "Entry not inserted into IG_owner->BFE map, check for "
-                    "duplicate entries.");
-              }
-            } else {
-              return absl::InvalidArgumentError(
-                  "Encountered empty BFE domain address.");
-            }
-          } else {
-            return absl::InvalidArgumentError(
-                "Encountered BFE Domain address that was not string.");
-          }
-        } else {
-          return absl::InvalidArgumentError("Encountered empty IG Owner.");
-        }
-      } else {
-        return absl::InvalidArgumentError(
-            "Encountered IG Owner that was not string.");
-      }
-    }
-    if (ig_owner_to_bfe_domain_map.empty()) {
-      return absl::InvalidArgumentError(
-          "Zero valid entries for IG Owner to BFE domain map.");
-    }
-  } else {
+  if (ig_owner_to_bfe_domain.empty()) {
     return absl::InvalidArgumentError(
         "Empty string for IG Owner to BFE domain map");
+  }
+
+  rapidjson::ParseResult parse_result =
+      ig_owner_to_bfe_domain_json_value
+          .Parse<rapidjson::kParseFullPrecisionFlag>(
+              ig_owner_to_bfe_domain.data());
+  if (parse_result.IsError()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Malformed IG Owner to BFE domain map, error: ",
+                     rapidjson::GetParseError_En(parse_result.Code())));
+  }
+
+  if (ig_owner_to_bfe_domain_json_value.MemberCount() < 1) {
+    return absl::InvalidArgumentError("Empty IG Owner to BFE domain map");
+  }
+
+  for (rapidjson::Value::MemberIterator itr =
+           ig_owner_to_bfe_domain_json_value.MemberBegin();
+       itr != ig_owner_to_bfe_domain_json_value.MemberEnd(); ++itr) {
+    if (!itr->name.IsString()) {
+      return absl::InvalidArgumentError(
+          "Encountered IG Owner that was not string.");
+    }
+
+    const std::string& ig_owner = itr->name.GetString();
+    if (ig_owner.empty()) {
+      return absl::InvalidArgumentError("Encountered empty IG Owner.");
+    }
+
+    if (!itr->value.IsString()) {
+      return absl::InvalidArgumentError(
+          "Encountered BFE Domain address that was not string.");
+    }
+
+    const std::string& bfe_host_addr = itr->value.GetString();
+    if (bfe_host_addr.empty()) {
+      return absl::InvalidArgumentError(
+          "Encountered empty BFE domain address.");
+    }
+
+    auto [it_2, inserted] =
+        ig_owner_to_bfe_domain_map.try_emplace(ig_owner, bfe_host_addr);
+    if (!inserted) {
+      return absl::InvalidArgumentError(
+          "Entry not inserted into IG_owner->BFE map, check for "
+          "duplicate entries.");
+    }
+  }
+
+  if (ig_owner_to_bfe_domain_map.empty()) {
+    return absl::InvalidArgumentError(
+        "Zero valid entries for IG Owner to BFE domain map.");
   }
   return ig_owner_to_bfe_domain_map;
 }

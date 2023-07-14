@@ -83,6 +83,16 @@ variable "machine_type" {
   type        = string
 }
 
+variable "collector_service_name" {
+  description = "Name of the collector service."
+  type        = string
+}
+
+variable "collector_service_port" {
+  description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
+  type        = number
+}
+
 variable "mesh_name" {
   description = "Traffic Director name"
   type        = string
@@ -96,6 +106,12 @@ variable "min_replicas_per_service_region" {
 variable "max_replicas_per_service_region" {
   description = "Maximum amount of replicas per each service region (a single managed instance group)."
   type        = number
+}
+
+variable "max_collectors_per_region" {
+  description = "Maximum amount of Collectors per each service region (a single managed instance group)."
+  type        = number
+  default     = 2
 }
 
 variable "vm_startup_delay_seconds" {

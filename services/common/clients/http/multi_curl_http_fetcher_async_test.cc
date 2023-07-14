@@ -150,5 +150,24 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, SetsAcceptEncodingHeaderOnRequest) {
   fetcher_->FetchUrl({"httpbin.org/gzip", {}}, kNormalTimeoutMs, done_cb);
   done.Wait();
 }
+
+TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
+  absl::BlockingCounter done(1);
+  std::vector<HTTPRequest> test_requests = {
+      {kUrlA.begin(), {}}, {kUrlB.begin(), {}}, {kUrlC.begin(), {}}};
+  auto done_cb = [&done, &test_requests](
+                     std::vector<absl::StatusOr<std::string>> results) {
+    EXPECT_EQ(results.size(), test_requests.size());
+    for (auto result : results) {
+      ASSERT_TRUE(result.ok()) << result.status();
+    }
+    done.DecrementCount();
+  };
+
+  fetcher_->FetchUrls(test_requests, absl::Milliseconds(kNormalTimeoutMs),
+                      std::move(done_cb));
+  done.Wait();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

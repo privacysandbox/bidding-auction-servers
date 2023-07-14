@@ -16,18 +16,34 @@
 #define SERVICES_SFE_PROVIDERS_SCORING_SIGNALS_ASYNC_PROVIDER_H_
 
 #include <memory>
+#include <string>
 
 #include "services/common/providers/async_provider.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+struct ScoringSignalsRequest {
+  explicit ScoringSignalsRequest(
+      const BuyerBidsList& buyer_bids_list,
+      const absl::flat_hash_map<std::string, std::string>& filtering_metadata)
+      : buyer_bids_list_(buyer_bids_list),
+        filtering_metadata_(filtering_metadata) {}
+
+  // The objects here should be owned by the caller of the provider class
+  // using this struct as a parameter. They're only required in the context of
+  // the function call, and can ideally be reduced to const& parameters to the
+  // method.
+  const BuyerBidsList& buyer_bids_list_;
+  const absl::flat_hash_map<std::string, std::string>& filtering_metadata_;
+};
+
 // The classes implementing this interface provide the external signals
 // required by SellerFrontEnd Service for the bidding process.
 // Different implementations of this interface can use different external
 // sources such as an externally sharded gRPC Key Value server, etc.
 using ScoringSignalsAsyncProvider =
-    AsyncProvider<BuyerBidsList, ScoringSignals>;
+    AsyncProvider<ScoringSignalsRequest, ScoringSignals>;
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

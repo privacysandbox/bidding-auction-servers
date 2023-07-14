@@ -177,12 +177,15 @@ absl::Status RunServer() {
           .GetCustomParameter<server_common::metric::TelemetryFlag>(
               TELEMETRY_CONFIG)
           .server_config);
+  std::string collector_endpoint =
+      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions());
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util));
+                                  CreateMetricsOptions(), collector_endpoint);
+  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
   metric::BfeContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()

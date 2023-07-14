@@ -58,11 +58,18 @@ module "buyer" {
     ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
     CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
     ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
+    # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
+    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
+    # and additional latency for parsing the logs.
+    ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
+    ENABLE_BUYER_CODE_WRAPPER  = "" # Example: "true"
 
     JS_URL                 = "" # Example: "https://storage.googleapis.com/my-bucket/generateBid.js"
     JS_URL_FETCH_PERIOD_MS = "" # Example: "3600000"
     JS_TIME_OUT_MS         = "" # Example: "30000"
     ROMA_TIMEOUT_MS        = "" # Example: "10000"
+    TELEMETRY_CONFIG       = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT     = "" # Example: "collector-buyer-1-${local.environment}.bfe-gcp.com:4317"
 
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
@@ -76,7 +83,7 @@ module "buyer" {
     GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "" # Example: "projects/78910/locations/global/workloadIdentityPools/staging-b-opwip/providers/staging-b-opwip-pvdr"
     GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "" # Example: "https://staging-a-us-central1-encryption-key-service-test-uc.a.run.app"
     GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "" # Example: "https://staging-b-us-central1-encryption-key-service-test-uc.a.run.app"
-    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "" # Example:  "600000"
+    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "" # Example:  "3974400" (46 days)
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "" # Example: "20000"
 
     BFE_TLS_KEY  = "" # You can either set this here or via a secrets.auto.tfvars.
@@ -98,4 +105,5 @@ module "buyer" {
   cpu_utilization_percent            = 0.8   # Example: 0.8
   use_confidential_space_debug_image = false # Example: false
   tee_impersonate_service_accounts   = "staging-a-opallowedusr@coordinator1.iam.gserviceaccount.com,staging-b-opallowedusr@coordinator2.iam.gserviceaccount.com"
+  collector_service_port             = 4317
 }

@@ -51,6 +51,10 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
   HTTPRequest request = BuildSellerKeyValueRequest(kv_server_base_address_,
                                                    metadata, std::move(keys));
   VLOG(2) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
+  VLOG(2) << "\nSellerKeyValueAsyncHttpClient Headers:\n";
+  for (const auto& header : request.headers) {
+    VLOG(2) << header;
+  }
   auto done_callback = [on_done = std::move(on_done)](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
