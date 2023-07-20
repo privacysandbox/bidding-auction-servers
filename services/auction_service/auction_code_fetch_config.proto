@@ -1,0 +1,52 @@
+/*
+ * Copyright 2023 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.auction_service;
+
+message SellerCodeFetchConfig {
+
+   // The javascript generateBid script.
+   string auction_js_path = 1;
+
+   // URL endpoint for fetching AdTech code blob, js file.
+   string auction_js_url = 2;
+
+   // Period of how often to fetch AdTech code blob from the URL endpoint.
+   int64 url_fetch_period_ms = 3;
+
+   // A time out limit for HttpsFetcherAsyc client to stop executing FetchUrl.
+   int64 url_fetch_timeout_ms = 4;
+
+   // Allow seller debug URL generation.
+   bool enable_seller_debug_url_generation = 5;
+
+   // Enables use of code wrapper.
+   bool enable_seller_code_wrapper = 6;
+
+   // Allow handling of console.logs from AdTech script execution.
+   bool enable_adtech_code_logging = 7;
+
+   // Enables executing reportResult function from Seller's script.
+   bool enable_report_result_url_generation = 8;
+
+   // Enables executing reportWin function from Seller's script.
+   bool enable_report_win_url_generation = 9;
+
+   // Map of buyer origin to URL endpoint for reportWin js fule.
+   map<string, string> buyer_report_win_js_urls = 10;
+}

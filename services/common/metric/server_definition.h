@@ -28,12 +28,14 @@ inline constexpr server_common::metric::PrivacyBudget server_total_budget{
     /*epsilon*/ 5};
 
 // Metric Definitions that are specific to bidding & auction servers.
-inline constexpr double kV8TimeHistogram[] = {50, 100, 200, 400, 800};
+inline constexpr double kV8TimeHistogram[] = {50,    100,   250,  500,
+                                              1'000, 2'000, 4'000};
 inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kImpacting,
+    int, server_common::metric::Privacy::kNonImpacting,
     server_common::metric::Instrument::kHistogram>
-    kV8DispatchTimeMs("kV8DispatchTimeMs", "Time taken by V8 dispatcher",
-                      kV8TimeHistogram, 2000, 0);
+    kJSExecutionDuration("js_execution.duration_ms",
+                         "Time taken to execute the JS dispatcher",
+                         kV8TimeHistogram);
 
 // API to get `Context` for bidding server to log metric
 inline constexpr const server_common::metric::DefinitionName*
@@ -42,7 +44,7 @@ inline constexpr const server_common::metric::DefinitionName*
                             &server_common::metric::kServerTotalTimeMs,
                             &server_common::metric::kRequestByte,
                             &server_common::metric::kResponseByte,
-                            &kV8DispatchTimeMs};
+                            &kJSExecutionDuration};
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBiddingMetricSpan = kBiddingMetricList;
 inline auto* BiddingContextMap(
@@ -63,6 +65,9 @@ inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
         &server_common::metric::kServerTotalTimeMs,
         &server_common::metric::kRequestByte,
         &server_common::metric::kResponseByte,
+        &server_common::metric::kInitiatedRequestCount,
+        &server_common::metric::kInitiatedRequestErrorCount,
+        &server_common::metric::kInitiatedRequestTotalDuration,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
@@ -84,6 +89,9 @@ inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
         &server_common::metric::kServerTotalTimeMs,
         &server_common::metric::kRequestByte,
         &server_common::metric::kResponseByte,
+        &server_common::metric::kInitiatedRequestCount,
+        &server_common::metric::kInitiatedRequestErrorCount,
+        &server_common::metric::kInitiatedRequestTotalDuration,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
@@ -99,13 +107,12 @@ using SfeContext = server_common::metric::ServerContext<kSfeMetricSpan>;
 
 // API to get `Context` for Auction server to log metric
 inline constexpr const server_common::metric::DefinitionName*
-    kAuctionMetricList[] = {
-        &server_common::metric::kTotalRequestCount,
-        &server_common::metric::kTotalRequestFailedCount,
-        &server_common::metric::kServerTotalTimeMs,
-        &server_common::metric::kRequestByte,
-        &server_common::metric::kResponseByte,
-};
+    kAuctionMetricList[] = {&server_common::metric::kTotalRequestCount,
+                            &server_common::metric::kTotalRequestFailedCount,
+                            &server_common::metric::kServerTotalTimeMs,
+                            &server_common::metric::kRequestByte,
+                            &server_common::metric::kResponseByte,
+                            &kJSExecutionDuration};
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kAuctionMetricSpan = kAuctionMetricList;
 inline auto* AuctionContextMap(

@@ -26,13 +26,11 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
-    srcs = select({
-        "//:non_prod_build": ["//production/packaging/common/nonprod"],
-        "//conditions:default": ["//production/packaging/common/prod"],
-    }) + [
+    srcs = [
         "bin/init_server_basic",
         "//services/seller_frontend_service:server",
         "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
@@ -125,6 +123,7 @@ container_image(
         "/server/bin/init_server_basic",
     ],
     entrypoint = ["sh"],
+    env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",

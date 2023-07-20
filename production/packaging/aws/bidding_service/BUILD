@@ -25,13 +25,11 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
-    srcs = select({
-        "//:non_prod_build": ["//production/packaging/common/nonprod"],
-        "//conditions:default": ["//production/packaging/common/prod"],
-    }) + [
+    srcs = [
         "bin/init_server_basic",
         "//services/bidding_service:server",
         "@control_plane_shared//cc/aws/proxy/src:proxify",
@@ -85,6 +83,7 @@ container_image(
         "/server/bin/init_server_basic",
     ],
     entrypoint = ["sh"],
+    env = LOG_ENV_VARS,
     layers = [
         ":server_binary_layer",
     ],

@@ -15,10 +15,32 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 
 #include <string>
+#include <vector>
+
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+namespace {
 
-std::string GetBuyerWrappedCode(absl::string_view adtech_code_blob) {
-  return absl::StrCat(kEntryFunction, adtech_code_blob);
+std::string WasmBytesToJavascript(absl::string_view wasm_bytes) {
+  std::string hex_array = "";
+
+  for (const uint8_t& byte :
+       std::vector<uint8_t>(wasm_bytes.begin(), wasm_bytes.end())) {
+    absl::StrAppend(&hex_array, absl::StrFormat("%#x,", byte));
+  }
+  // In javascript, it is ok to leave a comma after the last element in the
+  // array.
+
+  return absl::StrFormat(kWasmModuleTemplate, hex_array);
+}
+}  // namespace
+
+std::string GetBuyerWrappedCode(absl::string_view adtech_js,
+                                absl::string_view adtech_wasm = "") {
+  return absl::StrCat(WasmBytesToJavascript(adtech_wasm), kEntryFunction,
+                      adtech_js);
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

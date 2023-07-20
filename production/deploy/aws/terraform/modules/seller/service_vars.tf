@@ -54,11 +54,18 @@ variable "certificate_arn" {
 }
 
 # Variables related to EC2 instances.
-variable "instance_type" {
-  description = "Hardware and OS configuration for the EC2 instance."
+variable "sfe_instance_type" {
+  description = "Hardware and OS configuration for the SFE EC2 instance."
   type        = string
-  default     = "c6i.2xlarge"
+  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
+
+variable "auction_instance_type" {
+  description = "Hardware and OS configuration for the Auction EC2 instance."
+  type        = string
+  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
+}
+
 variable "sfe_instance_ami_id" {
   description = "Seller FrontEnd operator Amazon Machine Image to run on EC2 instance."
   type        = string
@@ -84,16 +91,27 @@ variable "server_port" {
   default     = 50051
 
 }
-variable "enclave_cpu_count" {
-  description = "The number of vcpus to allocate to the enclave."
+variable "sfe_enclave_cpu_count" {
+  description = "The number of vcpus to allocate to the SFE enclave."
   type        = number
   default     = 6
 }
-variable "enclave_memory_mib" {
-  description = "Amount of memory to allocate to the enclave."
+variable "sfe_enclave_memory_mib" {
+  description = "Amount of memory to allocate to the SFE enclave."
   type        = number
   default     = 12000
 }
+variable "auction_enclave_cpu_count" {
+  description = "The number of vcpus to allocate to the Auction enclave."
+  type        = number
+  default     = 6
+}
+variable "auction_enclave_memory_mib" {
+  description = "Amount of memory to allocate to the Auction enclave."
+  type        = number
+  default     = 12000
+}
+
 
 variable "sfe_autoscaling_desired_capacity" {
   type    = number

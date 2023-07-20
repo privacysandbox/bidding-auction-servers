@@ -308,12 +308,10 @@ TEST_F(SellerFrontEndServiceTest,
       scoring_signals_provider;
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
                            std::nullopt);
-
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
                          buyer_clients, key_fetcher_manager_,

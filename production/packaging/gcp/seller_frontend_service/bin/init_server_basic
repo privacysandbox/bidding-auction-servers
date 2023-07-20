@@ -84,7 +84,7 @@ echo "Passed backend reachability test."
 #                                                                       #
 #########################################################################
 
-source /server/bin/vlog
+
 export GLOG_logtostderr=1
 export GLOG_stderrthreshold=0
 export GRPC_DNS_RESOLVER=native

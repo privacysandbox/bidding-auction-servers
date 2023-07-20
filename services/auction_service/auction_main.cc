@@ -16,8 +16,10 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <aws/core/Aws.h>
+#include <google/protobuf/util/json_util.h>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -32,6 +34,7 @@
 #include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
 #include "services/auction_service/auction_adtech_code_wrapper.h"
+#include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
@@ -53,34 +56,25 @@
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
-// TODO(b/249682742): Make this a file until an updating design is established.
-ABSL_FLAG(std::optional<std::string>, js_path, std::nullopt,
-          "The javascript scoreAd script.");
 ABSL_FLAG(
     bool, init_config_client, false,
     "Initialize config client to fetch any runtime flags not supplied from"
     " command line from cloud metadata store. False by default.");
 ABSL_FLAG(std::optional<bool>, enable_auction_service_benchmark, std::nullopt,
           "Benchmark the auction server and write the runtimes to the logs.");
-ABSL_FLAG(std::optional<bool>, enable_seller_debug_url_generation, std::nullopt,
-          "Allow seller debug URL generation.");
-ABSL_FLAG(std::optional<std::string>, js_url, std::nullopt,
-          "The URL Endpoint for fetching AdTech code blob.");
 ABSL_FLAG(
-    std::optional<std::int64_t>, js_url_fetch_period_ms, std::nullopt,
-    "Period of how often to fetch AdTech code blob from the URL endpoint.");
+    std::optional<std::string>, seller_code_fetch_config, std::nullopt,
+    "The JSON string for config fields necessary for AdTech code fetching.");
 ABSL_FLAG(
-    std::optional<std::int64_t>, js_time_out_ms, std::nullopt,
-    "A time out limit for HttpsFetcherAsyc client to stop executing FetchUrl.");
-ABSL_FLAG(std::optional<bool>, enable_adtech_code_logging, std::nullopt,
-          "Allow handling of console.logs from AdTech script execution");
-ABSL_FLAG(std::optional<bool>, enable_seller_code_wrapper, std::nullopt,
-          "Enables use of code wrapper");
-ABSL_FLAG(std::optional<bool>, enable_report_result_url_generation,
-          std::nullopt,
-          "Enables executing reportResult function from Seller's script");
-ABSL_FLAG(std::optional<bool>, enable_report_win_url_generation, std::nullopt,
-          "Enables executing reportResult function from Seller's script");
+    std::optional<std::int64_t>, js_num_workers, std::nullopt,
+    "The number of workers/threads for executing AdTech code in parallel.");
+ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
+          "The length of queue size for a single JS execution worker.");
+ABSL_FLAG(
+    std::optional<std::int64_t>, js_worker_mem_mb, std::nullopt,
+    "Shared memory used to store requests and responses shared between ROMA "
+    "and JS workers. "
+    "js_worker_mem_mb/js_worker_queue_len > average JS request size.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -94,7 +88,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     std::string config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
-  config_client.SetFlag(FLAGS_js_path, JS_PATH);
   config_client.SetFlag(FLAGS_enable_auction_service_benchmark,
                         ENABLE_AUCTION_SERVICE_BENCHMARK);
   config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
@@ -127,19 +120,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
-  config_client.SetFlag(FLAGS_enable_seller_debug_url_generation,
-                        ENABLE_SELLER_DEBUG_URL_GENERATION);
-  config_client.SetFlag(FLAGS_js_url, JS_URL);
-  config_client.SetFlag(FLAGS_js_url_fetch_period_ms, JS_URL_FETCH_PERIOD_MS);
-  config_client.SetFlag(FLAGS_js_time_out_ms, JS_TIME_OUT_MS);
-  config_client.SetFlag(FLAGS_enable_adtech_code_logging,
-                        ENABLE_ADTECH_CODE_LOGGING);
-  config_client.SetFlag(FLAGS_enable_seller_code_wrapper,
-                        ENABLE_SELLER_CODE_WRAPPER);
-  config_client.SetFlag(FLAGS_enable_report_result_url_generation,
-                        ENABLE_REPORT_RESULT_URL_GENERATION);
-  config_client.SetFlag(FLAGS_enable_report_win_url_generation,
-                        ENABLE_REPORT_WIN_URL_GENERATION);
+  config_client.SetFlag(FLAGS_seller_code_fetch_config,
+                        SELLER_CODE_FETCH_CONFIG);
+  config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
+  config_client.SetFlag(FLAGS_js_worker_mem_mb, JS_WORKER_MEM_MB);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -159,9 +144,18 @@ absl::Status RunServer() {
   std::string_view port = config_client.GetStringParameter(PORT);
   std::string server_address = absl::StrCat("0.0.0.0:", port);
 
+  CHECK(!config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).empty())
+      << "SELLER_CODE_FETCH_CONFIG is a mandatory flag.";
+
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
   DispatchConfig config;
+  config.ipc_memory_size_in_mb =
+      config_client.GetIntParameter(JS_WORKER_MEM_MB);
+  config.worker_queue_max_items =
+      config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
+  config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+
   PS_RETURN_IF_ERROR(dispatcher.Init(config))
       << "Could not start code dispatcher.";
 
@@ -172,46 +166,58 @@ absl::Status RunServer() {
   std::unique_ptr<HttpFetcherAsync> http_fetcher =
       std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
 
-  bool enable_seller_debug_url_generation =
-      config_client.GetBooleanParameter(ENABLE_SELLER_DEBUG_URL_GENERATION);
-  bool enable_seller_code_wrapper =
-      config_client.GetBooleanParameter(ENABLE_SELLER_CODE_WRAPPER);
-  bool enable_adtech_code_logging =
-      config_client.GetBooleanParameter(ENABLE_ADTECH_CODE_LOGGING);
-  bool enable_report_result_url_generation =
-      config_client.GetBooleanParameter(ENABLE_REPORT_RESULT_URL_GENERATION);
-  bool enable_report_win_url_generation =
-      config_client.GetBooleanParameter(ENABLE_REPORT_WIN_URL_GENERATION);
-
   std::unique_ptr<CodeFetcherInterface> code_fetcher;
+
+  // Convert Json string into a AuctionCodeBlobFetcherConfig proto
+  auction_service::SellerCodeFetchConfig code_fetch_proto;
+  absl::Status result = google::protobuf::util::JsonStringToMessage(
+      config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).data(),
+      &code_fetch_proto);
+  CHECK(result.ok()) << "Could not parse SELLER_CODE_FETCH_CONFIG JsonString "
+                        "to a proto message.";
+
+  bool enable_seller_debug_url_generation =
+      code_fetch_proto.enable_seller_debug_url_generation();
+  bool enable_seller_code_wrapper =
+      code_fetch_proto.enable_seller_code_wrapper();
+  bool enable_adtech_code_logging =
+      code_fetch_proto.enable_adtech_code_logging();
+  bool enable_report_result_url_generation =
+      code_fetch_proto.enable_report_result_url_generation();
+  bool enable_report_win_url_generation =
+      code_fetch_proto.enable_report_win_url_generation();
+  std::string js_url = code_fetch_proto.auction_js_url();
 
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
-  if (!config_client.GetStringParameter(JS_URL).empty()) {
+  if (!js_url.empty()) {
     auto wrap_code = [enable_seller_code_wrapper,
                       enable_seller_debug_url_generation,
                       enable_report_result_url_generation](
-                         const std::string& adtech_code_blob) {
+                         const std::vector<std::string>& adtech_code_blobs) {
       if (enable_seller_code_wrapper) {
-        return GetSellerWrappedCode(adtech_code_blob,
+        return GetSellerWrappedCode(adtech_code_blobs.at(0),
                                     enable_report_result_url_generation);
       }
       return enable_seller_debug_url_generation
-                 ? GetWrappedAdtechCodeForScoring(adtech_code_blob)
-                 : adtech_code_blob;
+                 ? GetWrappedAdtechCodeForScoring(adtech_code_blobs.at(0))
+                 : adtech_code_blobs.at(0);
     };
 
+    auto buyer_report_win_js_urls = code_fetch_proto.buyer_report_win_js_urls();
+    std::vector<std::string> endpoints = {js_url};
+    for (const auto& key_value : buyer_report_win_js_urls) {
+      endpoints.push_back(key_value.second);
+    }
+
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-        config_client.GetStringParameter(JS_URL).data(),
-        absl::Milliseconds(
-            config_client.GetIntParameter(JS_URL_FETCH_PERIOD_MS)),
+        endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
         std::move(http_fetcher), dispatcher, executor.get(),
-        absl::Milliseconds(config_client.GetIntParameter(JS_TIME_OUT_MS)),
-        wrap_code);
+        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()), wrap_code);
 
     code_fetcher->Start();
-  } else {
-    std::ifstream ifs(config_client.GetStringParameter(JS_PATH).data());
+  } else if (!code_fetch_proto.auction_js_path().empty()) {
+    std::ifstream ifs(code_fetch_proto.auction_js_path().data());
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
     if (enable_seller_code_wrapper) {
@@ -224,6 +230,9 @@ absl::Status RunServer() {
     }
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
+  } else {
+    return absl::UnavailableError(
+        "Code fetching config requires either a path or url.");
   }
 
   bool enable_auction_service_benchmark =

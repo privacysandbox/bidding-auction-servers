@@ -109,6 +109,10 @@ struct BidStats {
   explicit BidStats(int initial_bids_count_input);
 
   void BidCompleted(CompletedBidState completed_bid_state);
+  // Indicates whether any bid was successful or if no buyer returned an empty
+  // bid so that we should send a chaff back. This should be called after all
+  // the get bid calls to buyer frontend have returned.
+  bool HasAnySuccessfulBids();
   std::string ToString();
 };
 
@@ -334,6 +338,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // were erroneous. If all bids ended up in an error state then that should be
   // flagged as an error eventually.
   BidStats bid_stats_ ABSL_GUARDED_BY(bid_data_mu_);
+
+  // Log metrics for the requests that were initiated by the server
+  void LogInitiatedRequestMetrics(int initiated_request_duration_ms);
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

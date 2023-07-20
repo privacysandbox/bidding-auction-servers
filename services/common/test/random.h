@@ -368,6 +368,27 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
   return ad_with_bid;
 }
 
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+MakeARandomAdWithBidMetadataWithRejectionReason(
+    float min_bid, float max_bid, int num_ad_components = 5,
+    int rejection_reason_index = 0) {
+  // request object will take ownership
+  // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata ad_with_bid;
+  ad_with_bid.mutable_ad()->mutable_struct_value()->MergeFrom(
+      MakeAnAd(MakeARandomString(), "rejectReason", rejection_reason_index));
+  ad_with_bid.set_interest_group_name(MakeARandomString());
+  ad_with_bid.set_render(MakeARandomString());
+  ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
+  ad_with_bid.set_interest_group_owner(MakeARandomString());
+
+  for (int i = 0; i < num_ad_components; i++) {
+    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+  }
+
+  return ad_with_bid;
+}
+
 DebugReportUrls MakeARandomDebugReportUrls() {
   DebugReportUrls debug_report_urls;
   debug_report_urls.set_auction_debug_win_url(MakeARandomUrl());
@@ -427,7 +448,9 @@ MakeARandomGenerateBidsRawResponse() {
   return raw_response;
 }
 
-ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
+ScoreAdsResponse::AdScore MakeARandomAdScore(
+    int hob_buyer_entries = 0, int rejection_reason_ig_owners = 0,
+    int rejection_reason_ig_per_owner = 0) {
   ScoreAdsResponse::AdScore ad_score;
   float bid = MakeARandomNumber<float>(1, 2.5);
   float score = MakeARandomNumber<float>(1, 2.5);
@@ -445,6 +468,23 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(int hob_buyer_entries = 0) {
     ad_score.mutable_ig_owner_highest_scoring_other_bids_map()->try_emplace(
         MakeARandomString(), MakeARandomListOfNumbers());
   }
+  std::vector<ScoreAdsResponse::AdScore::AdRejectionReason>
+      ad_rejection_reasons;
+  for (int index = 0; index < rejection_reason_ig_owners; index++) {
+    std::string interest_group_owner = MakeARandomString();
+    for (int j = 0; j < rejection_reason_ig_per_owner; j++) {
+      ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason;
+      ad_rejection_reason.set_interest_group_name(MakeARandomString());
+      ad_rejection_reason.set_interest_group_owner(interest_group_owner);
+      int rejection_reason_value =
+          MakeARandomInt(1, 7);  // based on number of rejection reasons.
+      ad_rejection_reason.set_rejection_reason(
+          static_cast<SellerRejectionReason>(rejection_reason_value));
+      ad_rejection_reasons.push_back(ad_rejection_reason);
+    }
+  }
+  *ad_score.mutable_ad_rejection_reasons() = {ad_rejection_reasons.begin(),
+                                              ad_rejection_reasons.end()};
   return ad_score;
 }
 

@@ -18,6 +18,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
@@ -27,12 +28,11 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 PeriodicCodeFetcher::PeriodicCodeFetcher(
-    absl::string_view url_endpoint, absl::Duration fetch_period_ms,
+    std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
     std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
     const V8Dispatcher& dispatcher, server_common::Executor* executor,
-    absl::Duration time_out_ms,
-    absl::AnyInvocable<std::string(const std::string&)> wrap_code)
-    : url_endpoint_(url_endpoint),
+    absl::Duration time_out_ms, WrapCodeForDispatch wrap_code)
+    : url_endpoints_(url_endpoints),
       fetch_period_ms_(fetch_period_ms),
       curl_http_fetcher_(std::move(curl_http_fetcher)),
       dispatcher_(dispatcher),
@@ -55,39 +55,53 @@ void PeriodicCodeFetcher::End() {
 }
 
 void PeriodicCodeFetcher::PeriodicCodeFetch() {
-  auto done_callback = [this](absl::StatusOr<std::string> result) mutable {
-    if (result.ok()) {
-      VLOG(1) << "MultiCurlHttpFetcher Success Response: " << result.status();
+  auto done_callback =
+      [this](std::vector<absl::StatusOr<std::string>> results) mutable {
+        bool all_status_ok = true;
+        std::vector<std::string> results_value;
 
-      // String comparison to only load a new code blob into Roma
-      if (cb_result_value_ != *result) {
-        cb_result_value_ = *result;
-
-        std::string wrapped_code = wrap_code_(cb_result_value_);
-        absl::Status syncResult = dispatcher_.LoadSync(1, wrapped_code);
-        VLOG(1) << "Roma Client Response: " << syncResult;
-        if (syncResult.ok()) {
-          VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
+        for (const auto& result : results) {
+          if (!result.ok()) {
+            VLOG(1) << "MultiCurlHttpFetcher Failure Response: "
+                    << result.status();
+            all_status_ok = false;
+            break;
+          } else {
+            VLOG(1) << "MultiCurlHttpFetcher Success Response: "
+                    << result.status();
+            results_value.push_back(*result);
+          }
         }
-      }
-    } else {
-      VLOG(1) << "MultiCurlHttpFetcher Failure Response: " << result.status();
-    }
 
-    // Schedules the next code blob fetch and saves that task into task_id_.
-    task_id_ = executor_->RunAfter(fetch_period_ms_,
-                                   [this]() { PeriodicCodeFetch(); });
-  };
+        if (all_status_ok) {
+          // Vector comparison to only load a new code blob into Roma
+          if (cb_results_value_ != results_value) {
+            cb_results_value_ = results_value;
+
+            std::string wrapped_code = wrap_code_(cb_results_value_);
+            absl::Status syncResult = dispatcher_.LoadSync(1, wrapped_code);
+            VLOG(1) << "Roma Client Response: " << syncResult;
+            if (syncResult.ok()) {
+              VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
+            }
+          }
+        }
+
+        // Schedules the next code blob fetch and saves that task into task_id_.
+        task_id_ = executor_->RunAfter(fetch_period_ms_,
+                                       [this]() { PeriodicCodeFetch(); });
+      };
 
   // Create a HTTPRequest object from the url_endpoint_
-  HTTPRequest request;
-  request.url = std::string(url_endpoint_);
+  std::vector<HTTPRequest> requests;
+  for (std::string endpoint : url_endpoints_) {
+    HTTPRequest request;
+    request.url = std::string(endpoint);
+    requests.push_back(request);
+  }
 
-  // Convert time_out_ms_ from absl::Duration to int
-  int request_time_out = absl::ToInt64Milliseconds(time_out_ms_);
-
-  curl_http_fetcher_->FetchUrl(request, request_time_out,
-                               std::move(done_callback));
+  curl_http_fetcher_->FetchUrls(requests, time_out_ms_,
+                                std::move(done_callback));
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

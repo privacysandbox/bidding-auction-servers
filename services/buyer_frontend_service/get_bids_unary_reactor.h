@@ -123,6 +123,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;
+
+  // Log metrics for the requests that were initiated by the server
+  void LogInitiatedRequestMetrics(int initiated_request_duration_ms);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

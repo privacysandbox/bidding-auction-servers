@@ -14,6 +14,7 @@
 
 #include <thread>
 
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/blocking_counter.h"
@@ -24,6 +25,7 @@
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_adtech_code_wrapper.h"
 #include "services/bidding_service/bidding_service.h"
+#include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/common_service_flags.h"
@@ -277,13 +279,42 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
           });
 }
 
-void SetupV8Dispatcher(V8Dispatcher* dispatcher,
-                       absl::string_view adtech_code_blob) {
+// The following is a base64 encoded string of wasm binary output
+// that exports a function with the following definition:
+// int plusOne(int x)
+constexpr absl::string_view base64_wasm_plus_one =
+    "AGFzbQEAAAABhoCAgAABYAF/"
+    "AX8DgoCAgAABAASEgICAAAFwAAAFg4CAgAABAAEGgYCAgAAAB5SAgIAAAgZtZW1vcnkCAAdwbH"
+    "VzT25lAAAKjYCAgAABh4CAgAAAIABBAWoL";
+constexpr absl::string_view js_code_runs_wasm_helper = R"JS_CODE(
+function generateBid( interest_group,
+                      auction_signals,
+                      buyer_signals,
+                      trusted_bidding_signals,
+                      device_signals) {
+  const instance = new WebAssembly.Instance(device_signals.wasmHelper);
+
+  //Reshaped into an AdWithBid.
+  return {
+    render: "%s" + interest_group.adRenderIds[0],
+    ad: {"tbsLength": Object.keys(trusted_bidding_signals).length},
+    bid: instance.exports.plusOne(0),
+    allowComponentAuction: false
+  };
+}
+)JS_CODE";
+
+void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
+                       absl::string_view adtech_wasm = "") {
   DispatchConfig config;
   ASSERT_TRUE(dispatcher->Init(config).ok());
-  std::string wrapper_js_blob =
-      GetWrappedAdtechCodeForBidding(adtech_code_blob);
-  ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_js_blob).ok());
+  std::string wrapper_blob;
+  if (adtech_wasm.size() == 0) {
+    wrapper_blob = GetWrappedAdtechCodeForBidding(adtech_js);
+  } else {
+    wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
+  }
+  ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_blob).ok());
 }
 
 GenerateBidsRequest::GenerateBidsRawRequest BuildGenerateBidsRequestFromBrowser(
@@ -898,6 +929,30 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       GenerateBidsReturnsSuccessWithWasmHelperCall) {
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = false;
+  bool enable_buyer_debug_url_generation = false;
+  bool enable_buyer_code_wrapper = true;
+  bool enable_adtech_code_logging = true;
+
+  std::string raw_wasm_bytes;
+  ASSERT_TRUE(absl::Base64Unescape(base64_wasm_plus_one, &raw_wasm_bytes));
+  const std::string generate_bid_code =
+      GetBuyerWrappedCode(js_code_runs_wasm_helper, raw_wasm_bytes);
+  GenerateBidCodeWrapperTestHelper(
+      &response, generate_bid_code, enable_debug_reporting,
+      enable_buyer_debug_url_generation, enable_buyer_code_wrapper,
+      enable_adtech_code_logging);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
+    EXPECT_EQ(adWithBid.bid(), 1);
+  }
 }
 
 }  // namespace

@@ -54,11 +54,18 @@ variable "certificate_arn" {
 }
 
 # Variables related to EC2 instances.
-variable "instance_type" {
-  description = "Hardware and OS configuration for the EC2 instance."
+variable "bfe_instance_type" {
+  description = "Hardware and OS configuration for the BFE EC2 instance."
   type        = string
-  default     = "c6i.2xlarge"
+  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
+
+variable "bidding_instance_type" {
+  description = "Hardware and OS configuration for the Bidding EC2 instance."
+  type        = string
+  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
+}
+
 variable "bfe_instance_ami_id" {
   description = "Buyer FrontEnd operator Amazon Machine Image to run on EC2 instance."
   type        = string
@@ -76,17 +83,26 @@ variable "server_port" {
   type        = number
   default     = 50051
 }
-variable "enclave_cpu_count" {
-  description = "The number of vcpus to allocate to the enclave."
+variable "bfe_enclave_cpu_count" {
+  description = "The number of vcpus to allocate to the BFE enclave."
   type        = number
   default     = 6
 }
-variable "enclave_memory_mib" {
-  description = "Amount of memory to allocate to the enclave."
+variable "bfe_enclave_memory_mib" {
+  description = "Amount of memory to allocate to the BFE enclave."
   type        = number
   default     = 12000
 }
-
+variable "bidding_enclave_cpu_count" {
+  description = "The number of vcpus to allocate to the Bidding enclave."
+  type        = number
+  default     = 6
+}
+variable "bidding_enclave_memory_mib" {
+  description = "Amount of memory to allocate to the Bidding enclave."
+  type        = number
+  default     = 12000
+}
 variable "bfe_autoscaling_desired_capacity" {
   type    = number
   default = 1

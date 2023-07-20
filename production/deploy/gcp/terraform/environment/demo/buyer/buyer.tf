@@ -52,7 +52,6 @@ module "buyer" {
 
     ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
     BUYER_KV_SERVER_ADDR               = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    ENABLE_BUYER_DEBUG_URL_GENERATION  = "" # Example: "false"
     GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
     ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
@@ -61,15 +60,24 @@ module "buyer" {
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
-    ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
-    ENABLE_BUYER_CODE_WRAPPER  = "" # Example: "true"
-
-    JS_URL                 = "" # Example: "https://storage.googleapis.com/my-bucket/generateBid.js"
-    JS_URL_FETCH_PERIOD_MS = "" # Example: "3600000"
-    JS_TIME_OUT_MS         = "" # Example: "30000"
-    ROMA_TIMEOUT_MS        = "" # Example: "10000"
-    TELEMETRY_CONFIG       = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT     = "" # Example: "collector-buyer-1-${local.environment}.bfe-gcp.com:4317"
+    BUYER_CODE_FETCH_CONFIG = "" # Example:
+    # "{
+    #    "biddingJsPath": "",
+    #    "biddingJsUrl": "https://example.com/generateBid.js",
+    #    "biddingWasmHelperUrl": "",
+    #    "urlFetchPeriodMs": 13000000,
+    #    "urlFetchTimeoutMs": 30000,
+    #    "enableBuyerDebugUrlGeneration": true,
+    #    "enableBuyerCodeWrapper": false,
+    #    "enableAdtechCodeLogging": false,
+    #    "enableReportWinUrlGeneration": false
+    #  }"
+    JS_NUM_WORKERS      = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
+    JS_WORKER_QUEUE_LEN = "" # Example: "200".
+    JS_WORKER_MEM_MB    = "" # Example: "3072" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
+    ROMA_TIMEOUT_MS     = "" # Example: "10000"
+    TELEMETRY_CONFIG    = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT  = "" # Example: "collector-buyer-1-${local.environment}.bfe-gcp.com:4317"
 
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
@@ -98,7 +106,9 @@ module "buyer" {
   operator                           = ""    # Example: "buyer-1"
   regions                            = []    # Example: ["us-central1", "us-west1"]
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
-  machine_type                       = ""    # Example: "c2d-standard-4"
+  bfe_machine_type                   = ""    # Example: "n2d-standard-64"
+  bidding_machine_type               = ""    # Example: "n2d-standard-64"
+  collector_machine_type             = ""    # Example: "e2-micro"
   min_replicas_per_service_region    = 1     # Example: 1
   max_replicas_per_service_region    = 5     # Example: 5
   vm_startup_delay_seconds           = 200   # Example: 200

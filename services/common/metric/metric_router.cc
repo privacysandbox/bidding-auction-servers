@@ -23,6 +23,7 @@
 #include "opentelemetry/sdk/metrics/meter.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "services/common/metric/definition.h"
+#include "services/common/util/read_system.h"
 #include "services/common/util/status_macros.h"
 
 namespace privacy_sandbox::server_common::metric {
@@ -33,6 +34,8 @@ MetricRouter::MetricRouter(Meter* meter, PrivacyBudget fraction,
                            absl::Duration dp_output_period)
     : meter_(meter), dp_(this, fraction, dp_output_period) {
   if (meter_ != nullptr) {
+    AddObserverable(kCpuPercent, GetCpu);
+    AddObserverable(kMemoryKB, GetMemory);
     return;
   }
   ABSL_LOG(ERROR) << "meter is null at initializing, init with default";

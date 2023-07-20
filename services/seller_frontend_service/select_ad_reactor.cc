@@ -115,6 +115,16 @@ void BidStats::BidCompleted(CompletedBidState completed_bid_state) {
   }
 }
 
+bool BidStats::HasAnySuccessfulBids() {
+  const int sum_bids_count = skipped_bids_count + successful_bids_count +
+                             error_bids_count + empty_bids_count +
+                             pending_bids_count;
+  DCHECK_EQ(initial_bids_count, sum_bids_count);
+
+  const bool possible_chaff = empty_bids_count > 0 || skipped_bids_count > 0;
+  return successful_bids_count > 0 || possible_chaff || error_bids_count == 0;
+}
+
 std::string BidStats::ToString() {
   return absl::StrCat(
       "Bidding Stats: succeeded=", successful_bids_count,
@@ -229,7 +239,10 @@ bool SelectAdReactor::DecryptRequest() {
 
   absl::string_view encapsulated_req =
       request_->protected_audience_ciphertext();
-  logger_.vlog(5, "Protected audience ciphertext: ", encapsulated_req);
+  if (VLOG_IS_ON(5)) {
+    logger_.vlog(5, "Protected audience ciphertext: ",
+                 absl::Base64Escape(encapsulated_req));
+  }
 
   // Parse the encapsulated request for the key ID.
   absl::StatusOr<uint8_t> key_id = server_common::ParseKeyId(encapsulated_req);
@@ -397,6 +410,16 @@ void SelectAdReactor::Execute() {
   logger_.vlog(5, "Finishing execute call, response may be available later");
 }
 
+void SelectAdReactor::LogInitiatedRequestMetrics(
+    int initiated_request_duration) {
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<server_common::metric::kInitiatedRequestCount>(1));
+  LogIfError(metric_context_->AccumulateMetric<
+             server_common::metric::kInitiatedRequestTotalDuration>(
+      initiated_request_duration));
+}
+
 void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
                                const BuyerInput& buyer_input,
                                absl::string_view seller) {
@@ -405,7 +428,6 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
   if (buyer_client == nullptr) {
     logger_.vlog(2, "No buyer client found for buyer: ", buyer_ig_owner);
-
     UpdatePendingBidsState(CompletedBidState::SKIPPED);
   } else {
     auto get_bids_request =
@@ -440,11 +462,15 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
     log_context->set_generation_id(protected_audience_input_.generation_id());
     log_context->set_adtech_debug_id(buyer_debug_id);
     VLOG(6) << "Getting bid from a BFE";
+    absl::Time bfe_request_start_time = absl::Now();
     absl::Status execute_result = buyer_client->ExecuteInternal(
         std::move(get_bids_request), buyer_metadata_,
-        [buyer_ig_owner, this](
+        [buyer_ig_owner, this, bfe_request_start_time](
             absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
                 response) {
+          int bfe_request_duration_ms =
+              (absl::Now() - bfe_request_start_time) / absl::Milliseconds(1);
+          LogInitiatedRequestMetrics(bfe_request_duration_ms);
           VLOG(6) << "Received a bid response from a BFE";
           OnFetchBidsDone(std::move(response), buyer_ig_owner);
         },
@@ -479,6 +505,8 @@ void SelectAdReactor::OnFetchBidsDone(
       completed_bid_state = CompletedBidState::SUCCESS;
     }
   } else {
+    LogIfError(metric_context_->AccumulateMetric<
+               server_common::metric::kInitiatedRequestErrorCount>(1));
     logger_.vlog(1, "GetBidsRequest failed for buyer ", buyer_ig_owner,
                  "\nresponse status: ", response.status());
     completed_bid_state = CompletedBidState::ERROR;
@@ -490,42 +518,42 @@ void SelectAdReactor::OnFetchBidsDone(
 
 void SelectAdReactor::UpdatePendingBidsState(
     CompletedBidState completed_bid_state) {
-  int pending_bids_count = 0;
-  bool any_buyer_bids = false;
-  {
-    absl::MutexLock lock(&bid_data_mu_);
-    bid_stats_.BidCompleted(completed_bid_state);
-    pending_bids_count = bid_stats_.pending_bids_count;
-    logger_.vlog(5, "Updated pending bids state: ", bid_stats_.ToString());
+  absl::MutexLock lock(&bid_data_mu_);
+  bid_stats_.BidCompleted(completed_bid_state);
+  logger_.vlog(5, "Updated pending bids state: ", bid_stats_.ToString());
 
-    if (pending_bids_count == 0) {
-      for (auto& [buyer_ig_owner, response] : buyer_bids_) {
-        buyer_bids_list_.emplace(buyer_ig_owner, std::move(response));
-      }
-    }
-  }
-
-  if (pending_bids_count == 0) {
-    if (buyer_bids_list_.empty()) {
+  if (bid_stats_.pending_bids_count == 0) {
+    if (buyer_bids_.empty()) {
       logger_.vlog(2, kNoBidsReceived);
-    } else {
-      any_buyer_bids = true;
-      FetchScoringSignals();
+      if (!bid_stats_.HasAnySuccessfulBids()) {
+        logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
+        FinishWithInternalError(kInternalError);
+        return;
+      }
+      // Since no buyers have returned bids, we would still finish the call RPC
+      // call here and send a chaff back.
+      OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+      return;
     }
-  }
 
-  if (!any_buyer_bids) {
-    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    for (auto& [buyer_ig_owner, response] : buyer_bids_) {
+      buyer_bids_list_.emplace(buyer_ig_owner, std::move(response));
+    }
+    FetchScoringSignals();
   }
 }
 
 void SelectAdReactor::FetchScoringSignals() {
   ScoringSignalsRequest scoring_signals_request(buyer_bids_list_,
                                                 buyer_metadata_);
-
+  absl::Time kv_request_start_time = absl::Now();
   clients_.scoring_signals_async_provider.Get(
       scoring_signals_request,
-      [this](absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
+      [this, kv_request_start_time](
+          absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
+        int kv_request_duration_ms =
+            (absl::Now() - kv_request_start_time) / absl::Milliseconds(1);
+        LogInitiatedRequestMetrics(kv_request_duration_ms);
         OnFetchScoringSignalsDone(std::move(result));
       },
       absl::Milliseconds(config_client_.GetIntParameter(
@@ -537,6 +565,8 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
   if (result.ok()) {
     scoring_signals_ = std::move(result.value());
   } else {
+    LogIfError(metric_context_->AccumulateMetric<
+               server_common::metric::kInitiatedRequestErrorCount>(1));
     // TODO(b/245982466): Handle early abort and errors.
     logger_.vlog(1, "Scoring signals fetch from key-value server failed: ",
                  result.status());
@@ -572,11 +602,16 @@ void SelectAdReactor::ScoreAds() {
   log_context->set_adtech_debug_id(
       request_->auction_config().seller_debug_id());
   logger_.vlog(2, "\nScoreAdsRawRequest:\n", raw_request->DebugString());
+  absl::Time auction_request_start_time = absl::Now();
   auto on_scoring_done =
-      [this](
+      [this, auction_request_start_time](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
-              result) { OnScoreAdsDone(std::move(result)); };
-
+              result) {
+        int auction_request_duration_ms =
+            (absl::Now() - auction_request_start_time) / absl::Milliseconds(1);
+        LogInitiatedRequestMetrics(auction_request_duration_ms);
+        OnScoreAdsDone(std::move(result));
+      };
   absl::Status execute_result = clients_.scoring.ExecuteInternal(
       std::move(raw_request), {}, std::move(on_scoring_done),
       absl::Milliseconds(
@@ -643,26 +678,6 @@ std::string SelectAdReactor::GetAccumulatedErrorString(
 void SelectAdReactor::OnScoreAdsDone(
     absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
         response) {
-  {
-    absl::MutexLock lock(&bid_data_mu_);
-    logger_.vlog(2, bid_stats_.ToString());
-
-    // Sanity checks.
-    const int sum_bids_count =
-        bid_stats_.skipped_bids_count + bid_stats_.successful_bids_count +
-        bid_stats_.error_bids_count + bid_stats_.empty_bids_count +
-        bid_stats_.pending_bids_count;
-    DCHECK_EQ(bid_stats_.initial_bids_count, sum_bids_count);
-
-    const bool possible_chaff =
-        bid_stats_.empty_bids_count > 0 || bid_stats_.skipped_bids_count > 0;
-    if (bid_stats_.successful_bids_count == 0 && !possible_chaff &&
-        bid_stats_.error_bids_count > 0) {
-      logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
-      Finish(grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
-      return;
-    }
-  }
   if (HaveAdServerVisibleErrors()) {
     logger_.vlog(
         3, "Finishing the SelectAdRequest RPC with ad server visible error");
@@ -674,6 +689,8 @@ void SelectAdReactor::OnScoreAdsDone(
 
   logger_.vlog(2, "ScoreAdsResponse status:", response.status());
   if (!response.ok()) {
+    LogIfError(metric_context_->AccumulateMetric<
+               server_common::metric::kInitiatedRequestErrorCount>(1));
     benchmarking_logger_->End();
     Finish(grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
                         std::string(response.status().message())));
@@ -773,8 +790,8 @@ void SelectAdReactor::PerformDebugReporting(
           debug_url = adWithBid.debug_report_urls().auction_debug_loss_url();
         }
         HTTPRequest http_request = CreateDebugReportingHttpRequest(
-            debug_url, GetPlaceholderDataForInterestGroupOwner(
-                           ig_owner, *post_auction_signals));
+            debug_url, GetPlaceholderDataForInterestGroup(
+                           ig_owner, ig_name, *post_auction_signals));
         clients_.reporting->DoReport(http_request, done_cb);
       }
     }

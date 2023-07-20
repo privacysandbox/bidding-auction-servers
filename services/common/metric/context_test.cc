@@ -194,4 +194,34 @@ TEST_F(ContextTest, LogAfterDecrypt) {
   LogUnSafeForApproximate();
 }
 
+TEST_F(BaseTest, Accumulate) {
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogUnSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntApproximateCounter)),
+                Eq(101), _))
+      .WillOnce(Return(absl::OkStatus()));
+  CHECK_OK(context_->AccumulateMetric<kIntApproximateCounter>(1));
+  CHECK_OK(context_->AccumulateMetric<kIntApproximateCounter>(100));
+  // compile errors:
+  // CHECK_OK(context_->AccumulateMetric<kIntApproximateCounter>(1.2));
+  // CHECK_OK(context_->AccumulateMetric<kNotInList>(1))  ;
+  // CHECK_OK(context_->AccumulateMetric<kIntExactCounter>(1));
+}
+
+TEST_F(BaseTest, AccumulatePartition) {
+  EXPECT_CALL(mock_metric_router_,
+              LogUnSafe(Matcher<const DefinitionPartitionUnsafe&>(
+                            Ref(kIntUnSafePartitioned)),
+                        Eq(101), "buyer_1"))
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(mock_metric_router_,
+              LogUnSafe(Matcher<const DefinitionPartitionUnsafe&>(
+                            Ref(kIntUnSafePartitioned)),
+                        Eq(200), "buyer_2"))
+      .WillOnce(Return(absl::OkStatus()));
+  CHECK_OK(context_->AccumulateMetric<kIntUnSafePartitioned>(1, "buyer_1"));
+  CHECK_OK(context_->AccumulateMetric<kIntUnSafePartitioned>(100, "buyer_1"));
+  CHECK_OK(context_->AccumulateMetric<kIntUnSafePartitioned>(200, "buyer_2"));
+}
+
 }  // namespace privacy_sandbox::server_common::metric

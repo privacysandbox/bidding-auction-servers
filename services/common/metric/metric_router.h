@@ -24,7 +24,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
+#include "opentelemetry/common/key_value_iterable_view.h"
 #include "opentelemetry/metrics/meter.h"
+#include "opentelemetry/metrics/observer_result.h"
+#include "opentelemetry/metrics/sync_instruments.h"
+#include "opentelemetry/nostd/shared_ptr.h"
 #include "services/common/metric/definition.h"
 #include "services/common/metric/dp.h"
 
@@ -61,6 +65,20 @@ class MetricRouter {
   const Meter& meter() const { return *meter_; }
   const DifferentiallyPrivate<MetricRouter>& dp() const { return dp_; }
 
+  // Add callback for observerable metric, must be Privacy:kNonImpacting
+  // Gauge. callback is use to read value, return a map of <string, double>,
+  // string for "label" attribute, double for the value of metric.
+  template <typename T, Privacy privacy, Instrument instrument>
+  absl::Status AddObserverable(
+      const Definition<T, privacy, instrument>& definition,
+      absl::flat_hash_map<std::string, double> (*callback)());
+
+  // Remove callback for observerable metric.
+  template <typename T, Privacy privacy, Instrument instrument>
+  absl::Status RemoveObserverable(
+      const Definition<T, privacy, instrument>& definition,
+      absl::flat_hash_map<std::string, double> (*callback)());
+
  private:
   void AddHistogramView(absl::string_view instrument_name,
                         const internal::Histogram& histogram);
@@ -81,6 +99,10 @@ class MetricRouter {
       std::string,
       std::unique_ptr<opentelemetry::metrics::SynchronousInstrument>>
       instrument_ ABSL_GUARDED_BY(mutex_);
+  absl::flat_hash_map<std::string,
+                      opentelemetry::nostd::shared_ptr<
+                          opentelemetry::metrics::ObservableInstrument>>
+      observerable_;
   Meter* meter_;
   DifferentiallyPrivate<MetricRouter> dp_;
 };
@@ -181,6 +203,40 @@ absl::Status MetricRouter::LogUnSafe(
     return absl::UnimplementedError("instrument type not done");
   }
   dp_.Aggregate(&definition, value, partition);
+  return absl::OkStatus();
+}
+
+inline void fetch(opentelemetry::metrics::ObserverResult observer_result,
+                  void* callback) {
+  auto m = ((absl::flat_hash_map<std::string, double>(*)())callback)();
+  for (auto& [label, value] : m) {
+    opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+        opentelemetry::metrics::ObserverResultT<double>>>(observer_result)
+        ->Observe(value, {{"label", label}});
+  }
+}
+
+template <typename T, Privacy privacy, Instrument instrument>
+absl::Status MetricRouter::AddObserverable(
+    const Definition<T, privacy, instrument>& definition,
+    absl::flat_hash_map<std::string, double> (*callback)()) {
+  static_assert(instrument == Instrument::kGauge);
+  static_assert(privacy == Privacy::kNonImpacting);
+  observerable_
+      .emplace(definition.name_,
+               meter_->CreateDoubleObservableGauge(definition.name_.data()))
+      .first->second->AddCallback(fetch, (void*)callback);
+  return absl::OkStatus();
+}
+
+template <typename T, Privacy privacy, Instrument instrument>
+absl::Status MetricRouter::RemoveObserverable(
+    const Definition<T, privacy, instrument>& definition,
+    absl::flat_hash_map<std::string, double> (*callback)()) {
+  auto it = observerable_.find(definition.name_);
+  if (it != observerable_.end()) {
+    it->second->RemoveCallback(fetch, (void*)callback);
+  }
   return absl::OkStatus();
 }
 

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -29,27 +30,30 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using WrapCodeForDispatch =
+    absl::AnyInvocable<std::string(const std::vector<std::string>&)>;
+
 // AdTech Code Blob fetching system to update Adtech's GenerateBid(), ScoreAd(),
 // ReportWin() and ReportResult() code through a periodic pull mechanism with an
 // arbitary endpoint.
 class PeriodicCodeFetcher : public CodeFetcherInterface {
  public:
-  // url_endpoint: an  arbiturary endpoint to fetch a code blob from.
+  // url_endpoint: a vector of arbiturary endpoints to fetch code blobs from.
   // fetch_period_ms: a time period in between each code fetching.
   // curl_http_fetcher: a libcurl wrapper client that performs code fetching
-  // with FetchUrl(). dispatcher: a Roma wrapper client that code blob is passed
-  // to. executor: a raw pointer that takes in a reference of the executor owned
-  // by the servers where the instance of this class is also declared. The same
+  // with FetchUrl().
+  // dispatcher: a Roma wrapper client that code blob is passed to.
+  // executor: a raw pointer that takes in a reference of the executor owned by
+  // the servers where the instance of this class is also declared. The same
   // executor should be used to construct a HttpFetcherAsync object.
   // time_out_ms: a time out limit for HttpsFetcherAsyc client to stop executing
-  // FetchUrl. wrap_code: a lambda function that wraps the code blob for scoring
-  // / bidding.
+  // FetchUrl. wrap_code: a lambda function that wraps the code blob for
+  // scoring / bidding.
   explicit PeriodicCodeFetcher(
-      absl::string_view url_endpoint, absl::Duration fetch_period_ms,
+      std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
       std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
       const V8Dispatcher& dispatcher, server_common::Executor* executor,
-      absl::Duration time_out_ms,
-      absl::AnyInvocable<std::string(const std::string&)> wrap_code);
+      absl::Duration time_out_ms, WrapCodeForDispatch wrap_code);
 
   // Not copyable or movable.
   PeriodicCodeFetcher(const PeriodicCodeFetcher&) = delete;
@@ -68,19 +72,19 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
   // A private function that performs the actual code fetching process.
   void PeriodicCodeFetch();
 
-  absl::string_view url_endpoint_;
+  std::vector<std::string> url_endpoints_;
   absl::Duration fetch_period_ms_;
   std::unique_ptr<HttpFetcherAsync> curl_http_fetcher_;
   const V8Dispatcher& dispatcher_;
   server_common::Executor* executor_;
   absl::Duration time_out_ms_;
-  absl::AnyInvocable<std::string(const std::string&)> wrap_code_;
+  WrapCodeForDispatch wrap_code_;
 
   // Keeps track of the next task to be performed on the executor.
   server_common::TaskId task_id_;
   // Keeps track of the last result.value() returned by FetchUrl and callback
   // function.
-  std::string cb_result_value_;
+  std::vector<std::string> cb_results_value_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 
