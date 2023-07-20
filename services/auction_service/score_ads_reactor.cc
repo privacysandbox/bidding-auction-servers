@@ -58,6 +58,16 @@ constexpr char kRenderUrlsPropertyForScoreAd[] = "renderUrl";
 constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 constexpr int kArgSizeDefault = 6;
 constexpr int kArgSizeWithWrapper = 7;
+
+// The following fields are expected to returned by ScoreAd response
+constexpr char kDesirabilityPropertyForScoreAd[] = "desirability";
+constexpr char kAllowComponentAuctionPropertyForScoreAd[] =
+    "allowComponentAuction";
+constexpr char kRejectReasonPropertyForScoreAd[] = "rejectReason";
+constexpr char kDebugReportUrlsPropertyForScoreAd[] = "debugReportUrls";
+constexpr char kAuctionDebugLossUrlPropertyForScoreAd[] = "auctionDebugLossUrl";
+constexpr char kAuctionDebugWinUrlPropertyForScoreAd[] = "auctionDebugWinUrl";
+
 // TODO(b/259610873): Revert hardcoded device signals.
 std::string MakeDeviceSignals(
     absl::string_view publisher_hostname,
@@ -423,23 +433,25 @@ std::shared_ptr<std::string> BuildAuctionConfig(
       "}"));
 }
 
-absl::StatusOr<std::string> ParseAndGetScoreAdResponseJson(
+absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     bool enable_seller_code_wrapper, bool enable_adtech_code_logging,
     const std::string& response, const ContextLogger& logger) {
-  if (!enable_seller_code_wrapper) {
-    return response;
-  }
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  rapidjson::Value& response_obj = document["response"];
-  std::string response_json;
-  PS_ASSIGN_OR_RETURN(response_json, SerializeJsonDoc(response_obj));
+  if (!enable_seller_code_wrapper) {
+    return document;
+  }
   if (enable_adtech_code_logging) {
     const rapidjson::Value& logs = document["logs"];
     for (const auto& log : logs.GetArray()) {
       logger.vlog(1, "Logs: ", log.GetString());
     }
   }
-  return response_json;
+  rapidjson::Document response_obj;
+  const auto iterator = document.FindMember("response");
+  if (iterator != document.MemberEnd() && iterator->value.IsObject()) {
+    response_obj.Swap(iterator->value);
+  }
+  return response_obj;
 }
 
 }  // namespace
@@ -525,10 +537,15 @@ void ScoreAdsReactor::Execute() {
                           kNoAdsWithValidScoringSignals));
     return;
   }
-
+  absl::Time start_js_execution_time = absl::Now();
   auto status = dispatcher_.BatchExecute(
       dispatch_requests_,
-      [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+      [this, start_js_execution_time](
+          const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+        int js_execution_time_ms =
+            (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
+        LogIfError(metric_context_->LogHistogram<metric::kJSExecutionDuration>(
+            js_execution_time_ms));
         ScoreAdsCallback(result);
       });
 
@@ -539,6 +556,84 @@ void ScoreAdsReactor::Execute() {
                  status.ToString(absl::StatusToStringMode::kWithEverything));
     Finish(grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
+}
+
+void ParseScoreAdResponse(const rapidjson::Document& score_ad_resp,
+                          ScoreAdsResponse::AdScore* score_ads_response) {
+  auto desirability_itr =
+      score_ad_resp.FindMember(kDesirabilityPropertyForScoreAd);
+  if (desirability_itr == score_ad_resp.MemberEnd() ||
+      !desirability_itr->value.IsNumber()) {
+    score_ads_response->set_desirability(0.0);
+  } else {
+    score_ads_response->set_desirability(
+        (double)desirability_itr->value.GetDouble());
+  }
+
+  auto component_auction_iter =
+      score_ad_resp.FindMember(kAllowComponentAuctionPropertyForScoreAd);
+  if (component_auction_iter == score_ad_resp.MemberEnd() ||
+      !component_auction_iter->value.IsBool()) {
+    score_ads_response->set_allow_component_auction(false);
+  } else {
+    score_ads_response->set_allow_component_auction(
+        (double)component_auction_iter->value.GetBool());
+  }
+
+  auto debug_report_urls_itr =
+      score_ad_resp.FindMember(kDebugReportUrlsPropertyForScoreAd);
+  if (debug_report_urls_itr == score_ad_resp.MemberEnd()) {
+    return;
+  }
+  DebugReportUrls debug_report_urls;
+  if (debug_report_urls_itr->value.HasMember(
+          kAuctionDebugWinUrlPropertyForScoreAd) &&
+      debug_report_urls_itr->value[kAuctionDebugWinUrlPropertyForScoreAd]
+          .IsString()) {
+    debug_report_urls.set_auction_debug_win_url(
+        debug_report_urls_itr->value[kAuctionDebugWinUrlPropertyForScoreAd]
+            .GetString());
+  }
+  if (debug_report_urls_itr->value.HasMember(
+          kAuctionDebugLossUrlPropertyForScoreAd) &&
+      debug_report_urls_itr->value[kAuctionDebugLossUrlPropertyForScoreAd]
+          .IsString()) {
+    debug_report_urls.set_auction_debug_loss_url(
+        debug_report_urls_itr->value[kAuctionDebugLossUrlPropertyForScoreAd]
+            .GetString());
+  }
+  *score_ads_response->mutable_debug_report_urls() = debug_report_urls;
+}
+
+std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
+ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
+                       absl::string_view interest_group_owner,
+                       absl::string_view interest_group_name,
+                       const ContextLogger& logger) {
+  std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
+      ad_rejection_reason;
+  auto reject_reason_itr =
+      score_ad_resp.FindMember(kRejectReasonPropertyForScoreAd);
+  if (reject_reason_itr == score_ad_resp.MemberEnd() ||
+      !reject_reason_itr->value.IsString()) {
+    return ad_rejection_reason;
+  }
+  std::string rejection_reason_str =
+      score_ad_resp[kRejectReasonPropertyForScoreAd].GetString();
+  SellerRejectionReason rejection_reason =
+      ToSellerRejectionReason(rejection_reason_str);
+
+  // We do not send rejection reasons if they are not available.
+  if (rejection_reason ==
+      SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE) {
+    return ad_rejection_reason;
+  }
+  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason_;
+  ad_rejection_reason_.set_interest_group_owner(interest_group_owner);
+  ad_rejection_reason_.set_interest_group_name(interest_group_name);
+  ad_rejection_reason_.set_rejection_reason(rejection_reason);
+  ad_rejection_reason = std::make_optional(ad_rejection_reason_);
+  return ad_rejection_reason;
 }
 
 // Handles the output of the code execution dispatch.
@@ -565,14 +660,14 @@ void ScoreAdsReactor::ScoreAdsCallback(
   // Saving the desirability allows us to compare desirability between ads
   // without re-parsing the current most-desirable ad every time.
   float desirability_of_most_desirable_ad = std::numeric_limits<float>::min();
+  // List of rejection reasons provided by seller.
+  std::vector<ScoreAdsResponse::AdScore::AdRejectionReason>
+      ad_rejection_reasons;
+
   std::optional<ScoreAdsResponse::AdScore> winning_ad;
   for (int index = 0; index < responses.size(); index++) {
     if (responses[index].ok()) {
-      ScoreAdsResponse::AdScore score_ads_response;
-      // Set the fields that the response includes automatically.
-      google::protobuf::json::ParseOptions parse_options;
-      parse_options.ignore_unknown_fields = true;
-      absl::StatusOr<std::string> response_json =
+      absl::StatusOr<rapidjson::Document> response_json =
           ParseAndGetScoreAdResponseJson(
               enable_seller_code_wrapper_, enable_adtech_code_logging_,
               responses[index].value().resp, logger_);
@@ -581,11 +676,11 @@ void ScoreAdsReactor::ScoreAdsCallback(
                      response_json.status().ToString(
                          absl::StatusToStringMode::kWithEverything));
       }
-      auto valid = google::protobuf::util::JsonStringToMessage(
-          response_json.value(), &score_ads_response, parse_options);
       const AdWithBidMetadata* ad =
           ad_data_.at(responses[index].value().id).get();
-      if (valid.ok()) {
+      if (response_json.ok()) {
+        ScoreAdsResponse::AdScore score_ads_response;
+        ParseScoreAdResponse(response_json.value(), &score_ads_response);
         score_ads_response.set_interest_group_name(ad->interest_group_name());
         score_ads_response.set_interest_group_owner(ad->interest_group_owner());
         score_ads_response.set_buyer_bid(ad->bid());
@@ -600,6 +695,13 @@ void ScoreAdsReactor::ScoreAdsCallback(
         score_ad_map[score_ads_response.desirability()].push_back(index);
         ad_scores_.push_back(
             std::make_unique<ScoreAdsResponse::AdScore>(score_ads_response));
+        // Parse Ad rejection reason and store only if it has value.
+        const auto& ad_rejection_reason = ParseAdRejectionReason(
+            response_json.value(), ad->interest_group_owner(),
+            ad->interest_group_name(), logger_);
+        if (ad_rejection_reason.has_value()) {
+          ad_rejection_reasons.push_back(ad_rejection_reason.value());
+        }
       } else {
         logger_.warn(
             "Invalid json output from code execution for interest group ",
@@ -650,6 +752,10 @@ void ScoreAdsReactor::ScoreAdsCallback(
         }
       }
     }
+
+    winning_ad->mutable_ad_rejection_reasons()->Assign(
+        ad_rejection_reasons.begin(), ad_rejection_reasons.end());
+
     PerformDebugReporting(winning_ad);
     *raw_response_.mutable_ad_score() = winning_ad.value();
     DCHECK(encryption_enabled_);
@@ -694,8 +800,8 @@ void ScoreAdsReactor::PerformDebugReporting(
         debug_url = ad_score->debug_report_urls().auction_debug_loss_url();
       }
       HTTPRequest http_request = CreateDebugReportingHttpRequest(
-          debug_url, GetPlaceholderDataForInterestGroupOwner(
-                         ig_owner, *post_auction_signals));
+          debug_url, GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                                        *post_auction_signals));
       async_reporter_->DoReport(http_request, done_cb);
     }
   }

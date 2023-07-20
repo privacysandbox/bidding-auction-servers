@@ -40,14 +40,19 @@ constexpr absl::string_view kBuyerBaseCode_template = R"JS_CODE(
       };
     }
 )JS_CODE";
-
 constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
+  const globalWasmHex = [];
+  const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
+
     function generateBidEntryFunction(interest_group,
                                 auction_signals,
                                 buyer_signals,
                                 trusted_bidding_signals,
                                 device_signals,
                                 enable_logging){
+
+    device_signals.wasmHelper = globalWasmHelper;
+
     var ps_logs = [];
     if(enable_logging){
       console.log = function(...args) {

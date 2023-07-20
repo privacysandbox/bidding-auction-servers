@@ -32,6 +32,11 @@ processors:
 
 exporters:
   googlecloud:
+    metric:
+      resource_filters:
+        # configures all resources to be passed on to GCP
+        # https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/googlecloudexporter/README.md
+        - regex: .*
 
 service:
   pipelines:

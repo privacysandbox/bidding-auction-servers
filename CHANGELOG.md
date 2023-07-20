@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.9.0 (2023-07-20)
+
+
+### Features
+
+* [reporting] Add helper function to build the dispatch request for
+* add buyerReportWinJsUrls to terraform files and enable_report_win_url_generation to BuyerCodeFetchConfig
+* add cpu memory metric for debugging
+* add GCP metric dashboard
+* add method to accumulate metric values before logging
+* changing PeriodicCodeFetcher to add wasm support and runtime config support
+* load and append wasm string to the JS code wrapper
+* support different instance types per service in GCP
+* Upgrade build-system to release-0.31.0
+
+
+### Bug Fixes
+
+* Add seller_code_fetch_config and buyer_code_fetch_config to server start scripts
+* CPU monitoring is not limited to a specific environment
+* Define container image log variables once
+* Don't end select ad request prematurely
+* patch google dp library to replace logging with absl
+* Update and read the buyer_bids_ with lock
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to v0.33.0
+
 ## 0.8.0 (2023-07-12)
 
 

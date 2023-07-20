@@ -74,7 +74,7 @@ resource "google_compute_instance_template" "frontends" {
     # }
   }
 
-  machine_type = var.machine_type
+  machine_type = var.frontend_machine_type
 
   service_account {
     email  = var.service_account_email
@@ -215,7 +215,7 @@ resource "google_compute_instance_template" "backends" {
     # }
   }
 
-  machine_type = var.machine_type
+  machine_type = var.backend_machine_type
 
   service_account {
     email  = var.service_account_email
@@ -328,7 +328,7 @@ resource "google_compute_instance_template" "collector" {
     # }
   }
 
-  machine_type = "e2-micro"
+  machine_type = var.collector_machine_type
 
   service_account {
     email  = var.service_account_email

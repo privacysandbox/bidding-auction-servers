@@ -73,6 +73,16 @@ bool GetBidsUnaryReactor::DecryptRequest() {
   return true;
 }
 
+void GetBidsUnaryReactor::LogInitiatedRequestMetrics(
+    int initiated_request_duration_ms) {
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<server_common::metric::kInitiatedRequestCount>(1));
+  LogIfError(metric_context_->AccumulateMetric<
+             server_common::metric::kInitiatedRequestTotalDuration>(
+      initiated_request_duration_ms));
+}
+
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   DCHECK(config_.encryption_enabled);
@@ -83,23 +93,29 @@ void GetBidsUnaryReactor::Execute() {
   VLOG(5) << "Successfully decrypted the request";
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
+  absl::Time kv_request_start_time = absl::Now();
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
-      [reactor{this},
-       this](absl::StatusOr<std::unique_ptr<BiddingSignals>> response) {
+      [this, kv_request_start_time](
+          absl::StatusOr<std::unique_ptr<BiddingSignals>> response) {
+        int kv_request_duration_ms =
+            (absl::Now() - kv_request_start_time) / absl::Milliseconds(1);
+        LogInitiatedRequestMetrics(kv_request_duration_ms);
         if (!response.ok()) {
+          LogIfError(metric_context_->AccumulateMetric<
+                     server_common::metric::kInitiatedRequestErrorCount>(1));
           // Return error to client.
           logger_.vlog(1, "GetBiddingSignals request failed with status:",
                        response.status());
-          reactor->Finish(grpc::Status(
+          Finish(grpc::Status(
               static_cast<grpc::StatusCode>(response.status().code()),
               std::string(response.status().message())));
           return;
         }
         // Final callback needs to check status of others and send bidding
         // request.
-        reactor->PrepareAndGenerateBid(std::move(response.value()));
+        PrepareAndGenerateBid(std::move(response.value()));
       },
       absl::Milliseconds(config_.bidding_signals_load_timeout_ms));
 }
@@ -115,13 +131,19 @@ void GetBidsUnaryReactor::PrepareAndGenerateBid(
           log_context);
 
   logger_.vlog(2, "GenerateBidsRequest:\n", raw_bidding_input->DebugString());
-
+  absl::Time bs_request_start_time = absl::Now();
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
       std::move(raw_bidding_input), {},
-      [this](absl::StatusOr<
-             std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
-                 raw_response) {
+      [this, bs_request_start_time](
+          absl::StatusOr<
+              std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
+              raw_response) {
+        int bs_request_duration_ms =
+            (absl::Now() - bs_request_start_time) / absl::Milliseconds(1);
+        LogInitiatedRequestMetrics(bs_request_duration_ms);
         if (!raw_response.ok()) {
+          LogIfError(metric_context_->AccumulateMetric<
+                     server_common::metric::kInitiatedRequestErrorCount>(1));
           const std::string err_msg = absl::StrCat(
               "Execution of GenerateBids request failed with status: ",
               raw_response.status().message());

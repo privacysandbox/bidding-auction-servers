@@ -50,7 +50,9 @@ module "autoscaling" {
   frontend_service_name              = "bfe"
   collector_service_name             = "collector"
   collector_service_port             = var.collector_service_port
-  machine_type                       = var.machine_type
+  frontend_machine_type              = var.bfe_machine_type
+  backend_machine_type               = var.bidding_machine_type
+  collector_machine_type             = var.collector_machine_type
   min_replicas_per_service_region    = var.min_replicas_per_service_region
   max_replicas_per_service_region    = var.max_replicas_per_service_region
   vm_startup_delay_seconds           = var.vm_startup_delay_seconds
@@ -82,6 +84,10 @@ module "load_balancing" {
   collector_service_port             = var.collector_service_port
 }
 
+module "buyer_dashboard" {
+  source      = "../../services/dashboards/buyer_dashboard"
+  environment = var.environment
+}
 
 resource "google_secret_manager_secret" "runtime_flag_secrets" {
   for_each = var.runtime_flags

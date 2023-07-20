@@ -68,11 +68,6 @@ variable "frontend_domain_ssl_certificate_id" {
   type        = string
 }
 
-variable "machine_type" {
-  description = "Must be listed here: https://cloud.google.com/compute/confidential-vm/docs/os-and-machine-type#machine-types"
-  type        = string
-}
-
 variable "min_replicas_per_service_region" {
   description = "Minimum amount of replicas per each service region (a single managed instance group)."
   type        = number
@@ -119,4 +114,19 @@ variable "tee_impersonate_service_accounts" {
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
   type        = number
+}
+
+variable "sfe_machine_type" {
+  description = "Machine type for the Seller Frontend Service. Must be compatible with confidential compute."
+  type        = string
+}
+
+variable "auction_machine_type" {
+  description = "Machine type for the Auction Service. Must be compatible with confidential compute."
+  type        = string
+}
+
+variable "collector_machine_type" {
+  description = "Machine type for the collector service."
+  type        = string
 }

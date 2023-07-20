@@ -275,26 +275,48 @@ constexpr bool IsInList(const Definition<T, privacy, instrument>& definition,
 inline constexpr Definition<int, Privacy::kNonImpacting,
                             Instrument::kUpDownCounter>
     kTotalRequestFailedCount(
-        "kTotalRequestFailedCount",
+        "request.failed_count",
         "Total number of requests that resulted in failure");
 
 inline constexpr Definition<int, Privacy::kNonImpacting,
                             Instrument::kUpDownCounter>
-    kTotalRequestCount("kTotalRequestCounter",
+    kTotalRequestCount("request.count",
                        "Total number of requests received by the server");
 
-inline constexpr double kTimeHistogram[] = {50, 100, 200, 400, 800};
+inline constexpr double kTimeHistogram[] = {50,    100,   250,  500,
+                                            1'000, 2'000, 4'000};
 inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
-    kServerTotalTimeMs("kServerTotalTimeMs",
+    kServerTotalTimeMs("request.duration_ms",
                        "Total time taken by the server to execute the request",
                        kTimeHistogram);
 
-inline constexpr double kSizeHistogram[] = {0, 20, 40, 80, 100, 200, 400, 800};
+inline constexpr double kSizeHistogram[] = {
+    0,      250,    500,     1'000,   2'000,   4'000,     8'000,    16'000,
+    32'000, 64'000, 128'000, 256'000, 512'000, 1'024'000, 2'048'000};
 inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
-    kResponseByte("kResponseByte", "Response size in bytes", kSizeHistogram);
+    kResponseByte("response.size_bytes", "Response size in bytes",
+                  kSizeHistogram);
 
 inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
-    kRequestByte("kRequestByte", "Request size in bytes", kSizeHistogram);
+    kRequestByte("request.size_bytes", "Request size in bytes", kSizeHistogram);
+
+inline constexpr Definition<double, Privacy::kNonImpacting, Instrument::kGauge>
+    kCpuPercent("system.cpu.percent", "cpu usage");
+inline constexpr Definition<double, Privacy::kNonImpacting, Instrument::kGauge>
+    kMemoryKB("system.memory.usage_kb", "Memory usage");
+inline constexpr Definition<int, Privacy::kNonImpacting,
+                            Instrument::kUpDownCounter>
+    kInitiatedRequestCount("initiated_request.count",
+                           "Total number of requests initiated by the server");
+inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
+    kInitiatedRequestTotalDuration(
+        "initiated_request.duration_ms",
+        "Total duration of requests initiated by the server", kTimeHistogram);
+inline constexpr Definition<int, Privacy::kNonImpacting,
+                            Instrument::kUpDownCounter>
+    kInitiatedRequestErrorCount("initiated_request.errors_count",
+                                "Total number of errors occurred for the "
+                                "requests received by the server");
 }  // namespace privacy_sandbox::server_common::metric
 
 #endif  // SERVICES_COMMON_METRIC_DEFINITION_H_

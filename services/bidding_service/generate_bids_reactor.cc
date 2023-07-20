@@ -494,9 +494,15 @@ void GenerateBidsReactor::Execute() {
   }
 
   benchmarking_logger_->BuildInputEnd();
+  absl::Time start_js_execution_time = absl::Now();
   auto status = dispatcher_.BatchExecute(
       dispatch_requests_,
-      [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+      [this, start_js_execution_time](
+          const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+        int js_execution_time_ms =
+            (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
+        LogIfError(metric_context_->LogHistogram<metric::kJSExecutionDuration>(
+            js_execution_time_ms));
         GenerateBidsCallback(result);
         EncryptResponseAndFinish(grpc::Status::OK);
       });

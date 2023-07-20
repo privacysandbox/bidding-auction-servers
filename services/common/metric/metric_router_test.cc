@@ -31,6 +31,7 @@
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/meter.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
+#include "services/common/util/read_system.h"
 
 namespace privacy_sandbox::server_common::metric {
 namespace {
@@ -67,7 +68,7 @@ constexpr Definition<double, Privacy::kNonImpacting,
 
 class MetricRouterTest : public ::testing::Test {
  protected:
-  void SetUp() override {
+  void init() {
     auto provider = std::make_shared<metric_sdk::MeterProvider>();
     provider->AddMetricReader(
         std::make_unique<metric_sdk::PeriodicExportingMetricReader>(
@@ -81,7 +82,9 @@ class MetricRouterTest : public ::testing::Test {
                     kExportIntervalMillis / 2)}));
     metrics_api::Provider::SetMeterProvider(
         (std::shared_ptr<metrics_api::MeterProvider>)provider);
-
+  }
+  void SetUp() override {
+    init();
     test_instance_ =
         std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
                                            ->GetMeter("not used name", "0.0.1")
@@ -203,7 +206,7 @@ TEST_F(MetricRouterTest, LogSafePartitionedDouble) {
 class MetricRouterDpNoNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
-    MetricRouterTest::SetUp();
+    init();
     test_instance_ =
         std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
                                            ->GetMeter("not used name", "0.0.1")
@@ -240,12 +243,14 @@ TEST_F(MetricRouterDpNoNoiseTest, LogPartitioned) {
 class MetricRouterDpNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
-    MetricRouterTest::SetUp();
+    init();
     test_instance_ =
         std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
                                            ->GetMeter("not used name", "0.0.1")
                                            .get(),
                                        PrivacyBudget{1}, kDpInterval);
+    test_instance_->RemoveObserverable(kCpuPercent, GetCpu);
+    test_instance_->RemoveObserverable(kMemoryKB, GetMemory);
   }
   absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
 };
@@ -268,7 +273,6 @@ TEST_F(MetricRouterDpNoiseTest, LogPartitioned) {
   std::regex r("value[ \t]*:[ \t]*([0-9]+)");
   std::smatch sm;
   std::vector<int> results;
-  ABSL_LOG(ERROR) << output;
   for (int i = 0; i < 3; ++i) {
     regex_search(output, sm, r);
     results.push_back(stoi(sm[1]));
@@ -281,5 +285,27 @@ TEST_F(MetricRouterDpNoiseTest, LogPartitioned) {
   }
   EXPECT_TRUE(at_least_one_not_200);
 }
+
+constexpr Definition<int, Privacy::kNonImpacting, Instrument::kGauge>
+    kTestGauge(/*name*/
+               "test_gauge", /*description*/ "test_gauge");
+
+absl::flat_hash_map<std::string, double> TestFetch() {
+  return {
+      {"p1", 1},
+      {"p2", 2},
+  };
+}
+
+TEST_F(MetricRouterTest, AddObserverable) {
+  CHECK_OK(test_instance_->AddObserverable(kTestGauge, TestFetch));
+  std::string output = ReadSs();
+  EXPECT_THAT(output, ContainsRegex("instrument name[ \t]*:[ \t]*test_gauge"));
+  EXPECT_THAT(output, ContainsRegex("value[ \t]+:[ \t]+1"));
+  EXPECT_THAT(output, ContainsRegex("label[ \t]*:[ \t]*p1"));
+  EXPECT_THAT(output, ContainsRegex("value[ \t]+:[ \t]+2"));
+  EXPECT_THAT(output, ContainsRegex("label[ \t]*:[ \t]*p2"));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::server_common::metric

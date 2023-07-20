@@ -133,14 +133,14 @@ module "autoscaling_bfe" {
   autoscaling_subnet_ids       = module.networking.private_subnet_ids
   instance_ami_id              = var.bfe_instance_ami_id
   instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.instance_type
+  instance_type                = var.bfe_instance_type
   target_group_arns            = module.load_balancing_bfe.target_group_arns
   autoscaling_desired_capacity = var.bfe_autoscaling_desired_capacity
   autoscaling_max_size         = var.bfe_autoscaling_max_size
   autoscaling_min_size         = var.bfe_autoscaling_min_size
   instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.enclave_cpu_count
-  enclave_memory_mib           = var.enclave_memory_mib
+  enclave_cpu_count            = var.bfe_enclave_cpu_count
+  enclave_memory_mib           = var.bfe_enclave_memory_mib
 }
 
 ################ Bidding operator Setup ################
@@ -174,14 +174,14 @@ module "autoscaling_bidding" {
   autoscaling_subnet_ids       = module.networking.private_subnet_ids
   instance_ami_id              = var.bidding_instance_ami_id
   instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.instance_type
+  instance_type                = var.bidding_instance_type
   target_group_arns            = module.load_balancing_bidding.target_group_arns
   autoscaling_desired_capacity = var.bidding_autoscaling_desired_capacity
   autoscaling_max_size         = var.bidding_autoscaling_max_size
   autoscaling_min_size         = var.bidding_autoscaling_min_size
   instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.enclave_cpu_count
-  enclave_memory_mib           = var.enclave_memory_mib
+  enclave_cpu_count            = var.bidding_enclave_cpu_count
+  enclave_memory_mib           = var.bidding_enclave_memory_mib
 }
 
 

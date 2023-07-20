@@ -17,6 +17,7 @@
 #include "services/common/code_fetch/periodic_code_fetcher.h"
 
 #include <utility>
+#include <vector>
 
 #include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
@@ -29,22 +30,30 @@ namespace {
 TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
   MockV8Dispatcher dispatcher;
-  absl::string_view url = "test.com";
-  absl::string_view url_response = "function test(){}";
+  absl::string_view js_url = "js.com";
+  absl::string_view wasm_helper_url = "wasm.com";
+  std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
+
+  const std::vector<std::string>& endpoints = {"js.com", "wasm.com"};
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](const std::string& code_blob) { return "test"; };
+  auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
+    return "test";
+  };
   constexpr char kSampleWrappedCode[] = "test";
 
   absl::BlockingCounter done(1);
-  EXPECT_CALL(*curl_http_fetcher, FetchUrl)
-      .WillOnce([&url, &url_response](
-                    HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
+      .WillOnce([&js_url, &wasm_helper_url, &url_response](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<
+                        void(std::vector<absl::StatusOr<std::string>>) &&>
                         done_callback) {
-        EXPECT_EQ(url, request.url);
-        std::move(done_callback)(std::string(url_response));
+        EXPECT_EQ(js_url, requests.at(0).url);
+        EXPECT_EQ(wasm_helper_url, requests.at(1).url);
+        std::move(done_callback)(url_response);
       });
 
   EXPECT_CALL(*executor, Run)
@@ -59,7 +68,7 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
             return absl::OkStatus();
           });
 
-  PeriodicCodeFetcher code_fetcher("test.com", fetch_period,
+  PeriodicCodeFetcher code_fetcher(endpoints, fetch_period,
                                    std::move(curl_http_fetcher), dispatcher,
                                    executor.get(), time_out, WrapCode);
   code_fetcher.Start();
@@ -70,21 +79,27 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
 TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
   MockV8Dispatcher dispatcher;
-  absl::string_view url_response = "function test(){}";
+  std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
+
+  const std::vector<std::string>& endpoints = {"test.com"};
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](const std::string& code_blob) { return "test"; };
+  auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
+    return "test";
+  };
 
   absl::BlockingCounter done_fetch_url(1);
-  EXPECT_CALL(*curl_http_fetcher, FetchUrl)
+  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
       .Times(1)
       .WillOnce([&url_response, &done_fetch_url](
-                    HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<
+                        void(std::vector<absl::StatusOr<std::string>>) &&>
                         done_callback) {
         done_fetch_url.DecrementCount();
-        std::move(done_callback)(std::string(url_response));
+        std::move(done_callback)(url_response);
       });
 
   EXPECT_CALL(*executor, Run)
@@ -99,7 +114,7 @@ TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
         return id;
       });
 
-  PeriodicCodeFetcher code_fetcher("test.com", fetch_period,
+  PeriodicCodeFetcher code_fetcher(endpoints, fetch_period,
                                    std::move(curl_http_fetcher), dispatcher,
                                    executor.get(), time_out, WrapCode);
   code_fetcher.Start();
@@ -110,25 +125,30 @@ TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
 TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
   MockV8Dispatcher dispatcher;
-  absl::string_view url_response = "function test(){}";
+  std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
+
+  const std::vector<std::string>& endpoints = {"test.com"};
   absl::Duration fetch_period = absl::Milliseconds(3000);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
-  auto WrapCode = [](const std::string& code_blob) { return "test"; };
+  auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
+    return "test";
+  };
   constexpr char kSampleWrappedCode[] = "test";
 
   absl::BlockingCounter done_fetch_url(2);
   absl::BlockingCounter done_load_sync(1);
-  EXPECT_CALL(*curl_http_fetcher, FetchUrl)
+  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
       .Times(2)
-      .WillRepeatedly(
-          [&url_response, &done_fetch_url](
-              HTTPRequest request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                  done_callback) {
-            done_fetch_url.DecrementCount();
-            std::move(done_callback)(std::string(url_response));
-          });
+      .WillRepeatedly([&url_response, &done_fetch_url](
+                          const std::vector<HTTPRequest>& requests,
+                          absl::Duration timeout,
+                          absl::AnyInvocable<
+                              void(std::vector<absl::StatusOr<std::string>>) &&>
+                              done_callback) {
+        done_fetch_url.DecrementCount();
+        std::move(done_callback)(url_response);
+      });
 
   EXPECT_CALL(*executor, Run)
       .Times(1)
@@ -136,12 +156,12 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
 
   EXPECT_CALL(*executor, RunAfter)
       .Times(2)
-      .WillOnce([&fetch_period](absl::Duration duration,
-                                absl::AnyInvocable<void()> closure) {
-        closure();
-        server_common::TaskId id;
-        return id;
-      });
+      .WillOnce(
+          [](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            closure();
+            server_common::TaskId id;
+            return id;
+          });
 
   EXPECT_CALL(dispatcher, LoadSync)
       .Times(1)
@@ -152,7 +172,7 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
         return absl::OkStatus();
       });
 
-  PeriodicCodeFetcher code_fetcher("test.com", fetch_period,
+  PeriodicCodeFetcher code_fetcher(endpoints, fetch_period,
                                    std::move(curl_http_fetcher), dispatcher,
                                    executor.get(), time_out, WrapCode);
   code_fetcher.Start();

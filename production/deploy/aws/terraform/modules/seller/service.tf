@@ -205,14 +205,14 @@ module "autoscaling_sfe" {
   autoscaling_subnet_ids       = module.networking.private_subnet_ids
   instance_ami_id              = var.sfe_instance_ami_id
   instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.instance_type
+  instance_type                = var.sfe_instance_type
   target_group_arns            = concat(module.load_balancing_sfe.target_group_arns, [aws_lb_target_group.alb_http2_target_group.arn])
   autoscaling_desired_capacity = var.sfe_autoscaling_desired_capacity
   autoscaling_max_size         = var.sfe_autoscaling_max_size
   autoscaling_min_size         = var.sfe_autoscaling_min_size
   instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.enclave_cpu_count
-  enclave_memory_mib           = var.enclave_memory_mib
+  enclave_cpu_count            = var.sfe_enclave_cpu_count
+  enclave_memory_mib           = var.sfe_enclave_memory_mib
 }
 
 
@@ -247,14 +247,14 @@ module "autoscaling_auction" {
   autoscaling_subnet_ids       = module.networking.private_subnet_ids
   instance_ami_id              = var.auction_instance_ami_id
   instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.instance_type
+  instance_type                = var.auction_instance_type
   target_group_arns            = module.load_balancing_auction.target_group_arns
   autoscaling_desired_capacity = var.auction_autoscaling_desired_capacity
   autoscaling_max_size         = var.auction_autoscaling_max_size
   autoscaling_min_size         = var.auction_autoscaling_min_size
   instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.enclave_cpu_count
-  enclave_memory_mib           = var.enclave_memory_mib
+  enclave_cpu_count            = var.auction_enclave_cpu_count
+  enclave_memory_mib           = var.auction_enclave_memory_mib
 }
 
 

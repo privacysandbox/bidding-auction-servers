@@ -13,7 +13,8 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
 cc_library(
     name = "runtime_flags",
@@ -183,12 +184,27 @@ cc_test(
         "//services/common/test:mocks",
         "//services/common/test:random",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
+)
+
+proto_library(
+    name = "auction_code_fetch_config_proto",
+    srcs = ["auction_code_fetch_config.proto"],
+    deps = [
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_protobuf//:struct_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "auction_code_fetch_config_cc_proto",
+    deps = [":auction_code_fetch_config_proto"],
 )
 
 cc_binary(
@@ -199,6 +215,7 @@ cc_binary(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":auction_code_fetch_config_cc_proto",
         ":auction_service",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",

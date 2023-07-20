@@ -24,35 +24,19 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
 inline constexpr char PORT[] = "AUCTION_PORT";
-inline constexpr char JS_PATH[] = "JS_PATH";
 inline constexpr char ENABLE_AUCTION_SERVICE_BENCHMARK[] =
     "ENABLE_AUCTION_SERVICE_BENCHMARK";
-inline constexpr char ENABLE_SELLER_DEBUG_URL_GENERATION[] =
-    "ENABLE_SELLER_DEBUG_URL_GENERATION";
-inline constexpr char JS_URL[] = "JS_URL";
-inline constexpr char JS_URL_FETCH_PERIOD_MS[] = "JS_URL_FETCH_PERIOD_MS";
-inline constexpr char JS_TIME_OUT_MS[] = "JS_TIME_OUT_MS";
-inline constexpr char ENABLE_SELLER_CODE_WRAPPER[] =
-    "ENABLE_SELLER_CODE_WRAPPER";
-inline constexpr char ENABLE_ADTECH_CODE_LOGGING[] =
-    "ENABLE_ADTECH_CODE_LOGGING";
-inline constexpr char ENABLE_REPORT_RESULT_URL_GENERATION[] =
-    "ENABLE_REPORT_RESULT_URL_GENERATION";
-inline constexpr char ENABLE_REPORT_WIN_URL_GENERATION[] =
-    "ENABLE_REPORT_WIN_URL_GENERATION";
+inline constexpr char SELLER_CODE_FETCH_CONFIG[] = "SELLER_CODE_FETCH_CONFIG";
+inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
+inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
+inline constexpr char JS_WORKER_MEM_MB[] = "JS_WORKER_MEM_MB";
 
-inline constexpr absl::string_view kFlags[] = {
-    PORT,
-    JS_PATH,
-    ENABLE_AUCTION_SERVICE_BENCHMARK,
-    ENABLE_SELLER_DEBUG_URL_GENERATION,
-    JS_URL,
-    JS_URL_FETCH_PERIOD_MS,
-    JS_TIME_OUT_MS,
-    ENABLE_SELLER_CODE_WRAPPER,
-    ENABLE_ADTECH_CODE_LOGGING,
-    ENABLE_REPORT_RESULT_URL_GENERATION,
-    ENABLE_REPORT_WIN_URL_GENERATION};
+inline constexpr absl::string_view kFlags[] = {PORT,
+                                               ENABLE_AUCTION_SERVICE_BENCHMARK,
+                                               SELLER_CODE_FETCH_CONFIG,
+                                               JS_NUM_WORKERS,
+                                               JS_WORKER_QUEUE_LEN,
+                                               JS_WORKER_MEM_MB};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);

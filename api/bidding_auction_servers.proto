@@ -740,24 +740,24 @@ message ScoreAdsRequest {
   bytes key_id = 2;
 }
 
+// Rejection reasons provided by seller should be one of the following.
+// Details:
+// https://github.com/WICG/turtledove/blob/main/Proposed_First_FLEDGE_OT_Details.md#reporting.
+enum SellerRejectionReason {
+  SELLER_REJECTION_REASON_NOT_AVAILABLE = 0;
+  INVALID_BID = 1;
+  BID_BELOW_AUCTION_FLOOR = 2;
+  PENDING_APPROVAL_BY_EXCHANGE = 3;
+  DISAPPROVED_BY_EXCHANGE = 4;
+  BLOCKED_BY_PUBLISHER = 5;
+  LANGUAGE_EXCLUSIONS = 6;
+  CATEGORY_EXCLUSIONS = 7;
+}
+
 // Encrypted response that includes winning ad candidate.
 message ScoreAdsResponse {
   // Identifies the winning ad belonging to a Custom Audience / Interest Group.
   message AdScore {
-    // Rejection reasons provided by seller should be one of the following.
-    // Details:
-    // https://github.com/WICG/turtledove/blob/main/Proposed_First_FLEDGE_OT_Details.md#reporting.
-    enum RejectionReason {
-      NOT_AVAILABLE = 0;
-      INVALID_BID = 1;
-      BID_BELOW_AUCTION_FLOOR = 2;
-      PENDING_APPROVAL_BY_EXCHANGE = 3;
-      DISAPPROVED_BY_EXCHANGE = 4;
-      BLOCKED_BY_PUBLISHER = 5;
-      LANGUAGE_EXCLUSIONS = 6;
-      CATEGORY_EXCLUSIONS = 7;
-    }
-
     // This captures the rejection reason provided by the seller for an Ad.
     // An ad is identified by the interest group owner and name.
     message AdRejectionReason {
@@ -768,7 +768,7 @@ message ScoreAdsResponse {
       string interest_group_owner = 2;
 
       // Rejection reason provided by the seller for this ad.
-      RejectionReason rejection_reason = 3;
+      SellerRejectionReason rejection_reason = 3;
     }
 
     // Score of the ad determined during the auction. Any value that is zero or

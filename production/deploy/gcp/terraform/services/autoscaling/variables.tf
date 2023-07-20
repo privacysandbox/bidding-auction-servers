@@ -78,11 +78,6 @@ variable "frontend_service_port" {
   type        = number
 }
 
-variable "machine_type" {
-  description = "Must be listed here: https://cloud.google.com/compute/confidential-vm/docs/os-and-machine-type#machine-types"
-  type        = string
-}
-
 variable "collector_service_name" {
   description = "Name of the collector service."
   type        = string
@@ -134,4 +129,19 @@ variable "tee_impersonate_service_accounts" {
   description = "Comma separated list of service accounts (by email) the TEE should impersonate."
   type        = string
   default     = ""
+}
+
+variable "frontend_machine_type" {
+  description = "Machine type for the frontend service. Must be compatible with confidential compute."
+  type        = string
+}
+
+variable "backend_machine_type" {
+  description = "Machine type for the backend service. Must be compatible with confidential compute."
+  type        = string
+}
+
+variable "collector_machine_type" {
+  description = "Machine type for the collector service."
+  type        = string
 }

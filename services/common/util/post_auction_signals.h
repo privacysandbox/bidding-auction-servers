@@ -16,27 +16,58 @@
 #define SERVICES_COMMON_UTIL_POST_AUCTION_SIGNALS_H_
 
 #include <memory>
+#include <string>
 
 #include "absl/strings/string_view.h"
-#include "api/bidding_auction_servers.grpc.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 // Captures the signals from the auction winner.
 struct PostAuctionSignals {
- public:
   // Name of the interest group which won the auction.
-  absl::string_view winning_ig_name;
+  std::string winning_ig_name;
   // Owner of the interest group which won the auction.
-  absl::string_view winning_ig_owner;
+  std::string winning_ig_owner;
   // The winning bid from the auction.
   float winning_bid;
 
   // The bid which was scored second highest in the auction.
   float highest_scoring_other_bid;
   // Owner of the interest group which made the second highest scored bid.
-  absl::string_view highest_scoring_other_bid_ig_owner;
+  std::string highest_scoring_other_bid_ig_owner;
   // Set to true if the signals has second highest scoring bid information.
   bool has_highest_scoring_other_bid;
+  // The score of the winning ad
+  float winning_score;
+  // Render url of the winning ad
+  std::string winning_ad_render_url;
+
+  // Map of rejection reasons provided by seller for interest group
+  // Key for outer map --> Interest group owner.
+  // Key for inner map --> Interest group name.
+  absl::flat_hash_map<std::string,
+                      absl::flat_hash_map<std::string, SellerRejectionReason>>
+      rejection_reason_map;
+
+  explicit PostAuctionSignals(
+      absl::string_view winning_ig_name, absl::string_view winning_ig_owner,
+      float winning_bid, float highest_scoring_other_bid,
+      absl::string_view highest_scoring_other_bid_ig_owner,
+      bool has_highest_scoring_other_bid, float winning_score,
+      absl::string_view winning_ad_render_url,
+      absl::flat_hash_map<
+          std::string, absl::flat_hash_map<std::string, SellerRejectionReason>>
+          rejection_reason_map) {
+    this->winning_ig_name = winning_ig_name;
+    this->winning_ig_owner = winning_ig_owner;
+    this->winning_bid = winning_bid;
+    this->highest_scoring_other_bid = highest_scoring_other_bid;
+    this->highest_scoring_other_bid_ig_owner =
+        highest_scoring_other_bid_ig_owner;
+    this->has_highest_scoring_other_bid = has_highest_scoring_other_bid;
+    this->winning_score = winning_score;
+    this->winning_ad_render_url = winning_ad_render_url;
+    this->rejection_reason_map = rejection_reason_map;
+  }
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

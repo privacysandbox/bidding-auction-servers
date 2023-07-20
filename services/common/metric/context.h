@@ -81,6 +81,11 @@ class Context {
       absl::Status s = std::move(callback)();
       ABSL_LOG_IF(ERROR, !s.ok()) << s;
     }
+
+    for (auto& [def, accumulator] : accumulated_metric_) {
+      absl::Status s = std::move(accumulator.callback)(accumulator.values);
+      ABSL_LOG_IF(ERROR, !s.ok()) << s;
+    }
   }
 
   // Sets once request is decrypted
@@ -163,6 +168,39 @@ class Context {
       std::enable_if_t<!std::is_lvalue_reference_v<T>>* = nullptr) {
     static_assert(definition.type_instrument == Instrument::kGauge);
     return LogMetricDeferred<definition>(std::forward<T>(callback));
+  }
+
+  // Accumulate metric values,  they can be accumulated multiple times during
+  // context life time. They will be aggregated and logged at destruction.
+  // Metrics must be Privacy::kImpacting.
+  template <const auto& definition, typename T>
+  absl::Status AccumulateMetric(
+      T value, absl::string_view partition = "",
+      std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr) {
+    CheckDefinition<definition, T>();
+    // TODO(b/291336238): Uncomment this static check when marking initiated
+    // requests unsafe. static_assert(definition.type_privacy ==
+    // Privacy::kImpacting);
+    absl::MutexLock mutex_lock(&mutex_);
+    auto it = accumulated_metric_.find(&definition);
+    if (it != accumulated_metric_.end()) {
+      it->second.values[partition] += value;
+      return absl::OkStatus();
+    }
+    accumulated_metric_.emplace(
+        &definition,
+        Accumulator{
+            typename Accumulator::PartitionedValue({{partition.data(), value}}),
+            [this](const typename Accumulator::PartitionedValue& values)
+                -> absl::Status {
+              for (auto& [partition, numeric] :
+                   BoundPartitionsContributed(values, definition)) {
+                PS_RETURN_IF_ERROR(LogMetricInternal(static_cast<T>(numeric),
+                                                     definition, partition));
+              }
+              return absl::OkStatus();
+            }});
+    return absl::OkStatus();
   }
 
  private:
@@ -334,6 +372,14 @@ class Context {
   std::vector<absl::AnyInvocable<absl::Status() &&>> callbacks_
       ABSL_GUARDED_BY(mutex_);
   absl::flat_hash_set<const DefinitionName*> logged_metric_
+      ABSL_GUARDED_BY(mutex_);
+
+  struct Accumulator {
+    using PartitionedValue = absl::flat_hash_map<std::string, double>;
+    PartitionedValue values;
+    absl::AnyInvocable<absl::Status(const PartitionedValue&) &&> callback;
+  };
+  absl::flat_hash_map<const DefinitionName*, Accumulator> accumulated_metric_
       ABSL_GUARDED_BY(mutex_);
 };
 

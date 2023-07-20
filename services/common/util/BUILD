@@ -297,7 +297,7 @@ cc_library(
     ],
     deps = [
         ":post_auction_signals",
-        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
@@ -314,6 +314,30 @@ cc_test(
         ":reporting_util",
         "//services/common/test:random",
         "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "read_system",
+    srcs = ["read_system.cc"],
+    hdrs = ["read_system.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "read_system_test",
+    size = "small",
+    srcs = [
+        "read_system_test.cc",
+    ],
+    deps = [
+        ":read_system",
+        "@com_google_absl//absl/log:check",
         "@com_google_googletest//:gtest_main",
     ],
 )

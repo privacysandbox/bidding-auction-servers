@@ -93,6 +93,7 @@ cc_library(
     deps = [
         ":definition",
         ":dp",
+        "//services/common/util:read_system",
         "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",

@@ -22,48 +22,66 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-constexpr absl::string_view winning_bid_placeholder = "${winningBid}";
-constexpr absl::string_view made_winning_bid_placeholder = "${madeWinningBid}";
-constexpr absl::string_view highest_scoring_other_bid_placeholder =
-    "${highestScoringOtherBid}";
-constexpr absl::string_view made_highest_scoring_other_bid_placeholder =
-    "${madeHighestScoringOtherBid}";
-constexpr absl::string_view reject_reason_placeholder = "${rejectReason}";
-
 std::unique_ptr<PostAuctionSignals> GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
-  std::unique_ptr<PostAuctionSignals> signals =
-      std::make_unique<PostAuctionSignals>();
+  // If there is no winning ad, return with default signals values.
   if (!winning_ad_score.has_value()) {
-    signals->winning_bid = 0.0;
-    signals->winning_ig_owner = "";
-    signals->winning_ig_name = "";
-    signals->has_highest_scoring_other_bid = false;
-    signals->highest_scoring_other_bid = 0.0;
-    signals->highest_scoring_other_bid_ig_owner = "";
-  } else {
-    signals->winning_bid = winning_ad_score->buyer_bid();
-    signals->winning_ig_owner = winning_ad_score->interest_group_owner();
-    signals->winning_ig_name = winning_ad_score->interest_group_name();
-    if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() >
-        0) {
-      auto iterator =
-          winning_ad_score->ig_owner_highest_scoring_other_bids_map().begin();
-      if (iterator->second.values().size() > 0) {
-        signals->has_highest_scoring_other_bid = true;
-        signals->highest_scoring_other_bid =
-            iterator->second.values().Get(0).number_value();
-        signals->highest_scoring_other_bid_ig_owner = iterator->first;
-      } else {
-        signals->has_highest_scoring_other_bid = false;
-        signals->highest_scoring_other_bid = 0.0;
-        signals->highest_scoring_other_bid_ig_owner = "";
-      }
-    } else {
-      signals->has_highest_scoring_other_bid = false;
+    absl::flat_hash_map<std::string,
+                        absl::flat_hash_map<std::string, SellerRejectionReason>>
+        rejection_reason_map;
+    return std::make_unique<PostAuctionSignals>(
+        kDefaultWinningIntereseGroupName, kDefaultWinningInterestGroupOwner,
+        kDefaultWinningBid, kDefaultHighestScoringOtherBid,
+        kDefaultHighestScoringOtherBidInterestGroupOwner,
+        kDefaultHasHighestScoringOtherBid, kDefaultWinningScore,
+        kDefaultWinningAdRenderUrl, rejection_reason_map);
+  }
+  absl::string_view winning_ig_name = winning_ad_score->interest_group_name();
+  absl::string_view winning_ig_owner = winning_ad_score->interest_group_owner();
+  float winning_bid = winning_ad_score->buyer_bid();
+  float winning_score = winning_ad_score->desirability();
+  absl::string_view winning_ad_render_url = winning_ad_score->render();
+  // Set second highest other bid information in signals if available.
+  absl::string_view highest_scoring_other_bid_ig_owner =
+      kDefaultHighestScoringOtherBidInterestGroupOwner;
+  float highest_scoring_other_bid = kDefaultHighestScoringOtherBid;
+  bool has_highest_scoring_other_bid;
+  if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() > 0) {
+    auto iterator =
+        winning_ad_score->ig_owner_highest_scoring_other_bids_map().begin();
+    if (iterator->second.values().size() > 0) {
+      highest_scoring_other_bid_ig_owner = iterator->first;
+      highest_scoring_other_bid =
+          iterator->second.values().Get(0).number_value();
+      has_highest_scoring_other_bid = true;
     }
   }
-  return signals;
+
+  // group rejection reasons by buyer and interest group owner.
+  absl::flat_hash_map<std::string,
+                      absl::flat_hash_map<std::string, SellerRejectionReason>>
+      rejection_reason_map;
+  for (const auto& ad_rejection_reason :
+       winning_ad_score->ad_rejection_reasons()) {
+    SellerRejectionReason interest_group_rejection_reason =
+        ad_rejection_reason.rejection_reason();
+    if (rejection_reason_map.contains(
+            ad_rejection_reason.interest_group_owner())) {
+      rejection_reason_map.find(ad_rejection_reason.interest_group_owner())
+          ->second.try_emplace(ad_rejection_reason.interest_group_name(),
+                               interest_group_rejection_reason);
+    } else {
+      absl::flat_hash_map<std::string, SellerRejectionReason> ig_rejection_map;
+      ig_rejection_map.emplace(ad_rejection_reason.interest_group_name(),
+                               interest_group_rejection_reason);
+      rejection_reason_map.emplace(ad_rejection_reason.interest_group_owner(),
+                                   ig_rejection_map);
+    }
+  }
+  return std::make_unique<PostAuctionSignals>(
+      winning_ig_name, winning_ig_owner, winning_bid, highest_scoring_other_bid,
+      highest_scoring_other_bid_ig_owner, has_highest_scoring_other_bid,
+      winning_score, winning_ad_render_url, rejection_reason_map);
 }
 
 HTTPRequest CreateDebugReportingHttpRequest(
@@ -71,39 +89,90 @@ HTTPRequest CreateDebugReportingHttpRequest(
     std::unique_ptr<DebugReportingPlaceholder> placeholder_data) {
   std::string formatted_url = absl::StrReplaceAll(
       url,
-      {{winning_bid_placeholder, absl::StrCat(placeholder_data->winning_bid)},
-       {made_winning_bid_placeholder,
+      {{kWinningBidPlaceholder, absl::StrCat(placeholder_data->winning_bid)},
+       {kMadeWinningBidPlaceholder,
         placeholder_data->made_winning_bid ? "true" : "false"},
-       {highest_scoring_other_bid_placeholder,
+       {kHighestScoringOtherBidPlaceholder,
         absl::StrCat(placeholder_data->highest_scoring_other_bid)},
-       {made_highest_scoring_other_bid_placeholder,
-        placeholder_data->made_highest_scoring_other_bid ? "true" : "false"}});
+       {kMadeHighestScoringOtherBidPlaceholder,
+        placeholder_data->made_highest_scoring_other_bid ? "true" : "false"},
+       {kRejectReasonPlaceholder,
+        ToSellerRejectionReasonString(placeholder_data->rejection_reason)}});
   HTTPRequest http_request;
   http_request.url = formatted_url;
   http_request.headers = {};
   return http_request;
 }
 
-std::unique_ptr<DebugReportingPlaceholder>
-GetPlaceholderDataForInterestGroupOwner(
+std::unique_ptr<DebugReportingPlaceholder> GetPlaceholderDataForInterestGroup(
     absl::string_view interest_group_owner,
+    absl::string_view interest_group_name,
     const PostAuctionSignals& post_auction_signals) {
-  bool made_winning_bid = false;
-  if (interest_group_owner == post_auction_signals.winning_ig_owner) {
-    made_winning_bid = true;
+  bool made_winning_bid =
+      interest_group_owner == post_auction_signals.winning_ig_owner;
+  bool made_highest_scoring_other_bid =
+      post_auction_signals.has_highest_scoring_other_bid &&
+      interest_group_owner ==
+          post_auction_signals.highest_scoring_other_bid_ig_owner;
+  SellerRejectionReason rejection_reason =
+      SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
+  if (auto ig_owner_itr =
+          post_auction_signals.rejection_reason_map.find(interest_group_owner);
+      ig_owner_itr != post_auction_signals.rejection_reason_map.end()) {
+    if (auto ig_name_itr = ig_owner_itr->second.find(interest_group_name);
+        ig_name_itr != ig_owner_itr->second.end()) {
+      rejection_reason = ig_name_itr->second;
+    }
   }
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
-      std::make_unique<DebugReportingPlaceholder>(
-          post_auction_signals.winning_bid, made_winning_bid);
-  if (post_auction_signals.has_highest_scoring_other_bid) {
-    placeholder->made_highest_scoring_other_bid =
-        interest_group_owner ==
-                post_auction_signals.highest_scoring_other_bid_ig_owner
-            ? true
-            : false;
-    placeholder->highest_scoring_other_bid =
-        post_auction_signals.highest_scoring_other_bid;
+  return std::make_unique<DebugReportingPlaceholder>(
+      post_auction_signals.winning_bid, made_winning_bid,
+      post_auction_signals.highest_scoring_other_bid,
+      made_highest_scoring_other_bid, rejection_reason);
+}
+
+SellerRejectionReason ToSellerRejectionReason(
+    absl::string_view rejection_reason_str) {
+  if (rejection_reason_str.empty()) {
+    return SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
+  } else if (kRejectionReasonInvalidBid == rejection_reason_str) {
+    return SellerRejectionReason::INVALID_BID;
+  } else if (kRejectionReasonBidBelowAuctionFloor == rejection_reason_str) {
+    return SellerRejectionReason::BID_BELOW_AUCTION_FLOOR;
+  } else if (kRejectionReasonPendingApprovalByExchange ==
+             rejection_reason_str) {
+    return SellerRejectionReason::PENDING_APPROVAL_BY_EXCHANGE;
+  } else if (kRejectionReasonDisapprovedByExchange == rejection_reason_str) {
+    return SellerRejectionReason::DISAPPROVED_BY_EXCHANGE;
+  } else if (kRejectionReasonBlockedByPublisher == rejection_reason_str) {
+    return SellerRejectionReason::BLOCKED_BY_PUBLISHER;
+  } else if (kRejectionReasonLanguageExclusions == rejection_reason_str) {
+    return SellerRejectionReason::LANGUAGE_EXCLUSIONS;
+  } else if (kRejectionReasonCategoryExclusions == rejection_reason_str) {
+    return SellerRejectionReason::CATEGORY_EXCLUSIONS;
+  } else {
+    return SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
   }
-  return placeholder;
+}
+
+absl::string_view ToSellerRejectionReasonString(
+    SellerRejectionReason rejection_reason) {
+  switch (rejection_reason) {
+    case SellerRejectionReason::INVALID_BID:
+      return kRejectionReasonInvalidBid;
+    case SellerRejectionReason::BID_BELOW_AUCTION_FLOOR:
+      return kRejectionReasonBidBelowAuctionFloor;
+    case SellerRejectionReason::PENDING_APPROVAL_BY_EXCHANGE:
+      return kRejectionReasonPendingApprovalByExchange;
+    case SellerRejectionReason::DISAPPROVED_BY_EXCHANGE:
+      return kRejectionReasonDisapprovedByExchange;
+    case SellerRejectionReason::BLOCKED_BY_PUBLISHER:
+      return kRejectionReasonBlockedByPublisher;
+    case SellerRejectionReason::LANGUAGE_EXCLUSIONS:
+      return kRejectionReasonLanguageExclusions;
+    case SellerRejectionReason::CATEGORY_EXCLUSIONS:
+      return kRejectionReasonCategoryExclusions;
+    default:
+      return kRejectionReasonNotAvailable;
+  }
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

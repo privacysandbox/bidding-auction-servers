@@ -60,17 +60,30 @@ module "seller" {
     KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
     BUYER_SERVER_HOSTS                     = "" # Example: "{\"https://example-bidder.com\": \"dns:///bidding-service-host:443\"}"
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
-    ENABLE_SELLER_DEBUG_URL_GENERATION     = "" # Example: "false"
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
-
-    JS_URL                 = "" # Example: "https://storage.googleapis.com/my-bucket/scoreAd.js"
-    JS_URL_FETCH_PERIOD_MS = "" # Example: "3600000"
-    JS_TIME_OUT_MS         = "" # Example: "30000"
-    ROMA_TIMEOUT_MS        = "" # Example: "10000"
-    TELEMETRY_CONFIG       = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT     = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
+    SELLER_CODE_FETCH_CONFIG               = "" # Example:
+    # "{
+    #     "auctionJsPath": "",
+    #     "auctionJsUrl": "https://example.com/scoreAd.js",
+    #     "urlFetchPeriodMs": 13000000,
+    #     "urlFetchTimeoutMs": 30000,
+    #     "enableSellerDebugUrlGeneration": true,
+    #     "enableSellerCodeWrapper": false,
+    #     "enableAdtechCodeLogging": false,
+    #     "enableReportResultUrlGeneration": false,
+    #     "enableReportWinUrlGeneration": false,
+    #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
+    #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
+    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"}
+    #  }"
+    JS_NUM_WORKERS      = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    JS_WORKER_QUEUE_LEN = "" # Example: "200".
+    JS_WORKER_MEM_MB    = "" # Example: "3072" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
+    ROMA_TIMEOUT_MS     = "" # Example: "10000"
+    TELEMETRY_CONFIG    = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT  = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
 
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
@@ -101,7 +114,9 @@ module "seller" {
   operator                           = ""    # Example: "seller-1"
   regions                            = []    # Example: ["us-central1", "us-west1"]
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
-  machine_type                       = ""    # Example: "c2d-standard-4"
+  sfe_machine_type                   = ""    # Example: "n2d-standard-64"
+  auction_machine_type               = ""    # Example: "n2d-standard-64"
+  collector_machine_type             = ""    # Example: "e2-micro"
   min_replicas_per_service_region    = 1     # Example: 1
   max_replicas_per_service_region    = 5     # Example: 5
   vm_startup_delay_seconds           = 200   # Example: 200

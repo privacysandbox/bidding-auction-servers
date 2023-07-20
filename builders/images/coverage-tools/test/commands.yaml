@@ -1,4 +1,3 @@
-#!/busybox/sh
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -o errexit
-set -x
+# refer to docs at https://github.com/GoogleContainerTools/container-structure-test
 
-export GLOG_v=10
+schemaVersion: 2.0.0
+
+# command tests require the docker toolchain
+commandTests:
+  - name: "lcov version"
+    command: "lcov"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "clang version"
+    command: "clang"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "bazel version"
+    command: "bazelisk"
+    args: ["version"]
+    exitCode: 0
+
+  - name: "docker image help"
+    command: "docker"
+    args: ["help", "image"]
+    exitCode: 0

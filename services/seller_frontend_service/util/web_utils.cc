@@ -669,7 +669,7 @@ DecodedBuyerInputs DecodeBuyerInputs(
                                               error_accumulator, fail_fast);
     RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, decoded_buyer_inputs);
 
-    decoded_buyer_inputs.insert({std::move(owner), std::move(buyer_input)});
+    decoded_buyer_inputs.insert({owner, std::move(buyer_input)});
   }
 
   return decoded_buyer_inputs;

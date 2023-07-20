@@ -53,9 +53,9 @@ constexpr absl::string_view KScoreAdWrapperJavascriptWasm = R"JS_CODE(
       } finally {
         if( forDebuggingOnly.auction_win_url ||
                 forDebuggingOnly.auction_loss_url ) {
-          scoreAdResponse.debug_report_urls = {
-            auction_debug_loss_url: forDebuggingOnly.auction_loss_url,
-            auction_debug_win_url: forDebuggingOnly.auction_win_url
+          scoreAdResponse.debugReportUrls = {
+            auctionDebugLossUrl: forDebuggingOnly.auction_loss_url,
+            auctionDebugWinUrl: forDebuggingOnly.auction_win_url
           }
         }
       }

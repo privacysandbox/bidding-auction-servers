@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
 cc_library(
     name = "runtime_flags",
@@ -120,6 +121,7 @@ cc_test(
         ":generate_bids_reactor",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper_test",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
@@ -160,6 +162,20 @@ cc_library(
     ],
 )
 
+proto_library(
+    name = "bidding_code_fetch_config_proto",
+    srcs = ["bidding_code_fetch_config.proto"],
+    deps = [
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_protobuf//:struct_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "bidding_code_fetch_config_cc_proto",
+    deps = [":bidding_code_fetch_config_proto"],
+)
+
 cc_binary(
     name = "server",
     srcs = ["bidding_main.cc"],
@@ -168,6 +184,7 @@ cc_binary(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":bidding_code_fetch_config_cc_proto",
         ":bidding_service",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",

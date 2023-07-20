@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-filegroup(
-    name = "prod",
-    srcs = glob(
-        ["**/*"],
-        exclude = ["BUILD"],
-    ),
-    visibility = ["//visibility:public"],
-)
+"""Top-level config-related variables."""
+
+LOG_ENV_VARS = select({
+    "//:non_prod_build": {"GLOG_v": "10"},
+    "//conditions:default": {"GLOG_v": "0"},
+})

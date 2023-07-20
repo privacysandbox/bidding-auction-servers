@@ -27,11 +27,14 @@ namespace privacy_sandbox::bidding_auction_servers {
 // This enables:
 // - Generation of event level debug reporting
 // - Exporting console.logs from the AdTech execution.
-std::string GetBuyerWrappedCode(absl::string_view adtech_code_blob);
+// - wasmHelper added to device_signals
+std::string GetBuyerWrappedCode(absl::string_view adtech_js,
+                                absl::string_view adtech_wasm);
 
 // Wrapper Javascript over AdTech code.
 // This wrapper supports the features below:
 //- Exporting logs to Bidding Service using console.log
+//- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
     function generateBidEntryFunction(interest_group,
                                 auction_signals,
@@ -39,6 +42,9 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
                                 trusted_bidding_signals,
                                 device_signals,
                                 enable_logging){
+
+    device_signals.wasmHelper = globalWasmHelper;
+
     var ps_logs = [];
     if(enable_logging){
       console.log = function(...args) {
@@ -55,6 +61,13 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       logs: ps_logs
     }
  }
+)JS_CODE";
+
+// This is used to create a javascript array that contains a hex representation
+// of the raw wasm bytecode.
+inline constexpr absl::string_view kWasmModuleTemplate = R"JS_CODE(
+  const globalWasmHex = [%s];
+  const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 )JS_CODE";
 
 }  // namespace privacy_sandbox::bidding_auction_servers

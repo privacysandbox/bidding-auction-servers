@@ -34,9 +34,12 @@ module "buyer" {
   operator                             = ""    # Example: "buyer1"
   bfe_instance_ami_id                  = ""    # Example: "ami-0ea7735ce85ec9cf5"
   bidding_instance_ami_id              = ""    # Example: "ami-0f2f28fc0914f6575"
-  instance_type                        = ""    # Example: "c6i.2xlarge"
-  enclave_cpu_count                    = 6     # Example: 6
-  enclave_memory_mib                   = 12000 # Example: 12000
+  bfe_instance_type                    = ""    # Example: "c6i.2xlarge"
+  bidding_instance_type                = ""    # Example: "c6i.2xlarge"
+  bfe_enclave_cpu_count                = 6     # Example: 6
+  bfe_enclave_memory_mib               = 12000 # Example: 12000
+  bidding_enclave_cpu_count            = 6     # Example: 6
+  bidding_enclave_memory_mib           = 12000 # Example: 12000
   bfe_autoscaling_desired_capacity     = 3     # Example: 3
   bfe_autoscaling_max_size             = 5     # Example: 5
   bfe_autoscaling_min_size             = 1     # Example: 1
@@ -53,7 +56,6 @@ module "buyer" {
     ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
     BIDDING_SERVER_ADDR                = "" # Example: "dns:///bidding1.com:443"
     BUYER_KV_SERVER_ADDR               = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    ENABLE_BUYER_DEBUG_URL_GENERATION  = "" # Example: "false"
     GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
     ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
@@ -62,15 +64,25 @@ module "buyer" {
     ENABLE_ENCRYPTION                  = "" # Example: "true"
     TELEMETRY_CONFIG                   = "" # Example: "mode: EXPERIMENT"
     TEST_MODE                          = "" # Example: "false"
-    JS_URL                             = "" # Example: "https://storage.googleapis.com/test/generateBid.js"
-    JS_URL_FETCH_PERIOD_MS             = "" # Example: "3600000"
-    JS_TIME_OUT_MS                     = "" # Example: "30000"
-    ROMA_TIMEOUT_MS                    = "" # Example: "10000"
+    BUYER_CODE_FETCH_CONFIG            = "" # Example:
+    # "{
+    #    "biddingJsPath": "",
+    #    "biddingJsUrl": "https://example.com/generateBid.js",
+    #    "biddingWasmHelperUrl": "",
+    #    "urlFetchPeriodMs": 13000000,
+    #    "urlFetchTimeoutMs": 30000,
+    #    "enableBuyerDebugUrlGeneration": true,
+    #    "enableBuyerCodeWrapper": false,
+    #    "enableAdtechCodeLogging": false,
+    #    "enableReportWinUrlGeneration": false
+    #  }"
+    JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count.
+    JS_WORKER_QUEUE_LEN = "" # Example: "100".
+    JS_WORKER_MEM_MB    = "" # Example: "1536" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
+    ROMA_TIMEOUT_MS     = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
-    ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
-    ENABLE_BUYER_CODE_WRAPPER  = "" # Example: "true"
 
 
     # Coordinator-based attestation flags:
