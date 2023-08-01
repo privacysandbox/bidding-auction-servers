@@ -72,6 +72,10 @@ If platform is gcp:
     --gcp-image-tag              [REQUIRED] (All lowercase) Custom image tag for GCP image.
     --gcp-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
 
+If platform is azure:
+    --azure-image-tag              [REQUIRED] (All lowercase) Custom image tag for Azure image.
+    --azure-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
+
 environment variables (all optional):
     WORKSPACE                    Set the path to the workspace (repo root)
     BAZEL_STARTUP_ARGS           Additional startup arguments to pass to bazel invocations
@@ -121,6 +125,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gcp-image-repo)
       GCP_IMAGE_REPO="$2"
+      shift 2 || usage
+      ;;
+    --azure-image-tag)
+      AZURE_IMAGE_TAG="$2"
+      shift 2 || usage
+      ;;
+    --azure-image-repo)
+      AZURE_IMAGE_REPO="$2"
       shift 2 || usage
       ;;
     --verbose)
@@ -272,6 +284,27 @@ if [[ ${PLATFORM} = "gcp" ]]; then
   done
 fi
 
+if [[ ${PLATFORM} = "azure" ]]; then
+  function build_service_for_azure() {
+    declare -r SERVICE="$1"
+    # note: use relative path to dist
+    declare -r DOCKER_IMAGE=dist/debian/${SERVICE}_image.tar
+    if ! [[ -s ${WORKSPACE}/${DOCKER_IMAGE} ]]; then
+      printf "Error: docker image tar file not found: %s\n" "${DOCKER_IMAGE}" &>/dev/stderr
+      exit 1
+    fi
+    # shellcheck disable=SC2086
+    "${SCRIPT_DIR}"/azure/build_and_test ${VERBOSE_ARG} \
+    --server-image "${DOCKER_IMAGE}" \
+    --service-path "${SERVICE}" \
+    --azure-image-tag "${AZURE_IMAGE_TAG}" \
+    --azure-image-repo "${AZURE_IMAGE_REPO}"
+  }
+
+  for svc in "${SERVICES[@]}"; do
+    build_service_for_azure "${svc}"
+  done
+fi
 
 if [[ -d ${DIST} ]]; then
   printf "build artifacts:\n"

@@ -1,0 +1,93 @@
+#!/busybox/sh
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -o errexit
+set -x
+
+#########################################################################
+#                                                                       #
+#                            Envoy Startup                              #
+#                                                                       #
+#########################################################################
+
+# Get credentials (to be used for fetching secrets)
+export ACCESS_TOKEN=$(wget -q --header "Metadata-Flavor: Google"  --output-document -  \
+"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+| /server/bin/jq -r '.access_token')
+
+# Get operator, environment, and project (to be used for fetching secrets)
+export OPERATOR=$(wget -q  --header "Metadata-Flavor: Google"  --output-document - \
+"http://metadata.google.internal/computeMetadata/v1/instance/attributes/operator")
+export ENV=$(wget -q  --header "Metadata-Flavor: Google"  --output-document - \
+"http://metadata.google.internal/computeMetadata/v1/instance/attributes/environment")
+export PROJECT_ID=$(wget -q --header "Metadata-Flavor: Google" --output-document - \
+"http://metadata.google.internal/computeMetadata/v1/project/project-id")
+
+# Get our secrets, parse, decode, and write the secret strings to files that the Envoy config will read.
+## TLS Key
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
+https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${OPERATOR}-${ENV}-SFE_TLS_KEY/versions/latest:access \
+| /server/bin/jq -r ".payload.data" \
+| base64 -d > /etc/envoy/key.pem
+
+## TLS Cert
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
+https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${OPERATOR}-${ENV}-SFE_TLS_CERT/versions/latest:access \
+| /server/bin/jq -r ".payload.data" \
+| base64 -d > /etc/envoy/cert.pem
+
+# Start envoy.
+/usr/local/bin/envoy --config-path /etc/envoy/envoy.yaml -l warn &
+sleep 2
+
+
+#########################################################################
+#                                                                       #
+#                             Mesh Startup                              #
+#                                                                       #
+#########################################################################
+# The following requires a GCP Metadata Server and a service account
+# that is allowed to read instance metadata.
+
+export MESH_NAME=$(wget -qO-  --header "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/mesh-name")
+export GRPC_XDS_BOOTSTRAP=/run/td-grpc-bootstrap.json
+echo export GRPC_XDS_BOOTSTRAP=$GRPC_XDS_BOOTSTRAP | tee /etc/profile.d/grpc-xds-bootstrap.sh
+wget https://storage.googleapis.com/traffic-director/td-grpc-bootstrap-0.14.0.tar.gz
+cat td-grpc-bootstrap-0.14.0.tar.gz | tar -xz
+./td-grpc-bootstrap-0.14.0/td-grpc-bootstrap --config-mesh-experimental $MESH_NAME | tee $GRPC_XDS_BOOTSTRAP
+
+echo "Starting backend reachability test..."
+# Loop until we reach the backend. If not reachable, we will not start the server.
+# Thus, health checks will fail.
+while ! /server/bin/grpc_cli ls xds:///auction --channel_creds_type=insecure
+do
+    echo "Backend not reachable... will try again in 5 seconds."
+    sleep 5
+done
+echo "Passed backend reachability test."
+
+#########################################################################
+#                                                                       #
+#                             SFE Startup                               #
+#                                                                       #
+#########################################################################
+
+
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
+
+# Start the server.
+/server/bin/server  --init_config_client=true

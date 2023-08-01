@@ -1,0 +1,108 @@
+#!/bin/bash
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -o pipefail
+set -o errexit
+export PS5='+\t ' # xtrace prompt
+
+START=$(date +%s)
+
+trap _print_runtime EXIT
+function _print_runtime() {
+  local -r -i STATUS=$?
+  local -i END
+  END=$(date +%s)
+  /usr/bin/env LC_ALL=en_US.UTF-8 printf "\ngcp/build_and_test runtime: %'ds\n" $((END - START)) >/dev/stderr
+  # shellcheck disable=SC2086
+  exit ${STATUS}
+}
+
+function usage() {
+  local exitval=${1-1}
+  cat >&2 << USAGE
+usage:
+  $0 <options>
+    --server-image <image.tar>   Server docker image tarfile
+    --service-path               [REQUIRED] One of: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service
+    --azure-image-tag              [REQUIRED] (All lowercase) Custom image tag for Azure image.
+    --azure-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
+
+environment variables (all optional):
+    WORKSPACE                    Set the path to the workspace (repo root)
+    BAZEL_STARTUP_ARGS           Additional startup arguments to pass to bazel invocations
+    BAZEL_EXTRA_ARGS             Additional command arguments to pass to bazel invocations
+    CBUILD_ARGS                  Additional command-line arguments to cbuild
+USAGE
+  # shellcheck disable=SC2086
+  exit ${exitval}
+}
+
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --server-image)
+      SERVER_IMAGE="$2"
+      shift
+      shift
+      ;;
+    --service-path)
+      SERVICE="$2"
+      shift
+      shift
+      ;;
+    --azure-image-tag)
+      AZURE_IMAGE_TAG="$2"
+      shift
+      shift
+      ;;
+    --azure-image-repo)
+      AZURE_IMAGE_REPO="$2"
+      shift
+      shift
+      ;;
+    --verbose)
+      set -o xtrace
+      shift
+      ;;
+    -h | --help)
+      usage 0
+      break
+      ;;
+    *)
+      usage
+      break
+      ;;
+  esac
+done
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=builders/tools/builder.sh
+source "${SCRIPT_DIR}"/../../../builders/tools/builder.sh
+DIST="${WORKSPACE}"/dist
+
+mkdir -p "${DIST}"/azure
+chmod 770 "${DIST}" "${DIST}"/azure
+
+cp ${SERVER_IMAGE} ${DIST}/azure
+
+printf "==== Uploading local image to Azure Container Registry =====\n"
+readonly IMAGE_URI=bazel/production/packaging/azure/${SERVICE}
+docker load -i ${SERVER_IMAGE}
+TAGGED_IMAGE_URI="${AZURE_IMAGE_REPO}/${SERVICE}:${AZURE_IMAGE_TAG}"
+docker tag ${IMAGE_URI}:server_docker_image ${TAGGED_IMAGE_URI}
+
+# Note: if the following command fails, double check that the local environment has
+# authenticated to the repo.
+docker push ${TAGGED_IMAGE_URI}

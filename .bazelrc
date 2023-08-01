@@ -38,11 +38,18 @@ build:platform_gcp --//:platform=gcp
 build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
 build:platform_gcp --@control_plane_shared//cc/public/cpio/interface:platform=gcp
 
+build:platform_azure --//:platform=gcp
+build:platform_azure --@google_privacysandbox_servers_common//:platform=gcp
+build:platform_azure --@control_plane_shared//cc/public/cpio/interface:platform=gcp
+
 build:local_aws --config=instance_local
 build:local_aws --config=platform_aws
 
 build:local_gcp --config=instance_local
 build:local_gcp --config=platform_gcp
+
+build:local_azure --config=instance_local
+build:local_azure --config=platform_gcp
 
 build:gcp_gcp --config=instance_gcp
 build:gcp_gcp --config=platform_gcp
