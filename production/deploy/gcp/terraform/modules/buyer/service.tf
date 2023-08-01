@@ -59,6 +59,8 @@ module "autoscaling" {
   cpu_utilization_percent            = var.cpu_utilization_percent
   use_confidential_space_debug_image = var.use_confidential_space_debug_image
   tee_impersonate_service_accounts   = var.tee_impersonate_service_accounts
+
+  runtime_flags                      = var.runtime_flags
 }
 
 module "load_balancing" {

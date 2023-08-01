@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+resource "null_resource" "runtime_flags" {
+  triggers = var.runtime_flags
+}
+
 ###############################################################
 #
 #                         FRONTEND
@@ -93,6 +97,7 @@ resource "google_compute_instance_template" "frontends" {
   lifecycle {
     create_before_destroy = true
     ignore_changes = [ name ]
+    replace_triggered_by = [ null_resource.runtime_flags ]
   }
 }
 
@@ -244,6 +249,7 @@ resource "google_compute_instance_template" "backends" {
   lifecycle {
     create_before_destroy = true
     ignore_changes = [ name ]
+    replace_triggered_by = [ null_resource.runtime_flags ]
   }
 }
 
