@@ -90,3 +90,21 @@ The PCR0 of `--build-flavor non_prod` should match below.
 
 > Note: The PCR0 hash would be validated by the Key Management Systems operated by Coordinators to
 > provision keys as part of server attestation.
+
+# Azure Confidential Containers
+
+## Build docker image
+
+```shell
+./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path seller_frontend_service --service-path buyer_frontend_service --service-path auction_service --instance local --platform azure --no-precommit --no-tests --azure-image-tag <ENV_NAME> --azure-image-repo ${DOCKER_REPO}  --build-flavor prod
+```
+
+-   switch `prod` to `non_prod` for debugging build that turn on all vlog.
+
+-   `${DOCKER_REPO}` is where to store the images such as `us-docker.pkg.dev/project-id/services`
+
+-   `${ENV_NAME}` should match `environment` in terraform deploy.
+
+After images being build, forward the docker URL(starting with ${DOCKER_REPO}) to Coordinator to
+enable the attestation.
+
