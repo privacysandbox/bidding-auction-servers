@@ -28,16 +28,6 @@ cc_library(
 )
 
 cc_library(
-    name = "auction_adtech_code_wrapper",
-    hdrs = [
-        "auction_adtech_code_wrapper.h",
-    ],
-    deps = [
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-cc_library(
     name = "seller_adtech_reporting_wrapper",
     hdrs = [
         "seller_adtech_reporting_wrapper.h",
@@ -66,7 +56,6 @@ cc_library(
         "auction_service.h",
     ],
     deps = [
-        ":auction_adtech_code_wrapper",
         ":runtime_flags",
         ":score_ads_reactor",
         "//api:bidding_auction_servers_cc_grpc_proto",
@@ -97,7 +86,10 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/data:runtime_config",
+        "//services/auction_service/reporting:reporting_helper",
+        "//services/auction_service/reporting:reporting_response",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:user_error_strings",
@@ -128,6 +120,7 @@ cc_test(
         ":score_ads_reactor",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/auction_service/reporting:reporting_helper_test",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

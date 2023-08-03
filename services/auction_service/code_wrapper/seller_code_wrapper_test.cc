@@ -17,26 +17,63 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "rapidjson/document.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
+#include "services/common/util/json_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 TEST(GetSellerWrappedCode, GeneratesCompleteFinalCode) {
   bool enable_report_result_url_generation = true;
-  EXPECT_EQ(GetSellerWrappedCode(kSellerBaseCode,
-                                 enable_report_result_url_generation),
-            kExpectedFinalCode);
+  bool enable_report_win_url_generation = true;
+  absl::flat_hash_map<std::string, std::string> buyer_code_map;
+  buyer_code_map.try_emplace(kBuyerOrigin, kBuyerBaseCode);
+  EXPECT_EQ(
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_report_win_url_generation, buyer_code_map),
+      kExpectedFinalCode);
 }
 
-TEST(GetSellerWrappedCode, CodeWithReportingDisabled) {
+TEST(GetSellerWrappedCode, CodeWithReportWinDisabled) {
+  bool enable_report_result_url_generation = true;
+  bool enable_report_win_url_generation = false;
+  EXPECT_EQ(
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_report_win_url_generation, {}),
+      kExpectedCodeWithReportWinDisabled);
+}
+
+TEST(GetSellerWrappedCode, CodeWithReportResultDisabled) {
   bool enable_report_result_url_generation = false;
-  std::string final_code = GetSellerWrappedCode(
-      kSellerBaseCode, enable_report_result_url_generation);
-  std::cout << "Final code" << final_code;
-  EXPECT_EQ(GetSellerWrappedCode(kSellerBaseCode,
-                                 enable_report_result_url_generation),
-            kExpectedCodeWithReportingDisabled);
+  bool enable_report_win_url_generation = false;
+  EXPECT_EQ(
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_report_win_url_generation, {}),
+      kExpectedCodeWithReportingDisabled);
+}
+
+void GenerateFeatureFlagsTestHelper(bool is_logging_enabled,
+                                    bool is_debug_url_generation_enabled) {
+  std::string actual_json =
+      GetFeatureFlagJson(is_logging_enabled, is_debug_url_generation_enabled);
+  absl::StatusOr<rapidjson::Document> document = ParseJsonString(actual_json);
+
+  EXPECT_TRUE(document.ok());
+  EXPECT_TRUE(document.value().HasMember(kFeatureLogging));
+  EXPECT_TRUE(document.value()[kFeatureLogging].IsBool());
+  EXPECT_EQ(is_logging_enabled, document.value()[kFeatureLogging].GetBool());
+  EXPECT_TRUE(document.value().HasMember(kFeatureDebugUrlGeneration));
+  EXPECT_TRUE(document.value()[kFeatureDebugUrlGeneration].IsBool());
+  EXPECT_EQ(is_debug_url_generation_enabled,
+            document.value()[kFeatureDebugUrlGeneration].GetBool());
+}
+
+TEST(GetSellerWrappedCode, GenerateFeatureFlagsAllConbinations) {
+  GenerateFeatureFlagsTestHelper(true, true);
+  GenerateFeatureFlagsTestHelper(true, false);
+  GenerateFeatureFlagsTestHelper(false, true);
+  GenerateFeatureFlagsTestHelper(false, false);
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

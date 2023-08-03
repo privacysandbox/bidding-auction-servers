@@ -112,7 +112,7 @@ module "buyer" {
   min_replicas_per_service_region    = 1     # Example: 1
   max_replicas_per_service_region    = 5     # Example: 5
   vm_startup_delay_seconds           = 200   # Example: 200
-  cpu_utilization_percent            = 0.8   # Example: 0.8
+  cpu_utilization_percent            = 0.6   # Example: 0.6
   use_confidential_space_debug_image = false # Example: false
   tee_impersonate_service_accounts   = "staging-a-opallowedusr@coordinator1.iam.gserviceaccount.com,staging-b-opallowedusr@coordinator2.iam.gserviceaccount.com"
   collector_service_port             = 4317

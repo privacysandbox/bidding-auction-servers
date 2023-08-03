@@ -45,6 +45,11 @@ class ScopedCbor {
   cbor_item_t* operator->() const { return ptr_; }
   cbor_item_t* operator*() const { return ptr_; }
   cbor_item_t* get() const { return ptr_; }
+  cbor_item_t* release() {
+    cbor_item_t* tmp = ptr_;
+    ptr_ = nullptr;
+    return tmp;
+  }
 
   explicit operator bool() const { return ptr_ != nullptr; }
   bool operator!() const { return ptr_ == nullptr; }

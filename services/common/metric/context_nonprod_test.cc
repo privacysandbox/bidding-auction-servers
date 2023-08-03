@@ -19,8 +19,8 @@ namespace privacy_sandbox::server_common::metric {
 class ExperimentTest : public ContextTest {
  protected:
   void SetUp() override {
-    ServerConfig config_proto;
-    config_proto.set_mode(ServerConfig::EXPERIMENT);
+    TelemetryConfig config_proto;
+    config_proto.set_mode(TelemetryConfig::EXPERIMENT);
     static BuildDependentConfig metric_config(config_proto);
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
         &mock_metric_router_, metric_config);
@@ -52,8 +52,8 @@ TEST_F(ExperimentTest, LogAfterDecrypt) {
 class CompareTest : public ExperimentTest {
  protected:
   void SetUp() override {
-    ServerConfig config_proto;
-    config_proto.set_mode(ServerConfig::COMPARE);
+    TelemetryConfig config_proto;
+    config_proto.set_mode(TelemetryConfig::COMPARE);
     static BuildDependentConfig metric_config(config_proto);
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
         &mock_metric_router_, metric_config);

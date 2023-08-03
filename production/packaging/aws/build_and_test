@@ -51,6 +51,7 @@ USAGE
 }
 
 declare -a AMI_REGIONS
+declare BUILD_FLAVOR=prod
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -72,6 +73,10 @@ while [[ $# -gt 0 ]]; do
     --verbose)
       set -o xtrace
       shift
+      ;;
+    --build-flavor)
+      BUILD_FLAVOR="$2"
+      shift 2 || usage
       ;;
     -h | --help)
       usage 0
@@ -108,9 +113,13 @@ set -o errexit
 # extract server docker image into local docker client and retag it
 docker load -i ${SERVER_IMAGE}
 docker tag ${IMAGE_URI}:server_docker_image ${IMAGE_URI}:${IMAGE_TAG}
-nitro-cli build-enclave --docker-uri ${IMAGE_URI}:${IMAGE_TAG} --output-file /tmp/${ENCLAVE_NAME}.eif > /tmp/${ENCLAVE_NAME}.json
+nitro-cli build-enclave \
+  --docker-uri ${IMAGE_URI}:${IMAGE_TAG} \
+  --output-file /tmp/${ENCLAVE_NAME}.eif \
+  > /tmp/${ENCLAVE_NAME}_${BUILD_FLAVOR}.json
 if [[ $? -eq 0 ]]; then
   mv /tmp/${ENCLAVE_NAME}.* dist/aws/
+  mv /tmp/${ENCLAVE_NAME}_${BUILD_FLAVOR}.* dist/aws/
 fi
 "
 docker image rm "${IMAGE_URI}:${IMAGE_TAG}"

@@ -48,7 +48,17 @@ pkg_files(
     prefix = "/server/bin",
 )
 
+pkg_files(
+    name = "kmstool_enclave_executable",
+    srcs = [
+        "@kmstool_enclave_cli//file",
+    ],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/",
+)
+
 server_binaries = [
+    ":kmstool_enclave_executable",
     ":server_executables",
     ":server_libs",
 ]
@@ -63,10 +73,23 @@ pkg_tar(
     srcs = server_binaries,
 )
 
+# Ensure libnsm ends up in the load path.
+pkg_tar(
+    name = "libnsm-tar",
+    srcs = [
+        "@libnsm//file",
+    ],
+    mode = "0644",
+    # TODO(b/294113069): Remove arch-specific path.
+    package_dir = "/lib/x86_64-linux-gnu/",
+    visibility = ["//visibility:public"],
+)
+
 container_layer(
     name = "server_binary_layer",
     directory = "/",
     tars = [
+        ":libnsm-tar",
         ":server_binaries_tar",
     ],
 )

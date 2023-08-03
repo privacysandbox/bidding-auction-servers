@@ -46,6 +46,7 @@ cc_library(
         "//services/common/util:request_response_constants",
         "//services/common/util:scoped_cbor",
         "//services/common/util:status_macros",
+        "//services/seller_frontend_service/util:web_utils",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

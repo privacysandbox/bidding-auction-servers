@@ -19,7 +19,9 @@
 
 #include "absl/strings/str_replace.h"
 #include "gtest/gtest.h"
+#include "rapidjson/document.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
+#include "services/common/util/json_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -44,5 +46,27 @@ TEST(GetBuyerWrappedCode, GeneratesCompleteFinalJavascriptWithWasm) {
   EXPECT_EQ(GetBuyerWrappedCode(kBuyerBaseCode_template, "test"), expected);
 }
 
+void GenerateFeatureFlagsTestHelper(bool is_logging_enabled,
+                                    bool is_debug_url_generation_enabled) {
+  std::string actual_json =
+      GetFeatureFlagJson(is_logging_enabled, is_debug_url_generation_enabled);
+  absl::StatusOr<rapidjson::Document> document = ParseJsonString(actual_json);
+
+  EXPECT_TRUE(document.ok());
+  EXPECT_TRUE(document.value().HasMember(kFeatureLogging));
+  EXPECT_TRUE(document.value()[kFeatureLogging].IsBool());
+  EXPECT_EQ(is_logging_enabled, document.value()[kFeatureLogging].GetBool());
+  EXPECT_TRUE(document.value().HasMember(kFeatureDebugUrlGeneration));
+  EXPECT_TRUE(document.value()[kFeatureDebugUrlGeneration].IsBool());
+  EXPECT_EQ(is_debug_url_generation_enabled,
+            document.value()[kFeatureDebugUrlGeneration].GetBool());
+}
+
+TEST(GetBuyerWrappedCode, GenerateFeatureFlagsAllConbinations) {
+  GenerateFeatureFlagsTestHelper(true, true);
+  GenerateFeatureFlagsTestHelper(true, false);
+  GenerateFeatureFlagsTestHelper(false, true);
+  GenerateFeatureFlagsTestHelper(false, false);
+}
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

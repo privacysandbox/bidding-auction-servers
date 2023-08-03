@@ -22,6 +22,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
@@ -32,6 +33,7 @@
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
 #include "services/common/util/status_macros.h"
+#include "services/seller_frontend_service/util/web_utils.h"
 
 #include "cbor.h"
 
@@ -43,6 +45,7 @@ using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using BuyerInputMap = ::google::protobuf::Map<std::string, BuyerInput>;
 using BuyerInputMapEncoded = ::google::protobuf::Map<std::string, std::string>;
+using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 
 inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
     kAuctionResultKeys = {
@@ -55,6 +58,7 @@ inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
         kInterestGroupOwner,  // 6
         kAdComponents,        // 7
         kError,               // 8
+        kWinReportingUrls     // 9
 };
 
 template <std::size_t Size>
@@ -257,11 +261,6 @@ absl::Status CborSerializeBuyerInput(const BuyerInputMapEncoded& buyer_inputs,
   return absl::OkStatus();
 }
 
-std::string CborDecodeString(cbor_item_t* input) {
-  return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
-                     cbor_string_length(input));
-}
-
 google::protobuf::RepeatedPtrField<std::string> CborDecodeComponentAdUrls(
     cbor_item_t* input) {
   google::protobuf::RepeatedPtrField<std::string> component_ad_urls;
@@ -331,7 +330,108 @@ absl::StatusOr<BiddingGroupMap> CborDecodeInterestGroupToProto(
   }
   return bidding_group_map;
 }
+absl::StatusOr<InteractionUrlMap> CborDecodeInteractionReportingUrlMapToProto(
+    cbor_item_t* serialized_interaction_urls_map) {
+  InteractionUrlMap interaction_url_map;
+  absl::Span<struct cbor_pair> interaction_urls(
+      cbor_map_handle(serialized_interaction_urls_map),
+      cbor_map_size(serialized_interaction_urls_map));
+  for (const auto& kv : interaction_urls) {
+    if (!cbor_isa_string(kv.key) || !cbor_isa_string(kv.value)) {
+      return absl::InvalidArgumentError("Malformed Interaction Reporting Urls");
+    }
+    interaction_url_map.try_emplace(CborDecodeString(kv.key),
+                                    CborDecodeString(kv.value));
+  }
+  return interaction_url_map;
+}
 
+absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
+                                     const std::string& outer_key,
+                                     AuctionResult& auction_result) {
+  absl::Span<struct cbor_pair> inner_map(
+      cbor_map_handle(serialized_reporting_map),
+      cbor_map_size(serialized_reporting_map));
+  for (const auto& inner_kv : inner_map) {
+    if (!cbor_isa_string(inner_kv.key)) {
+      return absl::InvalidArgumentError(
+          "Malformed inner map for winReportingUrls");
+    }
+    std::string reporting_url_key = CborDecodeString(inner_kv.key);
+    switch (FindKeyIndex<kNumReportingUrlsKeys>(kReportingKeys,
+                                                reporting_url_key)) {
+      // kReportingUrl
+      case 0: {
+        if (!cbor_isa_string(inner_kv.value)) {
+          return absl::InvalidArgumentError("Malformed Reporting Url value");
+        }
+        std::string reporting_url_value = CborDecodeString(inner_kv.value);
+        switch (FindKeyIndex<kNumWinReportingUrlsKeys>(kWinReportingKeys,
+                                                       outer_key)) {
+          // kBuyerReportingUrls
+          case 0:
+            auction_result.mutable_win_reporting_urls()
+                ->mutable_buyer_reporting_urls()
+                ->set_reporting_url(reporting_url_value);
+            break;
+          // kComponentSellerReportingUrls
+          case 1:
+            auction_result.mutable_win_reporting_urls()
+                ->mutable_component_seller_reporting_urls()
+                ->set_reporting_url(reporting_url_value);
+            break;
+        }
+      } break;
+      // kInteractionReportingUrls
+      case 1: {
+        absl::StatusOr<InteractionUrlMap> interaction_url_map =
+            CborDecodeInteractionReportingUrlMapToProto(inner_kv.value);
+        if (!interaction_url_map.ok()) {
+          return absl::InvalidArgumentError(
+              "Error decoding interaction reporting urls for the buyer");
+        }
+        for (const auto& [event, url] : interaction_url_map.value()) {
+          switch (FindKeyIndex<kNumWinReportingUrlsKeys>(kWinReportingKeys,
+                                                         outer_key)) {
+            case 0:
+              auction_result.mutable_win_reporting_urls()
+                  ->mutable_buyer_reporting_urls()
+                  ->mutable_interaction_reporting_urls()
+                  ->try_emplace(event, url);
+              break;
+            case 1:
+              auction_result.mutable_win_reporting_urls()
+                  ->mutable_component_seller_reporting_urls()
+                  ->mutable_interaction_reporting_urls()
+                  ->try_emplace(event, url);
+
+              break;
+          }
+        }
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborDecodeReportingUrlsToProto(
+    cbor_item_t* serialized_reporting_map, AuctionResult& auction_result) {
+  absl::Span<struct cbor_pair> reporting_urls(
+      cbor_map_handle(serialized_reporting_map),
+      cbor_map_size(serialized_reporting_map));
+  for (const auto& kv : reporting_urls) {
+    if (!cbor_isa_string(kv.key)) {
+      return absl::InvalidArgumentError("Malformed Reporting Urls");
+    }
+    std::string reporting_urls_key = CborDecodeString(kv.key);
+    absl::Status decoding_status =
+        CborDecodeReportingUrls(kv.value, reporting_urls_key, auction_result);
+    if (!decoding_status.ok()) {
+      return decoding_status;
+    }
+  }
+  return absl::OkStatus();
+}
 }  // namespace
 
 absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
@@ -362,19 +462,23 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
   for (const auto& kv : auction_result_entries) {
     std::string key = CborDecodeString(kv.key);
     switch (FindKeyIndex(kAuctionResultKeys, key)) {
-      case 0:  // kScore
+      case 0: {  // kScore
         if (!cbor_isa_float_ctrl(kv.value)) {
           return absl::InvalidArgumentError(
               "Expected score value to be a float");
         }
-        auction_result.set_score(cbor_float_get_float(kv.value));
-        break;
-      case 1:  // kBid
+        auto decoded_value = cbor_float_get_float4(kv.value);
+        VLOG(6) << "Decoded value for score: " << decoded_value;
+        auction_result.set_score(decoded_value);
+      } break;
+      case 1: {  // kBid
         if (!cbor_isa_float_ctrl(kv.value)) {
           return absl::InvalidArgumentError("Expected bid value to be a float");
         }
-        auction_result.set_bid(cbor_float_get_float(kv.value));
-        break;
+        auto decoded_value = cbor_float_get_float4(kv.value);
+        VLOG(6) << "Decoded value for bid: " << decoded_value;
+        auction_result.set_bid(decoded_value);
+      } break;
       case 2:  // kChaff
         if (!cbor_is_bool(kv.value)) {
           return absl::InvalidArgumentError(
@@ -430,6 +534,15 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         PS_ASSIGN_OR_RETURN(error, CborDecodeErrorToProto(kv.value));
         *auction_result.mutable_error() = std::move(error);
       } break;
+      case 9: {  // kWinReportingUrls
+        if (!cbor_isa_map(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected winReportingUrls value to be a map");
+        }
+        PS_RETURN_IF_ERROR(
+            CborDecodeReportingUrlsToProto(kv.value, auction_result))
+            << absl::StrFormat("Error decoding winReportingUrls");
+      } break;
       default:
         // Unexpected key in the auction result CBOR
         return absl::Status(
@@ -439,6 +552,7 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
                 key));
     }
   }
+
   return auction_result;
 }
 

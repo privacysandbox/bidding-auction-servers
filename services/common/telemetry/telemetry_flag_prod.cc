@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "services/common/metric/telemetry_flag.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
-namespace privacy_sandbox::server_common::metric {
+namespace privacy_sandbox::server_common {
 
 BuildDependentConfig::BuildMode BuildDependentConfig::GetBuildMode() const {
-  return BuildDependentConfig::BuildMode::kExperiment;
+  return BuildDependentConfig::BuildMode::kProd;
 }
 
-}  // namespace privacy_sandbox::server_common::metric
+}  // namespace privacy_sandbox::server_common

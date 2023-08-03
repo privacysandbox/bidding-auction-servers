@@ -48,12 +48,11 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<AuctionResult::Error>& error) {
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithInternalError, this);
-  absl::StatusOr<std::vector<unsigned char>> encoded_data;
-  PS_ASSIGN_OR_RETURN(encoded_data, Encode(high_score, bidding_group_map, error,
-                                           error_handler));
+  PS_ASSIGN_OR_RETURN(auto encoded_data, Encode(high_score, bidding_group_map,
+                                                error, error_handler));
 
   absl::string_view data_to_compress = absl::string_view(
-      reinterpret_cast<char*>(encoded_data->data()), encoded_data->size());
+      reinterpret_cast<char*>(encoded_data.data()), encoded_data.size());
 
   absl::StatusOr<std::string> compressed_data = GzipCompress(data_to_compress);
   if (!compressed_data.ok()) {
