@@ -13,10 +13,10 @@ python_deps("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    sha256 = "4de0ff482dd73aed7ed7db10b648e1efec59978e70bb11805275d8bf235c3c00",
-    strip_prefix = "data-plane-shared-libraries-0a7c2dd80096fb8597e466415896a8016493a9ec",
+    sha256 = "c651df8a42c405acb4d9b0a8cd3b01da4cbd759556a5bc7f8694ba130bd4e065",
+    strip_prefix = "data-plane-shared-libraries-e5ed1d77ec6dc7c72100637c4efb130a1e21b6b9",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/0a7c2dd80096fb8597e466415896a8016493a9ec.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/e5ed1d77ec6dc7c72100637c4efb130a1e21b6b9.zip",
     ],
 )
 

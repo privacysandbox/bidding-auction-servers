@@ -31,7 +31,6 @@
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/meter.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
-#include "services/common/util/read_system.h"
 
 namespace privacy_sandbox::server_common::metric {
 namespace {
@@ -249,8 +248,6 @@ class MetricRouterDpNoiseTest : public MetricRouterTest {
                                            ->GetMeter("not used name", "0.0.1")
                                            .get(),
                                        PrivacyBudget{1}, kDpInterval);
-    test_instance_->RemoveObserverable(kCpuPercent, GetCpu);
-    test_instance_->RemoveObserverable(kMemoryKB, GetMemory);
   }
   absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
 };

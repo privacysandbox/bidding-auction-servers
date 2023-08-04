@@ -85,6 +85,9 @@ cc_test(
     srcs = [
         "payload_packaging_test.cc",
     ],
+    tags = [
+        "flaky",
+    ],
     deps = [
         ":payload_packaging_lib",
         "//services/common/test:random",

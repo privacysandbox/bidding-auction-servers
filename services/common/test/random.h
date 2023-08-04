@@ -33,6 +33,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 using EncodedBuyerInputs = google::protobuf::Map<std::string, std::string>;
+using InterestGroupForBidding =
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
 
 std::string MakeARandomString() {
   return std::to_string(ToUnixNanos(absl::Now()));
@@ -183,20 +185,17 @@ std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice() {
   return u_ptr_to_ig;
 }
 
-std::unique_ptr<
-    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-MakeAnInterestGroupForBiddingSentFromDevice() {
+InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice() {
   std::unique_ptr<BuyerInput::InterestGroup> ig_with_two_ads =
       MakeAnInterestGroupSentFromDevice();
-  auto ig_for_bidding_from_device = std::make_unique<
-      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>();
+  InterestGroupForBidding ig_for_bidding_from_device;
 
-  ig_for_bidding_from_device->set_name(ig_with_two_ads->name());
-  ig_for_bidding_from_device->mutable_browser_signals()->CopyFrom(
+  ig_for_bidding_from_device.set_name(ig_with_two_ads->name());
+  ig_for_bidding_from_device.mutable_browser_signals()->CopyFrom(
       ig_with_two_ads->browser_signals());
-  ig_for_bidding_from_device->mutable_ad_render_ids()->MergeFrom(
+  ig_for_bidding_from_device.mutable_ad_render_ids()->MergeFrom(
       ig_with_two_ads->ad_render_ids());
-  ig_for_bidding_from_device->mutable_trusted_bidding_signals_keys()->Add(
+  ig_for_bidding_from_device.mutable_trusted_bidding_signals_keys()->Add(
       MakeARandomString());
   return ig_for_bidding_from_device;
 }
@@ -225,84 +224,68 @@ std::string MakeRandomTrustedBiddingSignals(
 
 // build_android_signals: If false, will insert random values into
 // browser signals, otherwise will insert random values into android signals.
-std::unique_ptr<
-    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-MakeARandomInterestGroupForBidding(
+InterestGroupForBidding MakeARandomInterestGroupForBidding(
     bool build_android_signals,
     bool set_user_bidding_signals_to_empty_struct = false) {
-  std::unique_ptr<
-      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-      ig_for_bidding =
-          std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest::
-                               InterestGroupForBidding>();
-  ig_for_bidding->set_name(MakeARandomString());
-  ig_for_bidding->mutable_trusted_bidding_signals_keys()->Add(
+  InterestGroupForBidding ig_for_bidding;
+  ig_for_bidding.set_name(MakeARandomString());
+  ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
       MakeARandomString());
   if (!set_user_bidding_signals_to_empty_struct) {
     // Takes ownership of pointer.
-    ig_for_bidding->set_user_bidding_signals(
+    ig_for_bidding.set_user_bidding_signals(
         R"JSON({"years": [1776, 1868], "name": "winston", "someId": 1789})JSON");
   }
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);
   for (int i = 0; i < ad_render_ids_to_generate; i++) {
-    *ig_for_bidding->mutable_ad_render_ids()->Add() =
+    *ig_for_bidding.mutable_ad_render_ids()->Add() =
         absl::StrCat("ad_render_id_", MakeARandomString());
   }
   if (build_android_signals) {
     // Empty message for now.
-    ig_for_bidding->mutable_android_signals();
+    ig_for_bidding.mutable_android_signals();
   } else {
-    ig_for_bidding->mutable_browser_signals()->CopyFrom(
-        MakeRandomBrowserSignalsForIG(ig_for_bidding->ad_render_ids()));
+    ig_for_bidding.mutable_browser_signals()->CopyFrom(
+        MakeRandomBrowserSignalsForIG(ig_for_bidding.ad_render_ids()));
   }
   return ig_for_bidding;
 }
 
-std::unique_ptr<
-    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-MakeALargeInterestGroupForBiddingForLatencyTesting() {
+InterestGroupForBidding MakeALargeInterestGroupForBiddingForLatencyTesting() {
   int num_ads = 10, num_bidding_signals_keys = 10, num_ad_render_ids = 10,
       num_ad_component_render_ids = 10, num_user_bidding_signals = 10;
-  std::unique_ptr<
-      GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-      ig_for_bidding =
-          std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest::
-                               InterestGroupForBidding>();
+  InterestGroupForBidding ig_for_bidding;
   // Name.
-  ig_for_bidding->set_name("HandbagShoppers");
+  ig_for_bidding.set_name("HandbagShoppers");
   // Ad render IDs.
   for (int i = 0; i < num_ad_render_ids; i++) {
-    ig_for_bidding->mutable_ad_render_ids()->Add(
+    ig_for_bidding.mutable_ad_render_ids()->Add(
         absl::StrCat("adRenderId", i + 1));
   }
   // Ad component render IDs.
   for (int i = 0; i < num_ad_component_render_ids; i++) {
-    ig_for_bidding->mutable_ad_component_render_ids()->Add(
+    ig_for_bidding.mutable_ad_component_render_ids()->Add(
         absl::StrCat("adComponentRenderId", i + 1));
   }
   // Bidding signals keys.
   for (int i = 0; i < num_bidding_signals_keys; i++) {
-    ig_for_bidding->mutable_trusted_bidding_signals_keys()->Add(
+    ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
         absl::StrCat("biddingSignalsKey", i + 1));
   }
   // User bidding signals.
-  ig_for_bidding->set_user_bidding_signals(
+  ig_for_bidding.set_user_bidding_signals(
       MakeAFixedSetOfUserBiddingSignals(num_user_bidding_signals));
   // Device signals.
-  ig_for_bidding->mutable_browser_signals()->CopyFrom(
-      MakeRandomBrowserSignalsForIG(ig_for_bidding->ad_render_ids()));
+  ig_for_bidding.mutable_browser_signals()->CopyFrom(
+      MakeRandomBrowserSignalsForIG(ig_for_bidding.ad_render_ids()));
   return ig_for_bidding;
 }
 
-std::unique_ptr<
-    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-MakeARandomInterestGroupForBiddingFromAndroid() {
+InterestGroupForBidding MakeARandomInterestGroupForBiddingFromAndroid() {
   return MakeARandomInterestGroupForBidding(true);
 }
 
-std::unique_ptr<
-    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding>
-MakeARandomInterestGroupForBiddingFromBrowser() {
+InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser() {
   return MakeARandomInterestGroupForBidding(false);
 }
 
@@ -311,11 +294,10 @@ MakeARandomGenerateBidsRawRequestForAndroid() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
-  // Takes ownership of pointers
-  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
-      MakeARandomInterestGroupForBiddingFromAndroid().release());
-  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
-      MakeARandomInterestGroupForBiddingFromAndroid().release());
+  *raw_request.mutable_interest_group_for_bidding()->Add() =
+      MakeARandomInterestGroupForBiddingFromAndroid();
+  *raw_request.mutable_interest_group_for_bidding()->Add() =
+      MakeARandomInterestGroupForBiddingFromAndroid();
   raw_request.set_allocated_auction_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
@@ -330,11 +312,10 @@ MakeARandomGenerateBidsRequestForBrowser() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
-  // Takes ownership of pointers
-  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
-      MakeARandomInterestGroupForBiddingFromBrowser().release());
-  raw_request.mutable_interest_group_for_bidding()->AddAllocated(
-      MakeARandomInterestGroupForBiddingFromBrowser().release());
+  *raw_request.mutable_interest_group_for_bidding()->Add() =
+      MakeARandomInterestGroupForBiddingFromBrowser();
+  *raw_request.mutable_interest_group_for_bidding()->Add() =
+      MakeARandomInterestGroupForBiddingFromBrowser();
   raw_request.set_allocated_auction_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
@@ -582,6 +563,10 @@ SelectAdRequest MakeARandomSelectAdRequest(
   for (auto& buyer_input_pair : protected_audience_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         buyer_input_pair.first;
+    SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config = {};
+    per_buyer_config.set_buyer_signals(MakeARandomString());
+    request.mutable_auction_config()->mutable_per_buyer_config()->insert(
+        {buyer_input_pair.first, per_buyer_config});
   }
 
   request.mutable_auction_config()->set_seller(seller_domain_origin);

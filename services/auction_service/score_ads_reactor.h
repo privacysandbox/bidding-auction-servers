@@ -27,6 +27,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/data/runtime_config.h"
+#include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
@@ -81,8 +82,11 @@ class ScoreAdsReactor
   void PerformDebugReporting(
       const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
+  void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score);
   // Finishes the RPC call with an OK status.
   void FinishWithOkStatus();
+  void ReportingCallback(
+      const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's
@@ -109,6 +113,7 @@ class ScoreAdsReactor
   bool enable_adtech_code_logging_;
   bool enable_report_result_url_generation_;
   bool enable_report_win_url_generation_;
+  std::string seller_origin_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

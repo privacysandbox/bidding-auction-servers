@@ -35,6 +35,9 @@
 #include "rapidjson/pointer.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include "services/auction_service/code_wrapper/seller_code_wrapper.h"
+#include "services/auction_service/reporting/reporting_helper.h"
+#include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -49,10 +52,9 @@ using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 
 constexpr char DispatchHandlerFunctionName[] = "scoreAd";
-constexpr char DispatchWrapperHandlerFunctionName[] = "scoreAdWrapper";
-constexpr char kAdComponentRenderUrlsProperty[] = "adComponentRenderUrls";
 constexpr char DispatchHandlerFunctionWithSellerWrapper[] =
     "scoreAdEntryFunction";
+constexpr char kAdComponentRenderUrlsProperty[] = "adComponentRenderUrls";
 constexpr char kRenderUrlsPropertyForKVResponse[] = "renderUrls";
 constexpr char kRenderUrlsPropertyForScoreAd[] = "renderUrl";
 constexpr char kRomaTimeoutMs[] = "TimeoutMs";
@@ -104,7 +106,7 @@ enum class ScoreAdArgs : int {
   // This is only added to prevent errors in the score ad script, and
   // will always be an empty object.
   kDirectFromSellerSignals,
-  kEnableAdTechCodeLogging,
+  kFeatureFlags,
 };
 
 constexpr int ScoreArgIndex(ScoreAdArgs arg) {
@@ -127,7 +129,7 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
     const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
         scoring_signals,
     const ContextLogger& logger, bool enable_seller_code_wrapper,
-    bool enable_adtech_code_logging) {
+    bool enable_adtech_code_logging, bool enable_debug_reporting) {
   int input_size = kArgSizeDefault;
   if (enable_seller_code_wrapper) {
     input_size = kArgSizeWithWrapper;
@@ -159,14 +161,9 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
   input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)] =
       std::make_shared<std::string>("{}");
   if (enable_seller_code_wrapper) {
-    // Converting the bool value to a string so that it can be passed as an
-    // input arg.
-    std::string enable_adtech_code_logging_ = "false";
-    if (enable_adtech_code_logging) {
-      enable_adtech_code_logging_ = "true";
-    }
-    input[ScoreArgIndex(ScoreAdArgs::kEnableAdTechCodeLogging)] =
-        std::make_shared<std::string>(enable_adtech_code_logging_);
+    input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)] =
+        std::make_shared<std::string>(GetFeatureFlagJson(
+            enable_adtech_code_logging, enable_debug_reporting));
   }
   if (VLOG_IS_ON(2)) {
     logger.vlog(2, "\n\nScore Ad Input Args:", "\nAdMetadata:\n",
@@ -200,14 +197,13 @@ DispatchRequest BuildScoreAdRequest(
   score_ad_request.version_num = 1;
   if (enable_seller_code_wrapper) {
     score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
-  } else if (enable_debug_reporting) {
-    score_ad_request.handler_name = DispatchWrapperHandlerFunctionName;
   } else {
     score_ad_request.handler_name = DispatchHandlerFunctionName;
   }
-  score_ad_request.input = ScoreAdInput(
-      ad, auction_config, publisher_hostname, scoring_signals, logger,
-      enable_seller_code_wrapper, enable_adtech_code_logging);
+  score_ad_request.input =
+      ScoreAdInput(ad, auction_config, publisher_hostname, scoring_signals,
+                   logger, enable_seller_code_wrapper,
+                   enable_adtech_code_logging, enable_debug_reporting);
   return score_ad_request;
 }
 
@@ -445,11 +441,19 @@ absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     for (const auto& log : logs.GetArray()) {
       logger.vlog(1, "Logs: ", log.GetString());
     }
+    const rapidjson::Value& warnings = document["warnings"];
+    for (const auto& warning : warnings.GetArray()) {
+      logger.vlog(1, "Warnings: ", warning.GetString());
+    }
+    const rapidjson::Value& errors = document["errors"];
+    for (const auto& error : errors.GetArray()) {
+      logger.vlog(1, "Errors: ", error.GetString());
+    }
   }
   rapidjson::Document response_obj;
-  const auto iterator = document.FindMember("response");
+  auto iterator = document.FindMember("response");
   if (iterator != document.MemberEnd() && iterator->value.IsObject()) {
-    response_obj.Swap(iterator->value);
+    response_obj.CopyFrom(iterator->value, response_obj.GetAllocator());
   }
   return response_obj;
 }
@@ -558,15 +562,16 @@ void ScoreAdsReactor::Execute() {
   }
 }
 
-void ParseScoreAdResponse(const rapidjson::Document& score_ad_resp,
-                          ScoreAdsResponse::AdScore* score_ads_response) {
+ScoreAdsResponse::AdScore ParseScoreAdResponse(
+    const rapidjson::Document& score_ad_resp) {
+  ScoreAdsResponse::AdScore score_ads_response;
   auto desirability_itr =
       score_ad_resp.FindMember(kDesirabilityPropertyForScoreAd);
   if (desirability_itr == score_ad_resp.MemberEnd() ||
       !desirability_itr->value.IsNumber()) {
-    score_ads_response->set_desirability(0.0);
+    score_ads_response.set_desirability(0.0);
   } else {
-    score_ads_response->set_desirability(
+    score_ads_response.set_desirability(
         (double)desirability_itr->value.GetDouble());
   }
 
@@ -574,16 +579,16 @@ void ParseScoreAdResponse(const rapidjson::Document& score_ad_resp,
       score_ad_resp.FindMember(kAllowComponentAuctionPropertyForScoreAd);
   if (component_auction_iter == score_ad_resp.MemberEnd() ||
       !component_auction_iter->value.IsBool()) {
-    score_ads_response->set_allow_component_auction(false);
+    score_ads_response.set_allow_component_auction(false);
   } else {
-    score_ads_response->set_allow_component_auction(
+    score_ads_response.set_allow_component_auction(
         (double)component_auction_iter->value.GetBool());
   }
 
   auto debug_report_urls_itr =
       score_ad_resp.FindMember(kDebugReportUrlsPropertyForScoreAd);
   if (debug_report_urls_itr == score_ad_resp.MemberEnd()) {
-    return;
+    return score_ads_response;
   }
   DebugReportUrls debug_report_urls;
   if (debug_report_urls_itr->value.HasMember(
@@ -602,7 +607,8 @@ void ParseScoreAdResponse(const rapidjson::Document& score_ad_resp,
         debug_report_urls_itr->value[kAuctionDebugLossUrlPropertyForScoreAd]
             .GetString());
   }
-  *score_ads_response->mutable_debug_report_urls() = debug_report_urls;
+  *score_ads_response.mutable_debug_report_urls() = debug_report_urls;
+  return score_ads_response;
 }
 
 std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
@@ -634,6 +640,42 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
   ad_rejection_reason_.set_rejection_reason(rejection_reason);
   ad_rejection_reason = std::make_optional(ad_rejection_reason_);
   return ad_rejection_reason;
+}
+
+void ScoreAdsReactor::PerformReporting(
+    const ScoreAdsResponse::AdScore& winning_ad_score) {
+  std::vector<DispatchRequest> dispatch_requests;
+  std::shared_ptr<std::string> auction_config =
+      BuildAuctionConfig(raw_request_);
+  DispatchRequest dispatch_request;
+  BuyerReportingMetadata buyer_reporting_metadata = {
+      .enable_report_win_url_generation = enable_report_win_url_generation_,
+      .buyer_signals = raw_request_.per_buyer_signals().at(
+          winning_ad_score.interest_group_owner()),
+      .join_count = ad_data_.at(winning_ad_score.render()).get()->join_count(),
+      .recency = ad_data_.at(winning_ad_score.render()).get()->recency(),
+      .modeling_signals =
+          ad_data_.at(winning_ad_score.render()).get()->modeling_signals()};
+  dispatch_request = GetReportingDispatchRequest(
+      winning_ad_score, raw_request_.publisher_hostname(),
+      enable_adtech_code_logging_, auction_config, logger_,
+      buyer_reporting_metadata);
+  dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
+  dispatch_requests.push_back(std::move(dispatch_request));
+  auto status = dispatcher_.BatchExecute(
+      dispatch_requests,
+      [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+        ReportingCallback(result);
+      });
+
+  if (!status.ok()) {
+    std::string original_request;
+    TextFormat::PrintToString(raw_request_, &original_request);
+    logger_.vlog(
+        1, "Reporting execution request failed for batch: ", original_request,
+        status.ToString(absl::StatusToStringMode::kWithEverything));
+    FinishWithOkStatus();
+  }
 }
 
 // Handles the output of the code execution dispatch.
@@ -678,9 +720,10 @@ void ScoreAdsReactor::ScoreAdsCallback(
       }
       const AdWithBidMetadata* ad =
           ad_data_.at(responses[index].value().id).get();
+
       if (response_json.ok()) {
-        ScoreAdsResponse::AdScore score_ads_response;
-        ParseScoreAdResponse(response_json.value(), &score_ads_response);
+        ScoreAdsResponse::AdScore score_ads_response =
+            ParseScoreAdResponse(*response_json);
         score_ads_response.set_interest_group_name(ad->interest_group_name());
         score_ads_response.set_interest_group_owner(ad->interest_group_owner());
         score_ads_response.set_buyer_bid(ad->bid());
@@ -696,9 +739,9 @@ void ScoreAdsReactor::ScoreAdsCallback(
         ad_scores_.push_back(
             std::make_unique<ScoreAdsResponse::AdScore>(score_ads_response));
         // Parse Ad rejection reason and store only if it has value.
-        const auto& ad_rejection_reason = ParseAdRejectionReason(
-            response_json.value(), ad->interest_group_owner(),
-            ad->interest_group_name(), logger_);
+        const auto& ad_rejection_reason =
+            ParseAdRejectionReason(*response_json, ad->interest_group_owner(),
+                                   ad->interest_group_name(), logger_);
         if (ad_rejection_reason.has_value()) {
           ad_rejection_reasons.push_back(ad_rejection_reason.value());
         }
@@ -758,12 +801,16 @@ void ScoreAdsReactor::ScoreAdsCallback(
 
     PerformDebugReporting(winning_ad);
     *raw_response_.mutable_ad_score() = winning_ad.value();
-    DCHECK(encryption_enabled_);
-    EncryptResponse();
 
     logger_.vlog(2, "ScoreAdsResponse:\n", response_->DebugString());
-    benchmarking_logger_->HandleResponseEnd();
-    FinishWithOkStatus();
+    if (!enable_report_result_url_generation_) {
+      DCHECK(encryption_enabled_);
+      EncryptResponse();
+      benchmarking_logger_->HandleResponseEnd();
+      FinishWithOkStatus();
+      return;
+    }
+    PerformReporting(winning_ad.value());
   } else {
     LOG(WARNING) << "No ad was selected as most desirable";
     PerformDebugReporting(winning_ad);
@@ -773,9 +820,73 @@ void ScoreAdsReactor::ScoreAdsCallback(
   }
 }
 
+void ScoreAdsReactor::ReportingCallback(
+    const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
+  if (VLOG_IS_ON(2)) {
+    for (const auto& dispatch_response : responses) {
+      logger_.vlog(2, "Reporting V8 Response: ", dispatch_response.status());
+      if (dispatch_response.ok()) {
+        logger_.vlog(2, dispatch_response.value().resp);
+      }
+    }
+  }
+  for (const auto& response : responses) {
+    if (response.ok()) {
+      absl::StatusOr<ReportingResponse> reporting_response =
+          ParseAndGetReportingResponse(enable_adtech_code_logging_,
+                                       response.value().resp);
+      if (!reporting_response.ok()) {
+        logger_.vlog(0, "Failed to parse response from Roma ",
+                     reporting_response.status().ToString(
+                         absl::StatusToStringMode::kWithEverything));
+        continue;
+      }
+      raw_response_.mutable_ad_score()
+          ->mutable_win_reporting_urls()
+          ->mutable_component_seller_reporting_urls()
+          ->set_reporting_url(reporting_response.value()
+                                  .report_result_response.report_result_url);
+      raw_response_.mutable_ad_score()
+          ->mutable_win_reporting_urls()
+          ->mutable_buyer_reporting_urls()
+          ->set_reporting_url(
+              reporting_response.value().report_win_response.report_win_url);
+
+      for (const auto& [event, interactionReportingUrl] :
+           reporting_response.value()
+               .report_result_response.interaction_reporting_urls) {
+        raw_response_.mutable_ad_score()
+            ->mutable_win_reporting_urls()
+            ->mutable_component_seller_reporting_urls()
+            ->mutable_interaction_reporting_urls()
+            ->try_emplace(event, interactionReportingUrl);
+      }
+      for (const auto& [event, interactionReportingUrl] :
+           reporting_response.value()
+               .report_win_response.interaction_reporting_urls) {
+        raw_response_.mutable_ad_score()
+            ->mutable_win_reporting_urls()
+            ->mutable_buyer_reporting_urls()
+            ->mutable_interaction_reporting_urls()
+            ->try_emplace(event, interactionReportingUrl);
+      }
+    } else {
+      logger_.warn("Invalid execution (possibly invalid input): ",
+                   response.status().ToString(
+                       absl::StatusToStringMode::kWithEverything));
+    }
+  }
+
+  logger_.vlog(2, "ReportingResponse:\n", response_->DebugString());
+  DCHECK(encryption_enabled_);
+  EncryptResponse();
+  benchmarking_logger_->HandleResponseEnd();
+  FinishWithOkStatus();
+}
+
 void ScoreAdsReactor::PerformDebugReporting(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
-  std::unique_ptr<PostAuctionSignals> post_auction_signals =
+  PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(winning_ad_score);
   for (const auto& ad_score : ad_scores_) {
     if (ad_score->has_debug_report_urls()) {
@@ -793,15 +904,15 @@ void ScoreAdsReactor::PerformDebugReporting(
                   << " ,status:" << result.status();
         }
       };
-      if (ig_owner == post_auction_signals->winning_ig_owner &&
-          ig_name == post_auction_signals->winning_ig_name) {
+      if (ig_owner == post_auction_signals.winning_ig_owner &&
+          ig_name == post_auction_signals.winning_ig_name) {
         debug_url = ad_score->debug_report_urls().auction_debug_win_url();
       } else {
         debug_url = ad_score->debug_report_urls().auction_debug_loss_url();
       }
       HTTPRequest http_request = CreateDebugReportingHttpRequest(
           debug_url, GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
-                                                        *post_auction_signals));
+                                                        post_auction_signals));
       async_reporter_->DoReport(http_request, done_cb);
     }
   }

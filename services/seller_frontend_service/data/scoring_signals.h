@@ -23,7 +23,7 @@
 #include "api/bidding_auction_servers.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-using BuyerBidsList =
+using BuyerBidsResponseMap =
     absl::flat_hash_map<const std::string,
                         std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>;
 

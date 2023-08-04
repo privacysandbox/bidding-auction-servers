@@ -55,9 +55,8 @@ std::string GetValidInput(const SelectAdRequest& expected_output) {
                                    input.GetAllocator());
 
   // Copy auction config from expected output.
-  input.AddMember(kAuctionConfigField,
-                  ProtoToDocument(expected_output.auction_config()),
-                  input.GetAllocator());
+  auto document = ProtoToDocument(expected_output.auction_config());
+  input.AddMember(kAuctionConfigField, document, input.GetAllocator());
   input.AddMember(kProtectedAudienceInputField, protected_audience_doc,
                   input.GetAllocator());
 

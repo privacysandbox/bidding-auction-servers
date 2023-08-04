@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "services/common/metric/telemetry_flag.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
 #include "absl/log/absl_log.h"
 #include "gmock/gmock.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 
-namespace privacy_sandbox::server_common::metric {
+namespace privacy_sandbox::server_common {
 namespace {
 
 using google::protobuf::util::MessageDifferencer;
@@ -31,7 +31,7 @@ TEST(TelemetryFlag, Parse) {
   TelemetryFlag f_parsed;
   std::string err;
   EXPECT_TRUE(AbslParseFlag(flag_str, &f_parsed, &err));
-  EXPECT_EQ(f_parsed.server_config.mode(), ServerConfig::PROD);
+  EXPECT_EQ(f_parsed.server_config.mode(), TelemetryConfig::PROD);
   EXPECT_EQ(f_parsed.server_config.metric_size(), 2);
 }
 
@@ -43,7 +43,7 @@ TEST(TelemetryFlag, ParseError) {
 
 TEST(TelemetryFlag, ParseUnParse) {
   TelemetryFlag f;
-  f.server_config.set_mode(ServerConfig::PROD);
+  f.server_config.set_mode(TelemetryConfig::PROD);
   f.server_config.add_metric()->set_name("m_0");
   f.server_config.add_metric()->set_name("m_1");
   TelemetryFlag f_parsed;
@@ -55,20 +55,20 @@ TEST(TelemetryFlag, ParseUnParse) {
 }
 
 TEST(BuildDependentConfig, Off) {
-  ServerConfig config_proto;
-  config_proto.set_mode(ServerConfig::OFF);
+  TelemetryConfig config_proto;
+  config_proto.set_mode(TelemetryConfig::OFF);
   BuildDependentConfig config(config_proto);
   EXPECT_FALSE(config.MetricAllowed());
   EXPECT_FALSE(config.TraceAllowed());
 }
 
 TEST(BuildDependentConfig, Prod) {
-  ServerConfig config_proto;
-  config_proto.set_mode(ServerConfig::PROD);
+  TelemetryConfig config_proto;
+  config_proto.set_mode(TelemetryConfig::PROD);
   BuildDependentConfig config(config_proto);
   EXPECT_TRUE(config.MetricAllowed());
   EXPECT_FALSE(config.TraceAllowed());
 }
-}  // namespace
 
-}  // namespace privacy_sandbox::server_common::metric
+}  // namespace
+}  // namespace privacy_sandbox::server_common

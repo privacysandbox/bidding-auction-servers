@@ -45,6 +45,9 @@ message ProtectedAudienceInput {
 
   // Globally unique identifier for the client request.
   string generation_id = 4;
+
+  // Consented debugging field.
+  ConsentedDebugConfiguration consented_debug_config = 5;
 }
 
 // A BuyerInput includes data that a buyer (DSP) requires to generate bids.
@@ -419,6 +422,9 @@ message GetBidsRequest {
 
     // Helpful context for logging and tracing the request.
     LogContext log_context = 8;
+
+    // Consented debugging field.
+    ConsentedDebugConfiguration consented_debug_config = 9;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -589,6 +595,9 @@ message GenerateBidsRequest {
 
     // Helpful context for logging and tracing the request.
     LogContext log_context = 8;
+
+    // Consented debugging field.
+    ConsentedDebugConfiguration consented_debug_config = 9;
   }
 
   // Encrypted GenerateBidsRawRequest.
@@ -680,6 +689,9 @@ message ScoreAdsRequest {
       // limited to an 8-bit mantissa and 8-bit exponent, with any rounding
       // performed stochastically.
       double ad_cost = 11;
+
+      // Consented debugging field.
+      ConsentedDebugConfiguration consented_debug_config = 12;
     }
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
@@ -729,6 +741,10 @@ message ScoreAdsRequest {
 
     // Helpful context for logging and tracing the request.
     LogContext log_context = 7;
+
+    // Map of buyer_origin to buyer_signals required as input for event level
+    // reporting url generation for the winning buyer.
+    map<string, string> per_buyer_signals = 8;
   }
 
   // Encrypted ScoreAdsRawRequest.
@@ -878,4 +894,16 @@ message DebugReportUrls {
   // URL to be triggered if the interest grou losses the auction.
   // If undefined or malformed url it will be ignored.
   string auction_debug_loss_url = 2;
+}
+
+// Consented debugging configuration.
+// Example:
+// The Chrome browser can set the following two fields:
+// 'consentedDebugConfig': {'isConsented': 'true', 'token': 'xxx'}
+message ConsentedDebugConfiguration {
+  // Whether the request is consented for debugging.
+  bool is_consented = 1;
+
+  // The debug token embedded in the request.
+  string token = 2;
 }

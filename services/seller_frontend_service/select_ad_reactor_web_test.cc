@@ -60,10 +60,9 @@ class SelectAdReactorForWebTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-    metric::SfeContextMap(
-        server_common::metric::BuildDependentConfig(config_proto));
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
   }
 };
 
@@ -81,7 +80,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
@@ -151,7 +150,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
@@ -219,7 +218,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
@@ -312,7 +311,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
@@ -400,7 +399,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
@@ -464,7 +463,7 @@ TEST_F(SelectAdReactorForWebTest,
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
