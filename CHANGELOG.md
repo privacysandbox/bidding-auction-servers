@@ -2,6 +2,99 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.10.0 (2023-08-03)
+
+
+### Features
+
+*  [AWS] add example terraform directory with README
+* [GCP] add example terraform directory with README
+* [reporting] Add helper function for cbor encoding and decoding of Win Reporting Urls
+* [reporting] Add helper function to build the dispatch request for
+* [reporting] Execute reportWin script and return the urls in the response.
+* [reporting] Fix reportWin function execution.
+* add AWS enclave PCR0 in release notes
+* Add bazel build flag --announce_rc
+* Add bazel configs for roma legacy vs sandboxed
+* add build_flavor for AWS packaging
+* add build_flavor for packaging
+* add buyerReportWinJsUrls to terraform files and enable_report_win_url_generation to BuyerCodeFetchConfig
+* add cpu memory metric for debugging
+* add FetchUrls utility to MultiCurlHttpFetcher
+* add GCP metric dashboard
+* add method to accumulate metric values before logging
+* Add OSSF Scorecard badge to top-level README
+* Add OSSF Scorecard GitHub workflow
+* Add the server flags to support user consented debugging
+* change autoscale cpu utilization measure to GCP suggested default (60%)
+* changing PeriodicCodeFetcher to add wasm support and runtime config support
+* clarify default lb policy within an instance group is ROUND_ROBIN
+* enable counter metrics with dp aggregation
+* Enable logging in the OTel collector
+* Encrypt GetBidsRequest for benchmarking
+* Flag protect the opentelemetry based logging
+* include coordinator and attestation support for GCP
+* load and append wasm string to the JS code wrapper
+* move observable system metric to server definition
+* support different instance types per service in GCP
+* update multi-region.tf to use prod js urls and test mode true
+* Upgrade build-system to release-0.30.1
+* Upgrade build-system to release-0.31.0
+* Upgrade data-plane-shared-libraries for Opentelemetry logs API
+* use //:non_prod_build to configure build
+
+
+### Bug Fixes
+
+* Add seller_code_fetch_config and buyer_code_fetch_config to server start scripts
+* Adjust all/small test configs
+* Adjust sanitizer configs
+* Adjust SFE DCHECKs
+* bidding_service_test
+* Change PeriodicCodeFetcher to use std::string instead of absl::string_view in the parameters
+* Correct example BFE hostname
+* Correct license block
+* CPU monitoring is not limited to a specific environment
+* Define container image log variables once
+* Don't end select ad request prematurely
+* Encode Ad Component Render URLs when sending request to Seller Key-Value Server
+* Ensure --gcp-image flags are specified for gcp
+* Ensure --instance flag is specified
+* fix missing telemetry flag and readme
+* Fixes few ASAN issues
+* Improve build_and_test_all_in_docker usage text
+* Minimal CBOR encoding for uint/float
+* Order the keys in the response
+* patch google dp library to replace logging with absl
+* refactor the test to share initialization
+* remove unnecessary flags
+* Remove unwanted seller_origin flag from start_auction script
+* Rename `adRenderUrl` to `adRenderURL`
+* Rename the opentelemetry endpoint flag
+* secure_invoke respects --insecure flag for BFE
+* TEE<>TEE fix
+* temporarily eliminate requirement to have device signals to generate bids
+* Update and read the buyer_bids_ with lock
+
+
+### API: Features
+
+* **api:** Add the fields to support adtech-consented debugging
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to v0.33.0
+* **deps:** Upgrade build-system to v0.39.0
+* **deps:** Upgrade build-system to v0.41.0
+* **deps:** upgrade opentelemetry-cpp to 1.9.1 for B&A servers
+
+
+### Documentation
+
+* update release README instructions
+* Update secure_invoke README with new instructions for running.
+
 ## 0.9.0 (2023-07-20)
 
 

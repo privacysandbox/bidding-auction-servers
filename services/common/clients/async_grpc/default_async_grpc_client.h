@@ -22,6 +22,7 @@
 
 #include "glog/logging.h"
 #include "services/common/clients/async_client.h"
+#include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/util/error_categories.h"
@@ -62,7 +63,8 @@ class DefaultAsyncGrpcClient
       VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     }
     VLOG(5) << "Encrypting request ...";
-    auto secret_request = EncryptRequest(raw_request.get());
+    auto secret_request = EncryptRequestWithHpke<RawRequest, Request>(
+        std::move(raw_request), *crypto_client_, *key_fetcher_manager_);
     if (!secret_request.ok()) {
       VLOG(1) << "Failed to encrypt the request: " << secret_request.status();
       auto error_status = absl::InternalError(kEncryptionFailed);
@@ -101,34 +103,6 @@ class DefaultAsyncGrpcClient
       RawClientParams<Request, Response, RawResponse>* params) const {
     VLOG(5) << "Stub SendRpc invoked ...";
     return absl::NotFoundError("Method should be implemented by subclasses");
-  }
-
-  absl::StatusOr<SecretRequest> EncryptRequest(RawRequest* raw_request) const {
-    absl::StatusOr<PublicKey> key = key_fetcher_manager_->GetPublicKey();
-    if (!key.ok()) {
-      const std::string error =
-          absl::StrCat("Could not get public key to use for HPKE encryption: ",
-                       key.status().message());
-      LOG(ERROR) << error;
-      return absl::InternalError(error);
-    }
-
-    auto encrypt_response = crypto_client_->HpkeEncrypt(
-        key.value(), raw_request->SerializeAsString());
-
-    if (!encrypt_response.ok()) {
-      const std::string error = absl::StrCat(
-          "Failed encrypting request: ", encrypt_response.status().message());
-      LOG(ERROR) << error;
-      return absl::InternalError(error);
-    }
-
-    std::unique_ptr<Request> request = std::make_unique<Request>();
-    request->set_key_id(key->key_id());
-    request->set_request_ciphertext(
-        std::move(encrypt_response->encrypted_data().ciphertext()));
-    return SecretRequest{std::move(encrypt_response->secret()),
-                         std::move(request)};
   }
 
   [[deprecated]] absl::Status DecryptResponse(

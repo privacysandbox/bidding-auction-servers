@@ -1,19 +1,28 @@
 build --announce_rc
 build --verbose_failures
-build --client_env=CC=clang
-build --cxxopt=-std=c++17
-build --host_cxxopt=-std=c++17
-build --client_env=BAZEL_CXXOPTS=-std=c++17
-
+build --config=clang
+build --config=roma_sandboxed
 build --compilation_mode=opt
 build --output_filter='^//((?!(third_party):).)*$'`
 build --color=yes
 
 # Required to import opentelemetry with abseil
 build --@io_opentelemetry_cpp//api:with_abseil
-
+# Required to build OpenTelemtry with logs API.
+# TODO(b/287675870): Delete the following when the feature is no longer experimental.
+build --copt=-DENABLE_LOGS_PREVIEW
 # Avoid linking to ICU shared libs for googleurl
 build --@com_google_googleurl//build_config:system_icu=0
+
+build:clang --cxxopt=-fbracket-depth=512
+build:clang --client_env=CC=clang
+build:clang --cxxopt=-std=c++17
+build:clang --host_cxxopt=-std=c++17
+build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
+
+build:roma_legacy --@control_plane_shared//cc/roma/roma_service/src:service=legacy
+
+build:roma_sandboxed --@control_plane_shared//cc/roma/roma_service/src:service=sandboxed
 
 test --test_verbose_timeout_warnings
 
@@ -53,45 +62,46 @@ build:local_local --config=platform_local
 build:aws_aws --config=instance_aws
 build:aws_aws --config=platform_aws
 
-# Address sanitizer
+# Address sanitizer, set action_env to segregate cache entries
 build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1
 build:asan --strip=never
-build:asan --copt -fsanitize=address
-build:asan --copt -DADDRESS_SANITIZER
-build:asan --copt -g
-build:asan --copt -fno-omit-frame-pointer
-build:asan --linkopt -fsanitize=address
-# Run sudo apt-get install lld in case of error
+build:asan --compilation_mode=dbg
+build:asan --copt=-fsanitize=address
+build:asan --copt=-DADDRESS_SANITIZER
+build:asan --copt=-O1
+build:asan --copt=-g
+build:asan --copt=-fno-omit-frame-pointer
+build:asan --linkopt=-fsanitize=address
 build:asan --linkopt=-fuse-ld=lld
 build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
 
-# Memory sanitizer
+# Memory sanitizer, set action_env to segregate cache entries
 build:msan --action_env=PRIVACY_SANDBOX_SERVERS_MSAN=1
 build:msan --strip=never
-build:msan --copt -fsanitize=memory
-build:msan --copt -DMEMORY_SANITIZER
-build:msan --copt -g
-build:msan --copt -fno-omit-frame-pointer
-build:msan --linkopt -fsanitize=memory
+build:msan --copt=-fsanitize=memory
+build:msan --copt=-DMEMORY_SANITIZER
+build:msan --copt=-g
+build:msan --copt=-fno-omit-frame-pointer
+build:msan --linkopt=-fsanitize=memory
 
-# Undefined Behavior Sanitizer
+# Undefined Behavior sanitizer, set action_env to segregate cache entries
 build:ubsan --action_env=PRIVACY_SANDBOX_SERVERS_UBSAN=1
 build:ubsan --strip=never
-build:ubsan --copt -fsanitize=undefined
-build:ubsan --copt -DUNDEFINED_BEHAVIOR_SANITIZER
-build:ubsan --copt -g
-build:ubsan --copt -fno-omit-frame-pointer
-build:ubsan --linkopt -fsanitize=undefined
-build:ubsan --linkopt -lubsan
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --copt=-DUNDEFINED_BEHAVIOR_SANITIZER
+build:ubsan --copt=-g
+build:ubsan --copt=-fno-omit-frame-pointer
+build:ubsan --linkopt=-fsanitize=undefined
+build:ubsan --linkopt=-lubsan
 
-# Thread Sanitizer
+# Thread sanitizer, set action_env to segregate cache entries
 build:tsan --action_env=PRIVACY_SANDBOX_SERVERS_TSAN=1
 build:tsan --strip=never
 build:tsan --copt=-fsanitize=thread
 build:tsan --copt=-fno-omit-frame-pointer
 build:tsan --copt=-DGPR_NO_DIRECT_SYSCALLS
 build:tsan --copt=-DGRPC_TSAN
-build:tsan --copt -g
+build:tsan --copt=-g
 build:tsan --linkopt=-fsanitize=thread
 # This is needed to address false positive problem with abseil.
 # https://github.com/google/sanitizers/issues/953

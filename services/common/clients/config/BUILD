@@ -36,7 +36,7 @@ cc_library(
     srcs = ["trusted_server_config_client.cc"],
     hdrs = ["trusted_server_config_client.h"],
     deps = [
-        "//services/common/metric:telemetry_flag",
+        "//services/common/telemetry:telemetry_flag",
         "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:flat_hash_map",

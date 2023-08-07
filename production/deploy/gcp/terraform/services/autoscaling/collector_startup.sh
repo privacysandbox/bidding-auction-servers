@@ -37,6 +37,8 @@ exporters:
         # configures all resources to be passed on to GCP
         # https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/googlecloudexporter/README.md
         - regex: .*
+    log:
+      default_log_name: bidding-auction
 
 service:
   pipelines:
@@ -45,6 +47,10 @@ service:
       processors: [batch]
       exporters: [googlecloud]
     metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [googlecloud]
+    logs:
       receivers: [otlp]
       processors: [batch]
       exporters: [googlecloud]

@@ -46,47 +46,8 @@ After AMI being built, the PCR0 will be saved at `dist/aws/${SERVICE_PATH}.json`
 }
 ```
 
-The PCR0 of `--build-flavor prod` should match below.
-
--   auction_service
-
-    -   "PCR0":
-        "e1bb35fab8e5c699793ba514b275632ff7deee53b33f1972a5271b40a9cb7dd9c546603b371065066688bfa2a44a7e10"
-
--   seller_frontend_service
-
-    -   "PCR0":
-        "9fec8c6cdca16a01bce7d042035a53c25fce0168253baa989fa0039be17a229b84258eea8aaad2a0aca2694664c0f1f4"
-
--   bidding_service
-
-    -   "PCR0":
-        "97b878136116766c1c45b160c99c847466509a7e8bf81f5cfa45ac9acfc327531df3b4ee056fd5017c6356a2ad110542"
-
--   buyer_frontend_service
-    -   "PCR0":
-        "40bb23cacdc09b0baa25c30111a536790e8f5a7284dbfa852e4843c49f4bdd0576f6c1f572b7523b35e934220a22199c"
-
-The PCR0 of `--build-flavor non_prod` should match below.
-
--   auction_service
-
-    -   "PCR0":
-        "413d8cf9863943b42d354bf510857d65b43f10e693ffe4aee25fe666fcd0b759cae9ad08c7182a2ed9183e5d985c0a3a"
-
--   seller_frontend_service
-
-    -   "PCR0":
-        "3bf2849af6e52a451129f76fb68b5bcc5d2b653ac306f4839ae0fc97f11ee10db495587efaa1584fffe27ed4e98e38b5"
-
--   bidding_service
-
-    -   "PCR0":
-        "36cfa852bdd8c93c2b0a69e50db7b746e4bb13bfebd1947c74432d621f2f6b5ce7b249f1104c61efc69e7590c30d63f2"
-
--   buyer_frontend_service
-    -   "PCR0":
-        "e0a59f724be3253280b3d179786f5e52ba9fc6c85d65f4ea48beadfb9a33bca1fe887294bb1287bb75b3cdadcee0c45d"
+The PCR0 of `--build-flavor prod` and `--build-flavor non_prod` should match PCR0 in
+[Release notes](https://github.com/privacysandbox/bidding-auction-servers/releases)
 
 > Note: The PCR0 hash would be validated by the Key Management Systems operated by Coordinators to
 > provision keys as part of server attestation.

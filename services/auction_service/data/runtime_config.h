@@ -39,6 +39,8 @@ struct AuctionServiceRuntimeConfig {
   // Enables execution of reportWin() function from AdTech provided script to
   // generate the event level reporting urls for Buyer.
   bool enable_report_win_url_generation = false;
+  // Seller's domain required as input for reporting url generation.
+  std::string seller_origin = "";
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

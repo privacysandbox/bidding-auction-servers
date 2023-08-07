@@ -14,7 +14,6 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -22,36 +21,47 @@
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
-#include "rapidjson/writer.h"
+#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/util/json_util.h"
-#include "services/common/util/status_util.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-constexpr char kTestReportResultUrl[] = "http://reportResultUrl.com";
-constexpr char kTestSignalsForWinner[] = "{testKey:testValue}";
-constexpr char kTestLog[] = "testLog";
-constexpr bool kSendReportToInvokedTrue = true;
-constexpr bool kRegisterAdBeaconInvokedTrue = true;
-constexpr char kTestInteractionEvent[] = "click";
-constexpr char kTestInteractionUrl[] = "http://event.com";
-constexpr char kTestPublisherHostName[] = "publisherName";
-constexpr char kTestAuctionConfig[] = "testAuctionConfig";
-constexpr char kTestSellerReportingSignals[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","bid":1.0,"desirability":2.0,"highestScoringOtherBid":0.5})";
-constexpr char kTestInterestGroupOwner[] = "testOwner";
-constexpr char kTestInterestGroupName[] = "testInterestGroupName";
-constexpr char kTestRender[] = "http://testurl.com";
-constexpr float kTestBuyerBid = 1.0;
-constexpr float kTestDesirability = 2.0;
-constexpr float kTestHighestScoringOtherBid = 0.5;
-constexpr char kEnableAdtechCodeLoggingTrue[] = "true";
+rapidjson::Document GetReportWinJsonObj(const ReportingResponse& response) {
+  rapidjson::Document document;
+  document.SetObject();
+  // Convert the std::string to a rapidjson::Value object.
+  rapidjson::Value report_win_url;
+  report_win_url.SetString(response.report_win_response.report_win_url.c_str(),
+                           document.GetAllocator());
 
-absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response) {
+  document.AddMember(kReportWinUrl, report_win_url, document.GetAllocator());
+  document.AddMember(kSendReportToInvoked,
+                     response.report_win_response.send_report_to_invoked,
+                     document.GetAllocator());
+  document.AddMember(kRegisterAdBeaconInvoked,
+                     response.report_win_response.register_ad_beacon_invoked,
+                     document.GetAllocator());
+  rapidjson::Value map_value(rapidjson::kObjectType);
+  for (const auto& [event, url] :
+       response.report_win_response.interaction_reporting_urls) {
+    rapidjson::Value interaction_event;
+    interaction_event.SetString(event.c_str(), document.GetAllocator());
+    rapidjson::Value interaction_url;
+    interaction_url.SetString(url.c_str(), document.GetAllocator());
+    map_value.AddMember(interaction_event, interaction_url,
+                        document.GetAllocator());
+  }
+  document.AddMember(kInteractionReportingUrlsWrapperResponse, map_value,
+                     document.GetAllocator());
+  return document;
+}
+
+rapidjson::Document GetReportResultJsonObj(const ReportingResponse& response) {
   rapidjson::Document document;
   document.SetObject();
   // Convert the std::string to a rapidjson::Value object.
@@ -92,14 +102,33 @@ absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response) {
     map_value.AddMember(interaction_event, interaction_url,
                         document.GetAllocator());
   }
-  document.AddMember(kInteractionReportingUrls, map_value,
+  document.AddMember(kInteractionReportingUrlsWrapperResponse, map_value,
                      document.GetAllocator());
+  return document;
+}
 
+absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response) {
   rapidjson::Document outerDoc;
   outerDoc.SetObject();
-  outerDoc.AddMember(kReportResultResponse, document, outerDoc.GetAllocator());
-  outerDoc.AddMember(kSellerLogs, seller_logs, outerDoc.GetAllocator());
+  rapidjson::Document report_result_obj = GetReportResultJsonObj(response);
+  rapidjson::Document report_win_obj = GetReportWinJsonObj(response);
+  rapidjson::Value seller_logs(rapidjson::kArrayType);
+  for (const std::string& log : response.seller_logs) {
+    rapidjson::Value value(log.c_str(), log.size(), outerDoc.GetAllocator());
+    seller_logs.PushBack(value, outerDoc.GetAllocator());
+  }
+  rapidjson::Value buyer_logs(rapidjson::kArrayType);
+  for (const std::string& log : response.buyer_logs) {
+    rapidjson::Value value(log.c_str(), log.size(), outerDoc.GetAllocator());
+    buyer_logs.PushBack(value, outerDoc.GetAllocator());
+  }
 
+  outerDoc.AddMember(kReportResultResponse, report_result_obj,
+                     outerDoc.GetAllocator());
+  outerDoc.AddMember(kSellerLogs, seller_logs, outerDoc.GetAllocator());
+  outerDoc.AddMember(kReportWinResponse, report_win_obj,
+                     outerDoc.GetAllocator());
+  outerDoc.AddMember(kBuyerLogs, buyer_logs, outerDoc.GetAllocator());
   return SerializeJsonDoc(outerDoc);
 }
 
@@ -121,7 +150,8 @@ void TestResponse(const ReportingResponse& response,
 }
 
 void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
-              absl::string_view enable_adtech_code_logging) {
+              absl::string_view enable_adtech_code_logging,
+              const BuyerReportingMetadata& expected_buyer_metadata = {}) {
   EXPECT_EQ(
       *(response_vector[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
       kTestAuctionConfig);
@@ -134,22 +164,35 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
   EXPECT_EQ(*(response_vector[ReportingArgIndex(
                 ReportingArgs::kEnableAdTechCodeLogging)]),
             enable_adtech_code_logging);
+  if (!expected_buyer_metadata.enable_report_win_url_generation) {
+    EXPECT_EQ(*(response_vector[ReportingArgIndex(
+                  ReportingArgs::kBuyerReportingMetadata)]),
+              kDefaultBuyerReportingMetadata);
+  } else {
+    EXPECT_EQ(*(response_vector[ReportingArgIndex(
+                  ReportingArgs::kBuyerReportingMetadata)]),
+              kTestBuyerMetadata);
+  }
 }
 
 TEST(ParseAndGetReportingResponseJson, ParsesReportingResultSuccessfully) {
   bool enable_adtech_code_logging = true;
-  ReportingResponse expected_response;
-  expected_response.report_result_response.report_result_url =
-      kTestReportResultUrl;
-  expected_response.report_result_response.signals_for_winner =
-      kTestSignalsForWinner;
-  expected_response.report_result_response.send_report_to_invoked =
-      kSendReportToInvokedTrue;
-  expected_response.report_result_response.register_ad_beacon_invoked =
-      kRegisterAdBeaconInvokedTrue;
+  ReportingResponse expected_response = {
+      .report_result_response = {.report_result_url = kTestReportResultUrl,
+                                 .signals_for_winner = kTestSignalsForWinner,
+                                 .send_report_to_invoked =
+                                     kSendReportToInvokedTrue,
+                                 .register_ad_beacon_invoked =
+                                     kRegisterAdBeaconInvokedTrue},
+      .report_win_response = {
+          .report_win_url = kTestReportWinUrl,
+          .send_report_to_invoked = kSendReportToInvokedTrue,
+          .register_ad_beacon_invoked = kRegisterAdBeaconInvokedTrue}};
   expected_response.seller_logs.emplace_back(kTestLog);
   expected_response.report_result_response.interaction_reporting_urls
       .try_emplace(kTestInteractionEvent, kTestInteractionUrl);
+  expected_response.report_win_response.interaction_reporting_urls.try_emplace(
+      kTestInteractionEvent, kTestInteractionUrl);
   absl::StatusOr<std::string> json_string = BuildJsonObject(expected_response);
   ASSERT_TRUE(json_string.ok()) << json_string.status();
   absl::StatusOr<ReportingResponse> response = ParseAndGetReportingResponse(
@@ -186,7 +229,7 @@ TEST(ParseAndGetReportingResponseJson, HandlesEmptyResponse) {
   TestResponse(response.value(), expected_response);
 }
 
-TEST(GetReportingInput, ReturnsTheInputArgsForReportingEntryFunction) {
+TEST(GetReportingInput, ReturnsTheInputArgsForReportResult) {
   ScoreAdsResponse::AdScore winning_ad_score;
   winning_ad_score.set_buyer_bid(kTestBuyerBid);
   winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
@@ -205,11 +248,11 @@ TEST(GetReportingInput, ReturnsTheInputArgsForReportingEntryFunction) {
   const ContextLogger logger{};
   std::vector<std::shared_ptr<std::string>> response_vector =
       GetReportingInput(winning_ad_score, kTestPublisherHostName,
-                        enable_adtech_code_logging, auction_config, logger);
+                        enable_adtech_code_logging, auction_config, logger, {});
   TestArgs(response_vector, kEnableAdtechCodeLoggingTrue);
 }
 
-TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReporting) {
+TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
   ScoreAdsResponse::AdScore winning_ad_score;
   winning_ad_score.set_buyer_bid(kTestBuyerBid);
   winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
@@ -228,12 +271,44 @@ TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReporting) {
   const ContextLogger logger{};
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
-      auction_config, logger);
+      auction_config, logger, {});
   TestArgs(request.input, kEnableAdtechCodeLoggingTrue);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
   EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
 }
 
+TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
+  ScoreAdsResponse::AdScore winning_ad_score;
+  winning_ad_score.set_buyer_bid(kTestBuyerBid);
+  winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
+  winning_ad_score.set_interest_group_name(kTestInterestGroupName);
+  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
+      ->try_emplace(kTestInterestGroupOwner, google::protobuf::ListValue());
+  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
+      ->at(kTestInterestGroupOwner)
+      .add_values()
+      ->set_number_value(kTestHighestScoringOtherBid);
+  winning_ad_score.set_desirability(kTestDesirability);
+  winning_ad_score.set_render(kTestRender);
+  bool enable_adtech_code_logging = true;
+  std::shared_ptr<std::string> auction_config =
+      std::make_shared<std::string>(kTestAuctionConfig);
+  const ContextLogger logger{};
+  const BuyerReportingMetadata buyer_reporting_metadata = {
+      .enable_report_win_url_generation = true,
+      .buyer_signals = kTestBuyerSignals,
+      .join_count = kTestJoinCount,
+      .recency = kTestRecency,
+      .modeling_signals = kTestModelingSignals};
+  DispatchRequest request = GetReportingDispatchRequest(
+      winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
+      auction_config, logger, buyer_reporting_metadata);
+  TestArgs(request.input, kEnableAdtechCodeLoggingTrue,
+           buyer_reporting_metadata);
+  EXPECT_EQ(request.id, kTestRender);
+  EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
+  EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
+}
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

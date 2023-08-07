@@ -48,6 +48,12 @@ GetEncodedBuyerInputMap(
 // Converts the passed in CBOR data handle to the serialized CBOR byte-string.
 std::string SerializeCbor(cbor_item_t* root);
 
+// Decodes cbor string input to std::string
+inline std::string CborDecodeString(cbor_item_t* input) {
+  return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
+                     cbor_string_length(input));
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_TEST_CBOR_UTILS_H_

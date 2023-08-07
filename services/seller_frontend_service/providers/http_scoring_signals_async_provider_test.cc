@@ -33,7 +33,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
                       GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
-  BuyerBidsList buyer_bids_list;
+  BuyerBidsResponseMap buyer_bids_map;
   std::vector<std::string> ad_render_urls;
   std::vector<std::string> ad_component_render_urls;
   // Construct input for provider and seller key value.
@@ -59,7 +59,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
         ad_component_render_urls.emplace_back(new_ad_comp_url);
       }
     }
-    buyer_bids_list.try_emplace(buyer_ig_owner, std::move(get_bid_res));
+    buyer_bids_map.try_emplace(buyer_ig_owner, std::move(get_bid_res));
   }
 
   absl::Notification notification;
@@ -95,7 +95,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 
   ScoringSignalsRequest scoring_signals_request =
-      ScoringSignalsRequest(buyer_bids_list, {});
+      ScoringSignalsRequest(buyer_bids_map, {});
   class_under_test.Get(
       scoring_signals_request,
       [](absl::StatusOr<std::unique_ptr<ScoringSignals>> signals) {},
@@ -107,7 +107,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
                       GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
-  BuyerBidsList buyer_bids_list;
+  BuyerBidsResponseMap buyer_bids_map;
   absl::Notification notification;
 
   EXPECT_CALL(
@@ -132,7 +132,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 
   ScoringSignalsRequest scoring_signals_request =
-      ScoringSignalsRequest(buyer_bids_list, {});
+      ScoringSignalsRequest(buyer_bids_map, {});
 
   class_under_test.Get(
       scoring_signals_request,
@@ -148,7 +148,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
                       GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
-  BuyerBidsList buyer_bids_list;
+  BuyerBidsResponseMap buyer_bids_map;
   absl::Notification notification;
   std::string expected_output = MakeARandomString();
 
@@ -175,7 +175,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 
   ScoringSignalsRequest scoring_signals_request =
-      ScoringSignalsRequest(buyer_bids_list, {});
+      ScoringSignalsRequest(buyer_bids_map, {});
 
   class_under_test.Get(
       scoring_signals_request,

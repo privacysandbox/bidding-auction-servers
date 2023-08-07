@@ -23,7 +23,6 @@
 #include "gtest/gtest.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
-#include "services/bidding_service/bidding_adtech_code_wrapper.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
@@ -236,6 +235,32 @@ constexpr absl::string_view js_code_throws_exception_with_debug_urls =
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_with_logs_template = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Do a random amount of work to generate the price:
+      const bid = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from generateBid");
+      console.warn("Warning from generateBid");
+      console.error("Error from generateBid");
+      // Reshaped into an AdWithBid.
+      return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+  )JS_CODE";
+
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
       .Times(testing::AnyNumber())
@@ -305,13 +330,12 @@ function generateBid( interest_group,
 )JS_CODE";
 
 void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
-                       absl::string_view adtech_wasm = "") {
+                       absl::string_view adtech_wasm = "",
+                       bool enable_buyer_code_wrapper = false) {
   DispatchConfig config;
   ASSERT_TRUE(dispatcher->Init(config).ok());
-  std::string wrapper_blob;
-  if (adtech_wasm.size() == 0) {
-    wrapper_blob = GetWrappedAdtechCodeForBidding(adtech_js);
-  } else {
+  std::string wrapper_blob = std::string(adtech_js);
+  if (enable_buyer_code_wrapper) {
     wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
   }
   ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_blob).ok());
@@ -326,11 +350,11 @@ GenerateBidsRequest::GenerateBidsRawRequest BuildGenerateBidsRequestFromBrowser(
   for (int i = 0; i < desired_bid_count; i++) {
     auto interest_group = MakeARandomInterestGroupForBiddingFromBrowser();
     interest_group_to_ad->try_emplace(
-        interest_group->name(),
-        std::vector<std::string>(interest_group->ad_render_ids().begin(),
-                                 interest_group->ad_render_ids().end()));
-    raw_request.mutable_interest_group_for_bidding()->AddAllocated(
-        interest_group.release());
+        interest_group.name(),
+        std::vector<std::string>(interest_group.ad_render_ids().begin(),
+                                 interest_group.ad_render_ids().end()));
+    *raw_request.mutable_interest_group_for_bidding()->Add() =
+        std::move(interest_group);
   }
   raw_request.set_bidding_signals(MakeRandomTrustedBiddingSignals(raw_request));
   return raw_request;
@@ -340,10 +364,10 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
     metric::BiddingContextMap(
-        server_common::metric::BuildDependentConfig(config_proto));
+        server_common::BuildDependentConfig(config_proto));
 
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
@@ -637,13 +661,14 @@ TEST_F(GenerateBidsReactorIntegrationTest,
       interest_group_to_ad;
   for (int i = 0; i < desired_bid_count; i++) {
     auto interest_group = MakeARandomInterestGroupForBidding(false, true);
-    *raw_request.mutable_interest_group_for_bidding()->Add() = *interest_group;
     interest_group_to_ad.try_emplace(
-        interest_group->name(),
-        std::vector<std::string>(interest_group->ad_render_ids().begin(),
-                                 interest_group->ad_render_ids().end()));
+        interest_group.name(),
+        std::vector<std::string>(interest_group.ad_render_ids().begin(),
+                                 interest_group.ad_render_ids().end()));
 
-    ASSERT_TRUE(interest_group->user_bidding_signals().empty());
+    ASSERT_TRUE(interest_group.user_bidding_signals().empty());
+    *raw_request.mutable_interest_group_for_bidding()->Add() =
+        std::move(interest_group);
   }
   GenerateBidsResponse response;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
@@ -700,12 +725,13 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
       interest_group_to_ad;
   for (int i = 0; i < desired_bid_count; i++) {
     auto interest_group = MakeAnInterestGroupForBiddingSentFromDevice();
-    ASSERT_EQ(interest_group->ad_render_ids_size(), 2);
-    *raw_request.mutable_interest_group_for_bidding()->Add() = *interest_group;
+    ASSERT_EQ(interest_group.ad_render_ids_size(), 2);
     interest_group_to_ad.try_emplace(
-        interest_group->name(),
-        std::vector<std::string>(interest_group->ad_render_ids().begin(),
-                                 interest_group->ad_render_ids().end()));
+        interest_group.name(),
+        std::vector<std::string>(interest_group.ad_render_ids().begin(),
+                                 interest_group.ad_render_ids().end()));
+    *raw_request.mutable_interest_group_for_bidding()->Add() =
+        std::move(interest_group);
     // This fails in production, the user Bidding Signals are not being set.
     // use logging to figure out why.
   }
@@ -769,13 +795,14 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
                                       absl::string_view js_blob,
                                       bool enable_debug_reporting,
                                       bool enable_buyer_debug_url_generation,
-                                      bool enable_buyer_code_wrapper = false,
-                                      bool enable_adtech_code_logging = false) {
+                                      bool enable_buyer_code_wrapper = true,
+                                      bool enable_adtech_code_logging = false,
+                                      absl::string_view wasm_blob = "") {
   int desired_bid_count = 5;
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
-  SetupV8Dispatcher(&dispatcher, js_blob);
+  SetupV8Dispatcher(&dispatcher, js_blob, wasm_blob, enable_buyer_code_wrapper);
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
@@ -922,8 +949,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   bool enable_adtech_code_logging = true;
   GenerateBidCodeWrapperTestHelper(
       &response,
-      absl::StrFormat(kExpectedGenerateBidCode_template,
-                      kAdRenderUrlPrefixForTest),
+      absl::StrFormat(js_code_with_logs_template, kAdRenderUrlPrefixForTest),
       enable_debug_reporting, enable_buyer_debug_url_generation,
       enable_buyer_code_wrapper, enable_adtech_code_logging);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
@@ -941,12 +967,10 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 
   std::string raw_wasm_bytes;
   ASSERT_TRUE(absl::Base64Unescape(base64_wasm_plus_one, &raw_wasm_bytes));
-  const std::string generate_bid_code =
-      GetBuyerWrappedCode(js_code_runs_wasm_helper, raw_wasm_bytes);
   GenerateBidCodeWrapperTestHelper(
-      &response, generate_bid_code, enable_debug_reporting,
+      &response, js_code_runs_wasm_helper, enable_debug_reporting,
       enable_buyer_debug_url_generation, enable_buyer_code_wrapper,
-      enable_adtech_code_logging);
+      enable_adtech_code_logging, raw_wasm_bytes);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);

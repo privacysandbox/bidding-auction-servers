@@ -17,6 +17,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 cc_library(
     name = "reporting_response",
     hdrs = ["reporting_response.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//services/common/util:status_util",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -29,6 +30,7 @@ cc_library(
     name = "reporting_helper",
     srcs = ["reporting_helper.cc"],
     hdrs = ["reporting_helper.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":reporting_response",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
@@ -37,6 +39,7 @@ cc_library(
         "//services/common/util:json_util",
         "//services/common/util:post_auction_signals",
         "//services/common/util:reporting_util",
+        "//services/common/util:request_response_constants",
         "//services/common/util:status_macros",
         "//services/common/util:status_util",
         "@com_github_google_glog//:glog",
@@ -52,13 +55,16 @@ cc_test(
     size = "small",
     srcs = [
         "reporting_helper_test.cc",
+        "reporting_helper_test_constants.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":reporting_helper",
         ":reporting_response",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/util:json_util",
+        "//services/common/util:request_response_constants",
         "//services/common/util:status_util",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

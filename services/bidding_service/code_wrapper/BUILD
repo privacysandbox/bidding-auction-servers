@@ -44,8 +44,10 @@ cc_test(
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/test:mocks",
+        "//services/common/util:json_util",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@rapidjson",
     ],
 )

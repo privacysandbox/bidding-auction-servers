@@ -68,9 +68,16 @@ ABSL_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds,
 // Master flag for controlling all the features that needs to turned on for
 // testing.
 ABSL_FLAG(std::optional<bool>, test_mode, std::nullopt, "Enable test mode");
-ABSL_FLAG(std::optional<privacy_sandbox::server_common::metric::TelemetryFlag>,
+ABSL_FLAG(std::optional<privacy_sandbox::server_common::TelemetryFlag>,
           telemetry_config, std::nullopt, "configure telemetry.");
 ABSL_FLAG(std::optional<std::string>, roma_timeout_ms, std::nullopt,
           "The timeout used by Roma for dispatch requests");
-ABSL_FLAG(std::optional<std::string>, FLAGS_collector_endpoint, std::nullopt,
+ABSL_FLAG(std::optional<std::string>, collector_endpoint, std::nullopt,
           "The endpoint of the OpenTelemetry Collector");
+ABSL_FLAG(std::optional<std::string>, consented_debug_token, std::nullopt,
+          "The secret token for AdTech consented debugging. The server will "
+          "enable logs only for the request with the matching token. It should "
+          "not be publicly shared.");
+ABSL_FLAG(std::optional<bool>, enable_otel_based_logging, false,
+          "Whether the OpenTelemetry Logs is enabled. It's used for consented "
+          "debugging.");

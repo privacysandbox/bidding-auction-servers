@@ -28,16 +28,6 @@ cc_library(
 )
 
 cc_library(
-    name = "bidding_adtech_code_wrapper",
-    hdrs = [
-        "bidding_adtech_code_wrapper.h",
-    ],
-    deps = [
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-cc_library(
     name = "generate_bids_reactor",
     srcs = [
         "generate_bids_reactor.cc",
@@ -50,6 +40,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
@@ -75,6 +66,7 @@ cc_test(
         ":generate_bids_reactor",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
@@ -146,7 +138,6 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":bidding_adtech_code_wrapper",
         ":generate_bids_reactor",
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",

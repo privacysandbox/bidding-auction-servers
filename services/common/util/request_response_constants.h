@@ -30,7 +30,15 @@ inline constexpr int kNumRequestRootKeys = 5;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-inline constexpr int kNumAuctionResultKeys = 9;
+inline constexpr int kNumAuctionResultKeys = 10;
+
+// Maximum number of keys that will be populated in the encoded CBOR
+// WinReportingUrls response.
+inline constexpr int kNumWinReportingUrlsKeys = 3;
+
+// Maximum number of keys that will be populated in the encoded CBOR
+// ReportingUrls response.
+inline constexpr int kNumReportingUrlsKeys = 2;
 
 // Minimum size of the returned response in bytes.
 inline constexpr size_t kMinAuctionResultBytes = 512;
@@ -66,7 +74,7 @@ inline constexpr char kAdRenderUrl[] = "adRenderURL";
 inline constexpr char kBiddingGroups[] = "biddingGroups";
 inline constexpr char kInterestGroupName[] = "interestGroupName";
 inline constexpr char kInterestGroupOwner[] = "interestGroupOwner";
-
+inline constexpr char kWinReportingUrls[] = "winReportingURLs";
 inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
     kRequestRootKeys = {
         kVersion, kPublisher, kInterestGroups, kGenerationId, kDebugReporting,
@@ -89,11 +97,23 @@ inline constexpr int kNumErrorKeys = 2;
 inline constexpr char kError[] = "error";
 inline constexpr char kMessage[] = "message";
 inline constexpr char kCode[] = "code";
+inline constexpr char kBuyerReportingUrls[] = "buyerReportingURLs";
+inline constexpr char kComponentSellerReportingUrls[] =
+    "componentSellerReportingURLs";
+inline constexpr char kTopLevelSellerReportingUrls[] =
+    "topLevelSellerReportingURLs";
+inline constexpr char kReportingUrl[] = "reportingURL";
+inline constexpr char kInteractionReportingUrls[] = "interactionReportingURLs";
+
 inline constexpr std::array<absl::string_view, kNumErrorKeys> kErrorKeys = {
     kMessage,
     kCode,
 };
-
+inline constexpr std::array<absl::string_view, kNumWinReportingUrlsKeys>
+    kWinReportingKeys = {kBuyerReportingUrls, kComponentSellerReportingUrls,
+                         kTopLevelSellerReportingUrls};
+inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
+    kReportingKeys = {kReportingUrl, kInteractionReportingUrls};
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_REQUEST_RESPONSE_CONSTANTS_H_
