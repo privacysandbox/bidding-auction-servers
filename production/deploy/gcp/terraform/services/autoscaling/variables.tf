@@ -145,3 +145,8 @@ variable "collector_machine_type" {
   description = "Machine type for the collector service."
   type        = string
 }
+
+variable "runtime_flags" {
+  description = "List of config variables applied at runtime whose changes still require replacing VM instances"
+  type        = map(string)
+}
