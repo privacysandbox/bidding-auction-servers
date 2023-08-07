@@ -34,7 +34,7 @@ cc_library(
         "//tools/secure_invoke:__subpackages__",
     ],
     deps = [
-        "//services/common/metric:telemetry_flag",
+        "//services/common/telemetry:telemetry_flag",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
     ],

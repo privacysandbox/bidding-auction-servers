@@ -15,6 +15,7 @@
 #include "services/seller_frontend_service/util/web_utils.h"
 
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -45,6 +46,7 @@ namespace {
 
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
+using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using ErrorHandler = const std::function<void(absl::string_view)>&;
 using RepeatedStringProto = ::google::protobuf::RepeatedPtrField<std::string>;
 
@@ -75,6 +77,22 @@ int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
   }
 
   return std::distance(haystack.begin(), it);
+}
+
+struct cbor_pair BuildCborKVPair(absl::string_view key,
+                                 absl::string_view value) {
+  return {.key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+          .value = cbor_move(cbor_build_stringn(value.data(), value.size()))};
+}
+
+absl::Status AddKVToMap(absl::string_view key, absl::string_view value,
+                        ErrorHandler error_handler, cbor_item_t& map) {
+  if (!cbor_map_add(&map, BuildCborKVPair(key, value))) {
+    error_handler(absl::StrCat("Failed to serialize ", key, " to CBOR"));
+    return absl::InternalError("");
+  }
+
+  return absl::OkStatus();
 }
 
 // Helper to validate the type of a CBOR object.
@@ -449,11 +467,12 @@ absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
   return absl::OkStatus();
 }
 
-absl::Status CborSerializeFloat(absl::string_view key, float value,
+absl::Status CborSerializeFloat(absl::string_view key, double value,
                                 ErrorHandler error_handler, cbor_item_t& root) {
+  PS_ASSIGN_OR_RETURN(cbor_item_t * float_val, cbor_build_float(value));
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
-      .value = cbor_move(cbor_build_float8(value))};
+      .value = cbor_move(float_val)};
   if (!cbor_map_add(&root, std::move(kv))) {
     error_handler(absl::StrCat("Failed to serialize ", key, " to CBOR"));
     return absl::InternalError("");
@@ -502,28 +521,32 @@ absl::Status CborSerializeAdComponentUrls(
 }
 
 absl::Status CborSerializeScoreAdResponse(
-    const ScoreAdsResponse::AdScore& ad_score, ErrorHandler error_handler,
+    const ScoreAdsResponse::AdScore& ad_score,
+    const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
   PS_RETURN_IF_ERROR(
-      CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
-  PS_RETURN_IF_ERROR(
       CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
+  PS_RETURN_IF_ERROR(
+      CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
                                          error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
+      kAdComponents, ad_score.component_renders(), error_handler, root));
+  PS_RETURN_IF_ERROR(
+      CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeWinReportingUrls(
+      ad_score.win_reporting_urls(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(
       kInterestGroupName, ad_score.interest_group_name(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(kInterestGroupOwner,
                                          ad_score.interest_group_owner(),
                                          error_handler, root));
-  PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
-      kAdComponents, ad_score.component_renders(), error_handler, root));
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::vector<unsigned char>> GetCborSerializedAuctionResult(
+absl::StatusOr<std::string> GetCborSerializedAuctionResult(
     ErrorHandler error_handler, cbor_item_t& cbor_data_root) {
-  absl::Status internal_error_status = absl::InternalError("");
   // Serialize the payload to CBOR.
   const size_t cbor_serialized_data_size =
       cbor_serialized_size(&cbor_data_root);
@@ -533,8 +556,10 @@ absl::StatusOr<std::vector<unsigned char>> GetCborSerializedAuctionResult(
     return absl::InternalError("");
   }
 
-  std::vector<unsigned char> byte_string(cbor_serialized_data_size);
-  if (cbor_serialize(&cbor_data_root, byte_string.data(),
+  std::string byte_string;
+  byte_string.resize(cbor_serialized_data_size);
+  if (cbor_serialize(&cbor_data_root,
+                     reinterpret_cast<unsigned char*>(byte_string.data()),
                      cbor_serialized_data_size) == 0) {
     error_handler("Failed to serialize the AuctionResult to CBOR");
     return absl::InternalError("");
@@ -557,7 +582,7 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
 
   struct cbor_pair code_kv = {
       .key = cbor_move(cbor_build_stringn(kCode, sizeof(kCode) - 1)),
-      .value = cbor_move(cbor_build_uint32(error.code()))};
+      .value = cbor_move(cbor_build_uint(error.code()))};
   if (!cbor_map_add(*serialized_error_map, std::move(code_kv))) {
     error_handler(
         absl::StrCat("Failed to serialize error ", kCode, " to CBOR"));
@@ -575,22 +600,109 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
   return absl::OkStatus();
 }
 
-absl::Status CborSerializeBiddingGroups(BiddingGroupMap bidding_groups,
+}  // namespace
+
+cbor_item_t* cbor_build_uint(uint32_t input) {
+  if (input <= 255) {
+    return cbor_build_uint8(input);
+  } else if (input <= 65535) {
+    return cbor_build_uint16(input);
+  }
+  return cbor_build_uint32(input);
+}
+
+absl::StatusOr<std::string> SerializeToCbor(cbor_item_t& cbor_data_root) {
+  // Serialize the payload to CBOR.
+  const size_t cbor_serialized_data_size =
+      cbor_serialized_size(&cbor_data_root);
+  if (!cbor_serialized_data_size) {
+    return absl::InternalError("CBOR data size too large");
+  }
+
+  std::string byte_string;
+  byte_string.resize(cbor_serialized_data_size);
+  if (cbor_serialize(&cbor_data_root,
+                     reinterpret_cast<unsigned char*>(byte_string.data()),
+                     cbor_serialized_data_size) == 0) {
+    return absl::InternalError("Failed to serialize data to CBOR");
+  }
+  return byte_string;
+}
+
+template <typename T>
+absl::StatusOr<double> EncodeDecodeFloatCbor(T input, cbor_float_width width) {
+  std::string encoded;
+  switch (width) {
+    case CBOR_FLOAT_16: {
+      ScopedCbor candidate(cbor_build_float2(input));
+      PS_ASSIGN_OR_RETURN(encoded, SerializeToCbor(**candidate));
+    } break;
+    case CBOR_FLOAT_32: {
+      ScopedCbor candidate(cbor_build_float4(input));
+      PS_ASSIGN_OR_RETURN(encoded, SerializeToCbor(**candidate));
+    } break;
+    default: {
+      ScopedCbor candidate(cbor_build_float8(input));
+      PS_ASSIGN_OR_RETURN(encoded, SerializeToCbor(**candidate));
+    } break;
+  }
+
+  cbor_load_result cbor_result;
+  ScopedCbor loaded_data(
+      cbor_load(reinterpret_cast<unsigned char*>(encoded.data()),
+                encoded.size(), &cbor_result));
+  if (*loaded_data == nullptr || cbor_result.error.code != CBOR_ERR_NONE) {
+    return absl::InternalError("Failed to load CBOR encoded float");
+  }
+
+  return cbor_float_get_float(*loaded_data);
+}
+
+absl::StatusOr<cbor_item_t*> cbor_build_float(double input) {
+  PS_ASSIGN_OR_RETURN(double decoded_double,
+                      EncodeDecodeFloatCbor(input, CBOR_FLOAT_64));
+  PS_ASSIGN_OR_RETURN(float decoded_single,
+                      EncodeDecodeFloatCbor(input, CBOR_FLOAT_32));
+  if (AreFloatsEqual(decoded_double, decoded_single)) {
+    PS_ASSIGN_OR_RETURN(float decoded_half,
+                        EncodeDecodeFloatCbor(input, CBOR_FLOAT_16));
+    if (AreFloatsEqual(decoded_single, decoded_half)) {
+      VLOG(5) << "Original input: " << input
+              << ", encoded as half precision float: " << decoded_half;
+      return cbor_build_float2(input);
+    }
+    VLOG(5) << "Original input: " << input
+            << ", encoded as single precision float: " << decoded_single;
+    return cbor_build_float4(input);
+  }
+  VLOG(5) << "Original input: " << input
+          << ", encoded as double precision float: " << decoded_double;
+  return cbor_build_float8(input);
+}
+
+absl::Status CborSerializeBiddingGroups(const BiddingGroupMap& bidding_groups,
                                         ErrorHandler error_handler,
                                         cbor_item_t& root) {
   ScopedCbor serialized_group_map(cbor_new_definite_map(bidding_groups.size()));
-  for (const auto& [origin, group_indices] : bidding_groups) {
+  // Order keys by length first and then lexicographically.
+  std::set<absl::string_view, decltype(kComparator)> ordered_origins(
+      kComparator);
+  for (const auto& [origin, unused] : bidding_groups) {
+    ordered_origins.insert(origin);
+  }
+  for (const auto& origin : ordered_origins) {
+    const auto& group_indices = bidding_groups.at(origin);
     ScopedCbor serialized_group_indices(
         cbor_new_definite_array(group_indices.index_size()));
     for (int32_t index : group_indices.index()) {
       if (!cbor_array_push(*serialized_group_indices,
-                           cbor_move(cbor_build_uint32(index)))) {
+                           cbor_move(cbor_build_uint(index)))) {
         error_handler("Failed to serialize a bidding group index to CBOR");
         return absl::InternalError("");
       }
     }
     struct cbor_pair kv = {
-        .key = cbor_move(cbor_build_stringn(origin.c_str(), origin.size())),
+        .key = cbor_move(cbor_build_stringn(origin.data(), origin.size())),
         .value = *serialized_group_indices};
     if (!cbor_map_add(*serialized_group_map, std::move(kv))) {
       error_handler(
@@ -609,7 +721,32 @@ absl::Status CborSerializeBiddingGroups(BiddingGroupMap bidding_groups,
   return absl::OkStatus();
 }
 
-}  // namespace
+absl::Status CborSerializeInteractionReportingUrls(
+    const InteractionUrlMap& interaction_url_map, ErrorHandler error_handler,
+    cbor_item_t& root) {
+  ScopedCbor serialized_interaction_url_map(
+      cbor_new_definite_map(interaction_url_map.size()));
+  std::set<absl::string_view, decltype(kComparator)> ordered_events(
+      kComparator);
+  for (const auto& [event, unused] : interaction_url_map) {
+    ordered_events.insert(event);
+  }
+  for (const auto& event : ordered_events) {
+    PS_RETURN_IF_ERROR(AddKVToMap(event, interaction_url_map.at(event),
+                                  error_handler,
+                                  **serialized_interaction_url_map));
+  }
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(
+          kInteractionReportingUrls, sizeof(kInteractionReportingUrls) - 1)),
+      .value = *serialized_interaction_url_map};
+  if (!cbor_map_add(&root, std::move(kv))) {
+    error_handler(absl::StrCat("Failed to serialize ",
+                               kInteractionReportingUrls, " to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
 
 ProtectedAudienceInput Decode(absl::string_view cbor_payload,
                               ErrorAccumulator& error_accumulator,
@@ -630,11 +767,10 @@ ProtectedAudienceInput Decode(absl::string_view cbor_payload,
   return protected_audience_input;
 }
 
-absl::StatusOr<std::vector<unsigned char>> Encode(
+absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupMap& bidding_group_map,
     std::optional<AuctionResult::Error> error, ErrorHandler error_handler) {
-  absl::StatusOr<std::vector<unsigned char>> plain_response;
   // CBOR data's root handle. When serializing the auction result to CBOR, we
   // use this handle to keep the temporary data.
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
@@ -643,21 +779,15 @@ absl::StatusOr<std::vector<unsigned char>> Encode(
   if (error.has_value()) {
     PS_RETURN_IF_ERROR(
         CborSerializeError(*error, error_handler, *cbor_internal));
-    PS_ASSIGN_OR_RETURN(plain_response, GetCborSerializedAuctionResult(
-                                            error_handler, *cbor_internal));
   } else if (high_score.has_value()) {
-    PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(*high_score, error_handler,
-                                                    *cbor_internal));
-    PS_RETURN_IF_ERROR(CborSerializeBiddingGroups(
-        bidding_group_map, error_handler, *cbor_internal));
+    PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
+        *high_score, bidding_group_map, error_handler, *cbor_internal));
   } else {
     PS_RETURN_IF_ERROR(
         CborSerializeBool(kChaff, true, error_handler, *cbor_internal));
   }
 
-  PS_ASSIGN_OR_RETURN(plain_response, GetCborSerializedAuctionResult(
-                                          error_handler, *cbor_internal));
-  return std::move(*plain_response);
+  return GetCborSerializedAuctionResult(error_handler, *cbor_internal);
 }
 
 DecodedBuyerInputs DecodeBuyerInputs(
@@ -815,6 +945,86 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
   }
 
   return buyer_input;
+}
+
+absl::Status CborSerializeReportingUrls(
+    absl::string_view key,
+    const WinReportingUrls::ReportingUrls& reporting_urls,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  int key_count = 0;
+  if (!reporting_urls.reporting_url().empty()) {
+    key_count++;
+  }
+  if (!reporting_urls.interaction_reporting_urls().empty()) {
+    key_count++;
+  }
+  if (key_count == 0) {
+    return absl::OkStatus();
+  }
+  ScopedCbor serialized_reporting_urls(
+      cbor_new_definite_map(kNumReportingUrlsKeys));
+
+  if (!reporting_urls.interaction_reporting_urls().empty()) {
+    PS_RETURN_IF_ERROR(CborSerializeInteractionReportingUrls(
+        reporting_urls.interaction_reporting_urls(), error_handler,
+        **serialized_reporting_urls));
+  }
+  if (!reporting_urls.reporting_url().empty()) {
+    PS_RETURN_IF_ERROR(AddKVToMap(kReportingUrl, reporting_urls.reporting_url(),
+                                  error_handler, **serialized_reporting_urls));
+  }
+
+  struct cbor_pair serialized_reporting_urls_kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = *serialized_reporting_urls,
+  };
+
+  if (!cbor_map_add(&root, std::move(serialized_reporting_urls_kv))) {
+    error_handler(absl::StrCat("Failed to serialize ", key, " to CBOR"));
+    return absl::InternalError("");
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status CborSerializeWinReportingUrls(
+    const WinReportingUrls& win_reporting_urls, ErrorHandler error_handler,
+    cbor_item_t& root) {
+  int key_count = 0;
+  if (win_reporting_urls.has_buyer_reporting_urls()) {
+    key_count++;
+  }
+  if (win_reporting_urls.has_component_seller_reporting_urls()) {
+    key_count++;
+  }
+  if (key_count == 0) {
+    return absl::OkStatus();
+  }
+  ScopedCbor serialized_win_reporting_urls(
+      cbor_new_definite_map(kNumReportingUrlsKeys));
+  if (win_reporting_urls.has_buyer_reporting_urls()) {
+    PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
+        kBuyerReportingUrls, win_reporting_urls.buyer_reporting_urls(),
+        error_handler, **serialized_win_reporting_urls));
+  }
+  if (win_reporting_urls.has_component_seller_reporting_urls()) {
+    PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
+        kComponentSellerReportingUrls,
+        win_reporting_urls.component_seller_reporting_urls(), error_handler,
+        **serialized_win_reporting_urls));
+  }
+  struct cbor_pair serialized_win_reporting_urls_kv = {
+      .key = cbor_move(
+          cbor_build_stringn(kWinReportingUrls, sizeof(kWinReportingUrls) - 1)),
+      .value = *serialized_win_reporting_urls,
+  };
+  if (!cbor_map_add(&root, std::move(serialized_win_reporting_urls_kv))) {
+    error_handler(
+        absl::StrCat("Failed to serialize ", kWinReportingUrls, " to CBOR"));
+    return absl::InternalError("");
+  }
+
+  return absl::OkStatus();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

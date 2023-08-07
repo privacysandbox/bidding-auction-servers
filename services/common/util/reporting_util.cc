@@ -16,33 +16,34 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-std::unique_ptr<PostAuctionSignals> GeneratePostAuctionSignals(
+PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
   // If there is no winning ad, return with default signals values.
   if (!winning_ad_score.has_value()) {
     absl::flat_hash_map<std::string,
                         absl::flat_hash_map<std::string, SellerRejectionReason>>
         rejection_reason_map;
-    return std::make_unique<PostAuctionSignals>(
-        kDefaultWinningIntereseGroupName, kDefaultWinningInterestGroupOwner,
-        kDefaultWinningBid, kDefaultHighestScoringOtherBid,
-        kDefaultHighestScoringOtherBidInterestGroupOwner,
-        kDefaultHasHighestScoringOtherBid, kDefaultWinningScore,
-        kDefaultWinningAdRenderUrl, rejection_reason_map);
+    return {kDefaultWinningInterestGroupName,
+            kDefaultWinningInterestGroupOwner,
+            kDefaultWinningBid,
+            kDefaultHighestScoringOtherBid,
+            kDefaultHighestScoringOtherBidInterestGroupOwner,
+            kDefaultHasHighestScoringOtherBid,
+            kDefaultWinningScore,
+            kDefaultWinningAdRenderUrl,
+            std::move(rejection_reason_map)};
   }
-  absl::string_view winning_ig_name = winning_ad_score->interest_group_name();
-  absl::string_view winning_ig_owner = winning_ad_score->interest_group_owner();
   float winning_bid = winning_ad_score->buyer_bid();
   float winning_score = winning_ad_score->desirability();
-  absl::string_view winning_ad_render_url = winning_ad_score->render();
   // Set second highest other bid information in signals if available.
-  absl::string_view highest_scoring_other_bid_ig_owner =
+  std::string highest_scoring_other_bid_ig_owner =
       kDefaultHighestScoringOtherBidInterestGroupOwner;
   float highest_scoring_other_bid = kDefaultHighestScoringOtherBid;
   bool has_highest_scoring_other_bid;
@@ -78,10 +79,15 @@ std::unique_ptr<PostAuctionSignals> GeneratePostAuctionSignals(
                                    ig_rejection_map);
     }
   }
-  return std::make_unique<PostAuctionSignals>(
-      winning_ig_name, winning_ig_owner, winning_bid, highest_scoring_other_bid,
-      highest_scoring_other_bid_ig_owner, has_highest_scoring_other_bid,
-      winning_score, winning_ad_render_url, rejection_reason_map);
+  return {winning_ad_score->interest_group_name(),
+          winning_ad_score->interest_group_owner(),
+          winning_bid,
+          highest_scoring_other_bid,
+          std::move(highest_scoring_other_bid_ig_owner),
+          has_highest_scoring_other_bid,
+          winning_score,
+          winning_ad_score->render(),
+          std::move(rejection_reason_map)};
 }
 
 HTTPRequest CreateDebugReportingHttpRequest(

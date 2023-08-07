@@ -33,7 +33,6 @@
 #include "public/cpio/interface/cpio.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
-#include "services/bidding_service/bidding_adtech_code_wrapper.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
@@ -122,6 +121,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
   config_client.SetFlag(FLAGS_js_worker_mem_mb, JS_WORKER_MEM_MB);
+  config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
+  config_client.SetFlag(FLAGS_enable_otel_based_logging,
+                        ENABLE_OTEL_BASED_LOGGING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -192,9 +194,7 @@ absl::Status RunServer() {
                                        ? adtech_code_blobs.at(1)
                                        : "" /* wasm */);
       }
-      return enable_buyer_debug_url_generation
-                 ? GetWrappedAdtechCodeForBidding(adtech_code_blobs.at(0))
-                 : adtech_code_blobs.at(0);
+      return adtech_code_blobs.at(0);
     };
 
     std::vector<std::string> endpoints = {js_url};
@@ -214,8 +214,6 @@ absl::Status RunServer() {
                                  (std::istreambuf_iterator<char>()));
     if (enable_buyer_code_wrapper) {
       adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
-    } else if (enable_buyer_debug_url_generation) {
-      adtech_code_blob = GetWrappedAdtechCodeForBidding(adtech_code_blob);
     }
 
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
@@ -228,25 +226,27 @@ absl::Status RunServer() {
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
 
-  server_common::metric::BuildDependentConfig telemetry_config(
+  server_common::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::metric::TelemetryFlag>(
-              TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
           .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
+      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
+      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
                                   CreateMetricsOptions(), collector_endpoint);
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
-  metric::BiddingContextMap(
+  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
+  AddSystemMetric(metric::BiddingContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()
           ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get());
+          .get()));
 
   auto generate_bids_reactor_factory =
       [&client, enable_bidding_service_benchmark](

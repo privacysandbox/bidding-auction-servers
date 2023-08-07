@@ -21,19 +21,19 @@
 namespace privacy_sandbox::bidding_auction_servers::metric {
 namespace {
 TEST(Sever, Initialization) {
-  server_common::metric::ServerConfig config_proto;
-  config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-  BiddingContextMap(server_common::metric::BuildDependentConfig(config_proto));
-  BfeContextMap(server_common::metric::BuildDependentConfig(config_proto));
-  AuctionContextMap(server_common::metric::BuildDependentConfig(config_proto));
-  SfeContextMap(server_common::metric::BuildDependentConfig(config_proto));
+  server_common::TelemetryConfig config_proto;
+  config_proto.set_mode(server_common::TelemetryConfig::PROD);
+  BiddingContextMap(server_common::BuildDependentConfig(config_proto));
+  BfeContextMap(server_common::BuildDependentConfig(config_proto));
+  AuctionContextMap(server_common::BuildDependentConfig(config_proto));
+  SfeContextMap(server_common::BuildDependentConfig(config_proto));
 }
 
 TEST(Sever, GetContext) {
-  server_common::metric::ServerConfig config_proto;
-  config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-  auto* bidding = BiddingContextMap(
-      server_common::metric::BuildDependentConfig(config_proto));
+  server_common::TelemetryConfig config_proto;
+  config_proto.set_mode(server_common::TelemetryConfig::PROD);
+  auto* bidding =
+      BiddingContextMap(server_common::BuildDependentConfig(config_proto));
   const GenerateBidsRequest request;
   EXPECT_FALSE(bidding->Get(&request).is_decrypted());
   bidding->Get(&request).SetDecrypted();

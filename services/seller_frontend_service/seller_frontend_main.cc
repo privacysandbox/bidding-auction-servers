@@ -143,6 +143,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
+  config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
+  config_client.SetFlag(FLAGS_enable_otel_based_logging,
+                        ENABLE_OTEL_BASED_LOGGING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -159,26 +162,28 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
-  server_common::metric::BuildDependentConfig telemetry_config(
+  server_common::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::metric::TelemetryFlag>(
-              TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
           .server_config);
 
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
+      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
+      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
                                   CreateMetricsOptions(), collector_endpoint);
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
-  metric::SfeContextMap(
+  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
+  AddSystemMetric(metric::SfeContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()
           ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get());
+          .get()));
 
   std::string server_address =
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));

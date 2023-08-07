@@ -14,25 +14,25 @@
 
 syntax = "proto3";
 
-package privacy_sandbox.server_common.metric;
+package privacy_sandbox.server_common;
 
-message ServerConfig {
+message TelemetryConfig {
   enum TelemetryMode {
     UNKNOWN_TYPE = 0;
 
-    // No metric or trace.
+    // No telemetry (metrics/traces).
     OFF = 1;
 
-    // Enable metrics. `Privacy::kImpacting` metrics must be noised.
+    // Production mode.
+    // `Privacy::kImpacting` metrics must be noised.
     PROD = 2;
 
     // Same as PROD in prod build;
-    // In experiment build, enable trace, enable metrics without noise.
+    // In experiment build, enables metrics without noise; and tracing is also enabled.
     EXPERIMENT = 3;
 
     // Same as PROD in prod build;
-    // In experiment build, enable trace, enable metric without noise, and output
-    // duplicate `Privacy::kImpacting` metrics with noised.
+    // In experiment build, exports both noised and raw data for `Privacy::kImpacting` metrics.
     COMPARE = 4;
   }
   TelemetryMode mode = 1;

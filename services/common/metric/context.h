@@ -33,7 +33,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "services/common/metric/definition.h"
-#include "services/common/metric/telemetry_flag.h"
+#include "services/common/telemetry/telemetry_flag.h"
 #include "services/common/util/status_macros.h"
 
 namespace privacy_sandbox::server_common::metric {
@@ -288,7 +288,7 @@ class Context {
     PS_ASSIGN_OR_RETURN(const bool log_safe, ShouldLogSafe<privacy>());
     if (log_safe) {
       PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
-      if (metric_config_.MetricMode() != ServerConfig::COMPARE) {
+      if (metric_config_.MetricMode() != TelemetryConfig::COMPARE) {
         return absl::OkStatus();
       }
     }
@@ -350,7 +350,7 @@ class Context {
         for (auto& [partition, value] : values) {
           PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
         }
-        if (metric_config_.MetricMode() != ServerConfig::COMPARE) {
+        if (metric_config_.MetricMode() != TelemetryConfig::COMPARE) {
           return absl::OkStatus();
         }
       }

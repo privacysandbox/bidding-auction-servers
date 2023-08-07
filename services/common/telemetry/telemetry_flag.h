@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef SERVICES_COMMON_METRIC_FLAG_H_
-#define SERVICES_COMMON_METRIC_FLAG_H_
+#ifndef SERVICES_COMMON_TELEMETRY_TELEMETRY_FLAG_H_
+#define SERVICES_COMMON_TELEMETRY_TELEMETRY_FLAG_H_
 
 #include <string>
 #include <utility>
 
 #include "absl/strings/string_view.h"
-#include "services/common/metric/config.pb.h"
+#include "services/common/telemetry/config.pb.h"
 
-namespace privacy_sandbox::server_common::metric {
+namespace privacy_sandbox::server_common {
 
 struct TelemetryFlag {
-  ServerConfig server_config;
+  TelemetryConfig server_config;
 };
 
 bool AbslParseFlag(absl::string_view text, TelemetryFlag* flag,
@@ -36,7 +36,7 @@ std::string AbslUnparseFlag(const TelemetryFlag&);
 
 class BuildDependentConfig {
  public:
-  explicit BuildDependentConfig(ServerConfig config)
+  explicit BuildDependentConfig(TelemetryConfig config)
       : server_config_(std::move(config)) {}
 
   enum class BuildMode { kProd, kExperiment };
@@ -45,12 +45,13 @@ class BuildDependentConfig {
   BuildMode GetBuildMode() const;
 
   // Get the metric mode to use
-  ServerConfig::TelemetryMode MetricMode() const {
+  TelemetryConfig::TelemetryMode MetricMode() const {
     if (GetBuildMode() == BuildMode::kExperiment) {
       return server_config_.mode();
     } else {
-      return server_config_.mode() == ServerConfig::OFF ? ServerConfig::OFF
-                                                        : ServerConfig::PROD;
+      return server_config_.mode() == TelemetryConfig::OFF
+                 ? TelemetryConfig::OFF
+                 : TelemetryConfig::PROD;
     }
   }
 
@@ -58,9 +59,9 @@ class BuildDependentConfig {
   // Used to initialize Open Telemetry.
   bool MetricAllowed() const {
     switch (server_config_.mode()) {
-      case ServerConfig::PROD:
-      case ServerConfig::EXPERIMENT:
-      case ServerConfig::COMPARE:
+      case TelemetryConfig::PROD:
+      case TelemetryConfig::EXPERIMENT:
+      case TelemetryConfig::COMPARE:
         return true;
       default:
         return false;
@@ -74,8 +75,8 @@ class BuildDependentConfig {
   // Should metric collection run as debug mode(without nosie)
   bool IsDebug() const {
     switch (server_config_.mode()) {
-      case ServerConfig::EXPERIMENT:
-      case ServerConfig::COMPARE:
+      case TelemetryConfig::EXPERIMENT:
+      case TelemetryConfig::COMPARE:
         return GetBuildMode() == BuildMode::kExperiment;
       default:
         return false;
@@ -83,8 +84,9 @@ class BuildDependentConfig {
   }
 
  private:
-  ServerConfig server_config_;
+  TelemetryConfig server_config_;
 };
-}  // namespace privacy_sandbox::server_common::metric
 
-#endif  // SERVICES_COMMON_METRIC_FLAG_H_
+}  // namespace privacy_sandbox::server_common
+
+#endif  // SERVICES_COMMON_TELEMETRY_TELEMETRY_FLAG_H_

@@ -25,16 +25,16 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 struct ScoringSignalsRequest {
   explicit ScoringSignalsRequest(
-      const BuyerBidsList& buyer_bids_list,
+      const BuyerBidsResponseMap& buyer_bids_map,
       const absl::flat_hash_map<std::string, std::string>& filtering_metadata)
-      : buyer_bids_list_(buyer_bids_list),
+      : buyer_bids_map_(buyer_bids_map),
         filtering_metadata_(filtering_metadata) {}
 
   // The objects here should be owned by the caller of the provider class
   // using this struct as a parameter. They're only required in the context of
   // the function call, and can ideally be reduced to const& parameters to the
   // method.
-  const BuyerBidsList& buyer_bids_list_;
+  const BuyerBidsResponseMap& buyer_bids_map_;
   const absl::flat_hash_map<std::string, std::string>& filtering_metadata_;
 };
 

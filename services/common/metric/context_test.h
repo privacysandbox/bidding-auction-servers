@@ -119,8 +119,8 @@ class MockMetricRouter {
 class BaseTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ServerConfig config_proto;
-    config_proto.set_mode(ServerConfig::PROD);
+    TelemetryConfig config_proto;
+    config_proto.set_mode(TelemetryConfig::PROD);
     static BuildDependentConfig metric_config(config_proto);
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
         &mock_metric_router_, metric_config);

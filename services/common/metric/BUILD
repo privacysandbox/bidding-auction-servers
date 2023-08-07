@@ -12,53 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_proto_library", "cc_test")
-load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:private"])
 
 # ToDo(b/279955396) move everything except :server_definition to common repo
-
-proto_library(
-    name = "config_proto",
-    srcs = ["config.proto"],
-)
-
-cc_proto_library(
-    name = "config_cc_proto",
-    deps = [":config_proto"],
-)
-
-cc_library(
-    name = "telemetry_flag",
-    srcs = [
-        "telemetry_flag.cc",
-    ] + select({
-        "//:non_prod_build": ["telemetry_flag_experiment.cc"],
-        "//conditions:default": ["telemetry_flag_prod.cc"],
-    }),
-    hdrs = [
-        "telemetry_flag.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":config_cc_proto",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_protobuf//:protobuf",
-    ],
-)
-
-cc_test(
-    name = "telemetry_flag_test",
-    timeout = "short",
-    srcs = ["telemetry_flag_test.cc"],
-    deps = [
-        ":telemetry_flag",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
 
 cc_library(
     name = "definition",
@@ -93,7 +51,6 @@ cc_library(
     deps = [
         ":definition",
         ":dp",
-        "//services/common/util:read_system",
         "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -129,7 +86,7 @@ cc_library(
     ],
     deps = [
         ":definition",
-        ":telemetry_flag",
+        "//services/common/telemetry:telemetry_flag",
         "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -163,7 +120,7 @@ cc_library(
     deps = [
         ":context",
         ":metric_router",
-        ":telemetry_flag",
+        "//services/common/telemetry:telemetry_flag",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/synchronization",
@@ -188,6 +145,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":context_map",
+        "//services/common/util:read_system",
     ],
 )
 

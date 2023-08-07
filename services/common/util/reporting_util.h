@@ -49,13 +49,12 @@ constexpr absl::string_view kRejectionReasonCategoryExclusions =
 
 constexpr float kDefaultWinningBid = 0.0;
 constexpr float kDefaultWinningScore = 0.0;
-constexpr absl::string_view kDefaultWinningAdRenderUrl = "";
-constexpr absl::string_view kDefaultWinningIntereseGroupName = "";
-constexpr absl::string_view kDefaultWinningInterestGroupOwner = "";
-constexpr absl::string_view kDefaultHighestScoringOtherBidInterestGroupOwner =
-    "";
-constexpr float kDefaultHighestScoringOtherBid = 0.0;
-constexpr float kDefaultHasHighestScoringOtherBid = false;
+inline constexpr char kDefaultWinningAdRenderUrl[] = "";
+inline constexpr char kDefaultWinningInterestGroupName[] = "";
+inline constexpr char kDefaultWinningInterestGroupOwner[] = "";
+inline constexpr char kDefaultHighestScoringOtherBidInterestGroupOwner[] = "";
+inline constexpr float kDefaultHighestScoringOtherBid = 0.0;
+inline constexpr bool kDefaultHasHighestScoringOtherBid = false;
 
 // Captures placeholder data for debug reporting.
 struct DebugReportingPlaceholder {
@@ -84,9 +83,9 @@ struct DebugReportingPlaceholder {
   }
 };
 
-// Returns a unique pointer to post auction signals from winning ad score.
-// If there is no winning ad, default values are set.
-std::unique_ptr<PostAuctionSignals> GeneratePostAuctionSignals(
+// Returns post auction signals from winning ad score.
+// If there is no winning ad, default values are returned.
+PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
 // Returns a http request object for debug reporting after replacing placeholder

@@ -96,10 +96,9 @@ class GetBidUnaryReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-    metric::BfeContextMap(
-        server_common::metric::BuildDependentConfig(config_proto))
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
         ->Get(&request_);
     get_bids_config_.encryption_enabled = true;
 

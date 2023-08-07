@@ -59,7 +59,8 @@ class SharedStringHolder {
 };
 
 // Parse string into a rapidjson::Document. Returns error status or document.
-absl::StatusOr<rapidjson::Document> ParseJsonString(absl::string_view str) {
+inline absl::StatusOr<rapidjson::Document> ParseJsonString(
+    absl::string_view str) {
   rapidjson::Document doc;
   // Parse into struct
   rapidjson::ParseResult parse_result =
@@ -76,7 +77,7 @@ absl::StatusOr<rapidjson::Document> ParseJsonString(absl::string_view str) {
 // shared string to prevent copying large string parameters required
 // by the ROMA engine interface. The reserve_string_len argument helps
 // reserve a large string size up front to prevent reallocation and copying.
-absl::StatusOr<std::shared_ptr<std::string>> SerializeJsonDoc(
+inline absl::StatusOr<std::shared_ptr<std::string>> SerializeJsonDoc(
     const rapidjson::Document& document, int reserve_string_len) {
   SharedStringHolder shared_string_holder(reserve_string_len);
   rapidjson::Writer<SharedStringHolder> writer(shared_string_holder);
@@ -87,7 +88,8 @@ absl::StatusOr<std::shared_ptr<std::string>> SerializeJsonDoc(
 }
 
 // Converts rapidjson::Value& to a string
-absl::StatusOr<std::string> SerializeJsonDoc(const rapidjson::Value& document) {
+inline absl::StatusOr<std::string> SerializeJsonDoc(
+    const rapidjson::Value& document) {
   rapidjson::StringBuffer string_buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
   if (document.Accept(writer)) {
@@ -97,7 +99,7 @@ absl::StatusOr<std::string> SerializeJsonDoc(const rapidjson::Value& document) {
 }
 
 // Converts rapidjson::Document to a string.
-absl::StatusOr<std::string> SerializeJsonDoc(
+inline absl::StatusOr<std::string> SerializeJsonDoc(
     const rapidjson::Document& document) {
   rapidjson::StringBuffer string_buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);

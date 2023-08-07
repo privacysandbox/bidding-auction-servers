@@ -158,14 +158,14 @@ server_common::PrivateKey GetPrivateKey() {
 
 void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
-    const BuyerBidsList& expected_buyer_bids,
+    const BuyerBidsResponseMap& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed) {
   auto MockScoringSignalsProvider =
       [&expected_buyer_bids, ad_render_urls](
           const ScoringSignalsRequest& scoring_signals_request,
           ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
-        EXPECT_EQ(scoring_signals_request.buyer_bids_list_.size(),
+        EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
                   expected_buyer_bids.size());
         google::protobuf::util::MessageDifferencer diff;
         std::string diff_output;
@@ -173,8 +173,8 @@ void SetupScoringProviderMock(
 
         for (const auto& [unused, get_bid_response] : expected_buyer_bids) {
           EXPECT_TRUE(std::any_of(
-              scoring_signals_request.buyer_bids_list_.begin(),
-              scoring_signals_request.buyer_bids_list_.end(),
+              scoring_signals_request.buyer_bids_map_.begin(),
+              scoring_signals_request.buyer_bids_map_.end(),
               [&diff, expected = get_bid_response.get()](auto& actual) {
                 return diff.Compare(*actual.second, *expected);
               }));
@@ -271,11 +271,11 @@ EncryptedSelectAdRequestWithContext GetSampleSelectAdRequest(
   }
 }
 
-BuyerBidsList GetBuyerClientsAndBidsForReactor(
+BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
     const SelectAdRequest& request,
     const ProtectedAudienceInput& protected_audience_input,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients) {
-  BuyerBidsList buyer_bids;
+  BuyerBidsResponseMap buyer_bids;
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
 
@@ -308,7 +308,7 @@ GetSelectAdRequestAndClientRegistryForTest(
     const BuyerFrontEndAsyncClientFactoryMock&
         buyer_front_end_async_client_factory_mock,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
-    BuyerBidsList& expected_buyer_bids,
+    BuyerBidsResponseMap& expected_buyer_bids,
     absl::string_view seller_origin_domain) {
   auto encrypted_request_with_context =
       GetSampleSelectAdRequest(client_type, seller_origin_domain);

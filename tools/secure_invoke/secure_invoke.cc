@@ -95,6 +95,8 @@ int main(int argc, char** argv) {
   }
   CHECK(input_format == kProtoFormat || input_format == kJsonFormat)
       << "Unexpected input format specified: " << input_format;
+  CHECK(target_service == kSfe || target_service == kBfe)
+      << "Unsupported target service: " << target_service;
   if (target_service == kSfe) {
     CHECK(input_format == kJsonFormat)
         << "Input request to be sent to SFE is acceptable only in "
@@ -104,13 +106,17 @@ int main(int argc, char** argv) {
       << "Please specify the operation to be performed - encrypt/invoke. This "
          "tool can only be used to call B&A servers running in test mode.";
   if (op == "encrypt") {
-    CHECK(target_service == kSfe)
-        << "Encrypt option currently only supported for SFE";
-    json_input_str =
-        privacy_sandbox::bidding_auction_servers::LoadFile(input_file);
-    // LOG causes clipping of response.
-    std::cout << privacy_sandbox::bidding_auction_servers::
-            PackagePlainTextSelectAdRequestToJson(json_input_str, client_type);
+    if (target_service == kSfe) {
+      json_input_str =
+          privacy_sandbox::bidding_auction_servers::LoadFile(input_file);
+      // LOG causes clipping of response.
+      std::cout << privacy_sandbox::bidding_auction_servers::
+              PackagePlainTextSelectAdRequestToJson(json_input_str,
+                                                    client_type);
+    } else {
+      std::cout << privacy_sandbox::bidding_auction_servers::
+              PackagePlainTextGetBidsRequestToJson();
+    }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =

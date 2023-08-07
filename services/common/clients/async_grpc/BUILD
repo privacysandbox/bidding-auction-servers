@@ -22,6 +22,7 @@ cc_library(
         "default_async_grpc_client.h",
     ],
     deps = [
+        ":grpc_client_utils",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients:async_client",
@@ -86,5 +87,23 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+    ],
+)
+
+cc_library(
+    name = "grpc_client_utils",
+    hdrs = [
+        "grpc_client_utils.h",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/encryption:crypto_client_factory",
+        "//services/common/encryption:crypto_client_wrapper_interface",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/util:status_macros",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
     ],
 )

@@ -69,10 +69,9 @@ class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-    metric::SfeContextMap(
-        server_common::metric::BuildDependentConfig(config_proto));
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
     config_.SetFlagForTest(kEmptyValue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kEmptyValue, SELLER_ORIGIN_DOMAIN);
@@ -341,7 +340,7 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   EXPECT_EQ(request.auction_config().buyer_list_size(),
             protected_audience_input.buyer_input_size());
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_audience_input.buyer_input()) {
     GetBidsResponse::GetBidsRawResponse response;
@@ -472,7 +471,7 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
   const float bid_value = 1.0;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_audience_input.buyer_input()) {
     std::string url = buyer_to_ad_url.at(local_buyer);
@@ -568,7 +567,7 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
   EXPECT_EQ(client_count, 1);
   int buyer_input_count = protected_audience_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 1);
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_audience_input.buyer_input()) {
     SetupFailingBuyerClientMock(local_buyer, buyer_clients);
@@ -685,7 +684,7 @@ TEST_F(SellerFrontEndServiceTest,
   int buyer_input_count = protected_audience_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
   auto i = 0;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_audience_input.buyer_input()) {
     if (i == 1) {
       // Setup valid client for only the last of the buyer since we want to
