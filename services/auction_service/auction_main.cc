@@ -180,8 +180,6 @@ absl::Status RunServer() {
 
   bool enable_seller_debug_url_generation =
       code_fetch_proto.enable_seller_debug_url_generation();
-  bool enable_seller_code_wrapper =
-      code_fetch_proto.enable_seller_code_wrapper();
   bool enable_adtech_code_logging =
       code_fetch_proto.enable_adtech_code_logging();
   bool enable_report_result_url_generation =
@@ -201,24 +199,21 @@ absl::Status RunServer() {
   // specified
   if (!js_url.empty()) {
     auto wrap_code =
-        [enable_seller_code_wrapper, enable_seller_debug_url_generation,
+        [enable_seller_debug_url_generation,
          enable_report_result_url_generation, enable_report_win_url_generation,
          buyer_origins](const std::vector<std::string>& adtech_code_blobs) {
-          if (enable_seller_code_wrapper) {
-            absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
-            CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
-                << "Error fetching code blobs from buyer. Buyer size:"
-                << buyer_origins.size()
-                << " and blobs count:" << adtech_code_blobs.size();
-            for (int i = 0; i < buyer_origins.size(); i++) {
-              buyer_origin_code_map.try_emplace(buyer_origins.at(i),
-                                                adtech_code_blobs.at(i + 1));
-            }
-            return GetSellerWrappedCode(
-                adtech_code_blobs.at(0), enable_report_result_url_generation,
-                enable_report_win_url_generation, buyer_origin_code_map);
+          absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
+          CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
+              << "Error fetching code blobs from buyer. Buyer size:"
+              << buyer_origins.size()
+              << " and blobs count:" << adtech_code_blobs.size();
+          for (int i = 0; i < buyer_origins.size(); i++) {
+            buyer_origin_code_map.try_emplace(buyer_origins.at(i),
+                                              adtech_code_blobs.at(i + 1));
           }
-          return adtech_code_blobs.at(0);
+          return GetSellerWrappedCode(
+              adtech_code_blobs.at(0), enable_report_result_url_generation,
+              enable_report_win_url_generation, buyer_origin_code_map);
         };
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
@@ -232,10 +227,9 @@ absl::Status RunServer() {
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
 
-    if (enable_seller_code_wrapper) {
-      adtech_code_blob = GetSellerWrappedCode(
-          adtech_code_blob, enable_report_result_url_generation, false, {});
-    }
+    adtech_code_blob = GetSellerWrappedCode(
+        adtech_code_blob, enable_report_result_url_generation, false, {});
+
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
   } else {
@@ -295,7 +289,6 @@ absl::Status RunServer() {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
-      .enable_seller_code_wrapper = enable_seller_code_wrapper,
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,

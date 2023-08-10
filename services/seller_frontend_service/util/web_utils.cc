@@ -282,6 +282,56 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
   return signals;
 }
 
+// Decodes consented debug config object.
+ConsentedDebugConfiguration DecodeConsentedDebugConfig(
+    const cbor_item_t* root, ErrorAccumulator& error_accumulator,
+    bool fail_fast) {
+  ConsentedDebugConfiguration consented_debug_config;
+  bool is_config_valid_type = IsTypeValid(
+      &cbor_isa_map, root, kConsentedDebugConfig, kMap, error_accumulator);
+  RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/!is_config_valid_type,
+                        consented_debug_config);
+
+  absl::Span<cbor_pair> entries(cbor_map_handle(root), cbor_map_size(root));
+  for (const cbor_pair& entry : entries) {
+    bool is_valid_key_type =
+        IsTypeValid(&cbor_isa_string, entry.key, kConsentedDebugConfigKey,
+                    kString, error_accumulator);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, consented_debug_config);
+    if (!is_valid_key_type) {
+      continue;
+    }
+
+    const int index =
+        FindItemIndex(kConsentedDebugConfigKeys, DecodeCborString(entry.key));
+    switch (index) {
+      case 0: {  // IsConsented.
+        bool is_valid_type = IsTypeValid(&cbor_is_bool, entry.value,
+                                         kConsentedDebugConfigIsConsented,
+                                         kString, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                              consented_debug_config);
+        if (is_valid_type) {
+          consented_debug_config.set_is_consented(cbor_get_bool(entry.value));
+        }
+        break;
+      }
+      case 1: {  // Token.
+        bool is_valid_type =
+            IsTypeValid(&cbor_isa_string, entry.value,
+                        kConsentedDebugConfigToken, kString, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                              consented_debug_config);
+        if (is_valid_type) {
+          consented_debug_config.set_token(DecodeCborString(entry.value));
+        }
+        break;
+      }
+    }
+  }
+  return consented_debug_config;
+}
+
 // Decodes the key (i.e. owner) in the BuyerInputs in ProtectedAudienceInput
 // and copies the corresponding value (i.e. BuyerInput) as-is. Note: this method
 // doesn't decode the value.
@@ -443,6 +493,12 @@ ProtectedAudienceInput DecodeProtectedAudienceInput(
         if (is_valid_debug_type) {
           output.set_enable_debug_reporting(cbor_get_bool(entry.value));
         }
+        break;
+      }
+      case 5: {  // Consented Debug Config.
+        *output.mutable_consented_debug_config() = DecodeConsentedDebugConfig(
+            entry.value, error_accumulator, fail_fast);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
         break;
       }
       default:

@@ -128,9 +128,7 @@ struct DifferentialPrivacy {
 //     /*lower_bound*/ 1);
 //
 // Definition<int, Privacy::kImpacting, Instrument::kHistogram> d7(
-//     /*name*/ "d7", /*description*/ "d71", /*histogram_boundaries*/ hb,
-//     /*upper_bound*/ 9,
-//     /*lower_bound*/ 1);
+//     /*name*/ "d7", /*description*/ "d71", /*histogram_boundaries*/ hb);
 //
 // Their pointers should then be added into a list, which defines the list of
 // metrics the server can log. A Span of the list is used to initialize
@@ -227,28 +225,14 @@ struct Definition : DefinitionName,
     privacy_budget_weight_copy_ = privacy_budget_weight_;
   }
 
-  template <Privacy non_impact = privacy, Instrument histogram = instrument>
-  constexpr explicit Definition(
-      absl::string_view name, absl::string_view description,
-      absl::Span<const double> histogram_boundaries,
-      std::enable_if_t<non_impact == Privacy::kNonImpacting&& histogram ==
-                       Instrument::kHistogram>* = nullptr)
-      : DefinitionName(name, description),
-        internal::Histogram(histogram_boundaries) {
-    histogram_boundaries_copy_ = histogram_boundaries_;
-  }
-
   template <Instrument histogram = instrument>
   constexpr explicit Definition(
       absl::string_view name, absl::string_view description,
-      absl::Span<const double> histogram_boundaries, T upper_bound,
-      T lower_bound,
+      absl::Span<const double> histogram_boundaries,
       std::enable_if_t<histogram == Instrument::kHistogram>* = nullptr)
       : DefinitionName(name, description),
-        internal::Histogram(histogram_boundaries),
-        internal::DifferentialPrivacy<T>(upper_bound, lower_bound) {
+        internal::Histogram(histogram_boundaries) {
     histogram_boundaries_copy_ = histogram_boundaries_;
-    privacy_budget_weight_copy_ = privacy_budget_weight_;
   }
 
   template <Privacy non_impact = privacy, Instrument gauge = instrument>
@@ -283,15 +267,16 @@ inline constexpr Definition<int, Privacy::kNonImpacting,
     kTotalRequestCount("request.count",
                        "Total number of requests received by the server");
 
-inline constexpr double kTimeHistogram[] = {50,    100,   250,  500,
-                                            1'000, 2'000, 4'000};
+inline constexpr double kTimeHistogram[] = {25,  35,    50,    71,    100,
+                                            141, 200,   283,   400,   566,
+                                            800, 1'131, 1'600, 2'263, 3'200};
 inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
     kServerTotalTimeMs("request.duration_ms",
                        "Total time taken by the server to execute the request",
                        kTimeHistogram);
 
 inline constexpr double kSizeHistogram[] = {
-    0,      250,    500,     1'000,   2'000,   4'000,     8'000,    16'000,
+    250,    500,    1'000,   2'000,   4'000,   8'000,     16'000,
     32'000, 64'000, 128'000, 256'000, 512'000, 1'024'000, 2'048'000};
 inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
     kResponseByte("response.size_bytes", "Response size in bytes",

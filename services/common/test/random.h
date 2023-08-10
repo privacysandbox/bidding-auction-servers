@@ -342,7 +342,7 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
   ad_with_bid.set_interest_group_owner(MakeARandomString());
 
   for (int i = 0; i < num_ad_components; i++) {
-    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+    ad_with_bid.add_ad_components(absl::StrCat("adComponent.com/id=", i));
   }
   ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
   ad_with_bid.set_modeling_signals(MakeARandomInt(0, 100));
@@ -364,7 +364,7 @@ MakeARandomAdWithBidMetadataWithRejectionReason(
   ad_with_bid.set_interest_group_owner(MakeARandomString());
 
   for (int i = 0; i < num_ad_components; i++) {
-    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+    ad_with_bid.add_ad_components(absl::StrCat("adComponent.com/id=", i));
   }
 
   return ad_with_bid;
@@ -412,7 +412,7 @@ AdWithBid MakeARandomAdWithBid(float min_bid, float max_bid,
   ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
   *ad_with_bid.mutable_debug_report_urls() = MakeARandomDebugReportUrls();
   for (int i = 0; i < num_ad_components; i++) {
-    ad_with_bid.add_ad_component_render(absl::StrCat("adComponent.com/id=", i));
+    ad_with_bid.add_ad_components(absl::StrCat("adComponent.com/id=", i));
   }
   ad_with_bid.set_bid_currency("USD");
   ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));

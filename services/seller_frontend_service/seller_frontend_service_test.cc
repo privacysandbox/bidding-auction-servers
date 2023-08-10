@@ -730,9 +730,8 @@ TEST_F(SellerFrontEndServiceTest,
           ScoreAdsResponse::AdScore score;
           EXPECT_FALSE(bid.render().empty());
           score.set_render(bid.render());
-          score.mutable_component_renders()->CopyFrom(
-              bid.ad_component_render());
-          EXPECT_EQ(bid.ad_component_render_size(), kDefaultNumAdComponents);
+          score.mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
           score.set_desirability(i++);
           score.set_buyer_bid(i);
           score.set_interest_group_name(bid.interest_group_name());

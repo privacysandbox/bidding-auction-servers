@@ -54,36 +54,26 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --server-image)
       SERVER_IMAGE="$2"
-      shift
-      shift
+      shift 2 || usage
       ;;
     --service-path)
       SERVICE="$2"
-      shift
-      shift
+      shift 2 || usage
       ;;
     --gcp-image-tag)
       GCP_IMAGE_TAG="$2"
-      shift
-      shift
+      shift 2 || usage
       ;;
     --gcp-image-repo)
       GCP_IMAGE_REPO="$2"
-      shift
-      shift
+      shift 2 || usage
       ;;
     --verbose)
       set -o xtrace
       shift
       ;;
-    -h | --help)
-      usage 0
-      break
-      ;;
-    *)
-      usage
-      break
-      ;;
+    -h | --help) usage 0 ;;
+    *) usage ;;
   esac
 done
 
@@ -95,16 +85,16 @@ DIST="${WORKSPACE}"/dist
 mkdir -p "${DIST}"/gcp
 chmod 770 "${DIST}" "${DIST}"/gcp
 
-cp ${WORKSPACE}/${SERVER_IMAGE} ${DIST}/gcp
+cp "${WORKSPACE}/${SERVER_IMAGE}" "${DIST}"/gcp
 
 if ! [[ -v KOKORO_ARTIFACTS_DIR ]]; then
   printf "==== Uploading local image to gcloud Artifact Repository us-docker.pkg.dev =====\n"
   readonly IMAGE_URI=bazel/production/packaging/gcp/${SERVICE}
-  docker load -i ${SERVER_IMAGE}
+  docker load -i "${SERVER_IMAGE}"
   TAGGED_IMAGE_URI="${GCP_IMAGE_REPO}/${SERVICE}:${GCP_IMAGE_TAG}"
-  docker tag ${IMAGE_URI}:server_docker_image ${TAGGED_IMAGE_URI}
+  docker tag "${IMAGE_URI}:server_docker_image" "${TAGGED_IMAGE_URI}"
 
   # Note: if the following command fails, double check that the local environment has
   # authenticated to the repo.
-  docker push ${TAGGED_IMAGE_URI}
+  docker push "${TAGGED_IMAGE_URI}"
 fi

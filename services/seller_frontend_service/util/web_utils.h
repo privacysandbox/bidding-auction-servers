@@ -90,6 +90,12 @@ inline constexpr char kBuyerInputKey[] = "BuyerInput[x].key";
 inline constexpr char kAdComponent[] = "interestGroups.adComponent";
 inline constexpr char kAdComponentEntry[] = "interestGroups.adComponent[x]";
 
+inline constexpr char kConsentedDebugConfigKey[] = "consentedDebugConfig.key";
+inline constexpr char kConsentedDebugConfigIsConsented[] =
+    "consentedDebugConfig.isConsented";
+inline constexpr char kConsentedDebugConfigToken[] =
+    "consentedDebugConfig.token";
+
 // Constants for data types in CBOR payload
 inline constexpr char kString[] = "string";
 inline constexpr char kArray[] = "array";

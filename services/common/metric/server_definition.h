@@ -29,14 +29,12 @@ inline constexpr server_common::metric::PrivacyBudget server_total_budget{
     /*epsilon*/ 5};
 
 // Metric Definitions that are specific to bidding & auction servers.
-inline constexpr double kV8TimeHistogram[] = {50,    100,   250,  500,
-                                              1'000, 2'000, 4'000};
 inline constexpr server_common::metric::Definition<
     int, server_common::metric::Privacy::kNonImpacting,
     server_common::metric::Instrument::kHistogram>
     kJSExecutionDuration("js_execution.duration_ms",
                          "Time taken to execute the JS dispatcher",
-                         kV8TimeHistogram);
+                         server_common::metric::kTimeHistogram);
 
 // API to get `Context` for bidding server to log metric
 inline constexpr const server_common::metric::DefinitionName*

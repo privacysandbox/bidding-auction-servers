@@ -177,7 +177,6 @@ absl::Status RunServer() {
 
   bool enable_buyer_debug_url_generation =
       code_fetch_proto.enable_buyer_debug_url_generation();
-  bool enable_buyer_code_wrapper = code_fetch_proto.enable_buyer_code_wrapper();
   bool enable_adtech_code_logging =
       code_fetch_proto.enable_adtech_code_logging();
   std::string js_url = code_fetch_proto.bidding_js_url();
@@ -185,16 +184,11 @@ absl::Status RunServer() {
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
   if (!js_url.empty()) {
-    auto wrap_code = [enable_buyer_code_wrapper,
-                      enable_buyer_debug_url_generation](
-                         const std::vector<std::string>& adtech_code_blobs) {
-      if (enable_buyer_code_wrapper) {
-        return GetBuyerWrappedCode(adtech_code_blobs.at(0) /* js */,
-                                   adtech_code_blobs.size() == 2
-                                       ? adtech_code_blobs.at(1)
-                                       : "" /* wasm */);
-      }
-      return adtech_code_blobs.at(0);
+    auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
+      return GetBuyerWrappedCode(adtech_code_blobs.at(0) /* js */,
+                                 adtech_code_blobs.size() == 2
+                                     ? adtech_code_blobs.at(1)
+                                     : "" /* wasm */);
     };
 
     std::vector<std::string> endpoints = {js_url};
@@ -212,9 +206,7 @@ absl::Status RunServer() {
     std::ifstream ifs(code_fetch_proto.bidding_js_path().data());
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
-    if (enable_buyer_code_wrapper) {
-      adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
-    }
+    adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
 
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for bidding.";
@@ -271,7 +263,6 @@ absl::Status RunServer() {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .enable_buyer_code_wrapper = enable_buyer_code_wrapper,
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};

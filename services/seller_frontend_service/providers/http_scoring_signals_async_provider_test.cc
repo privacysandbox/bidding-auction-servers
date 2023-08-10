@@ -54,7 +54,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
            ad_component_index++) {
         std::string new_ad_comp_url = MakeARandomString();
         std::string* ad_component_render_url_to_add =
-            ad_with_bid->mutable_ad_component_render()->Add();
+            ad_with_bid->mutable_ad_components()->Add();
         *ad_component_render_url_to_add = new_ad_comp_url;
         ad_component_render_urls.emplace_back(new_ad_comp_url);
       }

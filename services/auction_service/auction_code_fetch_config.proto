@@ -35,18 +35,15 @@ message SellerCodeFetchConfig {
    // Allow seller debug URL generation.
    bool enable_seller_debug_url_generation = 5;
 
-   // Enables use of code wrapper.
-   bool enable_seller_code_wrapper = 6;
-
    // Allow handling of console.logs from AdTech script execution.
-   bool enable_adtech_code_logging = 7;
+   bool enable_adtech_code_logging = 6;
 
    // Enables executing reportResult function from Seller's script.
-   bool enable_report_result_url_generation = 8;
+   bool enable_report_result_url_generation = 7;
 
    // Enables executing reportWin function from Seller's script.
-   bool enable_report_win_url_generation = 9;
+   bool enable_report_win_url_generation = 8;
 
    // Map of buyer origin to URL endpoint for reportWin js fule.
-   map<string, string> buyer_report_win_js_urls = 10;
+   map<string, string> buyer_report_win_js_urls = 9;
 }

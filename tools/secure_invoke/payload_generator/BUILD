@@ -81,7 +81,7 @@ cc_library(
 
 cc_test(
     name = "payload_packaging_test",
-    size = "small",
+    size = "large",
     srcs = [
         "payload_packaging_test.cc",
     ],

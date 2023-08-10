@@ -68,6 +68,10 @@ constexpr absl::string_view js_code_template = R"JS_CODE(
         render: "%s" + interest_group.adRenderIds[0],
         ad: {"arbitraryMetadataField": 1},
         bid: bid,
+        adComponents: [
+          "adComponent.com/comp?id=1",
+          "adComponent.com/comp?id=2"
+        ],
         allowComponentAuction: false
       };
     }
@@ -330,14 +334,10 @@ function generateBid( interest_group,
 )JS_CODE";
 
 void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
-                       absl::string_view adtech_wasm = "",
-                       bool enable_buyer_code_wrapper = false) {
+                       absl::string_view adtech_wasm = "") {
   DispatchConfig config;
   ASSERT_TRUE(dispatcher->Init(config).ok());
-  std::string wrapper_blob = std::string(adtech_js);
-  if (enable_buyer_code_wrapper) {
-    wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
-  }
+  std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
   ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_blob).ok());
 }
 
@@ -438,6 +438,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
         interest_group_to_ad.at(ad_with_bid.interest_group_name()).at(0);
     EXPECT_GT(ad_with_bid.render().length(), 0);
     EXPECT_EQ(ad_with_bid.render(), expected_render_url);
+    EXPECT_EQ(ad_with_bid.ad_components_size(), 2);
     // Expected false because it is expected to be present and was manually set
     // to false.
     EXPECT_FALSE(ad_with_bid.allow_component_auction());
@@ -652,7 +653,8 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   SetupV8Dispatcher(
       &dispatcher,
       absl::StrFormat(js_code_requiring_user_bidding_signals_template,
-                      kAdRenderUrlPrefixForTest));
+                      kAdRenderUrlPrefixForTest),
+      "");
   int desired_bid_count = 5;
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
@@ -795,14 +797,13 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
                                       absl::string_view js_blob,
                                       bool enable_debug_reporting,
                                       bool enable_buyer_debug_url_generation,
-                                      bool enable_buyer_code_wrapper = true,
                                       bool enable_adtech_code_logging = false,
                                       absl::string_view wasm_blob = "") {
   int desired_bid_count = 5;
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
-  SetupV8Dispatcher(&dispatcher, js_blob, wasm_blob, enable_buyer_code_wrapper);
+  SetupV8Dispatcher(&dispatcher, js_blob, wasm_blob);
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
@@ -837,7 +838,6 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
   const BiddingServiceRuntimeConfig& runtime_config = {
       .encryption_enabled = true,
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .enable_buyer_code_wrapper = enable_buyer_code_wrapper,
       .enable_adtech_code_logging = enable_adtech_code_logging};
   BiddingService service(std::move(generate_bids_reactor_factory),
                          std::move(key_fetcher_manager),
@@ -945,13 +945,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = false;
   bool enable_buyer_debug_url_generation = false;
-  bool enable_buyer_code_wrapper = true;
   bool enable_adtech_code_logging = true;
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_logs_template, kAdRenderUrlPrefixForTest),
       enable_debug_reporting, enable_buyer_debug_url_generation,
-      enable_buyer_code_wrapper, enable_adtech_code_logging);
+      enable_adtech_code_logging);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -962,15 +961,14 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = false;
   bool enable_buyer_debug_url_generation = false;
-  bool enable_buyer_code_wrapper = true;
   bool enable_adtech_code_logging = true;
 
   std::string raw_wasm_bytes;
   ASSERT_TRUE(absl::Base64Unescape(base64_wasm_plus_one, &raw_wasm_bytes));
-  GenerateBidCodeWrapperTestHelper(
-      &response, js_code_runs_wasm_helper, enable_debug_reporting,
-      enable_buyer_debug_url_generation, enable_buyer_code_wrapper,
-      enable_adtech_code_logging, raw_wasm_bytes);
+  GenerateBidCodeWrapperTestHelper(&response, js_code_runs_wasm_helper,
+                                   enable_debug_reporting,
+                                   enable_buyer_debug_url_generation,
+                                   enable_adtech_code_logging, raw_wasm_bytes);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);

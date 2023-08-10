@@ -113,7 +113,7 @@ TEST_F(ContextMapTest, GetContextMapPrivacyBudget) {
   constexpr server_common::metric::PrivacyBudget budget{/*epsilon*/ 5};
   auto c =
       GetContextMap<Foo, unsafe_list_span>(*metric_config_, nullptr, budget);
-  EXPECT_DOUBLE_EQ(c->metric_router()->dp().fraction_of_total_budget().epsilon,
+  EXPECT_DOUBLE_EQ(c->metric_router()->dp().privacy_budget_per_weight().epsilon,
                    2.5);
 }
 

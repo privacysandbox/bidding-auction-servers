@@ -37,8 +37,8 @@ void HttpScoringSignalsAsyncProvider::Get(
     for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
       request->render_urls.emplace_back(ad.render());
       request->ad_component_render_urls.insert(
-          request->ad_component_render_urls.end(),
-          ad.ad_component_render().begin(), ad.ad_component_render().end());
+          request->ad_component_render_urls.end(), ad.ad_components().begin(),
+          ad.ad_components().end());
     }
   }
   http_seller_kv_async_client_->Execute(
