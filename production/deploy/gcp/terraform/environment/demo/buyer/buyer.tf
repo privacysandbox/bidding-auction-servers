@@ -14,7 +14,7 @@
 
 locals {
   gcp_project_id = "" # Example: "your-gcp-project-123"
-  environment    = "" # Example: "testing"
+  environment    = "" # Must be <= 3 characters. Example: "abc"
   image_repo     = "" # Example: "us-docker.pkg.dev/your-gcp-project-123/services"
 
 }
@@ -68,9 +68,7 @@ module "buyer" {
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
     #    "enableBuyerDebugUrlGeneration": true,
-    #    "enableBuyerCodeWrapper": false,
     #    "enableAdtechCodeLogging": false,
-    #    "enableReportWinUrlGeneration": false
     #  }"
     JS_NUM_WORKERS      = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
     JS_WORKER_QUEUE_LEN = "" # Example: "200".
@@ -79,6 +77,8 @@ module "buyer" {
     TELEMETRY_CONFIG    = "" # Example: "mode: EXPERIMENT"
     COLLECTOR_ENDPOINT  = "" # Example: "collector-buyer-1-${local.environment}.bfe-gcp.com:4317"
 
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "" # Example: "https://privatekeyservice-staging-a.gcp.testing.dev/v1alpha/encryptionKeys"

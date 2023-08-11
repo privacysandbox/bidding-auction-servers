@@ -116,6 +116,12 @@ resource "google_compute_global_forwarding_rule" "collector" {
   load_balancing_scheme = "EXTERNAL"
   target                = google_compute_target_tcp_proxy.collector.id
   ip_address            = var.collector_ip_address
+
+  labels = {
+    environment = var.environment
+    operator    = var.operator
+    service     = var.collector_service_name
+  }
 }
 
 resource "google_dns_record_set" "collector" {
@@ -199,6 +205,12 @@ resource "google_compute_global_forwarding_rule" "xlb_https" {
   load_balancing_scheme = "EXTERNAL_MANAGED"
   target                = google_compute_target_https_proxy.default.id
   ip_address            = var.frontend_ip_address
+
+  labels = {
+    environment = var.environment
+    operator    = var.operator
+    service     = var.frontend_service_name
+  }
 }
 
 resource "google_dns_record_set" "default" {

@@ -111,7 +111,7 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   }
   result->set_bid(input.bid());
   result->set_render(input.render());
-  result->mutable_ad_component_render()->CopyFrom(input.ad_component_render());
+  result->mutable_ad_components()->CopyFrom(input.ad_components());
   result->set_allow_component_auction(input.allow_component_auction());
   result->set_interest_group_name(input.interest_group_name());
   result->set_ad_cost(kAdCost);
@@ -126,7 +126,7 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
-    bid.add_ad_component_render(
+    bid.add_ad_components(
         absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
   if (bid_value.has_value()) {
@@ -343,10 +343,8 @@ GetSelectAdRequestAndClientRegistryForTest(
               AdScore* score = response->mutable_ad_score();
               EXPECT_FALSE(bid.render().empty());
               score->set_render(bid.render());
-              score->mutable_component_renders()->CopyFrom(
-                  bid.ad_component_render());
-              EXPECT_EQ(bid.ad_component_render_size(),
-                        kDefaultNumAdComponents);
+              score->mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
               score->set_desirability(kNonZeroDesirability);
               score->set_buyer_bid(bid_value);
               score->set_interest_group_name(bid.interest_group_name());

@@ -141,7 +141,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_bid(input.bid());
   result.set_render(input.render());
   result.set_allow_component_auction(input.allow_component_auction());
-  result.mutable_ad_component_render()->CopyFrom(input.ad_component_render());
+  result.mutable_ad_components()->CopyFrom(input.ad_components());
   result.set_interest_group_name(input.interest_group_name());
   result.set_interest_group_owner(interest_group_owner);
   result.set_ad_cost(input.ad_cost());
@@ -348,6 +348,17 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
   }
 }
 
+void SelectAdReactor::MayLogBuyerInput() {
+  if (!buyer_inputs_.ok()) {
+    logger_.vlog(1, "Failed to decode buyer inputs");
+  } else if (VLOG_IS_ON(6)) {
+    for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
+      logger_.vlog(6, "Decoded buyer input for buyer: ", buyer,
+                   " is: ", buyer_input.DebugString());
+    }
+  }
+}
+
 void SelectAdReactor::Execute() {
   if (!config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)) {
     LOG(DFATAL) << "Expected encryption to be enabled";
@@ -358,6 +369,7 @@ void SelectAdReactor::Execute() {
   }
 
   logger_.Configure(GetLoggingContext());
+  MayLogBuyerInput();
   MayPopulateAdServerVisibleErrors();
   if (HaveAdServerVisibleErrors()) {
     logger_.vlog(1, "AdServerVisible errors found, failing now");

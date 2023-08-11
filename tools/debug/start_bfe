@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+export GLOG_v=2
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
+
+"$SCRIPT_DIR"/../../bazel-bin/services/buyer_frontend_service/server \
+--init_config_client="false" --port=50051 \
+--bidding_server_addr="localhost:50057" \
+--buyer_kv_server_addr="https://googleads.g.doubleclick.net/td/bts" \
+--enable_buyer_frontend_benchmarking="true" \
+--generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
+--create_new_event_engine="false" \
+--enable_encryption="true" \
+--test_mode="true" \
+--telemetry_config="mode: EXPERIMENT" \
+--enable_encryption="true"

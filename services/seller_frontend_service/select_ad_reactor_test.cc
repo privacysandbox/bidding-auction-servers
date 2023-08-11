@@ -413,7 +413,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
     auto get_bid_response =
         BuildGetBidsResponseWithSingleAd(buyer_to_ad_url.at(buyer), ig);
     EXPECT_FALSE(get_bid_response.bids(0).render().empty());
-    EXPECT_EQ(get_bid_response.bids(0).ad_component_render_size(),
+    EXPECT_EQ(get_bid_response.bids(0).ad_components_size(),
               kDefaultNumAdComponents);
     SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
     expected_buyer_bids.try_emplace(
@@ -470,9 +470,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
           AdScore score;
           EXPECT_FALSE(bid.render().empty());
           score.set_render(bid.render());
-          score.mutable_component_renders()->CopyFrom(
-              bid.ad_component_render());
-          EXPECT_EQ(bid.ad_component_render_size(), kDefaultNumAdComponents);
+          score.mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
           score.set_desirability(i++);
           score.set_buyer_bid(i);
           score.set_interest_group_name(bid.interest_group_name());
@@ -601,9 +600,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
           AdScore* score = response->mutable_ad_score();
           EXPECT_FALSE(bid.render().empty());
           score->set_render(bid.render());
-          score->mutable_component_renders()->CopyFrom(
-              bid.ad_component_render());
-          EXPECT_EQ(bid.ad_component_render_size(), kDefaultNumAdComponents);
+          score->mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
           score->set_desirability(kNonZeroDesirability);
           score->set_buyer_bid(1);
           score->set_interest_group_name(bid.interest_group_name());
@@ -703,10 +701,8 @@ TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
               AdScore score;
               EXPECT_FALSE(bid.render().empty());
               score.set_render(bid.render());
-              score.mutable_component_renders()->CopyFrom(
-                  bid.ad_component_render());
-              EXPECT_EQ(bid.ad_component_render_size(),
-                        kDefaultNumAdComponents);
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
               score.set_desirability(i++);
               score.set_buyer_bid(i);
               score.set_interest_group_name(bid.interest_group_name());

@@ -76,7 +76,7 @@ cc_binary(
 
 cc_test(
     name = "secure_invoke_lib_test",
-    size = "medium",
+    size = "large",
     srcs = ["secure_invoke_lib_test.cc"],
     tags = [
         "flaky",

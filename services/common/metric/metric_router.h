@@ -198,7 +198,8 @@ absl::Status MetricRouter::LogUnSafe(
     absl::string_view partition) {
   absl::string_view metric_name = definition.name_;
   if constexpr (instrument != Instrument::kUpDownCounter &&
-                instrument != Instrument::kPartitionedCounter) {
+                instrument != Instrument::kPartitionedCounter &&
+                instrument != Instrument::kHistogram) {
     // ToDo(b/279955396): implement
     return absl::UnimplementedError("instrument type not done");
   }

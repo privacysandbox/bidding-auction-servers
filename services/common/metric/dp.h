@@ -15,6 +15,7 @@
 #ifndef SERVICES_COMMON_METRIC_DP_H_
 #define SERVICES_COMMON_METRIC_DP_H_
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <thread>
@@ -23,6 +24,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/absl_log.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
@@ -58,10 +60,10 @@ class DpAggregator : public DpAggregatorBase {
  public:
   DpAggregator(TMetricRouter* metric_router,
                const Definition<TValue, privacy, instrument>* definition,
-               PrivacyBudget fraction_of_total_budget)
+               PrivacyBudget privacy_budget_per_weight)
       : metric_router_(metric_router),
         definition_(*definition),
-        fraction_of_total_budget_(fraction_of_total_budget) {}
+        privacy_budget_per_weight_(privacy_budget_per_weight) {}
 
   // Aggregate `value` for  a metric. This is only called from
   // `DifferentiallyPrivate`, can be called multiple times before
@@ -87,9 +89,8 @@ class DpAggregator : public DpAggregatorBase {
         PS_ASSIGN_OR_RETURN(
             std::unique_ptr<differential_privacy::BoundedSum<TValue>>
                 bounded_sum,
-
             typename differential_privacy::BoundedSum<TValue>::Builder()
-                .SetEpsilon(fraction_of_total_budget_.epsilon *
+                .SetEpsilon(privacy_budget_per_weight_.epsilon *
                             definition_.privacy_budget_weight_)
                 .SetLower(definition_.lower_bound_)
                 .SetUpper(definition_.upper_bound_)
@@ -108,6 +109,7 @@ class DpAggregator : public DpAggregatorBase {
     return absl::OkStatus();
   }
 
+  // After each `OutputNoised`, all aggregated value will be reset.
   absl::StatusOr<std::vector<differential_privacy::Output>> OutputNoised()
       override ABSL_LOCKS_EXCLUDED(mutex_) {
     absl::MutexLock mutex_lock(&mutex_);
@@ -127,12 +129,101 @@ class DpAggregator : public DpAggregatorBase {
  private:
   TMetricRouter* metric_router_;
   const Definition<TValue, privacy, instrument>& definition_;
-  PrivacyBudget fraction_of_total_budget_;
+  PrivacyBudget privacy_budget_per_weight_;
   absl::Mutex mutex_;
   absl::flat_hash_map<std::string,
                       std::unique_ptr<differential_privacy::BoundedSum<TValue>>>
       bounded_sums_ ABSL_GUARDED_BY(mutex_);
 };
+
+// Get mean value of the boundaries of the bucket, used to log into OTel
+// histogram; `index` is the bucket index corresponding to `boundaries`.
+// For example, with boundaries [10, 20, 30], the effective buckets are [
+// [0,10), [10,20), [20,30), [30, ) ] with index [0, 1, 2, 3],
+// BucketMean returns [5, 15, 25, 31] for them. i.e. returns mean for buckets
+// within 2 boundaries, +1 for buckets on the end.
+inline double BucketMean(int index, absl::Span<const double> boundaries) {
+  if (index == 0) {
+    return boundaries[0] / 2;
+  } else if (index == boundaries.size()) {
+    return boundaries.back() + 1;
+  } else {
+    return (boundaries[index - 1] + boundaries[index]) / 2;
+  }
+}
+
+// partial specialization of DpAggregator<> for kHistogram
+template <typename TMetricRouter, typename TValue, Privacy privacy>
+class DpAggregator<TMetricRouter, TValue, privacy, Instrument::kHistogram>
+    : public DpAggregatorBase {
+ public:
+  DpAggregator(
+      TMetricRouter* metric_router,
+      const Definition<TValue, privacy, Instrument::kHistogram>* definition,
+      PrivacyBudget privacy_budget_per_weight)
+      : metric_router_(metric_router),
+        definition_(*definition),
+        privacy_budget_per_weight_(privacy_budget_per_weight) {
+    for (int i = 0; i < definition_.histogram_boundaries_.size() + 1; ++i) {
+      auto bounded_sum =
+          typename differential_privacy::BoundedSum<int>::Builder()
+              .SetEpsilon(privacy_budget_per_weight_.epsilon *
+                          definition_.privacy_budget_weight_)
+              .SetLower(0)
+              .SetUpper(1)  // histogram count add at most 1 each time
+              .SetMaxPartitionsContributed(1)
+              .SetLaplaceMechanism(
+                  absl::make_unique<
+                      differential_privacy::LaplaceMechanism::Builder>())
+              .Build();
+      CHECK_OK(bounded_sum);
+      bounded_sums_.push_back(*std::move(bounded_sum));
+    }
+  }
+
+  absl::Status Aggregate(TValue value, absl::string_view partition)
+      ABSL_LOCKS_EXCLUDED(mutex_) {
+    absl::MutexLock mutex_lock(&mutex_);
+    absl::Span<const double> boundaries = definition_.histogram_boundaries_;
+    int index = std::lower_bound(boundaries.begin(), boundaries.end(), value) -
+                boundaries.begin();
+    bounded_sums_[index]->AddEntry(1);
+    return absl::OkStatus();
+  }
+
+  // Get noised histogram counts in buckets, output them to OTel with an
+  // arbitrary bucket value. The bucket value has no impact on the result, as
+  // long as it falls into the bucket range. `BucketMean` is used for the value.
+  // After each `OutputNoised`, all aggregated value will be reset.
+  absl::StatusOr<std::vector<differential_privacy::Output>> OutputNoised()
+      override ABSL_LOCKS_EXCLUDED(mutex_) {
+    absl::MutexLock mutex_lock(&mutex_);
+    std::vector<differential_privacy::Output> ret(bounded_sums_.size());
+    auto it = ret.begin();
+    for (int j = 0; j < bounded_sums_.size(); ++j) {
+      auto& bounded_sum = bounded_sums_[j];
+      PS_ASSIGN_OR_RETURN(*it, bounded_sum->PartialResult());
+      auto bucket_mean =
+          (TValue)BucketMean(j, definition_.histogram_boundaries_);
+      for (int i = 0, count = differential_privacy::GetValue<int>(*it++);
+           i < count; ++i) {
+        PS_RETURN_IF_ERROR(
+            (metric_router_->LogSafe(definition_, bucket_mean, "")));
+      }
+      bounded_sum->Reset();
+    }
+    return ret;
+  }
+
+ private:
+  TMetricRouter* metric_router_;
+  const Definition<TValue, privacy, Instrument::kHistogram>& definition_;
+  PrivacyBudget privacy_budget_per_weight_;
+  absl::Mutex mutex_;
+  std::vector<std::unique_ptr<differential_privacy::BoundedSum<int>>>
+      bounded_sums_ ABSL_GUARDED_BY(mutex_);
+};
+
 }  // namespace internal
 
 /*
@@ -150,16 +241,15 @@ template <typename TMetricRouter>
 class DifferentiallyPrivate {
  public:
   /*
-   `fraction_of_total_budget` is the privacy budget per weight:
-   i.e. fraction_of_total_budget = total_budget / total_weight
-   used for: privacy_budget = privacy_budget_weight * fraction_of_total_budget;
+   privacy_budget_per_weight = total_budget / total_weight
+   used for: privacy_budget = privacy_budget_weight * privacy_budget_per_weight;
    `output_period` is the interval to output aggregated and noise result.
    */
   DifferentiallyPrivate(TMetricRouter* metric_router,
-                        PrivacyBudget fraction_of_total_budget,
+                        PrivacyBudget privacy_budget_per_weight,
                         absl::Duration output_period)
       : metric_router_(metric_router),
-        fraction_of_total_budget_(fraction_of_total_budget),
+        privacy_budget_per_weight_(privacy_budget_per_weight),
         output_period_(output_period),
         run_output_(std::thread([this]() { RunOutput(); })) {}
 
@@ -175,12 +265,13 @@ class DifferentiallyPrivate {
     CounterT* counter;
     {
       absl::MutexLock mutex_lock(&mutex_);
+      has_data = true;
       auto it = counter_.find(metric_name);
       if (it == counter_.end()) {
         it = counter_
-                 .emplace(metric_name,
-                          std::make_unique<CounterT>(metric_router_, definition,
-                                                     fraction_of_total_budget_))
+                 .emplace(metric_name, std::make_unique<CounterT>(
+                                           metric_router_, definition,
+                                           privacy_budget_per_weight_))
                  .first;
       }
       counter = static_cast<CounterT*>(it->second.get());
@@ -188,8 +279,8 @@ class DifferentiallyPrivate {
     return counter->Aggregate(value, partition);
   }
 
-  PrivacyBudget fraction_of_total_budget() const {
-    return fraction_of_total_budget_;
+  PrivacyBudget privacy_budget_per_weight() const {
+    return privacy_budget_per_weight_;
   }
 
   ~DifferentiallyPrivate() {
@@ -210,11 +301,15 @@ class DifferentiallyPrivate {
     absl::flat_hash_map<absl::string_view,
                         std::vector<differential_privacy::Output>>
         ret;
+    if (!has_data) {
+      return ret;
+    }
     for (auto& [name, counter] : counter_) {
       PS_ASSIGN_OR_RETURN(std::vector<differential_privacy::Output> output,
                           counter->OutputNoised());
       ret.emplace(name, std::move(output));
     }
+    has_data = false;
     return ret;
   }
 
@@ -231,7 +326,7 @@ class DifferentiallyPrivate {
   }
 
   TMetricRouter* metric_router_;
-  PrivacyBudget fraction_of_total_budget_;
+  PrivacyBudget privacy_budget_per_weight_;
   absl::Duration output_period_;
 
   absl::Mutex mutex_;
@@ -241,6 +336,9 @@ class DifferentiallyPrivate {
 
   absl::Notification stop_signal;
   std::thread run_output_;
+  // Only output to OTel if data has been aggregated (`has_data` = true)
+  // become true when data has been aggregated, become false after output.
+  bool has_data ABSL_GUARDED_BY(mutex_) = false;
 };
 
 }  // namespace privacy_sandbox::server_common::metric

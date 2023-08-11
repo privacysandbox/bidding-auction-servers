@@ -35,10 +35,10 @@ using WrapCodeForDispatch =
 
 // AdTech Code Blob fetching system to update Adtech's GenerateBid(), ScoreAd(),
 // ReportWin() and ReportResult() code through a periodic pull mechanism with an
-// arbitary endpoint.
+// arbitrary endpoint.
 class PeriodicCodeFetcher : public CodeFetcherInterface {
  public:
-  // url_endpoint: a vector of arbiturary endpoints to fetch code blobs from.
+  // url_endpoint: a vector of arbitrary endpoints to fetch code blobs from.
   // fetch_period_ms: a time period in between each code fetching.
   // curl_http_fetcher: a libcurl wrapper client that performs code fetching
   // with FetchUrl().
@@ -46,7 +46,8 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
   // executor: a raw pointer that takes in a reference of the executor owned by
   // the servers where the instance of this class is also declared. The same
   // executor should be used to construct a HttpFetcherAsync object.
-  // time_out_ms: a time out limit for HttpsFetcherAsyc client to stop executing
+  // time_out_ms: a time out limit for HttpsFetcherAsync client to stop
+  // executing.
   // FetchUrl. wrap_code: a lambda function that wraps the code blob for
   // scoring / bidding.
   explicit PeriodicCodeFetcher(

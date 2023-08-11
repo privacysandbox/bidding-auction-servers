@@ -30,7 +30,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                     [ "bfe", "kTotalRequestCounter", "OTelLib", "bfe", "deployment.environment", "${var.environment}", { "id": "m2" } ]
+                     [ "bfe", "request.count", "OTelLib", "bfe", "deployment.environment", "${var.environment}", { "id": "m2" } ]
                 ],
                 "timezone": "UTC",
                 "region": "us-west-1",
@@ -48,7 +48,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "min": 0
                     }
                 },
-                "title": "kTotalRequestCounter",
+                "title": "Request count",
                 "legend": {
                     "position": "hidden"
                 }
@@ -62,7 +62,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ "bfe", "kServerTotalTimeMs", "OTelLib", "bfe", "deployment.environment", "${var.environment}", { "id": "m2" } ]
+                    [ "bfe", "request.duration_ms", "OTelLib", "bfe", "deployment.environment", "${var.environment}", { "id": "m2" } ]
                 ],
                 "timezone": "UTC",
                 "region": "us-west-1",
@@ -74,13 +74,13 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                     "left": {
                         "min": 0,
                         "showUnits": false,
-                        "label": "ns"
+                        "label": "ms"
                     },
                     "right": {
                         "min": 0
                     }
                 },
-                "title": "kServerTotalTimeMs",
+                "title": "Request duration",
                 "legend": {
                     "position": "hidden"
                 }
@@ -114,7 +114,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                     [ "bidding", "kTotalRequestCounter", "OTelLib", "bidding", "deployment.environment", "${var.environment}", { "id": "m2" } ]
+                     [ "bidding", "request.count", "OTelLib", "bidding", "deployment.environment", "${var.environment}", { "id": "m2" } ]
                 ],
                 "timezone": "UTC",
                 "region": "us-west-1",
@@ -126,7 +126,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "kTotalRequestCounter",
+                "title": "Request count",
                 "period": 300,
                 "legend": {
                     "position": "hidden"
@@ -142,7 +142,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                     [ "bidding", "kServerTotalTimeMs", "OTelLib", "bidding", "deployment.environment", "${var.environment}", { "id": "m2" } ]
+                     [ "bidding", "request.duration_ms", "OTelLib", "bidding", "deployment.environment", "${var.environment}", { "id": "m2" } ]
                 ],
                 "timezone": "UTC",
                 "region": "us-west-1",
@@ -151,11 +151,11 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                 "yAxis": {
                     "left": {
                         "min": 0,
-                        "label": "ns",
+                        "label": "ms",
                         "showUnits": false
                     }
                 },
-                "title": "kServerTotalTimeMs",
+                "title": "Request duration",
                 "period": 300,
                 "stat": "Average",
                 "legend": {
