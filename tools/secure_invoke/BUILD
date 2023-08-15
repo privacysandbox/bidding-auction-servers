@@ -56,6 +56,26 @@ cc_binary(
 )
 
 cc_binary(
+    name = "workload_generator",
+    testonly = True,
+    srcs = [
+        "workload_generator.cc",
+    ],
+    args = [
+        "--op=invoke",
+    ],
+    deps = [
+        ":secure_invoke_lib",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//tools/secure_invoke/payload_generator:payload_packaging_lib",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_binary(
     name = "package_payload",
     testonly = True,
     srcs = [

@@ -1,16 +1,9 @@
-// Copyright 2023 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <algorithm>
+
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/strings/ascii.h"
@@ -71,6 +64,12 @@ ABSL_FLAG(bool, insecure, false,
 ABSL_FLAG(std::string, target_service, kSfe,
           "Service name to which the request must be sent to.");
 
+ABSL_FLAG(int, num_threads, 4,
+          "Number of threads.");
+
+ABSL_FLAG(int, num_calls_per_thread, 10000,
+          "Number of calls per thread.");
+
 namespace {}  // namespace
 
 int main(int argc, char** argv) {
@@ -104,6 +103,9 @@ int main(int argc, char** argv) {
   CHECK(!op.empty())
       << "Please specify the operation to be performed - encrypt/invoke. This "
          "tool can only be used to call B&A servers running in test mode.";
+  int num_threads = absl::GetFlag(FLAGS_num_threads);
+  int num_calls_per_thread = absl::GetFlag(FLAGS_num_calls_per_thread);
+  
   if (op == "encrypt") {
     CHECK(target_service == kSfe)
         << "Encrypt option currently only supported for SFE";
@@ -113,24 +115,63 @@ int main(int argc, char** argv) {
     std::cout << privacy_sandbox::bidding_auction_servers::
             PackagePlainTextSelectAdRequestToJson(json_input_str, client_type);
   } else if (op == "invoke") {
-    if (target_service == kSfe) {
-      const auto status =
-          privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type);
-      CHECK(status.ok()) << status;
-    } else if (target_service == kBfe) {
-      const auto status =
-          privacy_sandbox::bidding_auction_servers::SendRequestToBfe();
-      CHECK(status.ok()) << status;
-    } else if (target_service == kBidding) {
-      const auto status =
-          privacy_sandbox::bidding_auction_servers::SendRequestToBidding();
-      CHECK(status.ok()) << status;
-    } else {
-      LOG(FATAL) << "Unsupported target service: " << target_service;
+    std::vector<std::thread> threads(num_threads);
+    int num_bins = 10; int bin_size = 10000;
+    int bins[num_threads][num_bins];
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < num_threads; ++i) {
+        for (int j = 0; j < num_bins; j++) {
+            bins[i][j] = 0;
+        }
+        threads[i] = std::thread([=, &bins] {
+            for (int j = 0; j < num_calls_per_thread; ++j) {
+                auto t1 = std::chrono::high_resolution_clock::now();
+
+                if (target_service == kSfe) {
+                  const auto status =
+                      privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
+                          client_type);
+                  CHECK(status.ok()) << status;
+                } else if (target_service == kBfe) {
+                  const auto status =
+                      privacy_sandbox::bidding_auction_servers::SendRequestToBfe();
+                  CHECK(status.ok()) << status;
+                } else if (target_service == kBidding) {
+                  const auto status =
+                      privacy_sandbox::bidding_auction_servers::SendRequestToBidding();
+                  CHECK(status.ok()) << status;
+                } else {
+                  LOG(FATAL) << "Unsupported target service: " << target_service;
+                }
+
+                auto t2 = std::chrono::high_resolution_clock::now();
+                auto time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+                int bin = static_cast<int>(time / bin_size);
+                if (bin < num_bins - 1)
+                    ++bins[i][bin];
+                else 
+                    ++bins[i][num_bins-1];
+            }
+        });
     }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
+    for (int i = 0; i < num_bins; ++i) {
+        int count = 0;
+        for (int j = 0; j < num_threads; j++) {
+            count += bins[j][i];
+        }
+        std::cout << "[" << i * bin_size << ", " << (i+1)*bin_size << "): " << count << "\n";
+    }
+
   } else {
     LOG(FATAL) << "Unsupported operation.";
   }
   return 0;
 }
+

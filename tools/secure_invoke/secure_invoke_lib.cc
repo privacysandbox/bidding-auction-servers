@@ -27,6 +27,7 @@
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/seller_frontend_server/seller_frontend_async_client.h"
+#include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -159,6 +160,7 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
   // Create service client.
   BuyerServiceClientConfig service_client_config = {
       .server_addr = request_options.host_addr,
+      .secure_client = !request_options.insecure,
       .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
@@ -178,6 +180,78 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               raw_response) mutable {
         VLOG(0) << "Received bid response from BFE";
+        if (!raw_response.ok()) {
+          std::move(onDone)(raw_response.status());
+        } else {
+          std::string response;
+          auto response_status = google::protobuf::util::MessageToJsonString(
+              **raw_response, &response);
+          if (!response_status.ok()) {
+            std::move(onDone)(absl::InternalError(
+                "Failed to convert the server response to JSON string"));
+          } else {
+            std::move(onDone)(std::move(response));
+          }
+        }
+        notification.Notify();
+      },
+      absl::Duration(timeout));
+  notification.WaitForNotification();
+  CHECK(call_status.ok()) << call_status;
+  return call_status;
+}
+
+absl::Status InvokeBiddingServiceWithRawRequest(
+    const GenerateBidsRequest::GenerateBidsRawRequest& generate_bids_raw_request,
+    const RequestOptions& request_options,
+    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done,
+    std::unique_ptr<Bidding::StubInterface> stub = nullptr) {
+  // Validate input
+  if (request_options.host_addr.empty()) {
+    return absl::InvalidArgumentError("Bidding service host address must be specified");
+  }
+
+  if (request_options.client_ip.empty()) {
+    return absl::InvalidArgumentError("Client IP must be specified");
+  }
+
+  if (request_options.user_agent.empty()) {
+    return absl::InvalidArgumentError("User Agent must be specified");
+  }
+
+  if (request_options.accept_language.empty()) {
+    return absl::InvalidArgumentError("Accept Language must be specified");
+  }
+
+  // Add request headers.
+  RequestMetadata request_metadata;
+  request_metadata.emplace("x-bna-client-ip", request_options.client_ip);
+  request_metadata.emplace("x-user-agent", request_options.user_agent);
+  request_metadata.emplace("x-accept-language",
+                           request_options.accept_language);
+
+  // Create service client.
+  BiddingServiceClientConfig service_client_config = {
+      .server_addr = request_options.host_addr,
+      .secure_client = !request_options.insecure,
+      .encryption_enabled = true,
+  };
+  TrustedServersConfigClient config_client({});
+  // Revisit if we have to test against non-test deployments.
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto crypto_client = CreateCryptoClient();
+  BiddingAsyncGrpcClient bidding_client(
+      key_fetcher_manager.get(), crypto_client.get(), service_client_config);
+  absl::Notification notification;
+  auto call_status = bidding_client.ExecuteInternal(
+      std::make_unique<GenerateBidsRequest::GenerateBidsRawRequest>(generate_bids_raw_request),
+      request_metadata,
+      [onDone = std::move(on_done), &notification](
+          absl::StatusOr<std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
+              raw_response) mutable {
+        VLOG(1) << "Received bid response from Bidding Service";
         if (!raw_response.ok()) {
           std::move(onDone)(raw_response.status());
         } else {
@@ -268,6 +342,53 @@ absl::Status SendRequestToBfe(
           [&status](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               LOG(INFO) << *output;
+            } else {
+              LOG(ERROR) << output.status();
+              status = output.status();
+            }
+          },
+          std::move(stub));
+  CHECK(call_status.ok()) << call_status;
+  return status;
+}
+
+absl::Status SendRequestToBidding(
+    std::unique_ptr<Bidding::StubInterface> stub) {
+  std::string raw_generate_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
+  const bool is_json = absl::GetFlag(FLAGS_input_format) == kJsonFormat;
+  GenerateBidsRequest::GenerateBidsRawRequest generate_bids_raw_request;
+  if (is_json) {
+    if (raw_generate_bids_request_str.empty()) {
+      raw_generate_bids_request_str = LoadFile(absl::GetFlag(FLAGS_input_file));
+    }
+    auto result = google::protobuf::util::JsonStringToMessage(
+        raw_generate_bids_request_str, &generate_bids_raw_request);
+    CHECK(result.ok())
+        << "Failed to convert the provided raw request JSON to proto "
+        << "(Is the input malformed?). Input:\n"
+        << raw_generate_bids_request_str << "\nError:\n:" << result;
+  } else {
+    if (raw_generate_bids_request_str.empty()) {
+      raw_generate_bids_request_str = LoadFile(absl::GetFlag(FLAGS_input_file));
+    }
+    CHECK(google::protobuf::TextFormat::ParseFromString(
+        raw_generate_bids_request_str, &generate_bids_raw_request))
+        << "Failed to create proto object from the input file. Input:\n"
+        << raw_generate_bids_request_str;
+  }
+  privacy_sandbox::bidding_auction_servers::RequestOptions request_options;
+  request_options.host_addr = absl::GetFlag(FLAGS_host_addr);
+  request_options.client_ip = absl::GetFlag(FLAGS_client_ip);
+  request_options.user_agent = absl::GetFlag(FLAGS_client_user_agent);
+  request_options.accept_language = absl::GetFlag(FLAGS_client_accept_language);
+  request_options.insecure = absl::GetFlag(FLAGS_insecure);
+  absl::Status status = absl::OkStatus();
+  auto call_status = privacy_sandbox::bidding_auction_servers::
+      InvokeBiddingServiceWithRawRequest(
+          generate_bids_raw_request, request_options,
+          [&status](absl::StatusOr<std::string> output) {
+            if (output.ok()) {
+              VLOG(1) << *output;
             } else {
               LOG(ERROR) << output.status();
               status = output.status();

@@ -44,6 +44,11 @@ absl::Status SendRequestToSfe(SelectAdRequest::ClientType client_type);
 absl::Status SendRequestToBfe(
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr);
 
+// Sends a request to bidding service. The parameters used for the request are retrieved
+// from absl flags that are used to run the script.
+absl::Status SendRequestToBidding(
+    std::unique_ptr<Bidding::StubInterface> stub = nullptr);
+
 // Gets contents of the provided file path.
 std::string LoadFile(absl::string_view file_path);
 
