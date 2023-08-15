@@ -81,7 +81,6 @@ class GenerateBidsReactor
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
   ContextLogger logger_;
-  bool enable_buyer_code_wrapper_;
   bool enable_adtech_code_logging_;
 
   // Used to log metric, same life time as reactor.

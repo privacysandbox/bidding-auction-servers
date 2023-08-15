@@ -466,7 +466,7 @@ message AdWithBid {
   // List of ad render urls that identifies ad components.
   // This field must not be present if no component_ad_render_id is passed in
   // Interest Group to GenerateBid().
-  repeated string ad_component_render = 4;
+  repeated string ad_components = 4;
 
   // Whether component auction is allowed.
   bool allow_component_auction = 5;
@@ -657,7 +657,7 @@ message ScoreAdsRequest {
       // List of ad render urls that identifies ad components.
       // This field must not be present if no component_ad_render_id is passed
       // in Interest Group for bidding.
-      repeated string ad_component_render = 4;
+      repeated string ad_components = 4;
 
       // Whether component auction is allowed.
       bool allow_component_auction = 5;

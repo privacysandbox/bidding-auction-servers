@@ -15,9 +15,7 @@
 resource "google_monitoring_dashboard" "environment_dashboard" {
   dashboard_json = <<EOF
 {
-  "dashboardFilters": [],
   "displayName": "${var.environment} Seller Metrics",
-  "labels": {},
   "mosaicLayout": {
     "columns": 48,
     "tiles": [
@@ -26,14 +24,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "request.count [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -58,9 +51,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -72,14 +63,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "request.failed_count [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -104,9 +90,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -119,14 +103,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "system.cpu.percent [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -147,9 +126,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -162,14 +139,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "request.duration_ms [95TH PERCENTILE]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -190,9 +162,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -206,14 +176,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "system.memory.usage_kb for main process [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -234,9 +199,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -249,14 +212,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "system.memory.usage_kb for MemAvailable: [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -278,9 +236,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -294,14 +250,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "request.size_bytes [95TH PERCENTILE]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -322,9 +273,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -337,14 +286,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "response.size_bytes [95TH PERCENTILE]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -365,9 +309,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -381,14 +323,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "js_execution.duration_ms [95TH PERCENTILE]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -409,9 +346,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -424,14 +359,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "initiated_request.count [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -456,9 +386,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -472,14 +400,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "initiated_request.errors_count [MEAN]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -504,9 +427,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }
@@ -519,14 +440,9 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "widget": {
           "title": "initiated_request.duration_ms [95TH PERCENTILE]",
           "xyChart": {
-            "chartOptions": {
-              "mode": "COLOR"
-            },
+            "chartOptions": {},
             "dataSets": [
               {
-                "breakdowns": [],
-                "dimensions": [],
-                "measures": [],
                 "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
@@ -547,9 +463,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 }
               }
             ],
-            "thresholds": [],
             "yAxis": {
-              "label": "",
               "scale": "LINEAR"
             }
           }

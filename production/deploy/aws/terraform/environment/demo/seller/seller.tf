@@ -16,7 +16,7 @@
 
 locals {
   region      = "" # Example: ["us-central1", "us-west1"]
-  environment = "" # Example: "test"
+  environment = "" # Must be <= 3 characters. Example: "abc"
 }
 provider "aws" {
   region = local.region
@@ -24,7 +24,7 @@ provider "aws" {
 
 
 module "seller" {
-  source                               = "../../modules/seller"
+  source                               = "../../../modules/seller"
   environment                          = local.environment
   region                               = local.region
   enclave_debug_mode                   = false # Example: false
@@ -76,7 +76,6 @@ module "seller" {
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
     #     "enableSellerDebugUrlGeneration": true,
-    #     "enableSellerCodeWrapper": false,
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": false,
     #     "enableReportWinUrlGeneration": false,
@@ -100,6 +99,8 @@ module "seller" {
     ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
     ENABLE_SELLER_CODE_WRAPPER = "" # Example: "true"
 
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"

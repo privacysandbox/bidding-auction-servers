@@ -66,6 +66,7 @@ inline constexpr char kTestEvent3[] = "close";
 inline constexpr char kTestInteractionUrl3[] = "http://close.com";
 inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
+inline constexpr char kConsentedDebugToken[] = "xyz";
 
 using ErrorVisibility::CLIENT_VISIBLE;
 using BiddingGroupMap =
@@ -210,6 +211,18 @@ TEST(ChromeRequestUtils, Decode_Success) {
                                 kInterestGroups, sizeof(kInterestGroups) - 1)),
                             cbor_move(interest_group_data_map)}));
 
+  cbor_item_t* consented_debug_config_map =
+      cbor_new_definite_map(kNumConsentedDebugConfigKeys);
+  EXPECT_TRUE(cbor_map_add(consented_debug_config_map,
+                           BuildBoolMapPair(kIsConsented, true)));
+  EXPECT_TRUE(cbor_map_add(consented_debug_config_map,
+                           BuildStringMapPair(kToken, kConsentedDebugToken)));
+  EXPECT_TRUE(cbor_map_add(
+      *protected_audience_input,
+      {cbor_move(cbor_build_stringn(kConsentedDebugConfig,
+                                    sizeof(kConsentedDebugConfig) - 1)),
+       cbor_move(consented_debug_config_map)}));
+
   std::string serialized_cbor = SerializeCbor(*protected_audience_input);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
@@ -249,6 +262,12 @@ TEST(ChromeRequestUtils, Decode_Success) {
       GetEncodedBuyerInputMap(buyer_inputs);
   ASSERT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
   *expected.mutable_buyer_input() = std::move(*encoded_buyer_inputs);
+
+  ConsentedDebugConfiguration consented_debug_config;
+  consented_debug_config.set_is_consented(true);
+  consented_debug_config.set_token(kConsentedDebugToken);
+  *expected.mutable_consented_debug_config() =
+      std::move(consented_debug_config);
 
   std::string papi_differences;
   google::protobuf::util::MessageDifferencer papi_differencer;

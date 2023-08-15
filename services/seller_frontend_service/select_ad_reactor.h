@@ -168,6 +168,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   void ValidateProtectedAudienceInput(
       const ProtectedAudienceInput& protected_audience_input);
 
+  // Logs the decoded buyer inputs if available.
+  void MayLogBuyerInput();
+
   // Populates the errors that need to be sent to the client (in the encrypted
   // response).
   void MayPopulateClientVisibleErrors();

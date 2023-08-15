@@ -40,7 +40,7 @@ namespace metrics_api = ::opentelemetry::metrics;
 
 using ::testing::ContainsRegex;
 
-constexpr int kExportIntervalMillis = 50;
+constexpr int kExportIntervalMillis = 100;
 
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kUpDownCounter>
     kSafeCounter("safe_counter", "description");
@@ -98,7 +98,6 @@ class MetricRouterTest : public ::testing::Test {
   }
   std::string ReadSs() {
     absl::SleepFor(absl::Milliseconds(kExportIntervalMillis * 2));
-
     // Shut down metric reader now to avoid concurrent access of Ss.
     metrics_api::Provider::SetMeterProvider(
         (std::shared_ptr<metrics_api::MeterProvider>)
@@ -223,6 +222,9 @@ constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
                        /*upper_bound*/ 2,
                        /*lower_bound*/ 0);
 
+constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram>
+    kUnSafeHistogram("unsafe_histogram", "description", histogram_boundaries);
+
 TEST_F(MetricRouterDpNoNoiseTest, LogPartitioned) {
   for (int i = 0; i < 100; ++i) {
     CHECK_OK(test_instance_->LogUnSafe(kUnsafePartitioned, 111, "buyer_1"));
@@ -237,6 +239,19 @@ TEST_F(MetricRouterDpNoNoiseTest, LogPartitioned) {
   EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_1"));
   EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_2"));
   EXPECT_THAT(output, ContainsRegex("buyer_name[ \t]*:[ \t]*buyer_3"));
+}
+
+TEST_F(MetricRouterDpNoNoiseTest, LogHistogram) {
+  for (int i = 0; i < 100; i += 10) {
+    CHECK_OK(test_instance_->LogUnSafe(kUnSafeHistogram, i, ""));
+  }
+
+  absl::SleepFor(kDpInterval);
+  std::string output = ReadSs();
+  EXPECT_THAT(output,
+              ContainsRegex("instrument name[ \t]*:[ \t]*unsafe_histogram"));
+  EXPECT_THAT(output, ContainsRegex("buckets[ \t]*:[ \t]*\\[50, 100, 200"));
+  EXPECT_THAT(output, ContainsRegex("counts[ \t]*:[ \t]*\\[6, 4, 0, 0"));
 }
 
 class MetricRouterDpNoiseTest : public MetricRouterTest {

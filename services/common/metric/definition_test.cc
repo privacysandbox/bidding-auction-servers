@@ -35,8 +35,9 @@ constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
     c5("c5", "c51", "buyer_name", 2, pv, 123, 111);
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram> c6(
     "c6", "c61", hb);
-constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram> c7(
-    "c7", "c71", hb, 12, 33);
+constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram> c7("c7",
+                                                                          "c71",
+                                                                          hb);
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kGauge> c8(
     "c8 gauge", "c81");
 

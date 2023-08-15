@@ -261,6 +261,31 @@ absl::Status CborSerializeBuyerInput(const BuyerInputMapEncoded& buyer_inputs,
   return absl::OkStatus();
 }
 
+absl::Status CborSerializeConsentedDebugConfig(
+    const ConsentedDebugConfiguration& consented_debug_config,
+    cbor_item_t& root) {
+  ScopedCbor serialized_consented_debug_config(
+      cbor_new_definite_map(kNumConsentedDebugConfigKeys));
+  PS_RETURN_IF_ERROR(CborSerializeBool(kIsConsented,
+                                       consented_debug_config.is_consented(),
+                                       **serialized_consented_debug_config));
+  if (!consented_debug_config.token().empty()) {
+    PS_RETURN_IF_ERROR(
+        CborSerializeString(kToken, consented_debug_config.token(),
+                            **serialized_consented_debug_config));
+  }
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(kConsentedDebugConfig,
+                                          sizeof(kConsentedDebugConfig) - 1)),
+      .value = *serialized_consented_debug_config,
+  };
+  if (!cbor_map_add(&root, std::move(kv))) {
+    return absl::InternalError(absl::StrCat("Failed to serialize ",
+                                            kConsentedDebugConfig, " to CBOR"));
+  }
+  return absl::OkStatus();
+}
+
 google::protobuf::RepeatedPtrField<std::string> CborDecodeComponentAdUrls(
     cbor_item_t* input) {
   google::protobuf::RepeatedPtrField<std::string> component_ad_urls;
@@ -570,6 +595,10 @@ absl::StatusOr<std::string> CborEncodeProtectedAudienceProto(
       *cbor_internal));
   PS_RETURN_IF_ERROR(CborSerializeBuyerInput(
       protected_audience_input.buyer_input(), *cbor_internal));
+  if (protected_audience_input.has_consented_debug_config()) {
+    PS_RETURN_IF_ERROR(CborSerializeConsentedDebugConfig(
+        protected_audience_input.consented_debug_config(), *cbor_internal));
+  }
   return SerializeCbor(*cbor_data_root);
 }
 

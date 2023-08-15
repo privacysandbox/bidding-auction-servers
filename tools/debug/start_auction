@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+export GLOG_v=2
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
+
+"$SCRIPT_DIR"/../../bazel-bin/services/auction_service/server \
+--init_config_client="false" --port=50061 \
+--enable_auction_service_benchmark="true" \
+--js_num_workers=4 \
+--js_worker_queue_len=100 \
+--js_worker_mem_mb=1024 \
+--test_mode="true" \
+--telemetry_config="mode: EXPERIMENT" \
+--enable_encryption="true" \
+--roma_timeout_ms="120000" \
+--seller_code_fetch_config='{
+      "auctionJsPath": "",
+      "auctionJsUrl": "https://pubads.g.doubleclick.net/td/sjs",
+      "urlFetchPeriodMs": 13000000,
+      "urlFetchTimeoutMs": 30000,
+      "enableSellerDebugUrlGeneration": false,
+      "enableAdtechCodeLogging": false,
+      "enableReportResultUrlGeneration": false,
+      "enableReportWinUrlGeneration": false,
+      "buyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"}
+    }'

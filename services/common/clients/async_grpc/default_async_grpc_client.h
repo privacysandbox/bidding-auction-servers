@@ -144,7 +144,10 @@ class DefaultAsyncGrpcClient
       return absl::InvalidArgumentError(error_msg);
     }
 
-    VLOG(6) << "Decryption/decoding of response succeeded";
+    if (VLOG_IS_ON(6)) {
+      VLOG(6) << "Decryption/decoding of response succeeded: "
+              << raw_response->DebugString();
+    }
     return raw_response;
   }
 

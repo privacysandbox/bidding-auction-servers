@@ -170,6 +170,7 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   fi
 fi
 BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --//:build_flavor=${BUILD_FLAVOR}"
+CBUILD_ARGS="${CBUILD_ARGS} --seccomp-unconfined"
 
 if [[ ${VERBOSE} -eq 1 ]]; then
   set -o xtrace
@@ -207,7 +208,6 @@ BUILD_TARGETS+=(
   "//tools/secure_invoke/..."
 )
 
-CBUILD_ARGS="--verbose"
 declare -r _BUILD_TARGETS="${BUILD_TARGETS[*]}"
 declare -r _TEST_TARGETS="${TEST_TARGETS[*]}"
 
@@ -232,54 +232,61 @@ done
 
 readonly DIST="${WORKSPACE}"/dist
 
-if [[ ${PLATFORM} = "aws" ]]; then
-  declare -a EXTRA_ARGS
-  for region in "${AMI_REGIONS[@]}"; do
-    EXTRA_ARGS+=(--with-ami "${region}")
-  done
-  if [[ ${VERBOSE} -eq 1 ]]; then
-    EXTRA_ARGS+=("--verbose")
+function build_service_for_aws() {
+  declare -r service="$1"
+  declare -n extra_args="$2"
+  # note: use relative path to dist
+  declare -r docker_image=dist/debian/${service}_image.tar
+  if ! [[ -s ${WORKSPACE}/${docker_image} ]]; then
+    printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
+    exit 1
   fi
+  # shellcheck disable=SC2086
+  "${SCRIPT_DIR}"/aws/build_and_test ${VERBOSE_ARG} \
+    --server-image "${docker_image}" \
+    --service-path "${service}" \
+    --build-flavor ${BUILD_FLAVOR} \
+    "${extra_args[@]}"
+}
 
-  function build_service_for_aws() {
-    declare -r SERVICE="$1"
-    # note: use relative path to dist
-    declare -r DOCKER_IMAGE=dist/debian/${SERVICE}_image.tar
-    if ! [[ -s ${WORKSPACE}/${DOCKER_IMAGE} ]]; then
-      printf "Error: docker image tar file not found: %s\n" "${DOCKER_IMAGE}" &>/dev/stderr
-      exit 1
+function build_service_for_gcp() {
+  declare -r service="$1"
+  # note: use relative path to dist
+  declare -r docker_image=dist/debian/${service}_image.tar
+  if ! [[ -s ${WORKSPACE}/${docker_image} ]]; then
+    printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
+    exit 1
+  fi
+  # shellcheck disable=SC2086
+  "${SCRIPT_DIR}"/gcp/build_and_test ${VERBOSE_ARG} \
+  --server-image "${docker_image}" \
+  --service-path "${service}" \
+  --gcp-image-tag "${GCP_IMAGE_TAG}" \
+  --gcp-image-repo "${GCP_IMAGE_REPO}"
+}
+
+
+case "${PLATFORM}" in
+  aws)
+    declare -a EXTRA_ARGS
+    for region in "${AMI_REGIONS[@]}"; do
+      EXTRA_ARGS+=(--with-ami "${region}")
+    done
+    if [[ ${VERBOSE} -eq 1 ]]; then
+      EXTRA_ARGS+=("--verbose")
     fi
-    # shellcheck disable=SC2086
-    "${SCRIPT_DIR}"/aws/build_and_test ${VERBOSE_ARG} --server-image "${DOCKER_IMAGE}" --service-path "${SERVICE}" --build-flavor ${BUILD_FLAVOR} "${EXTRA_ARGS[@]}"
-  }
 
-  for svc in "${SERVICES[@]}"; do
-    build_service_for_aws "${svc}"
-  done
-fi
+    for svc in "${SERVICES[@]}"; do
+      build_service_for_aws "${svc}" EXTRA_ARGS
+    done
+    ;;
 
-if [[ ${PLATFORM} = "gcp" ]]; then
-  function build_service_for_gcp() {
-    declare -r SERVICE="$1"
-    # note: use relative path to dist
-    declare -r DOCKER_IMAGE=dist/debian/${SERVICE}_image.tar
-    if ! [[ -s ${WORKSPACE}/${DOCKER_IMAGE} ]]; then
-      printf "Error: docker image tar file not found: %s\n" "${DOCKER_IMAGE}" &>/dev/stderr
-      exit 1
-    fi
-    # shellcheck disable=SC2086
-    "${SCRIPT_DIR}"/gcp/build_and_test ${VERBOSE_ARG} \
-    --server-image "${DOCKER_IMAGE}" \
-    --service-path "${SERVICE}" \
-    --gcp-image-tag "${GCP_IMAGE_TAG}" \
-    --gcp-image-repo "${GCP_IMAGE_REPO}"
-  }
-
-  for svc in "${SERVICES[@]}"; do
-    build_service_for_gcp "${svc}"
-  done
-fi
-
+    gcp)
+      for svc in "${SERVICES[@]}"; do
+        build_service_for_gcp "${svc}"
+      done
+    ;;
+esac
 
 if [[ -d ${DIST} ]]; then
   printf "build artifacts:\n"
