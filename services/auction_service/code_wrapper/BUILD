@@ -25,6 +25,7 @@ cc_library(
         "seller_code_wrapper.h",
     ],
     deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -38,8 +39,11 @@ cc_test(
     ],
     deps = [
         ":seller_code_wrapper",
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@rapidjson",
     ],
 )

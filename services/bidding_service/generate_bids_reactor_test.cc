@@ -111,8 +111,6 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
   for (const auto& request : batch) {
     if (enable_buyer_code_wrapper) {
       EXPECT_EQ(request.handler_name, "generateBidEntryFunction");
-    } else if (call_wrapper_method) {
-      EXPECT_EQ(request.handler_name, "generateBidWrapper");
     } else {
       EXPECT_EQ(request.handler_name, "generateBid");
     }
@@ -133,10 +131,9 @@ class GenerateBidsReactorTest : public testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-    metric::BiddingContextMap(
-        server_common::metric::BuildDependentConfig(config_proto))
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::BiddingContextMap(server_common::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
@@ -330,10 +327,15 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
   bool enable_buyer_debug_url_generation = false;
   bool enable_buyer_code_wrapper = true;
   bool enable_adtech_code_logging = true;
-  std::string json =
-      "{\"response\": {\"render\": \"test.com\", \"bid\": 1},"
-      "\"logs\":[\"test log\"]}";
-
+  std::string json = R"JSON({
+    "response": {
+      "render": "test.com",
+      "bid": 1
+    },
+    "logs": ["test log"],
+    "errors": ["test.error"],
+    "warnings":["test.warn"]
+  })JSON";
   AdWithBid bid;
   bid.set_render("test.com");
   bid.set_bid(1);
@@ -410,18 +412,18 @@ TEST_F(GenerateBidsReactorTest, IGSerializationLatencyBenchmark) {
   int num_igs = 10;
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   for (int i = 0; i < num_igs; i++) {
-    auto ig_ptr = MakeALargeInterestGroupForBiddingForLatencyTesting();
+    auto ig = MakeALargeInterestGroupForBiddingForLatencyTesting();
     // Add a key so the IG will have some trusted bidding signals so it will be
     // bid upon.
-    ig_ptr->mutable_trusted_bidding_signals_keys()->Add("bidding_signal");
+    ig.mutable_trusted_bidding_signals_keys()->Add("bidding_signal");
 
     AdWithBid bid;
     bid.set_render("test.com");
     bid.set_bid(1);
-    bid.set_interest_group_name(ig_ptr->name());
+    bid.set_interest_group_name(ig.name());
 
     *raw_response.add_bids() = bid;
-    igs.push_back(*ig_ptr.release());
+    igs.push_back(std::move(ig));
   }
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
 
@@ -653,14 +655,18 @@ TEST_F(GenerateBidsReactorTest, HandlesDuplicateKeysInBiddingSignalsKeys) {
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  bool enable_buyer_code_wrapper = true;
   const std::string json = R"JSON(
     {
-      "render": "test.com",
-      "bid": 1,
-      "debug_report_urls": {
-        "auction_debug_loss_url": "test.com/debugLoss",
-        "auction_debug_win_url": "test.com/debugWin"
-      }
+      "response": {
+        "render": "test.com",
+        "bid": 1,
+        "debug_report_urls": {
+          "auction_debug_loss_url": "test.com/debugLoss",
+          "auction_debug_win_url": "test.com/debugWin"
+        }
+      },
+      "logs": []
     }
   )JSON";
 
@@ -683,12 +689,13 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
   EXPECT_CALL(dispatcher_, BatchExecute)
       .WillOnce([json](std::vector<DispatchRequest>& batch,
                        BatchDispatchDoneCallback batch_callback) {
-        return FakeExecute(batch, std::move(batch_callback), json, true);
+        return FakeExecute(batch, std::move(batch_callback), json, false, true);
       });
   RawRequest rawRequest;
   BuildRawRequest(igs, testAuctionSignals, testBuyerSignals, testBiddingSignals,
                   rawRequest, enable_debug_reporting);
-  CheckGenerateBids(rawRequest, ads, enable_buyer_debug_url_generation);
+  CheckGenerateBids(rawRequest, ads, enable_buyer_debug_url_generation,
+                    enable_buyer_code_wrapper);
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithoutDebugUrls) {

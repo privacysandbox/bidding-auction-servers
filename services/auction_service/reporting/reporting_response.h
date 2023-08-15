@@ -29,10 +29,19 @@ struct ReportResultResponse {
   bool register_ad_beacon_invoked;
 };
 
+struct ReportWinResponse {
+  std::string report_win_url;
+  absl::flat_hash_map<std::string, std::string> interaction_reporting_urls;
+  bool send_report_to_invoked;
+  bool register_ad_beacon_invoked;
+};
+
 // Response received from execution of reportingEntryFunction() in Roma.
 struct ReportingResponse {
   ReportResultResponse report_result_response;
   std::vector<std::string> seller_logs;
+  ReportWinResponse report_win_response;
+  std::vector<std::string> buyer_logs;
 };
 }  //  namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_RESPONSE_H_

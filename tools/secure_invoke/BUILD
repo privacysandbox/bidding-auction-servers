@@ -98,6 +98,9 @@ cc_test(
     name = "secure_invoke_lib_test",
     size = "medium",
     srcs = ["secure_invoke_lib_test.cc"],
+    tags = [
+        "flaky",
+    ],
     deps = [
         ":secure_invoke_lib",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",

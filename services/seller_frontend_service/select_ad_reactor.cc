@@ -495,13 +495,13 @@ void SelectAdReactor::OnFetchBidsDone(
   if (response.ok()) {
     auto& found_response = *response;
     logger_.vlog(2, "\nGetBidsResponse:\n", found_response->DebugString());
-    absl::MutexLock lock(&bid_data_mu_);
     if (found_response->bids().empty()) {
       logger_.vlog(2, "Skipping buyer ", buyer_ig_owner,
                    " due to empty GetBidsResponse.");
       completed_bid_state = CompletedBidState::EMPTY_RESPONSE;
     } else {
-      buyer_bids_.try_emplace(buyer_ig_owner, *std::move(response));
+      absl::MutexLock lock(&bid_data_mu_);
+      shared_buyer_bids_map_.try_emplace(buyer_ig_owner, *std::move(response));
       completed_bid_state = CompletedBidState::SUCCESS;
     }
   } else {
@@ -523,7 +523,7 @@ void SelectAdReactor::UpdatePendingBidsState(
   logger_.vlog(5, "Updated pending bids state: ", bid_stats_.ToString());
 
   if (bid_stats_.pending_bids_count == 0) {
-    if (buyer_bids_.empty()) {
+    if (shared_buyer_bids_map_.empty()) {
       logger_.vlog(2, kNoBidsReceived);
       if (!bid_stats_.HasAnySuccessfulBids()) {
         logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
@@ -536,15 +536,15 @@ void SelectAdReactor::UpdatePendingBidsState(
       return;
     }
 
-    for (auto& [buyer_ig_owner, response] : buyer_bids_) {
-      buyer_bids_list_.emplace(buyer_ig_owner, std::move(response));
-    }
+    // Safe to access Buyer responses through buyer_bids_map_ now
+    // (without mutex lock). shared_buyer_bids_map_ is empty after this point.
+    buyer_bids_map_.swap(shared_buyer_bids_map_);
     FetchScoringSignals();
   }
 }
 
 void SelectAdReactor::FetchScoringSignals() {
-  ScoringSignalsRequest scoring_signals_request(buyer_bids_list_,
+  ScoringSignalsRequest scoring_signals_request(buyer_bids_map_,
                                                 buyer_metadata_);
   absl::Time kv_request_start_time = absl::Now();
   clients_.scoring_signals_async_provider.Get(
@@ -576,7 +576,7 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
 
 void SelectAdReactor::ScoreAds() {
   auto raw_request = std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>();
-  for (const auto& [buyer, get_bid_response] : buyer_bids_list_) {
+  for (const auto& [buyer, get_bid_response] : buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       AdWithBidMetadata ad_with_bid_metadata =
           BuildAdWithBidMetadata(get_bid_response->bids().at(i), buyer);
@@ -601,6 +601,11 @@ void SelectAdReactor::ScoreAds() {
   log_context->set_generation_id(protected_audience_input_.generation_id());
   log_context->set_adtech_debug_id(
       request_->auction_config().seller_debug_id());
+  for (const auto& [buyer, per_buyer_config] :
+       request_->auction_config().per_buyer_config()) {
+    raw_request->mutable_per_buyer_signals()->try_emplace(
+        buyer, per_buyer_config.buyer_signals());
+  }
   logger_.vlog(2, "\nScoreAdsRawRequest:\n", raw_request->DebugString());
   absl::Time auction_request_start_time = absl::Now();
   auto on_scoring_done =
@@ -626,7 +631,7 @@ void SelectAdReactor::ScoreAds() {
 
 BiddingGroupMap SelectAdReactor::GetBiddingGroups() {
   BiddingGroupMap bidding_groups;
-  for (const auto& [buyer, ad_with_bids] : buyer_bids_list_) {
+  for (const auto& [buyer, ad_with_bids] : buyer_bids_map_) {
     // Mapping from buyer to interest groups that are associated with non-zero
     // bids.
     absl::flat_hash_set<absl::string_view> buyer_interest_groups;
@@ -762,9 +767,9 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
 
 void SelectAdReactor::PerformDebugReporting(
     const std::optional<AdScore>& high_score) {
-  std::unique_ptr<PostAuctionSignals> post_auction_signals =
+  PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(high_score);
-  for (const auto& [buyer, get_bid_response] : buyer_bids_list_) {
+  for (const auto& [buyer, get_bid_response] : buyer_bids_map_) {
     std::string ig_owner = buyer;
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       AdWithBid adWithBid = get_bid_response->bids().at(i);
@@ -782,16 +787,16 @@ void SelectAdReactor::PerformDebugReporting(
           }
         };
         std::string debug_url;
-        if (post_auction_signals->winning_ig_owner == buyer &&
+        if (post_auction_signals.winning_ig_owner == buyer &&
             adWithBid.interest_group_name() ==
-                post_auction_signals->winning_ig_name) {
+                post_auction_signals.winning_ig_name) {
           debug_url = adWithBid.debug_report_urls().auction_debug_win_url();
         } else {
           debug_url = adWithBid.debug_report_urls().auction_debug_loss_url();
         }
         HTTPRequest http_request = CreateDebugReportingHttpRequest(
             debug_url, GetPlaceholderDataForInterestGroup(
-                           ig_owner, ig_name, *post_auction_signals));
+                           ig_owner, ig_name, post_auction_signals));
         clients_.reporting->DoReport(http_request, done_cb);
       }
     }

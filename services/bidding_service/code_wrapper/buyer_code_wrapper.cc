@@ -23,6 +23,16 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+void AppendFeatureFlagValue(std::string& feature_flags,
+                            absl::string_view feature_name,
+                            bool is_feature_enabled) {
+  absl::string_view enable_feature = kFeatureDisabled;
+  if (is_feature_enabled) {
+    enable_feature = kFeatureEnabled;
+  }
+  feature_flags.append(
+      absl::StrCat("\"", feature_name, "\": ", enable_feature));
+}
 
 std::string WasmBytesToJavascript(absl::string_view wasm_bytes) {
   std::string hex_array = "";
@@ -42,5 +52,16 @@ std::string GetBuyerWrappedCode(absl::string_view adtech_js,
                                 absl::string_view adtech_wasm = "") {
   return absl::StrCat(WasmBytesToJavascript(adtech_wasm), kEntryFunction,
                       adtech_js);
+}
+
+std::string GetFeatureFlagJson(bool enable_logging,
+                               bool enable_debug_url_generation) {
+  std::string feature_flags = "{";
+  AppendFeatureFlagValue(feature_flags, kFeatureLogging, enable_logging);
+  feature_flags.append(",");
+  AppendFeatureFlagValue(feature_flags, kFeatureDebugUrlGeneration,
+                         enable_debug_url_generation);
+  feature_flags.append("}");
+  return feature_flags;
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

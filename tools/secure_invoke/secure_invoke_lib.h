@@ -52,6 +52,10 @@ absl::Status SendRequestToBidding(
 // Gets contents of the provided file path.
 std::string LoadFile(absl::string_view file_path);
 
+// Returns a JSON string of the OHTTP encrypted of the input GetBidsRawRequest
+// to the secure invoke tool.
+std::string PackagePlainTextGetBidsRequestToJson();
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // TOOLS_INVOKE_SECURE_INVOKE_LIB_H_

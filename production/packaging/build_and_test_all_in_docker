@@ -205,11 +205,19 @@ for SERVICE in "${SERVICES[@]}"; do
     "//production/packaging/${PLATFORM}/${SERVICE}/..."
   )
   TEST_TARGETS+=(
-    "//services/common/..."
     "//services/${SERVICE}/..."
     "//production/packaging/${PLATFORM}/${SERVICE}/..."
   )
 done
+
+TEST_TARGETS+=(
+  "//services/common/..."
+  "//tools/secure_invoke/..."
+)
+
+BUILD_TARGETS+=(
+  "//tools/secure_invoke/..."
+)
 
 CBUILD_ARGS="--verbose"
 declare -r _BUILD_TARGETS="${BUILD_TARGETS[*]}"
@@ -254,7 +262,7 @@ if [[ ${PLATFORM} = "aws" ]]; then
       exit 1
     fi
     # shellcheck disable=SC2086
-    "${SCRIPT_DIR}"/aws/build_and_test ${VERBOSE_ARG} --server-image "${DOCKER_IMAGE}" --service-path "${SERVICE}" "${EXTRA_ARGS[@]}"
+    "${SCRIPT_DIR}"/aws/build_and_test ${VERBOSE_ARG} --server-image "${DOCKER_IMAGE}" --service-path "${SERVICE}" --build-flavor ${BUILD_FLAVOR} "${EXTRA_ARGS[@]}"
   }
 
   for svc in "${SERVICES[@]}"; do

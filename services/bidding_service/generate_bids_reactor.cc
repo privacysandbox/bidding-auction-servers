@@ -26,6 +26,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_format.h"
 #include "glog/logging.h"
+#include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/status_macros.h"
@@ -259,7 +260,7 @@ enum class GenerateBidArgs : int {
   kBuyerSignals,
   kTrustedBiddingSignals,
   kDeviceSignals,
-  kEnableLogging
+  kFeatureFlags
 };
 
 constexpr int BidArgIndex(GenerateBidArgs arg) {
@@ -357,21 +358,13 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
         std::make_shared<std::string>(R"JSON("")JSON");
   }
   if (enable_buyer_code_wrapper) {
-    std::string enable_logging = kDisableAdTechCodeLogging;
-    if (enable_adtech_code_logging) {
-      enable_logging = kEnableAdTechCodeLogging;
-    }
-    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kEnableLogging)] =
-        std::make_shared<std::string>(enable_logging);
-  }
-
-  // Wrap buyer code to add reporting URLs to generateBid response.
-  if (enable_buyer_code_wrapper) {
+    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kFeatureFlags)] =
+        std::make_shared<std::string>(
+            GetFeatureFlagJson(enable_adtech_code_logging,
+                               enable_buyer_debug_url_generation &&
+                                   raw_request.enable_debug_reporting()));
     generate_bid_request.handler_name =
         kDispatchHandlerFunctionNameWithCodeWrapper;
-  } else if (enable_buyer_debug_url_generation &&
-             raw_request.enable_debug_reporting()) {
-    generate_bid_request.handler_name = kDispatchHandlerWrapperFunctionName;
   } else {
     generate_bid_request.handler_name = kDispatchHandlerFunctionName;
   }
@@ -418,6 +411,14 @@ absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
     const rapidjson::Value& logs = document["logs"];
     for (const auto& log : logs.GetArray()) {
       logger.vlog(1, "Logs: ", log.GetString());
+    }
+    const rapidjson::Value& warnings = document["warnings"];
+    for (const auto& warning : warnings.GetArray()) {
+      logger.vlog(1, "Warnings: ", warning.GetString());
+    }
+    const rapidjson::Value& errors = document["errors"];
+    for (const auto& error : errors.GetArray()) {
+      logger.vlog(1, "Errors: ", error.GetString());
     }
   }
   return response_json;

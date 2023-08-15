@@ -33,7 +33,6 @@
 #include "grpcpp/health_check_service_interface.h"
 #include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
-#include "services/auction_service/auction_adtech_code_wrapper.h"
 #include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
@@ -125,6 +124,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
   config_client.SetFlag(FLAGS_js_worker_mem_mb, JS_WORKER_MEM_MB);
+  config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
+  config_client.SetFlag(FLAGS_enable_otel_based_logging,
+                        ENABLE_OTEL_BASED_LOGGING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -187,28 +189,37 @@ absl::Status RunServer() {
   bool enable_report_win_url_generation =
       code_fetch_proto.enable_report_win_url_generation();
   std::string js_url = code_fetch_proto.auction_js_url();
+  auto buyer_report_win_js_urls = code_fetch_proto.buyer_report_win_js_urls();
+  std::vector<std::string> endpoints = {js_url};
+  std::vector<std::string> buyer_origins = {};
+  for (const auto& key_value : buyer_report_win_js_urls) {
+    endpoints.push_back(key_value.second);
+    buyer_origins.push_back(key_value.first);
+  }
 
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
   if (!js_url.empty()) {
-    auto wrap_code = [enable_seller_code_wrapper,
-                      enable_seller_debug_url_generation,
-                      enable_report_result_url_generation](
-                         const std::vector<std::string>& adtech_code_blobs) {
-      if (enable_seller_code_wrapper) {
-        return GetSellerWrappedCode(adtech_code_blobs.at(0),
-                                    enable_report_result_url_generation);
-      }
-      return enable_seller_debug_url_generation
-                 ? GetWrappedAdtechCodeForScoring(adtech_code_blobs.at(0))
-                 : adtech_code_blobs.at(0);
-    };
-
-    auto buyer_report_win_js_urls = code_fetch_proto.buyer_report_win_js_urls();
-    std::vector<std::string> endpoints = {js_url};
-    for (const auto& key_value : buyer_report_win_js_urls) {
-      endpoints.push_back(key_value.second);
-    }
+    auto wrap_code =
+        [enable_seller_code_wrapper, enable_seller_debug_url_generation,
+         enable_report_result_url_generation, enable_report_win_url_generation,
+         buyer_origins](const std::vector<std::string>& adtech_code_blobs) {
+          if (enable_seller_code_wrapper) {
+            absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
+            CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
+                << "Error fetching code blobs from buyer. Buyer size:"
+                << buyer_origins.size()
+                << " and blobs count:" << adtech_code_blobs.size();
+            for (int i = 0; i < buyer_origins.size(); i++) {
+              buyer_origin_code_map.try_emplace(buyer_origins.at(i),
+                                                adtech_code_blobs.at(i + 1));
+            }
+            return GetSellerWrappedCode(
+                adtech_code_blobs.at(0), enable_report_result_url_generation,
+                enable_report_win_url_generation, buyer_origin_code_map);
+          }
+          return adtech_code_blobs.at(0);
+        };
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
         endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
@@ -220,13 +231,10 @@ absl::Status RunServer() {
     std::ifstream ifs(code_fetch_proto.auction_js_path().data());
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
+
     if (enable_seller_code_wrapper) {
       adtech_code_blob = GetSellerWrappedCode(
-          adtech_code_blob, enable_report_result_url_generation);
-    } else {
-      adtech_code_blob = enable_seller_debug_url_generation
-                             ? GetWrappedAdtechCodeForScoring(adtech_code_blob)
-                             : adtech_code_blob;
+          adtech_code_blob, enable_report_result_url_generation, false, {});
     }
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
@@ -238,25 +246,27 @@ absl::Status RunServer() {
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
 
-  server_common::metric::BuildDependentConfig telemetry_config(
+  server_common::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::metric::TelemetryFlag>(
-              TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
           .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed());
+      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
+      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
                                   CreateMetricsOptions(), collector_endpoint);
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
-  metric::AuctionContextMap(
+  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
+                                 collector_endpoint);
+  AddSystemMetric(metric::AuctionContextMap(
       std::move(telemetry_config),
       opentelemetry::metrics::Provider::GetMeterProvider()
           ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get());
+          .get()));
   auto executer = std::make_unique<server_common::EventEngineExecutor>(
       grpc_event_engine::experimental::CreateEventEngine());
   auto score_ads_reactor_factory =

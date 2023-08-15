@@ -49,8 +49,8 @@ class TestMetricRouter {
 class ContextMapTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ServerConfig config_proto;
-    config_proto.set_mode(ServerConfig::PROD);
+    TelemetryConfig config_proto;
+    config_proto.set_mode(TelemetryConfig::PROD);
     metric_config_ = std::make_unique<BuildDependentConfig>(config_proto);
   }
   std::unique_ptr<BuildDependentConfig> metric_config_;

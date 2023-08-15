@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "services/common/metric/telemetry_flag.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "google/protobuf/text_format.h"
 
-namespace privacy_sandbox::server_common::metric {
+namespace privacy_sandbox::server_common {
 namespace {
 
 template <typename T>
@@ -35,7 +35,7 @@ inline absl::StatusOr<T> ParseText(absl::string_view text) {
 
 bool AbslParseFlag(absl::string_view text, TelemetryFlag* flag,
                    std::string* err) {
-  absl::StatusOr<ServerConfig> s = ParseText<ServerConfig>(text);
+  absl::StatusOr<TelemetryConfig> s = ParseText<TelemetryConfig>(text);
   if (!s.ok()) {
     *err = s.status().message();
     return false;
@@ -48,4 +48,4 @@ std::string AbslUnparseFlag(const TelemetryFlag& flag) {
   return flag.server_config.ShortDebugString();
 }
 
-}  // namespace privacy_sandbox::server_common::metric
+}  // namespace privacy_sandbox::server_common

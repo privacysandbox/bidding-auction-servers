@@ -105,10 +105,9 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         .WillRepeatedly(Return(GetPrivateKey()));
 
     // Initialization for telemetry.
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-    metric::SfeContextMap(
-        server_common::metric::BuildDependentConfig(config_proto))
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto))
         ->Get(&request_);
   }
 
@@ -292,7 +291,7 @@ TEST_F(SellerFrontEndServiceTest,
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = protected_audience_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(buyer);
     auto get_bids_response =
@@ -331,7 +330,7 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
   int client_count = protected_audience_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
   absl::flat_hash_map<AdUrl, AdWithBid> bids;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(buyer);
     GetBidsResponse::GetBidsRawResponse response =
@@ -369,6 +368,7 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
                       select_ad_req.auction_config().auction_signals());
             EXPECT_STREQ(request->scoring_signals().c_str(),
                          ad_render_urls.c_str());
+            EXPECT_EQ(request->per_buyer_signals().size(), 2);
             for (const auto& actual_ad_with_bid_metadata : request->ad_bids()) {
               AdWithBid actual_ad_with_bid_for_test;
               BuildAdWithBidFromAdWithBidMetadata(actual_ad_with_bid_metadata,
@@ -401,7 +401,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   ErrorAccumulator error_accumulator;
   auto decoded_buyer_inputs = DecodeBuyerInputs(
       protected_audience_input_.buyer_input(), error_accumulator);
@@ -564,7 +564,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request_);
 
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_audience_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(local_buyer);
@@ -666,7 +666,7 @@ TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = protected_audience_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
-  BuyerBidsList expected_buyer_bids;
+  BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
     auto get_bid_response = BuildGetBidsResponseWithSingleAd(
         buyer_to_ad_url.at(buyer), "testIg", 1.9, true);

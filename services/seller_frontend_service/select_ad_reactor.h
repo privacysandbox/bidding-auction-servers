@@ -298,18 +298,16 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   RequestMetadata buyer_metadata_;
 
   // Store references to bids results for mutex free single thread operations.
-  BuyerBidsList buyer_bids_list_;
-
-  // Benchmarking Logger to benchmark the service
-  std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
+  BuyerBidsResponseMap buyer_bids_map_;
 
   // Get Bid Results
   // Multiple threads can be writing buyer bid responses, so we use a
   // mutex guard.
   absl::Mutex bid_data_mu_;
-  absl::flat_hash_map<std::string,
-                      std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
-      buyer_bids_ ABSL_GUARDED_BY(bid_data_mu_);
+  BuyerBidsResponseMap shared_buyer_bids_map_ ABSL_GUARDED_BY(bid_data_mu_);
+
+  // Benchmarking Logger to benchmark the service
+  std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
 
   // Request context needed throughout the lifecycle of the request.
   RequestContext request_context_;

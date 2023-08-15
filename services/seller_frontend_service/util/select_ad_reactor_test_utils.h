@@ -87,7 +87,7 @@ AdWithBid BuildNewAdWithBid(
 
 void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
-    const BuyerBidsList& expected_buyer_bids,
+    const BuyerBidsResponseMap& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed = false);
 
@@ -110,7 +110,7 @@ EncryptedSelectAdRequestWithContext GetSampleSelectAdRequest(
     SelectAdRequest::ClientType client_type,
     absl::string_view seller_origin_domain);
 
-BuyerBidsList GetBuyerClientsAndBidsForReactor(
+BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
     const SelectAdRequest& request,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients);
 
@@ -123,7 +123,8 @@ GetSelectAdRequestAndClientRegistryForTest(
     const BuyerFrontEndAsyncClientFactoryMock&
         buyer_front_end_async_client_factory_mock,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
-    BuyerBidsList& expected_buyer_bids, absl::string_view seller_origin_domain);
+    BuyerBidsResponseMap& expected_buyer_bids,
+    absl::string_view seller_origin_domain);
 
 std::pair<std::string, quiche::ObliviousHttpRequest::Context>
 GetCborEncodedEncryptedInputAndOhttpContext(

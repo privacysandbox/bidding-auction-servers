@@ -35,7 +35,8 @@ HTTPRequest BuildSellerKeyValueRequest(
   }
   if (!client_input->ad_component_render_urls.empty()) {
     AddListItemsAsQueryParamsToUrl(&request.url, "adComponentRenderUrls",
-                                   client_input->ad_component_render_urls);
+                                   client_input->ad_component_render_urls,
+                                   true);
   }
   request.headers = RequestMetadataToHttpHeaders(metadata);
   return request;

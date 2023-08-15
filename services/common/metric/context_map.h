@@ -18,13 +18,14 @@
 #define SERVICES_COMMON_METRIC_CONTEXT_MAP_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "absl/log/check.h"
 #include "absl/synchronization/mutex.h"
 #include "services/common/metric/context.h"
 #include "services/common/metric/metric_router.h"
-#include "services/common/metric/telemetry_flag.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
 namespace privacy_sandbox::server_common::metric {
 
@@ -73,6 +74,13 @@ class ContextMap {
     std::unique_ptr<ContextT> c = std::move(it->second);
     context_.erase(it);
     return c;
+  }
+
+  template <typename TDefinition>
+  absl::Status AddObserverable(
+      const TDefinition& definition,
+      absl::flat_hash_map<std::string, double> (*callback)()) {
+    return metric_router_->AddObserverable(definition, callback);
   }
 
   const BuildDependentConfig& metric_config() const { return metric_config_; }

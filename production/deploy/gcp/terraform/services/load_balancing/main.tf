@@ -41,6 +41,7 @@ resource "google_compute_backend_service" "mesh_backend" {
   port_name             = "grpc"
   protocol              = "GRPC"
   load_balancing_scheme = "INTERNAL_SELF_MANAGED"
+  locality_lb_policy    = "ROUND_ROBIN"
   timeout_sec           = 10
   health_checks         = [google_compute_health_check.backend.id]
 
@@ -160,6 +161,7 @@ resource "google_compute_backend_service" "default" {
   port_name             = "grpc"
   protocol              = "HTTP2"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  locality_lb_policy    = "ROUND_ROBIN"
   timeout_sec           = 10
   health_checks         = [google_compute_health_check.frontend.id]
   dynamic "backend" {

@@ -78,10 +78,10 @@ std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
 class AuctionServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::metric::ServerConfig config_proto;
-    config_proto.set_mode(server_common::metric::ServerConfig::PROD);
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
     metric::AuctionContextMap(
-        server_common::metric::BuildDependentConfig(config_proto));
+        server_common::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
   }
 

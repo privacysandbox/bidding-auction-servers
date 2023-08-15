@@ -2,6 +2,78 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.41.0 (2023-08-03)
+
+
+### Features
+
+* Create links for lld and ld.lld in build-debian
+
+## 0.40.0 (2023-08-03)
+
+
+### Features
+
+* Add Dependencies section for release notes
+* **deps:** Upgrade rules_python to 0.24.0
+* Ensure bazel-* scripts handle non-bazel args too
+
+## 0.39.0 (2023-08-02)
+
+
+### Features
+
+* Run bazel containers in seccomp=unconfined mode
+
+## 0.38.1 (2023-08-02)
+
+
+### Bug Fixes
+
+* Ensure python3.9 is found first in PATH
+
+## 0.38.0 (2023-07-28)
+
+
+### Features
+
+* Add cbuild flag --seccomp-unconfined
+
+## 0.37.0 (2023-07-27)
+
+
+### Features
+
+* Add patch tool to build-debian image
+
+## 0.36.1 (2023-07-25)
+
+
+### Bug Fixes
+
+* Rename convert_docker_to_nitro to convert-docker-to-nitro
+
+## 0.36.0 (2023-07-24)
+
+
+### Features
+
+* Add convert_docker_to_nitro
+
+## 0.35.0 (2023-07-21)
+
+
+### Features
+
+* Add LICENSE file
+
+## 0.34.0 (2023-07-21)
+
+
+### Features
+
+* Add OSSF Scorecard badge to top-level README
+
 ## 0.33.0 (2023-07-20)
 
 

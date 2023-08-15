@@ -33,7 +33,7 @@ void HttpScoringSignalsAsyncProvider::Get(
     absl::Duration timeout) const {
   auto request = std::make_unique<GetSellerValuesInput>();
   for (const auto& buyer_get_bid_response_pair :
-       scoring_signals_request.buyer_bids_list_) {
+       scoring_signals_request.buyer_bids_map_) {
     for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
       request->render_urls.emplace_back(ad.render());
       request->ad_component_render_urls.insert(

@@ -42,10 +42,9 @@ TEST(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
   GenerateBidsResponse response;
   absl::BlockingCounter init_pending(1);
   // initialize
-  server_common::metric::ServerConfig config_proto;
-  config_proto.set_mode(server_common::metric::ServerConfig::PROD);
-  metric::BiddingContextMap(
-      server_common::metric::BuildDependentConfig(config_proto));
+  server_common::TelemetryConfig config_proto;
+  config_proto.set_mode(server_common::TelemetryConfig::PROD);
+  metric::BiddingContextMap(server_common::BuildDependentConfig(config_proto));
   BiddingServiceRuntimeConfig bidding_service_runtime_config = {
       .encryption_enabled = true};
   TrustedServersConfigClient config{{}};

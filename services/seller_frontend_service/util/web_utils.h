@@ -17,6 +17,7 @@
 #ifndef SERVICES_SELLER_FRONTEND_SERVICE_UTIL_WEB_UTILS_H_
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_WEB_UTILS_H_
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -103,8 +104,17 @@ inline constexpr char kSuccessfulBuyerInputDecode[] =
 inline constexpr char kMalformedCompressedIgError[] =
     "Malformed bytestring for compressed interest group for buyer: %s";
 
+// Comparator to order strings by length first and then lexicographically.
+inline constexpr auto kComparator = [](absl::string_view a,
+                                       absl::string_view b) {
+  if (a.size() == b.size()) {
+    return a < b;
+  }
+  return a.size() < b.size();
+};
+
 // Encodes the data into a CBOR-serialized AuctionResult response.
-absl::StatusOr<std::vector<unsigned char>> Encode(
+absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
@@ -117,6 +127,15 @@ absl::StatusOr<std::vector<unsigned char>> Encode(
 ProtectedAudienceInput Decode(absl::string_view cbor_payload,
                               ErrorAccumulator& error_accumulator,
                               bool fail_fast = true);
+
+// Serializes the bidding groups (buyer origin => interest group indices map)
+// to CBOR. Note: this should not be used directly and is only here to
+// facilitate testing.
+absl::Status CborSerializeBiddingGroups(
+    const google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>&
+        bidding_groups,
+    const std::function<void(absl::string_view)>& error_handler,
+    cbor_item_t& root);
 
 // Decodes the decompressed but CBOR encoded BuyerInput map to a mapping from
 // owner => BuyerInput. Errors are reported to `error_accumulator`.
@@ -131,6 +150,31 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
                             ErrorAccumulator& error_accumulator,
                             bool fail_fast = true);
 
+// Minimally encodes an unsigned int into CBOR. Caller is responsible for
+// decrementing the reference once done with the returned int.
+cbor_item_t* cbor_build_uint(uint32_t input);
+
+// Minimally encodes a float into CBOR. Caller is responsible for decrementing
+// the reference once done with the returned int.
+absl::StatusOr<cbor_item_t*> cbor_build_float(double input);
+
+// Checks for floats equality (subject to the system's limits).
+template <typename T, typename U>
+bool AreFloatsEqual(T a, U b) {
+  bool result = std::fabs(a - b) < std::numeric_limits<double>::epsilon();
+  if (VLOG_IS_ON(6)) {
+    VLOG(6) << "a: " << a << ", b: " << b << ", diff: " << fabs(a - b)
+            << ", EPS: " << std::numeric_limits<double>::epsilon()
+            << ", floats equal: " << result;
+  }
+  return result;
+}
+
+// Serializes WinReportingUrls for buyer and seller.
+absl::Status CborSerializeWinReportingUrls(
+    const WinReportingUrls& win_reporting_urls,
+    const std::function<void(absl::string_view)>& error_handler,
+    cbor_item_t& root);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_SELLER_FRONTEND_SERVICE_UTIL_WEB_UTILS_H_

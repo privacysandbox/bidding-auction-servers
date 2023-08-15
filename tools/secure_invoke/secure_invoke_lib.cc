@@ -24,6 +24,7 @@
 
 #include "absl/flags/flag.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
+#include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/seller_frontend_server/seller_frontend_async_client.h"
@@ -162,6 +163,7 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       .server_addr = request_options.host_addr,
       .secure_client = !request_options.insecure,
       .encryption_enabled = true,
+      .secure_client = !request_options.insecure,
   };
   TrustedServersConfigClient config_client({});
   // Revisit if we have to test against non-test deployments.
@@ -306,8 +308,7 @@ absl::Status SendRequestToSfe(SelectAdRequest::ClientType client_type) {
   return status;
 }
 
-absl::Status SendRequestToBfe(
-    std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
+GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput() {
   std::string raw_get_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
   const bool is_json = (!raw_get_bids_request_str.empty() ||
                         absl::GetFlag(FLAGS_input_format) == kJsonFormat);
@@ -329,6 +330,35 @@ absl::Status SendRequestToBfe(
         << "Failed to create proto object from the input file. Input:\n"
         << raw_get_bids_request_str;
   }
+  return get_bids_raw_request;
+}
+
+std::string PackagePlainTextGetBidsRequestToJson() {
+  GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
+      GetBidsRawRequestFromInput();
+  TrustedServersConfigClient config_client({});
+  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto crypto_client = CreateCryptoClient();
+  auto secret_request =
+      EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
+          std::make_unique<GetBidsRequest::GetBidsRawRequest>(
+              get_bids_raw_request),
+          *crypto_client, *key_fetcher_manager);
+  CHECK(secret_request.ok()) << secret_request.status();
+  std::string get_bids_request_json;
+  auto get_bids_request_json_status =
+      google::protobuf::util::MessageToJsonString(*secret_request->second,
+                                                  &get_bids_request_json);
+  CHECK(get_bids_request_json_status.ok()) << get_bids_request_json_status;
+  return get_bids_request_json;
+}
+
+absl::Status SendRequestToBfe(
+    std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
+  GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
+      GetBidsRawRequestFromInput();
   privacy_sandbox::bidding_auction_servers::RequestOptions request_options;
   request_options.host_addr = absl::GetFlag(FLAGS_host_addr);
   request_options.client_ip = absl::GetFlag(FLAGS_client_ip);

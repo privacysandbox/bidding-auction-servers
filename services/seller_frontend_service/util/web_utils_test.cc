@@ -58,8 +58,19 @@ inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
 inline constexpr char kSampleErrorMessage[] = "BadError";
 inline constexpr int32_t kSampleErrorCode = 400;
+inline constexpr char kTestEvent1[] = "click";
+inline constexpr char kTestInteractionUrl1[] = "http://click.com";
+inline constexpr char kTestEvent2[] = "scroll";
+inline constexpr char kTestInteractionUrl2[] = "http://scroll.com";
+inline constexpr char kTestEvent3[] = "close";
+inline constexpr char kTestInteractionUrl3[] = "http://close.com";
+inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
+inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 
 using ErrorVisibility::CLIENT_VISIBLE;
+using BiddingGroupMap =
+    ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
+using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 
 cbor_pair BuildStringMapPair(absl::string_view key, absl::string_view value) {
   return {cbor_move(cbor_build_stringn(key.data(), key.size())),
@@ -340,6 +351,242 @@ TEST(ChromeRequestUtils, Decode_FailOnMalformedCompresedBytestring) {
                                   kMalformedCompressedBytestring));
 }
 
+TEST(ChromeResponseUtils, VerifyBiddingGroupBuyerOriginOrdering) {
+  const std::string interest_group_owner_1 = "ig1";
+  const std::string interest_group_owner_2 = "zi";
+  const std::string interest_group_owner_3 = "ih1";
+  AuctionResult::InterestGroupIndex interest_group_index;
+  interest_group_index.add_index(1);
+  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
+      bidding_group_map;
+  bidding_group_map.try_emplace(interest_group_owner_1, interest_group_index);
+  bidding_group_map.try_emplace(interest_group_owner_2, interest_group_index);
+  bidding_group_map.try_emplace(interest_group_owner_3, interest_group_index);
+
+  // Convert the bidding group map to CBOR.
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
+  auto* cbor_internal = cbor_data_root.get();
+  auto err_handler = [](absl::string_view err_msg) {};
+  auto result = CborSerializeBiddingGroups(bidding_group_map, err_handler,
+                                           *cbor_internal);
+  ASSERT_TRUE(result.ok()) << result;
+
+  // Decode the produced CBOR and collect the origins for verification.
+  std::vector<std::string> observed_origins;
+  absl::Span<struct cbor_pair> outer_map(cbor_map_handle(cbor_internal),
+                                         cbor_map_size(cbor_internal));
+  ASSERT_EQ(outer_map.size(), 1);
+  auto& bidding_group_val = outer_map.begin()->value;
+  ASSERT_TRUE(cbor_isa_map(bidding_group_val));
+  absl::Span<struct cbor_pair> group_entries(cbor_map_handle(bidding_group_val),
+                                             cbor_map_size(bidding_group_val));
+  for (const auto& kv : group_entries) {
+    ASSERT_TRUE(cbor_isa_string(kv.key)) << "Expected the key to be a string";
+    observed_origins.emplace_back(
+        reinterpret_cast<char*>(cbor_string_handle(kv.key)),
+        cbor_string_length(kv.key));
+  }
+
+  // We expect the shorter length keys to be present first followed. Ties on
+  // length are then broken by lexicographic order.
+  ASSERT_EQ(observed_origins.size(), 3);
+  EXPECT_EQ(observed_origins[0], interest_group_owner_2);
+  EXPECT_EQ(observed_origins[1], interest_group_owner_1);
+  EXPECT_EQ(observed_origins[2], interest_group_owner_3);
+}
+void TestReportAndInteractionUrls(const struct cbor_pair reporting_data,
+                                  absl::string_view reporting_url_key,
+                                  absl::string_view expected_report_url) {
+  ASSERT_TRUE(cbor_isa_string(reporting_data.key))
+      << "Expected the key to be a string";
+  EXPECT_EQ(reporting_url_key, CborDecodeString(reporting_data.key));
+  auto& outer_map = reporting_data.value;
+  absl::Span<struct cbor_pair> reporting_urls_map(cbor_map_handle(outer_map),
+                                                  cbor_map_size(outer_map));
+  std::vector<std::string> observed_keys;
+  for (const auto& kv : reporting_urls_map) {
+    ASSERT_TRUE(cbor_isa_string(kv.key)) << "Expected the key to be a string";
+    observed_keys.emplace_back(CborDecodeString(kv.key));
+  }
+  EXPECT_EQ(observed_keys[0], kInteractionReportingUrls);
+  EXPECT_EQ(observed_keys[1], kReportingUrl);
+  EXPECT_EQ(expected_report_url,
+            CborDecodeString(reporting_urls_map.at(1).value));
+  auto& interaction_map = reporting_urls_map.at(0).value;
+  ASSERT_TRUE(cbor_isa_map(interaction_map));
+  absl::Span<struct cbor_pair> interaction_urls(
+      cbor_map_handle(interaction_map), cbor_map_size(interaction_map));
+  ASSERT_EQ(interaction_urls.size(), 3);
+  std::vector<std::string> observed_events;
+  std::vector<std::string> observed_urls;
+  for (const auto& kv : interaction_urls) {
+    ASSERT_TRUE(cbor_isa_string(kv.key)) << "Expected the key to be a string";
+    ASSERT_TRUE(cbor_isa_string(kv.value)) << "Expected the key to be a string";
+    observed_events.emplace_back(CborDecodeString(kv.key));
+    observed_urls.emplace_back(CborDecodeString(kv.value));
+  }
+  EXPECT_EQ(kTestEvent1, observed_events.at(0));
+  EXPECT_EQ(kTestInteractionUrl1, observed_urls.at(0));
+  EXPECT_EQ(kTestEvent3, observed_events.at(1));
+  EXPECT_EQ(kTestInteractionUrl3, observed_urls.at(1));
+  EXPECT_EQ(kTestEvent2, observed_events.at(2));
+  EXPECT_EQ(kTestInteractionUrl2, observed_urls.at(2));
+}
+
+void TestReportingUrl(const struct cbor_pair reporting_data,
+                      absl::string_view reporting_url_key,
+                      absl::string_view expected_report_url) {
+  ASSERT_TRUE(cbor_isa_string(reporting_data.key))
+      << "Expected the key to be a string";
+  EXPECT_EQ(reporting_url_key, CborDecodeString(reporting_data.key));
+  auto& outer_map = reporting_data.value;
+  absl::Span<struct cbor_pair> reporting_urls_map(cbor_map_handle(outer_map),
+                                                  cbor_map_size(outer_map));
+  std::vector<std::string> observed_keys;
+  for (const auto& kv : reporting_urls_map) {
+    ASSERT_TRUE(cbor_isa_string(kv.key)) << "Expected the key to be a string";
+    observed_keys.emplace_back(CborDecodeString(kv.key));
+  }
+  EXPECT_EQ(observed_keys[0], kReportingUrl);
+  EXPECT_EQ(expected_report_url,
+            CborDecodeString(reporting_urls_map.at(0).value));
+}
+
+TEST(ChromeResponseUtils, CborSerializeWinReportingUrls) {
+  InteractionUrlMap interaction_url_map;
+  interaction_url_map.try_emplace(kTestEvent1, kTestInteractionUrl1);
+  interaction_url_map.try_emplace(kTestEvent2, kTestInteractionUrl2);
+  interaction_url_map.try_emplace(kTestEvent3, kTestInteractionUrl3);
+  WinReportingUrls win_reporting_urls;
+  win_reporting_urls.mutable_buyer_reporting_urls()->set_reporting_url(
+      kTestReportWinUrl);
+  win_reporting_urls.mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  win_reporting_urls.mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent2, kTestInteractionUrl2);
+  win_reporting_urls.mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent3, kTestInteractionUrl3);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent2, kTestInteractionUrl2);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent3, kTestInteractionUrl3);
+
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
+  auto* cbor_internal = cbor_data_root.get();
+  auto err_handler = [](absl::string_view err_msg) {};
+  auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
+                                              *cbor_internal);
+  ASSERT_TRUE(result.ok()) << result;
+
+  // Decode the produced CBOR and collect the origins for verification.
+  std::vector<std::string> observed_keys;
+  absl::Span<struct cbor_pair> outer_map(cbor_map_handle(cbor_internal),
+                                         cbor_map_size(cbor_internal));
+  ASSERT_EQ(outer_map.size(), 1);
+  auto& report_win_urls_map = outer_map.at(0).value;
+  ASSERT_TRUE(cbor_isa_map(report_win_urls_map));
+  absl::Span<struct cbor_pair> inner_map(cbor_map_handle(report_win_urls_map),
+                                         cbor_map_size(report_win_urls_map));
+  ASSERT_EQ(inner_map.size(), 2);
+  TestReportAndInteractionUrls(inner_map.at(0), kBuyerReportingUrls,
+                               kTestReportWinUrl);
+  TestReportAndInteractionUrls(inner_map.at(1), kComponentSellerReportingUrls,
+                               kTestReportResultUrl);
+}
+
+TEST(ChromeResponseUtils, NoCborGeneratedWithEmptyWinReportingUrl) {
+  WinReportingUrls win_reporting_urls;
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
+  auto* cbor_internal = cbor_data_root.get();
+  auto err_handler = [](absl::string_view err_msg) {};
+  auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
+                                              *cbor_internal);
+  ASSERT_TRUE(result.ok()) << result;
+
+  // Decode the produced CBOR and collect the origins for verification.
+  std::vector<std::string> observed_keys;
+  absl::Span<struct cbor_pair> outer_map(cbor_map_handle(cbor_internal),
+                                         cbor_map_size(cbor_internal));
+  ASSERT_EQ(outer_map.size(), 0);
+}
+
+TEST(ChromeResponseUtils, CborWithOnlySellerReprotingUrls) {
+  InteractionUrlMap interaction_url_map;
+  interaction_url_map.try_emplace(kTestEvent1, kTestInteractionUrl1);
+  interaction_url_map.try_emplace(kTestEvent2, kTestInteractionUrl2);
+  interaction_url_map.try_emplace(kTestEvent3, kTestInteractionUrl3);
+  WinReportingUrls win_reporting_urls;
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent2, kTestInteractionUrl2);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent3, kTestInteractionUrl3);
+
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
+  auto* cbor_internal = cbor_data_root.get();
+  auto err_handler = [](absl::string_view err_msg) {};
+  auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
+                                              *cbor_internal);
+  ASSERT_TRUE(result.ok()) << result;
+
+  // Decode the produced CBOR and collect the origins for verification.
+  std::vector<std::string> observed_keys;
+  absl::Span<struct cbor_pair> outer_map(cbor_map_handle(cbor_internal),
+                                         cbor_map_size(cbor_internal));
+  ASSERT_EQ(outer_map.size(), 1);
+  auto& report_win_urls_map = outer_map.at(0).value;
+  ASSERT_TRUE(cbor_isa_map(report_win_urls_map));
+  absl::Span<struct cbor_pair> inner_map(cbor_map_handle(report_win_urls_map),
+                                         cbor_map_size(report_win_urls_map));
+  ASSERT_EQ(inner_map.size(), 1);
+  TestReportAndInteractionUrls(inner_map.at(0), kComponentSellerReportingUrls,
+                               kTestReportResultUrl);
+}
+
+TEST(ChromeResponseUtils, CborWithNoInteractionReportingUrls) {
+  WinReportingUrls win_reporting_urls;
+  win_reporting_urls.mutable_buyer_reporting_urls()->set_reporting_url(
+      kTestReportWinUrl);
+  win_reporting_urls.mutable_component_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
+  auto* cbor_internal = cbor_data_root.get();
+  auto err_handler = [](absl::string_view err_msg) {};
+  auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
+                                              *cbor_internal);
+  ASSERT_TRUE(result.ok()) << result;
+
+  // Decode the produced CBOR and collect the origins for verification.
+  std::vector<std::string> observed_keys;
+  absl::Span<struct cbor_pair> outer_map(cbor_map_handle(cbor_internal),
+                                         cbor_map_size(cbor_internal));
+  ASSERT_EQ(outer_map.size(), 1);
+  auto& report_win_urls_map = outer_map.at(0).value;
+  ASSERT_TRUE(cbor_isa_map(report_win_urls_map));
+  absl::Span<struct cbor_pair> inner_map(cbor_map_handle(report_win_urls_map),
+                                         cbor_map_size(report_win_urls_map));
+  ASSERT_EQ(inner_map.size(), 2);
+  TestReportingUrl(inner_map.at(0), kBuyerReportingUrls, kTestReportWinUrl);
+  TestReportingUrl(inner_map.at(1), kComponentSellerReportingUrls,
+                   kTestReportResultUrl);
+}
+
 TEST(ChromeResponseUtils, VerifyCborEncoding) {
   // Setup a winning bid.
   const std::string interest_group = "interest_group";
@@ -354,7 +601,20 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   winner.set_buyer_bid(bid);
   winner.set_interest_group_name(interest_group);
   winner.set_interest_group_owner(interest_group_owner);
-
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(kTestReportWinUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
   // Setup a bidding group map.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
       bidding_group_map;
@@ -362,16 +622,14 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   ig_indices.add_index(ig_index);
   bidding_group_map.try_emplace(interest_group_owner, std::move(ig_indices));
 
-  absl::StatusOr<std::vector<unsigned char>> response_with_cbor =
+  auto response_with_cbor =
       Encode(winner, std::move(bidding_group_map), /*error=*/std::nullopt,
              [](absl::string_view error) {});
-  EXPECT_TRUE(response_with_cbor.ok());
+  ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
-  std::string byte_string =
-      std::string(reinterpret_cast<char*>(response_with_cbor->data()),
-                  response_with_cbor->size());
+  VLOG(1) << "Encoded CBOR: " << absl::BytesToHexString(*response_with_cbor);
   absl::StatusOr<AuctionResult> decoded_result =
-      CborDecodeAuctionResultToProto(byte_string);
+      CborDecodeAuctionResultToProto(*response_with_cbor);
   ASSERT_TRUE(decoded_result.ok()) << decoded_result.status();
 
   // Verify that the decoded result has all the bidding groups correctly set.
@@ -384,13 +642,34 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
-  EXPECT_EQ(decoded_result->bid(), bid);
-  EXPECT_EQ(decoded_result->score(), desirability);
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), bid))
+      << " Actual: " << decoded_result->bid() << ", Expected: " << bid;
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->score(), desirability))
+      << " Actual: " << decoded_result->score()
+      << ", Expected: " << desirability;
   EXPECT_EQ(decoded_result->interest_group_name(), interest_group);
   EXPECT_EQ(decoded_result->interest_group_owner(), interest_group_owner);
+  EXPECT_EQ(decoded_result->win_reporting_urls()
+                .buyer_reporting_urls()
+                .reporting_url(),
+            kTestReportWinUrl);
+  EXPECT_EQ(decoded_result->win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestEvent1),
+            kTestInteractionUrl1);
+  EXPECT_EQ(decoded_result->win_reporting_urls()
+                .component_seller_reporting_urls()
+                .reporting_url(),
+            kTestReportResultUrl);
+  EXPECT_EQ(decoded_result->win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestEvent1),
+            kTestInteractionUrl1);
 }
 
-TEST(ChromeResponseUtils, VerifCBOREncodedError) {
+TEST(ChromeResponseUtils, VerifyCBOREncodedError) {
   ScoreAdsResponse::AdScore winner;
   // Setup a bidding group map.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
@@ -400,15 +679,11 @@ TEST(ChromeResponseUtils, VerifCBOREncodedError) {
   AuctionResult::Error error;
   error.set_message(kSampleErrorMessage);
   error.set_code(kSampleErrorCode);
-  absl::StatusOr<std::vector<unsigned char>> response_with_cbor =
-      Encode(winner, std::move(bidding_group_map), error,
-             [](absl::string_view error) {});
+  auto response_with_cbor = Encode(winner, std::move(bidding_group_map), error,
+                                   [](absl::string_view error) {});
 
-  std::string byte_string =
-      std::string(reinterpret_cast<char*>(response_with_cbor->data()),
-                  response_with_cbor->size());
   absl::StatusOr<AuctionResult> decoded_result =
-      CborDecodeAuctionResultToProto(byte_string);
+      CborDecodeAuctionResultToProto(*response_with_cbor);
   ASSERT_TRUE(decoded_result.ok()) << decoded_result.status();
   EXPECT_EQ(decoded_result->error().message(), kSampleErrorMessage);
   EXPECT_EQ(decoded_result->error().code(), kSampleErrorCode);
@@ -524,6 +799,121 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
   EXPECT_TRUE(unexpected_errors.empty())
       << "Found following unexpected errors were observed:\n"
       << absl::StrJoin(unexpected_errors, "\n");
+}
+
+absl::StatusOr<std::string> SerializeToCbor(cbor_item_t* cbor_data_root) {
+  // Serialize the payload to CBOR.
+  const size_t cbor_serialized_data_size = cbor_serialized_size(cbor_data_root);
+  if (!cbor_serialized_data_size) {
+    return absl::InternalError("Unable to serialize (data too large)");
+  }
+
+  std::vector<unsigned char> byte_string(cbor_serialized_data_size);
+  if (cbor_serialize(cbor_data_root, byte_string.data(),
+                     cbor_serialized_data_size) == 0) {
+    return absl::InternalError("Failed to serialize to CBOR");
+  }
+  std::string out;
+  for (const auto& val : byte_string) {
+    out.append(absl::StrCat(absl::Hex(val, absl::kZeroPad2)));
+  }
+  return out;
+}
+
+TEST(ChromeResponseUtils, UintsAreCompactlyCborEncoded) {
+  ScopedCbor single_byte_cbor(cbor_build_uint(23));
+  auto single_byte = SerializeToCbor(*single_byte_cbor);
+  ASSERT_TRUE(single_byte.ok()) << single_byte.status();
+  EXPECT_EQ(*single_byte, "17");
+
+  ScopedCbor two_bytes_cbor(cbor_build_uint(255));
+  auto two_bytes = SerializeToCbor(*two_bytes_cbor);
+  ASSERT_TRUE(two_bytes.ok()) << two_bytes.status();
+  EXPECT_EQ(*two_bytes, "18ff");
+
+  ScopedCbor three_bytes_cbor(cbor_build_uint(65535));
+  auto three_bytes = SerializeToCbor(*three_bytes_cbor);
+  ASSERT_TRUE(three_bytes.ok()) << three_bytes.status();
+  EXPECT_EQ(*three_bytes, "19ffff");
+
+  ScopedCbor five_bytes_cbor(cbor_build_uint(4294967295));
+  auto five_bytes = SerializeToCbor(*five_bytes_cbor);
+  ASSERT_TRUE(five_bytes.ok()) << five_bytes.status();
+  EXPECT_EQ(*five_bytes, "1affffffff");
+}
+
+TEST(ChromeResponseUtils, FloatsAreCompactlyCborEncoded) {
+  auto half_precision_cbor = cbor_build_float(0.0);
+  ASSERT_TRUE(half_precision_cbor.ok()) << half_precision_cbor.status();
+  auto half_precision = SerializeToCbor(*half_precision_cbor);
+  cbor_decref(&*half_precision_cbor);
+  ASSERT_TRUE(half_precision.ok()) << half_precision.status();
+  EXPECT_EQ(*half_precision, "f90000");
+
+  auto single_precision_cbor = cbor_build_float(std::pow(2.0, -24));
+  ASSERT_TRUE(single_precision_cbor.ok()) << single_precision_cbor.status();
+  auto single_precision = SerializeToCbor(*single_precision_cbor);
+  cbor_decref(&*single_precision_cbor);
+  ASSERT_TRUE(single_precision.ok()) << single_precision.status();
+  EXPECT_EQ(*single_precision, "f90001");
+
+  auto fine_precision_cbor = cbor_build_float(std::pow(2.0, -32));
+  ASSERT_TRUE(fine_precision_cbor.ok()) << fine_precision_cbor.status();
+  auto fine_precision = SerializeToCbor(*fine_precision_cbor);
+  cbor_decref(&*fine_precision_cbor);
+  EXPECT_EQ(*fine_precision, "fa2f800000");
+
+  auto double_precision_cbor = cbor_build_float(0.16);
+  ASSERT_TRUE(double_precision_cbor.ok()) << double_precision_cbor.status();
+  auto double_precision = SerializeToCbor(*double_precision_cbor);
+  cbor_decref(&*double_precision_cbor);
+  ASSERT_TRUE(double_precision.ok()) << double_precision.status();
+  EXPECT_EQ(*double_precision, "fb3fc47ae147ae147b");
+
+  auto rand_cbor_1 = cbor_build_float(10.21);
+  ASSERT_TRUE(rand_cbor_1.ok()) << rand_cbor_1.status();
+  auto rand_1 = SerializeToCbor(*rand_cbor_1);
+  cbor_decref(&*rand_cbor_1);
+  ASSERT_TRUE(rand_1.ok()) << rand_1.status();
+  EXPECT_EQ(*rand_1, "fb40246b851eb851ec");
+
+  auto rand_cbor_2 = cbor_build_float(2.35);
+  ASSERT_TRUE(rand_cbor_2.ok()) << rand_cbor_2.status();
+  auto rand_2 = SerializeToCbor(*rand_cbor_2);
+  cbor_decref(&*rand_cbor_2);
+  ASSERT_TRUE(rand_2.ok()) << rand_2.status();
+  EXPECT_EQ(*rand_2, "fb4002cccccccccccd");
+}
+
+TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
+  ScoreAdsResponse::AdScore winner;
+  winner.set_interest_group_owner("https://adtech.com");
+  winner.set_interest_group_name("ig1");
+  winner.set_desirability(156671.781);
+  winner.set_buyer_bid(0.195839122);
+  const std::string interest_group_owner_1 = "ig1";
+  const std::string interest_group_owner_2 = "zi";
+  const std::string interest_group_owner_3 = "ih1";
+  AuctionResult::InterestGroupIndex indices;
+  indices.add_index(7);
+  indices.add_index(2);
+  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
+      bidding_group_map;
+  bidding_group_map.try_emplace(interest_group_owner_1, indices);
+  bidding_group_map.try_emplace(interest_group_owner_2, indices);
+  bidding_group_map.try_emplace(interest_group_owner_3, indices);
+  bidding_group_map.try_emplace("owner1", std::move(indices));
+
+  auto ret = Encode(std::move(winner), std::move(bidding_group_map),
+                    std::nullopt, [](auto error) {});
+  ASSERT_TRUE(ret.ok()) << ret.status();
+  // Conversion can be verified at: https://cbor.me/
+  EXPECT_EQ(absl::BytesToHexString(*ret),
+            "a863626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46b6164"
+            "52656e64657255524c606c636f6d706f6e656e74416473806d62696464696e6747"
+            "726f757073a4627a698207026369673182070263696831820702666f776e657231"
+            "82070271696e74657265737447726f75704e616d656369673172696e7465726573"
+            "7447726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
 }
 
 }  // namespace

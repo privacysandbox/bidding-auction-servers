@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "services/common/metric/context_map.h"
+#include "services/common/util/read_system.h"
 
 // Defines API used by Bidding auction servers, and B&A specific metrics.
 namespace privacy_sandbox::bidding_auction_servers {
@@ -48,8 +49,7 @@ inline constexpr const server_common::metric::DefinitionName*
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBiddingMetricSpan = kBiddingMetricList;
 inline auto* BiddingContextMap(
-    std::optional<server_common::metric::BuildDependentConfig> config =
-        std::nullopt,
+    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const GenerateBidsRequest,
                                               kBiddingMetricSpan>(
@@ -72,8 +72,7 @@ inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
 inline auto* BfeContextMap(
-    std::optional<server_common::metric::BuildDependentConfig> config =
-        std::nullopt,
+    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const GetBidsRequest,
                                               kBfeMetricSpan>(
@@ -96,8 +95,7 @@ inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
 inline auto* SfeContextMap(
-    std::optional<server_common::metric::BuildDependentConfig> config =
-        std::nullopt,
+    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const SelectAdRequest,
                                               kSfeMetricSpan>(
@@ -116,8 +114,7 @@ inline constexpr const server_common::metric::DefinitionName*
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kAuctionMetricSpan = kAuctionMetricList;
 inline auto* AuctionContextMap(
-    std::optional<server_common::metric::BuildDependentConfig> config =
-        std::nullopt,
+    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
     server_common::metric::MetricRouter::Meter* meter = nullptr) {
   return server_common::metric::GetContextMap<const ScoreAdsRequest,
                                               kAuctionMetricSpan>(
@@ -134,6 +131,14 @@ inline void LogIfError(const absl::Status& s,
   ABSL_LOG_EVERY_N_SEC(WARNING, 60)
           .AtLocation(location.file_name(), location.line())
       << message << ": " << s;
+}
+
+template <typename T>
+inline void AddSystemMetric(T* context_map) {
+  context_map->AddObserverable(server_common::metric::kCpuPercent,
+                               server_common::GetCpu);
+  context_map->AddObserverable(server_common::metric::kMemoryKB,
+                               server_common::GetMemory);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers
