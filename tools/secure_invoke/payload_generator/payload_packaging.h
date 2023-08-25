@@ -25,7 +25,7 @@
 #include "quiche/oblivious_http/oblivious_http_client.h"
 
 const char kAuctionConfigField[] = "auction_config";
-const char kProtectedAudienceInputField[] = "raw_protected_audience_input";
+const char kProtectedAuctionInputField[] = "raw_protected_audience_input";
 const char kOldBuyerInputMapField[] = "buyer_input";
 const char kBuyerInputMapField[] = "raw_buyer_input";
 

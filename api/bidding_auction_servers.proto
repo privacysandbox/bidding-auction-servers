@@ -25,7 +25,7 @@ import "google/protobuf/struct.proto";
 // It is the wrapper for all of BuyerInput and other information required
 // for the Protected Audience auction.
 message ProtectedAudienceInput {
-  // Update type of BuyerInput to `bytes`.
+  option deprecated = true;
   // Input per buyer.
   // The key in the map corresponds to IGOwner (Interest Group Owner) that
   // is the Buyer / DSP. This  string that can identify a
@@ -39,8 +39,8 @@ message ProtectedAudienceInput {
   // to fetch trusted bidding signals.
   string publisher_name = 2;
 
-  // A boolean value which indicates if event level debug reporting should be enabled
-  // or disabled for this request.
+  // A boolean value which indicates if event level debug reporting should be
+  // enabled or disabled for this request.
   bool enable_debug_reporting = 3;
 
   // Globally unique identifier for the client request.
@@ -48,6 +48,46 @@ message ProtectedAudienceInput {
 
   // Consented debugging field.
   ConsentedDebugConfiguration consented_debug_config = 5;
+}
+
+// ProtectedAuctionInput is generated and encrypted by the client,
+// passed through the untrusted Seller service, and decrypted by the
+// SellerFrontEnd service.
+// It is the wrapper for all of BuyerInput and other information required
+// for the Protected Audience auction.
+message ProtectedAuctionInput {
+  // Input per buyer.
+  // The key in the map corresponds to IGOwner (Interest Group Owner) that
+  // is the Buyer / DSP. This  string that can identify a
+  // buyer participating in the auction. The value corresponds to plaintext
+  // BuyerInput ingested by the buyer for bidding.
+  map<string, bytes> buyer_input = 1;
+
+  // Publisher website or app.
+  // This is required to construct browser signals for web.
+  // It will also be passed via GetBids to buyers for their Buyer KV lookup
+  // to fetch trusted bidding signals.
+  string publisher_name = 2;
+
+  // A boolean value which indicates if event level debug reporting should be
+  // enabled or disabled for this request.
+  bool enable_debug_reporting = 3;
+
+  // Globally unique identifier for the client request.
+  string generation_id = 4;
+
+  // Consented debugging field.
+  ConsentedDebugConfiguration consented_debug_config = 5;
+}
+
+// Grouping of data pertaining to protected app signals.
+message ProtectedAppSignals {
+  // Raw and system signals from device that can help generate a relevant app
+  // install ad for user.
+  bytes app_install_signals = 1;
+
+  // Version of the encoding used for the protected app signals.
+  int32 encoding_version = 2;
 }
 
 // A BuyerInput includes data that a buyer (DSP) requires to generate bids.
@@ -100,9 +140,16 @@ message BuyerInput {
       // bidding.
       BrowserSignals browser_signals = 7;
     }
+
+    // Owner of the IG.
+    string origin = 8;
   }
   // The Interest Groups (a.k.a Custom Audiences) owned by the buyer.
   repeated InterestGroup interest_groups = 1;
+
+  // Signals from device that can help generate a relevant app install ad for
+  // users.
+  ProtectedAppSignals protected_app_signals = 2;
 }
 
 // Information about an Interest Group passed by the browser.
@@ -126,6 +173,18 @@ message BrowserSignals {
 // Information passed by Android.
 message AndroidSignals {}
 
+// Specifies type of the ad. It can help differentiate between ads when
+// B&A is supporting multiple ad targeting use cases concurrently.
+enum AdType {
+  UNKNOWN = 0;
+
+  // Remarketing ad.
+  PROTECTED_AUDIENCE_AD = 1;
+
+  // An app install ad.
+  PROTECTED_APP_SIGNALS_AD = 2;
+}
+
 // Protected Audience auction result returned from SellerFrontEnd to the client
 // through the Seller service. It is encrypted by the SellerFrontEnd, passed
 // through the untrusted Seller service and decrypted by the client. Note that
@@ -141,7 +200,7 @@ message AuctionResult {
   // Name of the InterestGroup (Custom Audience), the remarketing ad belongs to.
   string interest_group_name = 3;
 
-  // Domain of the Buyer who owns the interest group that includes the ad.
+  // Domain of the Buyer who owns the winning ad.
   string interest_group_owner = 4;
 
   // Score of the ad determined during the auction. Any value that is zero or
@@ -174,7 +233,7 @@ message AuctionResult {
   // List of interest group indices that generated bids.
   message InterestGroupIndex {
     // List of indices of interest groups. These indices are derived from the
-    // original ProtectedAudienceInput sent from the client.
+    // original ProtectedAuctionInput sent from the client.
     repeated int32 index = 1;
   }
 
@@ -195,6 +254,13 @@ message AuctionResult {
   // Error thrown during the SelectAd request. If there is no error and the
   // request completes successfully, this field will be empty.
   Error error = 12;
+
+  // Owner of the IG to which the winning ad belongs to (applicable for
+  // Protected Audience only).
+  string interest_group_origin = 13;
+
+  // Type of the winning ad.
+  AdType ad_type = 14;
 }
 
 // SellerFrontEnd service (also known as SFE) operated by SSP / Seller.
@@ -210,7 +276,7 @@ service SellerFrontEnd {
 }
 
 // SelectAdRequest is sent by the untrusted Seller service to SellerFrontEnd
-// (SFE) once it receives an encrypted ProtectedAudienceInput from a client.
+// (SFE) once it receives an encrypted ProtectedAuctionInput from a client.
 // SelectAdRequest would also include contextual signals and other data
 // passed by untrusted Seller service for the auction.
 message SelectAdRequest {
@@ -274,6 +340,25 @@ message SelectAdRequest {
       // production mode, additional user consent would be required to access
       // these.
       string buyer_debug_id = 4;
+
+      // Optional.
+      // Version of buyer's GenerateBid() code for protected app signals.
+      // The string must be an object name belonging to the
+      // Cloud Storage bucket specified at Bidding service startup.
+      // A buyer can pass this information to the Seller in RTB response.
+      // If a version is not specified, the default version
+      // (specified in the service startup config) will be used.
+      string protected_signals_generate_bid_code_version = 5;
+
+      // Optional.
+      // Version of buyer's GenerateAdRetrievalUserMetadata() code for
+      // protected app signals.
+      // The string must be an object name belonging to the
+      // Cloud Storage bucket specified at Bidding service startup.
+      // A buyer can pass this information to the Seller in RTB response.
+      // If a version is not specified, the default version
+      // (specified in the service startup config) will be used.
+      string protected_signals_generate_embeddings_version = 6;
     }
 
     // The key in the map corresponds to Interest Group Owner (IGOwner), a
@@ -323,7 +408,7 @@ message SelectAdRequest {
   }
 
   // Encrypted ProtectedAudienceInput generated by the device.
-  bytes protected_audience_ciphertext = 1;
+  bytes protected_audience_ciphertext = 1 [deprecated = true];
 
   // Plaintext. Passed by the untrusted Seller service.
   AuctionConfig auction_config = 2;
@@ -343,6 +428,9 @@ message SelectAdRequest {
   // client integrity.
   // Note: Not all types of clients can be attested.
   ClientType client_type = 3;
+
+  // Encrypted ProtectedAuctionInput generated by the client.
+  bytes protected_auction_ciphertext = 4;
 }
 
 // SelectAdResponse is sent from the SellerFrontEndService to the Seller
@@ -376,6 +464,11 @@ service BuyerFrontEnd {
       body: "*"
     };
   }
+}
+
+// PAS input per buyer.
+message ProtectedAppSignalsBuyerInput {
+  ProtectedAppSignals protected_app_signals = 1;
 }
 
 // GetBidsRequest is sent by the SellerFrontEnd Service to the BuyerFrontEnd
@@ -425,6 +518,9 @@ message GetBidsRequest {
 
     // Consented debugging field.
     ConsentedDebugConfiguration consented_debug_config = 9;
+
+    // Protected App signals buyer input.
+    ProtectedAppSignalsBuyerInput protected_app_signals_buyer_input = 10;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -443,6 +539,10 @@ message GetBidsResponse {
     // Includes ad_render_url and corresponding bid value pairs for each IG.
     // Represents a JSON object.
     repeated AdWithBid bids = 1;
+
+    // Includes ad_render_url and corresponding bid value pairs for each IG.
+    // Represents a JSON object.
+    repeated ProtectedAppSignalsAdWithBid protected_app_signals_bids = 2;
   }
 
   // Encrypted GetBidsRawResponse.
@@ -500,6 +600,14 @@ service Bidding {
   rpc GenerateBids(GenerateBidsRequest) returns (GenerateBidsResponse) {
     option (google.api.http) = {
       post: "/v1/generatebids"
+      body: "*"
+    };
+  }
+
+  // Generate bids for app install ads.
+  rpc GenerateProtectedAppSignalsBids(GenerateProtectedAppSignalsBidsRequest) returns (GenerateProtectedAppSignalsBidsResponse) {
+    option (google.api.http) = {
+      post: "/v1/generateprotectedappsignalsbids"
       body: "*"
     };
   }
@@ -624,6 +732,108 @@ message GenerateBidsResponse {
   bytes response_ciphertext = 1;
 }
 
+// Generate bids for protected app signals.
+message GenerateProtectedAppSignalsBidsRequest {
+  // Unencrypted request.
+  message GenerateProtectedAppSignalsBidsRawRequest {
+    /********************* Common inputs for bidding ***********************/
+    // Information about auction (ad format, size) derived contextually.
+    // Represents a JSON object. Copied from Auction Config in SellerFrontEnd
+    // service.
+    // Represents a serialized string that is deserialized to a JSON object
+    // before passing to Adtech script.
+    string auction_signals = 1;
+
+    // Buyer may provide additional contextual information that
+    // could help in generating bids. Not fetched real-time.
+    // Represents a serialized string that is deserialized to a JSON object
+    // before passing to Adtech script.
+    //
+    // Note: This is passed in encrypted BuyerInput, i.e.
+    // buyer_input_ciphertext field in GetBidsRequest. The BuyerInput is
+    // encrypted in the client and decrypted in `BuyerFrontEnd` Service.
+    // Note: This is passed in BuyerInput.
+    string buyer_signals = 2;
+
+    // Signals used to generate features needed to generate ads for app
+    // install.
+    ProtectedAppSignals protected_app_signals = 3;
+
+    // Seller origin.
+    // Sent to generateBid script in device signals.
+    string seller = 4;
+
+    // Publisher app that is part of Buyer KV lookup URL.
+    // Sent to generateBid script in device signals.
+    string publisher_name = 5;
+
+    // Helpful context for logging and tracing the request.
+    LogContext log_context = 6;
+
+    // Consented debugging field.
+    ConsentedDebugConfiguration consented_debug_config = 7;
+
+    // A boolean value which indicates if event level debug reporting should be
+    // enabled or disabled for this request.
+    bool enable_debug_reporting = 8;
+  }
+
+  // Encrypted GenerateProtectedAppSignalsBidsRawRequest.
+  bytes request_ciphertext = 1;
+
+  // Version of the public key used for request encryption. The service
+  // needs use private keys corresponding to same key_id to decrypt
+  // 'request_ciphertext'.
+  string key_id = 2;
+}
+
+// Bid for an app install ad candidate.
+message ProtectedAppSignalsAdWithBid {
+  // Metadata of the ad, this will be passed to Seller's scoring function.
+  // Represents a serialized string that is deserialized to a JSON object
+  // before passing to Adtech script.
+  google.protobuf.Value ad = 1;
+
+  // Bid price corresponding to an ad.
+  float bid = 2;
+
+  // Ad render url that identifies an ad creative.
+  string render = 3;
+
+  // A numerical value used to pass reporting advertiser click or conversion
+  // cost from generateBid to reportWin. The precision of this number is
+  // limited to an 8-bit mantissa and 8-bit exponent, with any rounding
+  // performed stochastically.
+  double ad_cost = 4;
+
+  // A 12 bit integer signal used as input to win reporting url generation for
+  // the Buyer.
+  int32 modeling_signals = 5;
+
+  // Indicates the currency used for the bid price.
+  string bid_currency = 6;
+
+  // Holds schema version as well as features related information that needs
+  // to be send back to the buyer who has the winning bid.
+  bytes egress_features = 7;
+
+  // Optional field for debug report URLs.
+  DebugReportUrls debug_report_urls = 8;
+}
+
+// Encrypted response to GenerateProtectedAppSignalsBidsRequest with bid prices
+// corresponding to eligible app install Ad creatives.
+message GenerateProtectedAppSignalsBidsResponse {
+  // Unencrypted response.
+  message GenerateProtectedAppSignalsBidsRawResponse {
+    // Bids corresponding to ads.
+    repeated ProtectedAppSignalsAdWithBid bids = 1;
+  }
+
+  // Encrypted GenerateProtectedAppSignalsBidsRawResponse.
+  bytes response_ciphertext = 1;
+}
+
 // Auction service operated by the seller.
 service Auction {
   // Scores all top ad candidates returned by each buyer participating
@@ -689,9 +899,6 @@ message ScoreAdsRequest {
       // limited to an 8-bit mantissa and 8-bit exponent, with any rounding
       // performed stochastically.
       double ad_cost = 11;
-
-      // Consented debugging field.
-      ConsentedDebugConfiguration consented_debug_config = 12;
     }
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
@@ -745,6 +952,43 @@ message ScoreAdsRequest {
     // Map of buyer_origin to buyer_signals required as input for event level
     // reporting url generation for the winning buyer.
     map<string, string> per_buyer_signals = 8;
+
+    // Consented debugging field.
+    ConsentedDebugConfiguration consented_debug_config = 9;
+
+    // Bid for an app install ad along with other information required to score
+    // the ad.
+    message ProtectedAppSignalsAdWithBidMetadata {
+      // Metadata of the ad, this will be passed to Seller's scoring function.
+      // Represents a serialized string that is deserialized to a JSON object
+      // before passing to Adtech script.
+      google.protobuf.Value ad = 1;
+
+      // Bid price corresponding to an ad.
+      float bid = 2;
+
+      // Ad render url that identifies an ad creative.
+      string render = 3;
+
+      // A signal used as input to win reporting url generation for the Buyer.
+      int32 modeling_signals = 4;
+
+      // A numerical value used to pass reporting advertiser click or conversion
+      // cost from generateBid to reportWin. The precision of this number is
+      // limited to an 8-bit mantissa and 8-bit exponent, with any rounding
+      // performed stochastically.
+      double ad_cost = 5;
+
+      // Features to be sent back to the buyer of winning app install ad to help
+      // train their models.
+      bytes egress_features = 6;
+
+      // Domain of Buyer who owns app signals used for this ad.
+      string owner = 7;
+    }
+
+    // Ad with bid for protected app signals.
+    repeated ProtectedAppSignalsAdWithBidMetadata protected_app_signals_ad_bids = 10;
   }
 
   // Encrypted ScoreAdsRawRequest.
@@ -797,10 +1041,11 @@ message ScoreAdsResponse {
     // Ad creative render url.
     string render = 2;
 
-    // Ad creative render url.
+    // Ad creative render url. This will be empty for app install ads.
     repeated string component_renders = 3;
 
-    // Name of Custom Audience / Interest Group the ad belongs to.
+    // Name of Custom Audience / Interest Group the ad belongs to. This will be
+    // empty if the winning ad is an app install ad.
     string interest_group_name = 4;
 
     // Bid corresponding to the winning ad.
@@ -846,6 +1091,9 @@ message ScoreAdsResponse {
     // we do not return any rejection reason. The reporting client will
     // substitute the default rejection reason.
     repeated AdRejectionReason ad_rejection_reasons = 13;
+
+    // Type of the ad.
+    AdType ad_type = 14;
   }
 
   // The response includes the top scored ad along with other related data.

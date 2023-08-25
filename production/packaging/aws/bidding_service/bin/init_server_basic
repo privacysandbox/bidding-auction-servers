@@ -26,7 +26,7 @@ USAGE
   exit ${exitval}
 }
 
-PROXY=/server/bin/proxify
+PROXY=/proxify
 while [ $# -gt 0 ]; do
   case "$1" in
     --without-proxify)
@@ -50,4 +50,4 @@ export GLOG_stderrthreshold=0
 export GRPC_DNS_RESOLVER=native
 
 # Start the server first.
-$PROXY /server/bin/server  --init_config_client=true
+$PROXY /server  --init_config_client=true

@@ -225,14 +225,27 @@ struct Definition : DefinitionName,
     privacy_budget_weight_copy_ = privacy_budget_weight_;
   }
 
-  template <Instrument histogram = instrument>
+  template <Privacy non_impact = privacy, Instrument histogram = instrument>
   constexpr explicit Definition(
       absl::string_view name, absl::string_view description,
       absl::Span<const double> histogram_boundaries,
-      std::enable_if_t<histogram == Instrument::kHistogram>* = nullptr)
+      std::enable_if_t<non_impact == Privacy::kNonImpacting&& histogram ==
+                       Instrument::kHistogram>* = nullptr)
       : DefinitionName(name, description),
         internal::Histogram(histogram_boundaries) {
     histogram_boundaries_copy_ = histogram_boundaries_;
+  }
+
+  template <Privacy impact = privacy, Instrument histogram = instrument>
+  constexpr explicit Definition(
+      absl::string_view name, absl::string_view description,
+      absl::Span<const double> histogram_boundaries,
+      std::enable_if_t<impact == Privacy::kImpacting&& histogram ==
+                       Instrument::kHistogram>* = nullptr)
+      : DefinitionName(name, description),
+        internal::Histogram(histogram_boundaries) {
+    histogram_boundaries_copy_ = histogram_boundaries_;
+    privacy_budget_weight_copy_ = privacy_budget_weight_;
   }
 
   template <Privacy non_impact = privacy, Instrument gauge = instrument>
@@ -297,6 +310,10 @@ inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
     kInitiatedRequestTotalDuration(
         "initiated_request.duration_ms",
         "Total duration of requests initiated by the server", kTimeHistogram);
+inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
+    kInitiatedRequestByte("initiated_request.total_size_bytes",
+                          "Size of all the initiated requests by a server",
+                          kSizeHistogram);
 inline constexpr Definition<int, Privacy::kNonImpacting,
                             Instrument::kUpDownCounter>
     kInitiatedRequestErrorCount("initiated_request.errors_count",

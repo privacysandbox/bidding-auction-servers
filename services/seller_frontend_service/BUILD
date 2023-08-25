@@ -59,6 +59,7 @@ cc_library(
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
+        "//services/common/util:consented_debugging_logger",
         "//services/common/util:context_logger",
         "//services/common/util:error_accumulator",
         "//services/common/util:error_reporter",
@@ -165,6 +166,8 @@ cc_test(
     ],
     deps = [
         ":seller_frontend_service",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",

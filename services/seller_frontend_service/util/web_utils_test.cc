@@ -121,11 +121,11 @@ struct cbor_item_t* BuildSampleCborInterestGroup() {
       BuildStringMapPair(kUserBiddingSignals, kSampleUserBiddingSignals)));
   EXPECT_TRUE(cbor_map_add(
       interest_group,
-      BuildStringArrayMapPair(kAds, {kSampleAdRenderId1, kSampleAdRenderId2})));
-  EXPECT_TRUE(cbor_map_add(
-      interest_group,
       BuildStringArrayMapPair(kAdComponents, {kSampleAdComponentRenderId1,
                                               kSampleAdComponentRenderId2})));
+  EXPECT_TRUE(cbor_map_add(
+      interest_group,
+      BuildStringArrayMapPair(kAds, {kSampleAdRenderId1, kSampleAdRenderId2})));
 
   cbor_item_t* browser_signals = cbor_new_definite_map(kNumBrowserSignalKeys);
   EXPECT_TRUE(cbor_map_add(browser_signals,
@@ -187,14 +187,14 @@ bool ContainsClientError(const ErrorAccumulator::ErrorMap& error_map,
 }
 
 TEST(ChromeRequestUtils, Decode_Success) {
-  ScopedCbor protected_audience_input(
+  ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input,
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            BuildStringMapPair(kPublisher, kSamplePublisher)));
   EXPECT_TRUE(
-      cbor_map_add(*protected_audience_input,
+      cbor_map_add(*protected_auction_input,
                    BuildStringMapPair(kGenerationId, kSampleGenerationId)));
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input,
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            BuildBoolMapPair(kDebugReporting, true)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
@@ -206,7 +206,7 @@ TEST(ChromeRequestUtils, Decode_Success) {
                            {cbor_move(cbor_build_stringn(
                                 kSampleIgOwner, sizeof(kSampleIgOwner) - 1)),
                             cbor_move(ig_bytestring)}));
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input,
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            {cbor_move(cbor_build_stringn(
                                 kInterestGroups, sizeof(kInterestGroups) - 1)),
                             cbor_move(interest_group_data_map)}));
@@ -218,23 +218,24 @@ TEST(ChromeRequestUtils, Decode_Success) {
   EXPECT_TRUE(cbor_map_add(consented_debug_config_map,
                            BuildStringMapPair(kToken, kConsentedDebugToken)));
   EXPECT_TRUE(cbor_map_add(
-      *protected_audience_input,
+      *protected_auction_input,
       {cbor_move(cbor_build_stringn(kConsentedDebugConfig,
                                     sizeof(kConsentedDebugConfig) - 1)),
        cbor_move(consented_debug_config_map)}));
 
-  std::string serialized_cbor = SerializeCbor(*protected_audience_input);
+  std::string serialized_cbor = SerializeCbor(*protected_auction_input);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
-  ProtectedAudienceInput actual = Decode(serialized_cbor, error_accumulator);
+  ProtectedAuctionInput actual =
+      Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_FALSE(error_accumulator.HasErrors());
 
-  ProtectedAudienceInput expected;
+  ProtectedAuctionInput expected;
   expected.set_publisher_name(kSamplePublisher);
   expected.set_enable_debug_reporting(true);
   expected.set_generation_id(kSampleGenerationId);
 
-  BuyerInput_InterestGroup expected_ig;
+  BuyerInput::InterestGroup expected_ig;
   expected_ig.set_name(kSampleIgName);
   expected_ig.add_bidding_signals_keys(kSampleBiddingSignalKey1);
   expected_ig.add_bidding_signals_keys(kSampleBiddingSignalKey2);
@@ -280,7 +281,7 @@ TEST(ChromeRequestUtils, Decode_Success) {
     VLOG(1) << "Actual proto does not match expected proto";
     VLOG(1) << "\nExpected:\n" << expected.DebugString();
     VLOG(1) << "\nActual:\n" << actual.DebugString();
-    VLOG(1) << "\nFound differences in ProtectedAudienceInput:\n"
+    VLOG(1) << "\nFound differences in ProtectedAuctionInput:\n"
             << papi_differences;
 
     auto expected_buyer_inputs =
@@ -311,23 +312,25 @@ TEST(ChromeRequestUtils, Decode_FailOnWrongType) {
   std::string serialized_cbor = SerializeCbor(*root);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
-  ProtectedAudienceInput actual = Decode(serialized_cbor, error_accumulator);
+  ProtectedAuctionInput actual =
+      Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_TRUE(error_accumulator.HasErrors());
 
-  const std::string expected_error = absl::StrFormat(
-      kInvalidTypeError, "ProtectedAudienceInput", kMap, kString);
+  const std::string expected_error =
+      absl::StrFormat(kInvalidTypeError, kProtectedAuctionInput, kMap, kString);
   EXPECT_TRUE(ContainsClientError(error_accumulator.GetErrors(CLIENT_VISIBLE),
                                   expected_error));
 }
 
 TEST(ChromeRequestUtils, Decode_FailOnUnsupportedVersion) {
-  ScopedCbor protected_audience_input(cbor_new_definite_map(1));
+  ScopedCbor protected_auction_input(cbor_new_definite_map(1));
   EXPECT_TRUE(
-      cbor_map_add(*protected_audience_input, BuildIntMapPair(kVersion, 999)));
-  std::string serialized_cbor = SerializeCbor(*protected_audience_input);
+      cbor_map_add(*protected_auction_input, BuildIntMapPair(kVersion, 999)));
+  std::string serialized_cbor = SerializeCbor(*protected_auction_input);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
-  ProtectedAudienceInput actual = Decode(serialized_cbor, error_accumulator);
+  ProtectedAuctionInput actual =
+      Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_TRUE(error_accumulator.HasErrors());
 
   const std::string expected_error =
@@ -337,7 +340,7 @@ TEST(ChromeRequestUtils, Decode_FailOnUnsupportedVersion) {
 }
 
 TEST(ChromeRequestUtils, Decode_FailOnMalformedCompresedBytestring) {
-  ScopedCbor protected_audience_input(cbor_new_definite_map(1));
+  ScopedCbor protected_auction_input(cbor_new_definite_map(1));
   ScopedCbor ig_array(cbor_new_definite_array(1));
   EXPECT_TRUE(cbor_array_push(*ig_array, BuildSampleCborInterestGroup()));
   ScopedCbor ig_bytestring = ScopedCbor(CompressInterestGroups(ig_array));
@@ -350,17 +353,18 @@ TEST(ChromeRequestUtils, Decode_FailOnMalformedCompresedBytestring) {
   EXPECT_TRUE(
       cbor_map_add(interest_group_data_map,
                    BuildBytestringMapPair(kSampleIgOwner, compressed_split)));
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input,
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            {cbor_move(cbor_build_stringn(
                                 kInterestGroups, sizeof(kInterestGroups) - 1)),
                             cbor_move(interest_group_data_map)}));
 
-  std::string serialized_cbor = SerializeCbor(*protected_audience_input);
+  std::string serialized_cbor = SerializeCbor(*protected_auction_input);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
   // The main decoding method for protected audience input doesn't decompress
   // and decode the BuyerInput. The latter is handled separately.
-  ProtectedAudienceInput actual = Decode(serialized_cbor, error_accumulator);
+  ProtectedAuctionInput actual =
+      Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_FALSE(error_accumulator.HasErrors());
 
   absl::flat_hash_map<absl::string_view, BuyerInput> buyer_inputs =
@@ -716,7 +720,7 @@ std::string ErrStr(absl::string_view field_name,
 }
 
 TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
-  ScopedCbor protected_audience_input(
+  ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
 
   std::set<std::string> expected_errors;
@@ -727,7 +731,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
                                       sizeof(kPublisher) - 1)),
       cbor_move(
           cbor_build_stringn(kSamplePublisher, sizeof(kSamplePublisher) - 1))};
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input, std::move(publisher_kv)));
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input, std::move(publisher_kv)));
   expected_errors.emplace(ErrStr(/*field_name=*/kRootCborKey,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypeByteString));
@@ -738,7 +742,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
       cbor_move(cbor_build_bytestring(
           reinterpret_cast<cbor_data>(kSampleGenerationId),
           sizeof(kSampleGenerationId) - 1))};
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input, std::move(gen_id_kv)));
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input, std::move(gen_id_kv)));
   expected_errors.emplace(ErrStr(/*field_name=*/kGenerationId,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypeByteString));
@@ -787,19 +791,20 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
                            {cbor_move(cbor_build_stringn(
                                 kSampleIgOwner, sizeof(kSampleIgOwner) - 1)),
                             cbor_move(ig_bytestring)}));
-  EXPECT_TRUE(cbor_map_add(*protected_audience_input,
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            {cbor_move(cbor_build_stringn(
                                 kInterestGroups, sizeof(kInterestGroups) - 1)),
                             cbor_move(interest_group_data_map)}));
 
-  std::string serialized_cbor = SerializeCbor(*protected_audience_input);
+  std::string serialized_cbor = SerializeCbor(*protected_auction_input);
   ContextLogger logger;
   ErrorAccumulator error_accumulator(&logger);
-  ProtectedAudienceInput decoded_protected_audience_input =
-      Decode(serialized_cbor, error_accumulator, /*fail_fast=*/false);
+  ProtectedAuctionInput decoded_protected_auction_input =
+      Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator,
+                                    /*fail_fast=*/false);
   ASSERT_TRUE(error_accumulator.HasErrors());
   VLOG(0) << "Decoded protected audience input:\n"
-          << decoded_protected_audience_input.DebugString();
+          << decoded_protected_auction_input.DebugString();
 
   // Verify all the errors were reported to the error accumulator.
   const auto& client_visible_errors =
@@ -928,11 +933,11 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(absl::BytesToHexString(*ret),
-            "a863626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46b6164"
-            "52656e64657255524c606c636f6d706f6e656e74416473806d62696464696e6747"
-            "726f757073a4627a698207026369673182070263696831820702666f776e657231"
-            "82070271696e74657265737447726f75704e616d656369673172696e7465726573"
-            "7447726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
+            "a863626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f"
+            "6d706f6e656e7473806b616452656e64657255524c606d62696464696e6747726f"
+            "757073a4627a698207026369673182070263696831820702666f776e6572318207"
+            "0271696e74657265737447726f75704e616d656369673172696e74657265737447"
+            "726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
 }
 
 }  // namespace

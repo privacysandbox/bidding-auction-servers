@@ -124,11 +124,12 @@ resource "google_compute_region_instance_group_manager" "frontends" {
   }
 
   update_policy {
-    minimal_action = "REPLACE"
-    type           = "PROACTIVE"
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
   }
   wait_for_instances_status = "UPDATED"
-  wait_for_instances        = true
+  wait_for_instances        = var.instance_template_waits_for_instances
   timeouts {
     create = "1h"
     delete = "1h"
@@ -276,11 +277,12 @@ resource "google_compute_region_instance_group_manager" "backends" {
   }
 
   update_policy {
-    minimal_action = "REPLACE"
-    type           = "PROACTIVE"
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
   }
   wait_for_instances_status = "UPDATED"
-  wait_for_instances        = true
+  wait_for_instances        = var.instance_template_waits_for_instances
   timeouts {
     create = "1h"
     delete = "1h"
@@ -402,11 +404,12 @@ resource "google_compute_region_instance_group_manager" "collector" {
   }
 
   update_policy {
-    minimal_action = "REPLACE"
-    type           = "PROACTIVE"
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
   }
   wait_for_instances_status = "UPDATED"
-  wait_for_instances        = true
+  wait_for_instances        = var.instance_template_waits_for_instances
   timeouts {
     create = "1h"
     delete = "1h"

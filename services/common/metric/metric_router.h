@@ -27,6 +27,7 @@
 #include "opentelemetry/common/key_value_iterable_view.h"
 #include "opentelemetry/metrics/meter.h"
 #include "opentelemetry/metrics/observer_result.h"
+#include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/metrics/sync_instruments.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "services/common/metric/definition.h"
@@ -40,9 +41,11 @@ namespace privacy_sandbox::server_common::metric {
 class MetricRouter {
  public:
   using Meter = ::opentelemetry::metrics::Meter;
+  using MeterProvider = opentelemetry::metrics::MeterProvider;
 
-  explicit MetricRouter(Meter* meter, PrivacyBudget fraction,
-                        absl::Duration dp_output_period);
+  MetricRouter(std::unique_ptr<MeterProvider> provider,
+               absl::string_view service, absl::string_view version,
+               PrivacyBudget fraction, absl::Duration dp_output_period);
 
   ~MetricRouter() = default;
 
@@ -80,6 +83,8 @@ class MetricRouter {
       absl::flat_hash_map<std::string, double> (*callback)());
 
  private:
+  friend class MetricRouterTest;
+
   void AddHistogramView(absl::string_view instrument_name,
                         const internal::Histogram& histogram);
 
@@ -103,6 +108,7 @@ class MetricRouter {
                       opentelemetry::nostd::shared_ptr<
                           opentelemetry::metrics::ObservableInstrument>>
       observerable_;
+  std::unique_ptr<MeterProvider> provider_;
   Meter* meter_;
   DifferentiallyPrivate<MetricRouter> dp_;
 };

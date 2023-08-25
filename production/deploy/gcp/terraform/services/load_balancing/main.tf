@@ -50,6 +50,7 @@ resource "google_compute_backend_service" "mesh_backend" {
     content {
       group           = backend.value
       balancing_mode  = "UTILIZATION"
+      max_utilization = 0.80
       capacity_scaler = 1.0
     }
   }
@@ -175,6 +176,7 @@ resource "google_compute_backend_service" "default" {
     content {
       group           = backend.value
       balancing_mode  = "UTILIZATION"
+      max_utilization = 0.80
       capacity_scaler = 1.0
     }
   }

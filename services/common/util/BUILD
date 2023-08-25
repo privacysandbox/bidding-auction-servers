@@ -341,3 +341,31 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "consented_debugging_logger",
+    srcs = ["consented_debugging_logger.cc"],
+    hdrs = ["consented_debugging_logger.h"],
+    deps = [
+        ":context_logger",
+        ":request_response_constants",
+        ":source_location",
+        "@com_github_google_glog//:glog",
+        "@io_opentelemetry_cpp//api",
+        "@io_opentelemetry_cpp//sdk:headers",
+        "@io_opentelemetry_cpp//sdk/src/logs",
+        "@io_opentelemetry_cpp//sdk/src/trace",
+    ],
+)
+
+cc_test(
+    name = "consented_debugging_logger_test",
+    size = "small",
+    srcs = [
+        "consented_debugging_logger_test.cc",
+    ],
+    deps = [
+        ":consented_debugging_logger",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

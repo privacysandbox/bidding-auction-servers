@@ -32,7 +32,7 @@ BiddingAsyncGrpcClient::BiddingAsyncGrpcClient(
                                          client_config.secure_client));
 }
 
-absl::Status BiddingAsyncGrpcClient::SendRpc(
+void BiddingAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
     RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
                     GenerateBidsResponse::GenerateBidsRawResponse>* params)
@@ -62,8 +62,6 @@ absl::Status BiddingAsyncGrpcClient::SendRpc(
         VLOG(6) << "Returning the decrypted response via callback";
         params->OnDone(status);
       });
-
-  return absl::OkStatus();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

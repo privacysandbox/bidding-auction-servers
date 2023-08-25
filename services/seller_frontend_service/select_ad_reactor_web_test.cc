@@ -56,6 +56,7 @@ using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(
                            absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
 
+template <typename T>
 class SelectAdReactorForWebTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -66,6 +67,10 @@ class SelectAdReactorForWebTest : public ::testing::Test {
   }
 };
 
+using ProtectedAuctionInputTypes =
+    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+TYPED_TEST_SUITE(SelectAdReactorForWebTest, ProtectedAuctionInputTypes);
+
 template <typename T>
 std::string MessageToJson(const T& message) {
   std::string response_string;
@@ -75,7 +80,7 @@ std::string MessageToJson(const T& message) {
   return response_string;
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -86,13 +91,14 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);
@@ -145,7 +151,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
   EXPECT_TRUE(unexpected_interest_group_indices.empty());
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -156,13 +162,14 @@ TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);
@@ -213,7 +220,7 @@ auto EqScoreAdsRawRequestWithLogContext(
                         EqLogContext(raw_request.log_context())));
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -292,8 +299,9 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
                               _, _, _));
 
   // Set log context that should be propagated to the downstream services.
-  auto [protected_audience_input, request, context] =
-      GetSampleSelectAdRequest(SelectAdRequest::BROWSER, kSellerOriginDomain);
+  auto [protected_auction_input, request, context] =
+      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+                                          kSellerOriginDomain);
   request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
   auto& buyer_config = (*request.mutable_auction_config()
                              ->mutable_per_buyer_config())[kSampleBuyer];
@@ -302,11 +310,12 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(config, clients, request);
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -317,16 +326,15 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   // Setup bad request that should be validated by our validation logic.
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  protected_audience_input.clear_generation_id();
-  protected_audience_input.clear_publisher_name();
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  protected_auction_input.clear_generation_id();
+  protected_auction_input.clear_publisher_name();
 
   google::protobuf::Map<std::string, BuyerInput> buyer_input_map;
   // A Buyer input with IGs.
@@ -349,17 +357,18 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_input_map);
   ASSERT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
-  *protected_audience_input.mutable_buyer_input() =
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request_with_context.select_ad_request
        .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);
@@ -394,7 +403,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
             static_cast<int>(ErrorCode::CLIENT_SIDE));
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -405,24 +414,24 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   // Setup bad request that should be validated by our validation logic.
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  protected_audience_input.clear_buyer_input();
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  protected_auction_input.clear_buyer_input();
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request_with_context.select_ad_request
        .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);
@@ -457,8 +466,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   EXPECT_FALSE(deserialized_auction_result->is_chaff());
 }
 
-TEST_F(SelectAdReactorForWebTest,
-       VerifyANonEmptyYetMalformedBuyerInputMapIsCaught) {
+TYPED_TEST(SelectAdReactorForWebTest,
+           VerifyANonEmptyYetMalformedBuyerInputMapIsCaught) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -469,7 +478,7 @@ TEST_F(SelectAdReactorForWebTest,
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
@@ -482,19 +491,19 @@ TEST_F(SelectAdReactorForWebTest,
   buyer_input_map.emplace(kEmptyBuyer, input_with_igs);
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_input_map);
   ASSERT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  *protected_audience_input.mutable_buyer_input() =
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request_with_context.select_ad_request
        .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           config, clients, request_with_context.select_ad_request);

@@ -68,7 +68,6 @@ class DefaultAsyncGrpcClient
     if (!secret_request.ok()) {
       VLOG(1) << "Failed to encrypt the request: " << secret_request.status();
       auto error_status = absl::InternalError(kEncryptionFailed);
-      std::move(on_done)(error_status);
       return error_status;
     }
     auto& [hpke_secret, request] = *secret_request;
@@ -79,7 +78,8 @@ class DefaultAsyncGrpcClient
             std::move(request), std::move(on_done), metadata);
     params->SetDeadline(std::min(max_timeout, timeout));
     VLOG(5) << "Sending RPC ...";
-    return SendRpc(hpke_secret, params.release());
+    SendRpc(hpke_secret, params.release());
+    return absl::OkStatus();
   }
 
  protected:
@@ -92,36 +92,10 @@ class DefaultAsyncGrpcClient
   // by the grpc stub.
   // hpke_secret: secret generated during HPKE encryption used during
   // AeadDecryption
-  [[deprecated]] virtual absl::Status SendRpc(
-      ClientParams<Request, Response>* params,
-      const std::string& hpke_secret) const {
-    return absl::NotFoundError("Method should be implemented by subclasses");
-  }
-
-  virtual absl::Status SendRpc(
+  virtual void SendRpc(
       const std::string& hpke_secret,
       RawClientParams<Request, Response, RawResponse>* params) const {
     VLOG(5) << "Stub SendRpc invoked ...";
-    return absl::NotFoundError("Method should be implemented by subclasses");
-  }
-
-  [[deprecated]] absl::Status DecryptResponse(
-      Response* response, const std::string& hpke_secret) const {
-    absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
-        decrypt_response = crypto_client_->AeadDecrypt(
-            response->response_ciphertext(), hpke_secret);
-    if (!decrypt_response.ok()) {
-      const std::string error = absl::StrCat(
-          "Could not decrypt response: ", decrypt_response.status().message());
-      LOG(ERROR) << error;
-      return absl::InternalError(error);
-    }
-
-    RawResponse raw_response;
-    raw_response.ParseFromString(decrypt_response->payload());
-    *response->mutable_raw_response() = std::move(raw_response);
-    response->clear_response_ciphertext();
-    return absl::OkStatus();
   }
 
   absl::StatusOr<std::unique_ptr<RawResponse>> DecryptResponse(

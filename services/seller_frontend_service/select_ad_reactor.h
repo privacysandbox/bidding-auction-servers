@@ -18,6 +18,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -48,8 +49,8 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
                               {"x-bna-client-ip", "x-bna-client-ip"}}};
 
 // Constants for user errors.
-inline constexpr char kEmptyRemarketingCiphertextError[] =
-    "remarketing_ciphertext must be non-null.";
+inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
+    "protected_auction_ciphertext must be non-null.";
 inline constexpr char kInvalidOhttpKeyIdError[] =
     "Invalid key ID provided in OHTTP encapsulated request for "
     "protected_audience_ciphertext.";
@@ -145,7 +146,12 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Decodes the plaintext payload and returns a `ProtectedAudienceInput` proto.
   // Any errors while decoding are reported to error accumulator object.
-  virtual ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+  [[deprecated]] virtual ProtectedAudienceInput
+  GetDecodedProtectedAudienceInput(absl::string_view encoded_data) = 0;
+
+  // Decodes the plaintext payload and returns a `ProtectedAuctionInput` proto.
+  // Any errors while decoding are reported to error accumulator object.
+  virtual ProtectedAuctionInput GetDecodedProtectedAuctionInput(
       absl::string_view encoded_data) = 0;
 
   // Returns the decoded BuyerInput from the encoded/compressed BuyerInput.
@@ -163,10 +169,63 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Finishes the RPC call while reporting the error.
   void FinishWithInternalError(absl::string_view error);
 
+  // Finishes the RPC call when call is cancelled/aborted.
+  void FinishWithAborted();
+
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
-  void ValidateProtectedAudienceInput(
-      const ProtectedAudienceInput& protected_audience_input);
+  template <typename T>
+  void ValidateProtectedAuctionInput(const T& protected_auction_input) {
+    if (protected_auction_input.generation_id().empty()) {
+      ReportError(ErrorVisibility::CLIENT_VISIBLE, kMissingGenerationId,
+                  ErrorCode::CLIENT_SIDE);
+    }
+
+    if (protected_auction_input.publisher_name().empty()) {
+      ReportError(ErrorVisibility::CLIENT_VISIBLE, kMissingPublisherName,
+                  ErrorCode::CLIENT_SIDE);
+    }
+
+    // Validate Buyer Inputs.
+    if (buyer_inputs_->empty()) {
+      ReportError(ErrorVisibility::CLIENT_VISIBLE, kMissingBuyerInputs,
+                  ErrorCode::CLIENT_SIDE);
+    } else {
+      bool is_any_buyer_input_valid = false;
+      std::set<std::string> observed_errors;
+      for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
+        bool any_error = false;
+        if (buyer.empty()) {
+          observed_errors.insert(kEmptyInterestGroupOwner);
+          any_error = true;
+        }
+        if (buyer_input.interest_groups().empty()) {
+          observed_errors.insert(
+              absl::StrFormat(kMissingInterestGroups, buyer));
+          any_error = true;
+        }
+        if (any_error) {
+          continue;
+        }
+        is_any_buyer_input_valid = true;
+      }
+      // Buyer inputs have keys but none of the key/value pairs are usable to
+      // get bids from buyers.
+      if (!is_any_buyer_input_valid) {
+        std::string error =
+            absl::StrFormat(kNonEmptyBuyerInputMalformed,
+                            absl::StrJoin(observed_errors, kErrorDelimiter));
+        ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
+                    ErrorCode::CLIENT_SIDE);
+      } else {
+        // Log but don't report the errors for malformed buyer inputs because we
+        // have found at least one buyer input that is well formed.
+        for (const auto& observed_error : observed_errors) {
+          logger_.vlog(2, observed_error);
+        }
+      }
+    }
+  }
 
   // Logs the decoded buyer inputs if available.
   void MayLogBuyerInput();
@@ -180,11 +239,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Gets a string of all errors caused by bad inputs to the SFE.
   std::string GetAccumulatedErrorString(ErrorVisibility error_visibility);
-
-  // Inspects errors that have been accumulated so far and then finishes the
-  // request (either with OK status or an error status depending on the errors).
-  // This must only be called when some errors have been observed previously.
-  void SetErrorsAndFinishRequest();
 
   // Decrypts the ProtectedAudienceInput in the request object and returns
   // whether decryption was successful.
@@ -211,8 +265,14 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Updates the state, keeping track of how many bids are still pending.
   // Once the pending bid count reaches zero, we initiate a call
-  // to FetchScoringSignals.
+  // to OnAllBidsDone.
   void UpdatePendingBidsState(CompletedBidState completed_bid_state)
+      ABSL_LOCKS_EXCLUDED(bid_data_mu_);
+
+  // Calls FetchScoringSignals or calls Finish on the reactor depending on
+  // if there were any successful bids or if the request was cancelled by the
+  // client. MUST be called without holding bid_data_mu_.
+  void OnAllBidsDone(bool any_successful_bids)
       ABSL_LOCKS_EXCLUDED(bid_data_mu_);
 
   // Initiates the asynchronous grpc request to fetch scoring signals
@@ -251,12 +311,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   void PerformDebugReporting(
       const std::optional<ScoreAdsResponse::AdScore>& high_score);
 
-  // Populates the raw AuctionResult response.
-  void PopulateRawResponse(
-      const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
-          bidding_group_map);
-
   // Encrypts the AuctionResult and sets the ciphertext field in the response.
   // Returns whether encryption was successful.
   bool EncryptResponse(std::string plaintext_response);
@@ -288,7 +342,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Initialization
   grpc::CallbackServerContext* context_;
   const SelectAdRequest* request_;
-  ProtectedAudienceInput protected_audience_input_;
+  std::variant<ProtectedAudienceInput, ProtectedAuctionInput>
+      protected_auction_input_;
   SelectAdResponse* response_;
   AuctionResult::Error error_;
   const ClientRegistry& clients_;
@@ -334,6 +389,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // wrong with each input field.
   const bool fail_fast_;
 
+  // Indicates whether the request is using newer request field.
+  // This can be removed once all the clients start using this new field.
+  bool is_protected_auction_request_;
+
  private:
   // Keeps track of how many buyer bids were expected initially and how many
   // were erroneous. If all bids ended up in an error state then that should be
@@ -341,7 +400,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   BidStats bid_stats_ ABSL_GUARDED_BY(bid_data_mu_);
 
   // Log metrics for the requests that were initiated by the server
-  void LogInitiatedRequestMetrics(int initiated_request_duration_ms);
+  void LogInitiatedRequestMetrics(int initiated_request_duration_ms,
+                                  const absl::string_view server_name,
+                                  int initiated_request_size);
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -81,3 +81,5 @@ ABSL_FLAG(std::optional<std::string>, consented_debug_token, std::nullopt,
 ABSL_FLAG(std::optional<bool>, enable_otel_based_logging, false,
           "Whether the OpenTelemetry Logs is enabled. It's used for consented "
           "debugging.");
+ABSL_FLAG(std::optional<bool>, enable_protected_app_signals, false,
+          "Enables the protected app signals support.");

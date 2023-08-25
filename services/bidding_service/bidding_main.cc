@@ -67,11 +67,6 @@ ABSL_FLAG(
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
-ABSL_FLAG(
-    std::optional<std::int64_t>, js_worker_mem_mb, std::nullopt,
-    "Shared memory used to store requests and responses shared between ROMA "
-    "and JS workers. "
-    "js_worker_mem_mb/js_worker_queue_len > average JS request size.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -120,16 +115,19 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_buyer_code_fetch_config, BUYER_CODE_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
-  config_client.SetFlag(FLAGS_js_worker_mem_mb, JS_WORKER_MEM_MB);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
                         ENABLE_OTEL_BASED_LOGGING);
+  config_client.SetFlag(FLAGS_enable_protected_app_signals,
+                        ENABLE_PROTECTED_APP_SIGNALS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
 
+  VLOG(1) << "Protected App Signals support enabled for the service: "
+          << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   VLOG(1) << "Successfully constructed the config client.";
   return config_client;
 }
@@ -149,8 +147,6 @@ absl::Status RunServer() {
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
   DispatchConfig config;
-  config.ipc_memory_size_in_mb =
-      config_client.GetIntParameter(JS_WORKER_MEM_MB);
   config.worker_queue_max_items =
       config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
   config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
@@ -227,18 +223,19 @@ absl::Status RunServer() {
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions(), collector_endpoint);
+      telemetry_config.LogsAllowed() &&
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::BiddingContextMap(
       std::move(telemetry_config),
-      opentelemetry::metrics::Provider::GetMeterProvider()
-          ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get()));
+      server_common::ConfigurePrivateMetrics(
+          CreateSharedAttributes(&config_util),
+          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
+          collector_endpoint),
+      config_util.GetService(), kOpenTelemetryVersion.data()));
 
   auto generate_bids_reactor_factory =
       [&client, enable_bidding_service_benchmark](

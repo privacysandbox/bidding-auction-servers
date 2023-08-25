@@ -541,6 +541,8 @@ void ScoreAdsReactor::Execute() {
     TextFormat::PrintToString(raw_request_, &original_request);
     logger_.vlog(1, "Execution request failed for batch: ", original_request,
                  status.ToString(absl::StatusToStringMode::kWithEverything));
+    LogIfError(
+        metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     Finish(grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
 }
@@ -690,6 +692,8 @@ void ScoreAdsReactor::ScoreAdsCallback(
       ad_rejection_reasons;
 
   std::optional<ScoreAdsResponse::AdScore> winning_ad;
+  LogIfError(metric_context_->AccumulateMetric<metric::kAuctionTotalBidsCount>(
+      static_cast<int>(responses.size())));
   for (int index = 0; index < responses.size(); index++) {
     if (responses[index].ok()) {
       absl::StatusOr<rapidjson::Document> response_json =
@@ -710,6 +714,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
         score_ads_response.set_interest_group_name(ad->interest_group_name());
         score_ads_response.set_interest_group_owner(ad->interest_group_owner());
         score_ads_response.set_buyer_bid(ad->bid());
+        score_ads_response.set_ad_type(AdType::PROTECTED_AUDIENCE_AD);
         // >= ensures that in the edge case where the most desirable ad's
         // desirability is float.min_val, it is still selected.
         if (score_ads_response.desirability() >=
@@ -727,6 +732,11 @@ void ScoreAdsReactor::ScoreAdsCallback(
                                    ad->interest_group_name(), logger_);
         if (ad_rejection_reason.has_value()) {
           ad_rejection_reasons.push_back(ad_rejection_reason.value());
+          LogIfError(
+              metric_context_
+                  ->AccumulateMetric<metric::kAuctionBidRejectedCount>(
+                      1, ToSellerRejectionReasonString(
+                             ad_rejection_reason.value().rejection_reason())));
         }
       } else {
         logger_.warn(

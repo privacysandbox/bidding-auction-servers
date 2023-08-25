@@ -20,7 +20,9 @@
 #include <string>
 #include <utility>
 
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "services/common/metric/definition.h"
 #include "services/common/telemetry/config.pb.h"
 
 namespace privacy_sandbox::server_common {
@@ -34,10 +36,11 @@ bool AbslParseFlag(absl::string_view text, TelemetryFlag* flag,
 
 std::string AbslUnparseFlag(const TelemetryFlag&);
 
+// BuildDependentConfig wrap `TelemetryConfig`, provide methods that also
+// depends on the build options `//:non_prod_build`
 class BuildDependentConfig {
  public:
-  explicit BuildDependentConfig(TelemetryConfig config)
-      : server_config_(std::move(config)) {}
+  explicit BuildDependentConfig(TelemetryConfig config);
 
   enum class BuildMode { kProd, kExperiment };
 
@@ -45,46 +48,47 @@ class BuildDependentConfig {
   BuildMode GetBuildMode() const;
 
   // Get the metric mode to use
-  TelemetryConfig::TelemetryMode MetricMode() const {
-    if (GetBuildMode() == BuildMode::kExperiment) {
-      return server_config_.mode();
-    } else {
-      return server_config_.mode() == TelemetryConfig::OFF
-                 ? TelemetryConfig::OFF
-                 : TelemetryConfig::PROD;
-    }
-  }
+  TelemetryConfig::TelemetryMode MetricMode() const;
 
   // Should metric be collected and exported;
   // Used to initialize Open Telemetry.
-  bool MetricAllowed() const {
-    switch (server_config_.mode()) {
-      case TelemetryConfig::PROD:
-      case TelemetryConfig::EXPERIMENT:
-      case TelemetryConfig::COMPARE:
-        return true;
-      default:
-        return false;
-    }
-  }
+  bool MetricAllowed() const;
 
   // Should trace be collected and exported;
   // Used to initialize Open Telemetry.
   bool TraceAllowed() const { return IsDebug(); }
 
-  // Should metric collection run as debug mode(without nosie)
-  bool IsDebug() const {
-    switch (server_config_.mode()) {
-      case TelemetryConfig::EXPERIMENT:
-      case TelemetryConfig::COMPARE:
-        return GetBuildMode() == BuildMode::kExperiment;
-      default:
-        return false;
-    }
+  // Should logs be collected and exported;
+  // Used to initialize Open Telemetry.
+  bool LogsAllowed() const {
+    return server_config_.mode() != TelemetryConfig::OFF;
   }
+
+  // Should metric collection run as debug mode(without nosie)
+  bool IsDebug() const;
+
+  int metric_export_interval_ms() const {
+    return server_config_.metric_export_interval_ms();
+  }
+
+  int dp_export_interval_ms() const {
+    return server_config_.dp_export_interval_ms();
+  }
+
+  // If server_config_ has defined MetricConfig list, if found return the
+  // MetricConfig for `metric_name`, otherwise return error; if server_config_
+  // has empty MetricConfig list, always return default MetricConfig.
+  absl::StatusOr<MetricConfig> GetMetricConfig(
+      absl::string_view metric_name) const;
+
+  // return error if metric is not configured right
+  absl::Status CheckMetricConfig(
+      const absl::Span<const metric::DefinitionName* const>& server_metrics)
+      const;
 
  private:
   TelemetryConfig server_config_;
+  absl::flat_hash_map<std::string, MetricConfig> metric_config_;
 };
 
 }  // namespace privacy_sandbox::server_common

@@ -675,6 +675,7 @@ TEST_F(ScoreAdsReactorTest,
   // Since in the above test we are assuming not component auctions, verify.
   EXPECT_FALSE(scored_ad.allow_component_auction());
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
+  EXPECT_EQ(scored_ad.ad_type(), AdType::PROTECTED_AUDIENCE_AD);
   VLOG(1) << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map()
                 .at(kInterestGroupOwnerOfBarBidder)
