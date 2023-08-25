@@ -125,7 +125,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   std::unique_ptr<metric::BfeContext> metric_context_;
 
   // Log metrics for the requests that were initiated by the server
-  void LogInitiatedRequestMetrics(int initiated_request_duration_ms);
+  void LogInitiatedRequestMetrics(int initiated_request_duration_ms,
+                                  const absl::string_view server_name,
+                                  int initiated_request_size);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

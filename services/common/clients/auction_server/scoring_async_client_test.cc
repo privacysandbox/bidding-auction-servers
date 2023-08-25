@@ -133,15 +133,11 @@ TEST(ScoringAsyncClientTest,
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
 
-  absl::Notification notification;
   absl::Status execute_result = class_under_test.ExecuteInternal(
       std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(), {},
-      [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
-              callback_response) {
-        EXPECT_FALSE(callback_response.ok());
-        notification.Notify();
+      [](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
+             callback_response) {  // Never called
       });
-  notification.WaitForNotification();
   EXPECT_FALSE(execute_result.ok());
 }
 

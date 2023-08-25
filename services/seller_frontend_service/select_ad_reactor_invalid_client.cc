@@ -47,6 +47,12 @@ SelectAdReactorInvalidClient::GetDecodedProtectedAudienceInput(
   return {};
 }
 
+ProtectedAuctionInput
+SelectAdReactorInvalidClient::GetDecodedProtectedAuctionInput(
+    absl::string_view encoded_data) {
+  return {};
+}
+
 absl::flat_hash_map<absl::string_view, BuyerInput>
 SelectAdReactorInvalidClient::GetDecodedBuyerinputs(
     const google::protobuf::Map<std::string, std::string>&

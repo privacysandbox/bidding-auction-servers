@@ -32,14 +32,12 @@ function partition_array() {
   declare -n pre=$2
   declare -n post=$3
   if [[ ${#arr[@]} -eq 0 ]]; then
-    printf "empty array\n" &>/dev/stderr
-    return 1
+    return
   fi
 
   declare -r delim="--"
   declare target=pre
   for i in "${!arr[@]}"; do
-    printf "val: %s\n" "${arr[$i]}"
     if [[ ${arr[$i]} == "${delim}" ]]; then
       target=post
     fi

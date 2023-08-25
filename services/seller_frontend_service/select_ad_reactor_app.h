@@ -47,7 +47,10 @@ class SelectAdReactorForApp : public SelectAdReactor {
           std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
       const std::optional<AuctionResult::Error>& error) override;
 
-  ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+  [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+      absl::string_view encoded_data) override;
+
+  ProtectedAuctionInput GetDecodedProtectedAuctionInput(
       absl::string_view encoded_data) override;
 
   absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(

@@ -224,14 +224,14 @@ class Context {
     return !decrypted_ && privacy == Privacy::kNonImpacting;
   }
 
-  absl::Status IsLogged(const DefinitionName& definition)
+  absl::Status AssertLoggable(const DefinitionName& definition)
       ABSL_LOCKS_EXCLUDED(mutex_) {
     absl::MutexLock mutex_lock(&mutex_);
     if (!logged_metric_.insert(&definition).second) {
       return absl::AlreadyExistsError(
           absl::StrCat(definition.name_, " can only log once for a request."));
     }
-    return absl::OkStatus();
+    return metric_config_.GetMetricConfig(definition.name_).status();
   }
 
   template <const auto& definition, typename T>
@@ -250,7 +250,7 @@ class Context {
   absl::Status LogMetric(T value,
                          std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr) {
     CheckDefinition<definition, T>();
-    PS_RETURN_IF_ERROR(IsLogged(definition));
+    PS_RETURN_IF_ERROR(AssertLoggable(definition));
     static_assert(definition.type_instrument !=
                   Instrument::kPartitionedCounter);
     return LogMetricInternal(value, definition, "");
@@ -261,7 +261,7 @@ class Context {
                 std::remove_reference_t<decltype(definition)>>::TypeT>
   absl::Status LogMetric(const absl::flat_hash_map<std::string, T>& value) {
     CheckDefinition<definition, T>();
-    PS_RETURN_IF_ERROR(IsLogged(definition));
+    PS_RETURN_IF_ERROR(AssertLoggable(definition));
     static_assert(definition.type_instrument ==
                   Instrument::kPartitionedCounter);
     for (auto& [partition, numeric] :
@@ -307,7 +307,7 @@ class Context {
       std::enable_if_t<!std::is_lvalue_reference_v<T>>* = nullptr) {
     using Result = std::invoke_result_t<T>;
     CheckDefinition<definition, Result>();
-    PS_RETURN_IF_ERROR(IsLogged(definition));
+    PS_RETURN_IF_ERROR(AssertLoggable(definition));
     return LogMetricDeferredInternal<Result>(
         [callback = std::move(
              callback)]() mutable -> absl::flat_hash_map<std::string, Result> {
@@ -328,7 +328,7 @@ class Context {
                                            typename Result::mapped_type>,
                        std::remove_cv_t<Result>>);
     CheckDefinition<definition, typename Result::mapped_type>();
-    PS_RETURN_IF_ERROR(IsLogged(definition));
+    PS_RETURN_IF_ERROR(AssertLoggable(definition));
     static_assert(definition.type_instrument ==
                   Instrument::kPartitionedCounter);
     return LogMetricDeferredInternal<typename Result::mapped_type>(

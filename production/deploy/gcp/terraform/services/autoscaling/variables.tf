@@ -150,3 +150,9 @@ variable "runtime_flags" {
   description = "List of config variables applied at runtime whose changes still require replacing VM instances"
   type        = map(string)
 }
+
+variable "instance_template_waits_for_instances" {
+  description = "True if terraform should wait for instances before returning from instance template application. False if faster apply is desired."
+  type        = bool
+  default     = true
+}

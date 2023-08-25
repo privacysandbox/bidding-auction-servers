@@ -32,6 +32,8 @@ constexpr absl::string_view kMadeHighestScoringOtherBidPlaceholder =
     "${madeHighestScoringOtherBid}";
 constexpr absl::string_view kRejectReasonPlaceholder = "${rejectReason}";
 
+// Update server_definition.h  - kSellerRejectReasons[] if any change is made to
+// SellerRejectionReason Enum.
 constexpr absl::string_view kRejectionReasonNotAvailable = "not-available";
 constexpr absl::string_view kRejectionReasonInvalidBid = "invalid-bid";
 constexpr absl::string_view kRejectionReasonBidBelowAuctionFloor =

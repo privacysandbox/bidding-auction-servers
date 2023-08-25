@@ -122,10 +122,9 @@ class TestDefaultAsyncGrpcClient
         req_(req),
         expected_timeout_(expected_timeout) {}
 
-  absl::Status SendRpc(
-      const std::string& hpke_secret,
-      RawClientParams<MockRequest, MockResponse, MockRawResponse>* params)
-      const override {
+  void SendRpc(const std::string& hpke_secret,
+               RawClientParams<MockRequest, MockResponse, MockRawResponse>*
+                   params) const override {
     VLOG(1) << "SendRpc invoked";
     EXPECT_EQ(params->RequestRef()->request_ciphertext(),
               req_.request_ciphertext());
@@ -140,7 +139,6 @@ class TestDefaultAsyncGrpcClient
     EXPECT_LE(time_difference_ms, 100);
     notification_.Notify();
     params->OnDone(grpc::Status::OK);
-    return absl::OkStatus();
   }
   absl::Notification& notification_;
   MockRequest req_;

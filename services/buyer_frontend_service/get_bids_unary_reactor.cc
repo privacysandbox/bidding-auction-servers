@@ -74,13 +74,35 @@ bool GetBidsUnaryReactor::DecryptRequest() {
 }
 
 void GetBidsUnaryReactor::LogInitiatedRequestMetrics(
-    int initiated_request_duration_ms) {
+    int initiated_request_duration_ms, const absl::string_view server_name,
+    int initiated_request_size) {
   LogIfError(
       metric_context_
           ->AccumulateMetric<server_common::metric::kInitiatedRequestCount>(1));
+  LogIfError(
+      metric_context_->AccumulateMetric<metric::kInitiatedRequestCountByServer>(
+          1, server_name));
   LogIfError(metric_context_->AccumulateMetric<
              server_common::metric::kInitiatedRequestTotalDuration>(
       initiated_request_duration_ms));
+  LogIfError(metric_context_
+                 ->LogHistogram<server_common::metric::kInitiatedRequestByte>(
+                     initiated_request_size));
+  if (server_name == metric::kKv) {
+    LogIfError(
+        metric_context_->LogHistogram<metric::kInitiatedRequestKVDuration>(
+            initiated_request_duration_ms));
+    LogIfError(metric_context_->LogHistogram<metric::kInitiatedRequestKVSize>(
+        initiated_request_size));
+  }
+  if (server_name == metric::kBs) {
+    LogIfError(
+        metric_context_->LogHistogram<metric::kInitiatedRequestBiddingDuration>(
+            initiated_request_duration_ms));
+    LogIfError(
+        metric_context_->LogHistogram<metric::kInitiatedRequestBiddingSize>(
+            initiated_request_size));
+  }
 }
 
 void GetBidsUnaryReactor::Execute() {
@@ -94,14 +116,18 @@ void GetBidsUnaryReactor::Execute() {
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
   absl::Time kv_request_start_time = absl::Now();
+  int kv_request_size =
+      (int)bidding_signals_request.get_bids_raw_request_.ByteSizeLong() +
+      (int)bidding_signals_request.filtering_metadata_.size();
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
-      [this, kv_request_start_time](
+      [this, kv_request_start_time, kv_request_size](
           absl::StatusOr<std::unique_ptr<BiddingSignals>> response) {
         int kv_request_duration_ms =
             (absl::Now() - kv_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(kv_request_duration_ms);
+        LogInitiatedRequestMetrics(kv_request_duration_ms, metric::kKv,
+                                   kv_request_size);
         if (!response.ok()) {
           LogIfError(metric_context_->AccumulateMetric<
                      server_common::metric::kInitiatedRequestErrorCount>(1));
@@ -132,15 +158,17 @@ void GetBidsUnaryReactor::PrepareAndGenerateBid(
 
   logger_.vlog(2, "GenerateBidsRequest:\n", raw_bidding_input->DebugString());
   absl::Time bs_request_start_time = absl::Now();
+  int bs_request_size = (int)raw_bidding_input->ByteSizeLong();
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
       std::move(raw_bidding_input), {},
-      [this, bs_request_start_time](
+      [this, bs_request_start_time, bs_request_size](
           absl::StatusOr<
               std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
               raw_response) {
         int bs_request_duration_ms =
             (absl::Now() - bs_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(bs_request_duration_ms);
+        LogInitiatedRequestMetrics(bs_request_duration_ms, metric::kBs,
+                                   bs_request_size);
         if (!raw_response.ok()) {
           LogIfError(metric_context_->AccumulateMetric<
                      server_common::metric::kInitiatedRequestErrorCount>(1));

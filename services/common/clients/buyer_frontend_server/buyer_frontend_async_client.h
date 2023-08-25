@@ -58,10 +58,10 @@ class BuyerFrontEndAsyncGrpcClient
   //
   // params: a pointer to the RawClientParams object which carries data used
   // by the grpc stub.
-  absl::Status SendRpc(const std::string& hpke_secret,
-                       RawClientParams<GetBidsRequest, GetBidsResponse,
-                                       GetBidsResponse::GetBidsRawResponse>*
-                           params) const override;
+  void SendRpc(const std::string& hpke_secret,
+               RawClientParams<GetBidsRequest, GetBidsResponse,
+                               GetBidsResponse::GetBidsRawResponse>* params)
+      const override;
 
   std::unique_ptr<BuyerFrontEnd::StubInterface> stub_;
 };

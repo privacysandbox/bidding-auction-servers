@@ -33,7 +33,7 @@ ScoringAsyncGrpcClient::ScoringAsyncGrpcClient(
                                          client_config.secure_client));
 }
 
-absl::Status ScoringAsyncGrpcClient::SendRpc(
+void ScoringAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
     RawClientParams<ScoreAdsRequest, ScoreAdsResponse,
                     ScoreAdsResponse::ScoreAdsRawResponse>* params) const {
@@ -63,8 +63,6 @@ absl::Status ScoringAsyncGrpcClient::SendRpc(
         VLOG(6) << "Returning the decrypted response via callback";
         params->OnDone(status);
       });
-
-  return absl::OkStatus();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

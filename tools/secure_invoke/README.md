@@ -14,9 +14,35 @@ decompressed, deserialized and printed to console.
 
 ### Sending [SelectAdRequest] to SFE
 
+This method expects a plaintext json with the following fields.
+
+```json
+ {
+    "auction_config" : {
+          "seller_signals": "...",
+          "per_buyer_config": {"buyer1" : {
+              "buyer_signals": "...",
+              ....
+          }}
+          .....
+    }
+    "raw_protected_audience_input": {
+        "raw_buyer_input" : {"buyer1": {
+            "interest_groups": [{
+                "name": "IG1",
+                "bidding_signals_keys":["IG1",..],
+                .....
+            }]
+        }},
+        "publisher_name": "testPublisher.com",
+        .....
+    }
+ }
+```
+
 ```bash
 # Setup arguments.
-INPUT_PATH=select_ad_request.json  # Needs to be a valid plaintext SelectAdRequest in the root of the B&A project (i.e. the path is .../bidding-auction-server/select_ad_request.json)
+INPUT_PATH=select_ad_request.json  # Needs to be a valid plaintext in the root of the B&A project (i.e. the path is .../bidding-auction-server/select_ad_request.json)
 SFE_HOST_ADDRESS=seller.domain.com  # DNS name of SFE (e.g. dns:///seller.domain.com)
 CLIENT_IP=<A valid client IPv4 address>
 

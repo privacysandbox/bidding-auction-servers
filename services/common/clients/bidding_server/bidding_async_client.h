@@ -57,11 +57,10 @@ class BiddingAsyncGrpcClient
   //
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
-  absl::Status SendRpc(
-      const std::string& hpke_secret,
-      RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
-                      GenerateBidsResponse::GenerateBidsRawResponse>* params)
-      const override;
+  void SendRpc(const std::string& hpke_secret,
+               RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
+                               GenerateBidsResponse::GenerateBidsRawResponse>*
+                   params) const override;
   std::unique_ptr<Bidding::Stub> stub_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers

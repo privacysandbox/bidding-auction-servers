@@ -49,6 +49,7 @@ using ::testing::Return;
 using EncodedBueryInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBueryInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
+template <typename T>
 class SelectAdReactorForAppTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -59,7 +60,11 @@ class SelectAdReactorForAppTest : public ::testing::Test {
   }
 };
 
-TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
+using ProtectedAuctionInputTypes =
+    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+TYPED_TEST_SUITE(SelectAdReactorForAppTest, ProtectedAuctionInputTypes);
+
+TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -70,13 +75,14 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::ANDROID, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config, clients, request_with_context.select_ad_request);
@@ -109,6 +115,8 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
   EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
       decompressed_response->data(), decompressed_response->size()));
   EXPECT_FALSE(deserialized_auction_result.is_chaff());
+  EXPECT_EQ(deserialized_auction_result.ad_type(),
+            AdType::PROTECTED_AUDIENCE_AD);
 
   // Validate that the bidding groups data is present.
   EXPECT_EQ(deserialized_auction_result.bidding_groups().size(), 1);
@@ -126,7 +134,7 @@ TEST_F(SelectAdReactorForAppTest, VerifyEncoding) {
   EXPECT_TRUE(unexpected_interest_group_indices.empty());
 }
 
-TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
+TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -137,13 +145,14 @@ TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config, clients, request_with_context.select_ad_request);
@@ -180,7 +189,7 @@ TEST_F(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   EXPECT_TRUE(deserialized_auction_result.is_chaff());
 }
 
-TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
+TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -191,15 +200,14 @@ TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
+  auto& protected_auction_input = request_with_context.protected_auction_input;
   auto& request = request_with_context.select_ad_request;
   // Set up the encoded cipher text in the request.
-  std::string encoded_request = protected_audience_input.SerializeAsString();
+  std::string encoded_request = protected_auction_input.SerializeAsString();
   // Corrupt the binary proto so that we can verify a proper error is set in
   // the response.
   encoded_request.data()[0] = 'a';
@@ -217,6 +225,7 @@ TEST_F(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
 
   auto config = CreateConfig();
   config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(config, clients, request);
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());

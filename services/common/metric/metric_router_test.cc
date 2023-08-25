@@ -33,7 +33,6 @@
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 
 namespace privacy_sandbox::server_common::metric {
-namespace {
 
 namespace metric_sdk = ::opentelemetry::sdk::metrics;
 namespace metrics_api = ::opentelemetry::metrics;
@@ -67,8 +66,8 @@ constexpr Definition<double, Privacy::kNonImpacting,
 
 class MetricRouterTest : public ::testing::Test {
  protected:
-  void init() {
-    auto provider = std::make_shared<metric_sdk::MeterProvider>();
+  std::unique_ptr<MetricRouter::MeterProvider> init() {
+    auto provider = std::make_unique<metric_sdk::MeterProvider>();
     provider->AddMetricReader(
         std::make_unique<metric_sdk::PeriodicExportingMetricReader>(
             std::make_unique<
@@ -79,16 +78,11 @@ class MetricRouterTest : public ::testing::Test {
                     kExportIntervalMillis),
                 /*export_timeout_millis*/ std::chrono::milliseconds(
                     kExportIntervalMillis / 2)}));
-    metrics_api::Provider::SetMeterProvider(
-        (std::shared_ptr<metrics_api::MeterProvider>)provider);
+    return provider;
   }
   void SetUp() override {
-    init();
-    test_instance_ =
-        std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
-                                           ->GetMeter("not used name", "0.0.1")
-                                           .get(),
-                                       PrivacyBudget{0}, absl::Minutes(5));
+    test_instance_ = std::make_unique<MetricRouter>(
+        init(), "not used name", "0.0.1", PrivacyBudget{0}, absl::Minutes(5));
   }
 
   static std::stringstream& GetSs() {
@@ -99,9 +93,7 @@ class MetricRouterTest : public ::testing::Test {
   std::string ReadSs() {
     absl::SleepFor(absl::Milliseconds(kExportIntervalMillis * 2));
     // Shut down metric reader now to avoid concurrent access of Ss.
-    metrics_api::Provider::SetMeterProvider(
-        (std::shared_ptr<metrics_api::MeterProvider>)
-            std::make_shared<metrics_api::NoopMeterProvider>());
+    { auto not_used = std::move(test_instance_); }
     std::string output = GetSs().str();
     GetSs().str("");
     return output;
@@ -204,12 +196,8 @@ TEST_F(MetricRouterTest, LogSafePartitionedDouble) {
 class MetricRouterDpNoNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
-    init();
-    test_instance_ =
-        std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
-                                           ->GetMeter("not used name", "0.0.1")
-                                           .get(),
-                                       PrivacyBudget{1e10}, kDpInterval);
+    test_instance_ = std::make_unique<MetricRouter>(
+        init(), "not used name", "0.0.1", PrivacyBudget{1e10}, kDpInterval);
   }
   absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
 };
@@ -257,12 +245,8 @@ TEST_F(MetricRouterDpNoNoiseTest, LogHistogram) {
 class MetricRouterDpNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
-    init();
-    test_instance_ =
-        std::make_unique<MetricRouter>(metrics_api::Provider::GetMeterProvider()
-                                           ->GetMeter("not used name", "0.0.1")
-                                           .get(),
-                                       PrivacyBudget{1}, kDpInterval);
+    test_instance_ = std::make_unique<MetricRouter>(
+        init(), "not used name", "0.0.1", PrivacyBudget{1}, kDpInterval);
   }
   absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
 };
@@ -319,5 +303,4 @@ TEST_F(MetricRouterTest, AddObserverable) {
   EXPECT_THAT(output, ContainsRegex("label[ \t]*:[ \t]*p2"));
 }
 
-}  // namespace
 }  // namespace privacy_sandbox::server_common::metric

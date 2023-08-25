@@ -16,6 +16,7 @@
 
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
@@ -25,7 +26,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
-PackagePayload(const ProtectedAudienceInput& protected_audience_input,
+PackagePayload(const ProtectedAuctionInput& protected_auction_input,
                SelectAdRequest::ClientType client_type,
                absl::string_view public_key) {
   // Encode request.
@@ -34,7 +35,7 @@ PackagePayload(const ProtectedAudienceInput& protected_audience_input,
     case SelectAdRequest::BROWSER: {
       PS_ASSIGN_OR_RETURN(
           auto serialized_request,
-          CborEncodeProtectedAudienceProto(protected_audience_input));
+          CborEncodeProtectedAuctionProto(protected_auction_input));
       PS_ASSIGN_OR_RETURN(
           encoded_request,
           server_common::EncodeResponsePayload(
@@ -44,7 +45,7 @@ PackagePayload(const ProtectedAudienceInput& protected_audience_input,
     case SelectAdRequest::ANDROID: {
       // Serialize the protected audience input and frame it.
       std::string serialized_request =
-          protected_audience_input.SerializeAsString();
+          protected_auction_input.SerializeAsString();
       PS_ASSIGN_OR_RETURN(
           encoded_request,
           server_common::EncodeResponsePayload(

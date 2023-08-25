@@ -104,15 +104,30 @@ constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>
     kUnsafe1("kUnsafe1", "", 0, 0);
 constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>
     kUnsafe2("kUnsafe2", "", 0, 0);
+constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>
+    kUnsafe3("kUnsafe3", "", 0, 0);
 constexpr const DefinitionName* unsafe_list[] = {&kUnsafe1, &kUnsafe2,
-                                                 &kIntExactCounter};
+                                                 &kUnsafe3, &kIntExactCounter};
 constexpr absl::Span<const DefinitionName* const> unsafe_list_span =
     unsafe_list;
 
-TEST_F(ContextMapTest, GetContextMapPrivacyBudget) {
+class MetricConfigTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    TelemetryConfig config_proto;
+    config_proto.set_mode(TelemetryConfig::PROD);
+    config_proto.add_metric()->set_name("kUnsafe1");
+    config_proto.add_metric()->set_name("kUnsafe2");
+    config_proto.add_metric()->set_name("not_defined");
+    metric_config_ = std::make_unique<BuildDependentConfig>(config_proto);
+  }
+  std::unique_ptr<BuildDependentConfig> metric_config_;
+};
+
+TEST_F(MetricConfigTest, PrivacyBudget) {
   constexpr server_common::metric::PrivacyBudget budget{/*epsilon*/ 5};
-  auto c =
-      GetContextMap<Foo, unsafe_list_span>(*metric_config_, nullptr, budget);
+  auto c = GetContextMap<Foo, unsafe_list_span>(*metric_config_, nullptr, "",
+                                                "", budget);
   EXPECT_DOUBLE_EQ(c->metric_router()->dp().privacy_budget_per_weight().epsilon,
                    2.5);
 }

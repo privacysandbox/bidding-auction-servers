@@ -160,4 +160,15 @@ class ContextTest : public BaseTest {
   }
 };
 
+class MetricConfigTest : public ::testing::Test {
+ protected:
+  void SetUpWithConfig(const BuildDependentConfig& metric_config) {
+    context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
+        &mock_metric_router_, metric_config);
+  }
+
+  StrictMock<MockMetricRouter> mock_metric_router_;
+  std::unique_ptr<Context<metric_list_span, MockMetricRouter>> context_;
+};
+
 }  // namespace privacy_sandbox::server_common::metric

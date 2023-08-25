@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "absl/log/absl_log.h"
-#include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/metrics/aggregation/histogram_aggregation.h"
 #include "opentelemetry/sdk/metrics/meter.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
@@ -27,20 +26,18 @@
 
 namespace privacy_sandbox::server_common::metric {
 namespace sdk = ::opentelemetry::sdk::metrics;
-namespace api = ::opentelemetry::metrics;
 
-MetricRouter::MetricRouter(Meter* meter, PrivacyBudget fraction,
+MetricRouter::MetricRouter(std::unique_ptr<MeterProvider> provider,
+                           absl::string_view service, absl::string_view version,
+                           PrivacyBudget fraction,
                            absl::Duration dp_output_period)
-    : meter_(meter), dp_(this, fraction, dp_output_period) {
-  if (meter_ != nullptr) {
-    return;
+    : provider_(std::move(provider)), dp_(this, fraction, dp_output_period) {
+  if (!provider_) {
+    ABSL_LOG(WARNING)
+        << "MeterProvider is null at initializing, init with default";
+    provider_ = std::make_unique<sdk::MeterProvider>();
   }
-  ABSL_LOG(ERROR) << "meter is null at initializing, init with default";
-  api::Provider::SetMeterProvider((std::shared_ptr<api::MeterProvider>)
-                                      std::make_shared<sdk::MeterProvider>());
-  meter_ = api::Provider::GetMeterProvider()
-               ->GetMeter("default initialized", "default initialized")
-               .get();
+  meter_ = provider_->GetMeter(service.data(), version.data()).get();
 }
 
 void MetricRouter::AddHistogramView(absl::string_view instrument_name,
@@ -50,7 +47,7 @@ void MetricRouter::AddHistogramView(absl::string_view instrument_name,
       std::vector<double>(histogram.histogram_boundaries_.begin(),
                           histogram.histogram_boundaries_.end());
   auto* sdk_meter = static_cast<sdk::Meter*>(meter_);
-  static_cast<sdk::MeterProvider*>(api::Provider::GetMeterProvider().get())
+  static_cast<sdk::MeterProvider*>(provider_.get())
       ->AddView(
           std::make_unique<sdk::InstrumentSelector>(
               sdk::InstrumentType::kHistogram, instrument_name.data()),

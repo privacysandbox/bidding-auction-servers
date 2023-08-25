@@ -116,16 +116,19 @@ bool TrustedServersConfigClient::HasParameter(
 
 absl::string_view TrustedServersConfigClient::GetStringParameter(
     absl::string_view name) const noexcept {
+  DCHECK(HasParameter(name)) << "Flag " << name << " not found";
   return config_entries_map_.at(name);
 }
 
 bool TrustedServersConfigClient::GetBooleanParameter(
     absl::string_view name) const noexcept {
+  DCHECK(HasParameter(name)) << "Flag " << name << " not found";
   return absl::AsciiStrToLower(config_entries_map_.at(name)) == kTrue;
 }
 
 int TrustedServersConfigClient::GetIntParameter(
     absl::string_view name) const noexcept {
+  DCHECK(HasParameter(name)) << "Flag " << name << " not found";
   return std::stoi(config_entries_map_.at(name));
 }
 
