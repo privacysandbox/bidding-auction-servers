@@ -170,7 +170,9 @@ int main(int argc, char** argv) {
         for (int j = 0; j < num_threads; j++) {
             count += bins[j][i];
         }
-        std::cout << "[" << i * bin_size << ", " << (i+1)*bin_size << "): " << count << "\n";
+        auto f = std::setfill('0');
+        auto s = std::setw(6);
+        std::cout << "[" << f << s << i * bin_size << ", " << f << s << (i+1)*bin_size << "): " << count << "\n";
     }
 
   } else {
