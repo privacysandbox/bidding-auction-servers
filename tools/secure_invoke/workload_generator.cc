@@ -70,7 +70,7 @@ ABSL_FLAG(int, num_threads, 4,
 ABSL_FLAG(int, num_calls_per_thread, 10000,
           "Number of calls per thread.");
 
-ABSL_FLAG(int, bin_size, 10000,
+ABSL_FLAG(int, bucket_size, 10000,
           "size of each bucket.");
 
 namespace {}  // namespace
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
          "tool can only be used to call B&A servers running in test mode.";
   int num_threads = absl::GetFlag(FLAGS_num_threads);
   int num_calls_per_thread = absl::GetFlag(FLAGS_num_calls_per_thread);
-  int bin_size = absl::GetFlag(FLAGS_bin_size);
+  int bucket_size = absl::GetFlag(FLAGS_bucket_size);
   
   if (op == "encrypt") {
     CHECK(target_service == kSfe)
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
             PackagePlainTextSelectAdRequestToJson(json_input_str, client_type);
   } else if (op == "invoke") {
     std::vector<std::thread> threads(num_threads);
-    int num_bins = 10; int bin_size = bin_size;
+    int num_bins = 10; int bin_size = bucket_size;
     int bins[num_threads][num_bins];
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < num_threads; ++i) {
