@@ -25,6 +25,9 @@ namespace {
 
 constexpr char kSampleGenerationId[] = "sample-generation-id";
 constexpr char kSampleAdtechDebugId[] = "sample-adtech-debug-id";
+constexpr bool kIsConsentedDebug = true;
+constexpr absl::string_view kConsentedDebugToken = "test";
+
 using ::google::protobuf::util::MessageDifferencer;
 using GenBidsRawReq = GenerateBidsRequest::GenerateBidsRawRequest;
 using GenBidsRawResp = GenerateBidsResponse::GenerateBidsRawResponse;
@@ -411,6 +414,22 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
             log_context.generation_id());
   EXPECT_EQ(raw_output->log_context().adtech_debug_id(),
             log_context.adtech_debug_id());
+}
+
+TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+
+  GetBidsRequest::GetBidsRawRequest input;
+  auto* consented_debug_config = input.mutable_consented_debug_config();
+  consented_debug_config->set_is_consented(kIsConsentedDebug);
+  consented_debug_config->set_token(kConsentedDebugToken);
+
+  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+
+  EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
+            kIsConsentedDebug);
+  EXPECT_EQ(raw_output->consented_debug_config().token(), kConsentedDebugToken);
 }
 
 }  // namespace

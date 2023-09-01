@@ -66,8 +66,19 @@ BuyerFrontEndService::BuyerFrontEndService(
       enable_benchmarking_(enable_benchmarking),
       key_fetcher_manager_(std::move(key_fetcher_manager)),
       crypto_client_(std::move(crypto_client)),
+      stub_(Bidding::NewStub(CreateChannel(client_config.server_addr,
+                                           client_config.compression,
+                                           client_config.secure_client))),
       bidding_async_client_(std::make_unique<BiddingAsyncGrpcClient>(
-          key_fetcher_manager_.get(), crypto_client_.get(), client_config)) {}
+          key_fetcher_manager_.get(), crypto_client_.get(), client_config,
+          stub_.get())) {
+  if (config_.is_protected_app_signals_enabled) {
+    protected_app_signals_bidding_async_client_ =
+        std::make_unique<ProtectedAppSignalsBiddingAsyncGrpcClient>(
+            key_fetcher_manager_.get(), crypto_client_.get(), client_config,
+            stub_.get());
+  }
+}
 
 grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
     grpc::CallbackServerContext* context, const GetBidsRequest* request,

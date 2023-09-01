@@ -72,6 +72,8 @@ using ErrorVisibility::CLIENT_VISIBLE;
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
+using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
+using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 
 cbor_pair BuildStringMapPair(absl::string_view key, absl::string_view value) {
   return {cbor_move(cbor_build_stringn(key.data(), key.size())),
@@ -431,11 +433,11 @@ void TestReportAndInteractionUrls(const struct cbor_pair reporting_data,
     ASSERT_TRUE(cbor_isa_string(kv.key)) << "Expected the key to be a string";
     observed_keys.emplace_back(CborDecodeString(kv.key));
   }
-  EXPECT_EQ(observed_keys[0], kInteractionReportingUrls);
-  EXPECT_EQ(observed_keys[1], kReportingUrl);
+  EXPECT_EQ(observed_keys[1], kInteractionReportingUrls);
+  EXPECT_EQ(observed_keys[0], kReportingUrl);
   EXPECT_EQ(expected_report_url,
-            CborDecodeString(reporting_urls_map.at(1).value));
-  auto& interaction_map = reporting_urls_map.at(0).value;
+            CborDecodeString(reporting_urls_map.at(0).value));
+  auto& interaction_map = reporting_urls_map.at(1).value;
   ASSERT_TRUE(cbor_isa_map(interaction_map));
   absl::Span<struct cbor_pair> interaction_urls(
       cbor_map_handle(interaction_map), cbor_map_size(interaction_map));
@@ -492,15 +494,15 @@ TEST(ChromeResponseUtils, CborSerializeWinReportingUrls) {
   win_reporting_urls.mutable_buyer_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent3, kTestInteractionUrl3);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(kTestReportResultUrl);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent2, kTestInteractionUrl2);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent3, kTestInteractionUrl3);
 
@@ -523,7 +525,7 @@ TEST(ChromeResponseUtils, CborSerializeWinReportingUrls) {
   ASSERT_EQ(inner_map.size(), 2);
   TestReportAndInteractionUrls(inner_map.at(0), kBuyerReportingUrls,
                                kTestReportWinUrl);
-  TestReportAndInteractionUrls(inner_map.at(1), kComponentSellerReportingUrls,
+  TestReportAndInteractionUrls(inner_map.at(1), kTopLevelSellerReportingUrls,
                                kTestReportResultUrl);
 }
 
@@ -549,15 +551,15 @@ TEST(ChromeResponseUtils, CborWithOnlySellerReprotingUrls) {
   interaction_url_map.try_emplace(kTestEvent2, kTestInteractionUrl2);
   interaction_url_map.try_emplace(kTestEvent3, kTestInteractionUrl3);
   WinReportingUrls win_reporting_urls;
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(kTestReportResultUrl);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent2, kTestInteractionUrl2);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent3, kTestInteractionUrl3);
 
@@ -578,7 +580,7 @@ TEST(ChromeResponseUtils, CborWithOnlySellerReprotingUrls) {
   absl::Span<struct cbor_pair> inner_map(cbor_map_handle(report_win_urls_map),
                                          cbor_map_size(report_win_urls_map));
   ASSERT_EQ(inner_map.size(), 1);
-  TestReportAndInteractionUrls(inner_map.at(0), kComponentSellerReportingUrls,
+  TestReportAndInteractionUrls(inner_map.at(0), kTopLevelSellerReportingUrls,
                                kTestReportResultUrl);
 }
 
@@ -586,7 +588,7 @@ TEST(ChromeResponseUtils, CborWithNoInteractionReportingUrls) {
   WinReportingUrls win_reporting_urls;
   win_reporting_urls.mutable_buyer_reporting_urls()->set_reporting_url(
       kTestReportWinUrl);
-  win_reporting_urls.mutable_component_seller_reporting_urls()
+  win_reporting_urls.mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(kTestReportResultUrl);
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
@@ -606,7 +608,7 @@ TEST(ChromeResponseUtils, CborWithNoInteractionReportingUrls) {
                                          cbor_map_size(report_win_urls_map));
   ASSERT_EQ(inner_map.size(), 2);
   TestReportingUrl(inner_map.at(0), kBuyerReportingUrls, kTestReportWinUrl);
-  TestReportingUrl(inner_map.at(1), kComponentSellerReportingUrls,
+  TestReportingUrl(inner_map.at(1), kTopLevelSellerReportingUrls,
                    kTestReportResultUrl);
 }
 
@@ -632,10 +634,10 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
   winner.mutable_win_reporting_urls()
-      ->mutable_component_seller_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(kTestReportResultUrl);
   winner.mutable_win_reporting_urls()
-      ->mutable_component_seller_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
   // Setup a bidding group map.
@@ -682,11 +684,11 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
                 .at(kTestEvent1),
             kTestInteractionUrl1);
   EXPECT_EQ(decoded_result->win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             kTestReportResultUrl);
   EXPECT_EQ(decoded_result->win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .at(kTestEvent1),
             kTestInteractionUrl1);
@@ -915,6 +917,20 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   winner.set_interest_group_name("ig1");
   winner.set_desirability(156671.781);
   winner.set_buyer_bid(0.195839122);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(kTestReportWinUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
   const std::string interest_group_owner_1 = "ig1";
   const std::string interest_group_owner_2 = "zi";
   const std::string interest_group_owner_3 = "ih1";
@@ -932,12 +948,20 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
                     std::nullopt, [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(absl::BytesToHexString(*ret),
-            "a863626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f"
-            "6d706f6e656e7473806b616452656e64657255524c606d62696464696e6747726f"
-            "757073a4627a698207026369673182070263696831820702666f776e6572318207"
-            "0271696e74657265737447726f75704e616d656369673172696e74657265737447"
-            "726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
+  EXPECT_EQ(
+      absl::BytesToHexString(*ret),
+      "a963626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
+      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
+      "698207026369673182070263696831820702666f776e6572318207027077696e5265706f"
+      "7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c7265706f72"
+      "74696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e74657261"
+      "6374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69"
+      "636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a2"
+      "6c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f"
+      "6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
+      "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d65636967"
+      "3172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
+      "636f6d");
 }
 
 }  // namespace

@@ -35,9 +35,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
-
 // Client facing error messages.
 inline constexpr char kInvalidCborError[] =
     "Unable to parse ProtectedAudienceInput CBOR";
@@ -162,7 +159,7 @@ std::string DecodeCborString(const cbor_item_t* item);
 // Decodes the key (i.e. owner) in the BuyerInputs in ProtectedAudienceInput
 // and copies the corresponding value (i.e. BuyerInput) as-is. Note: this method
 // doesn't decode the value.
-EncodedBuyerInputs DecodeBuyerInputKeys(
+::google::protobuf::Map<std::string, std::string> DecodeBuyerInputKeys(
     cbor_item_t& compressed_encoded_buyer_inputs,
     ErrorAccumulator& error_accumulator, bool fail_fast = true);
 

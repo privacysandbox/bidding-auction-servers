@@ -24,11 +24,16 @@
 #include <utility>
 
 #include "absl/strings/string_view.h"
+#include "api/bidding_auction_servers.pb.h"
 #include "glog/logging.h"
 #include "opentelemetry/logs/logger.h"
 #include "services/common/util/context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+// Helper function to update ContextMap.
+bool MaybeAddConsentedDebugConfig(const ConsentedDebugConfiguration& config,
+                                  ContextLogger::ContextMap& context_map);
 
 // Utility class to log messages based on adtech consents.
 // The context including consented debugging info is cached.
@@ -36,12 +41,11 @@ class ConsentedDebuggingLogger {
  public:
   using ContextMap = ContextLogger::ContextMap;
 
-  // TODO(b/279955398): Allows to update `context_map` and `span_context` via a
-  // public method.
-  ConsentedDebuggingLogger(
-      const ContextMap& context_map,
-      const opentelemetry::trace::SpanContext& span_context,
-      absl::string_view server_debug_token);
+  // TODO(b/279955398): Allows to update `context_map` via a public method.
+  // TODO(b/279955398): Support opentelemtry::trace::SpanContext when
+  // OpenTelemtry tracing is properly set up.
+  ConsentedDebuggingLogger(const ContextMap& context_map,
+                           absl::string_view server_debug_token);
   virtual ~ConsentedDebuggingLogger() = default;
 
   bool IsConsented() const { return is_consented_; }
@@ -51,7 +55,6 @@ class ConsentedDebuggingLogger {
 
  private:
   std::string context_;
-  opentelemetry::trace::SpanContext span_context_;
   opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger_;
   // Debug token given by a consented client request.
   // A request with no consent should have no token.

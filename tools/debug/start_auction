@@ -44,7 +44,8 @@ export GRPC_DNS_RESOLVER=native
       "enableAdtechCodeLogging": false,
       "enableReportResultUrlGeneration": false,
       "enableReportWinUrlGeneration": false,
-      "buyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"}
+      "buyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"},
+      "protectedAppSignalsBuyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"}
     }' \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \

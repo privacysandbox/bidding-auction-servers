@@ -68,11 +68,15 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
   std::unique_ptr<CryptoClientWrapperInterface> crypto_client_;
+  // Stub to make GRPC calls to the bidding service.
+  std::unique_ptr<Bidding::Stub> stub_;
   // The BiddingAsyncClient is used to call Bidding Service to execute
   // AdTech's code in a secure privacy sandbox and generate the bids.
   // The bids received in response from the BiddingAsyncClient are returned
   // to the caller in the GetBid response.
   std::unique_ptr<BiddingAsyncClient> bidding_async_client_;
+  std::unique_ptr<ProtectedAppSignalsBiddingAsyncClient>
+      protected_app_signals_bidding_async_client_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

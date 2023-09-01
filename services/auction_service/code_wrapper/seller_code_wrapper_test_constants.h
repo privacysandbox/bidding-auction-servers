@@ -135,9 +135,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata) {
-      var ps_report_result_response = {
+    ps_signalsForWinner = ""
+    var ps_report_result_response = {
         reportResultUrl : "",
-        signalsForWinner : "",
         interactionReportingUrls : "",
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
@@ -170,7 +170,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         ps_report_result_response.interactionReportingUrls=eventUrlMap;
         ps_report_result_response.registerAdBeaconInvoked = true;
       }
-      ps_report_result_response.signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+      ps_signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
       try{
       if(buyerReportingMetadata.enableReportWinUrlGeneration){
         var buyerOrigin = buyerReportingMetadata.buyerOrigin
@@ -183,8 +183,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         buyerReportingSignals.recency = buyerReportingMetadata.recency
         buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
-        signalsForWinner = ps_report_result_response.signalsForWinner
-        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,"+
+        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
                               "directFromSellerSignals, enable_logging)"
         var reportWinResponse = eval(reportWinFunction)
         return {
@@ -337,9 +336,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata) {
-      var ps_report_result_response = {
+    ps_signalsForWinner = ""
+    var ps_report_result_response = {
         reportResultUrl : "",
-        signalsForWinner : "",
         interactionReportingUrls : "",
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
@@ -372,7 +371,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         ps_report_result_response.interactionReportingUrls=eventUrlMap;
         ps_report_result_response.registerAdBeaconInvoked = true;
       }
-      ps_report_result_response.signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+      ps_signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
       try{
       if(buyerReportingMetadata.enableReportWinUrlGeneration){
         var buyerOrigin = buyerReportingMetadata.buyerOrigin
@@ -385,8 +384,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         buyerReportingSignals.recency = buyerReportingMetadata.recency
         buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
-        signalsForWinner = ps_report_result_response.signalsForWinner
-        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,"+
+        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
                               "directFromSellerSignals, enable_logging)"
         var reportWinResponse = eval(reportWinFunction)
         return {

@@ -42,12 +42,18 @@ std::string LogHeader(
 
 }  // namespace
 
+bool MaybeAddConsentedDebugConfig(const ConsentedDebugConfiguration& config,
+                                  ContextLogger::ContextMap& context_map) {
+  if (!config.is_consented()) return false;
+  absl::string_view token = config.token();
+  if (token.empty()) return false;
+  context_map[kToken] = std::string(token);
+  return true;
+}
+
 ConsentedDebuggingLogger::ConsentedDebuggingLogger(
-    const ContextMap& context_map,
-    const opentelemetry::trace::SpanContext& span_context,
-    absl::string_view server_debug_token)
+    const ContextMap& context_map, absl::string_view server_debug_token)
     : context_(FormatContext(context_map)),
-      span_context_(span_context),
       logger_(opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger(
           "default")) {
   if (auto iter = context_map.find(kToken);
@@ -69,7 +75,7 @@ void ConsentedDebuggingLogger::vlog(
   logger_->EmitLogRecord(
       // TODO(b/279955398): Support more than one severities.
       opentelemetry::logs::Severity::kInfo,
-      absl::StrCat(LogHeader(verbosity_with_source_loc), msg), span_context_,
+      absl::StrCat(LogHeader(verbosity_with_source_loc), msg),
       opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
 }
 

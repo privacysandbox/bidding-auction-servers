@@ -23,6 +23,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr char kTestToken[] = "test";
+constexpr char kMismatchedToken[] = "test2";
+
 TEST(ConsentedDebuggingLoggerTest, FormatContextWithEmptyString) {
   EXPECT_EQ(FormatContext({}), "");
 }
@@ -33,49 +36,61 @@ TEST(ConsentedDebuggingLoggerTest, FormatContextWithConsentedDebugConfig) {
 }
 
 TEST(ConsentedDebuggingLoggerTest, NotConsented_NoToken) {
-  auto span_context = opentelemetry::trace::SpanContext(/*sampled_flag=*/false,
-                                                        /*is_remote=*/false);
-  EXPECT_FALSE(ConsentedDebuggingLogger({}, span_context, /*server_token=*/"")
+  EXPECT_FALSE(ConsentedDebuggingLogger({}, /*server_token=*/"").IsConsented());
+  EXPECT_FALSE(ConsentedDebuggingLogger({}, /*server_token=*/"").IsConsented());
+  EXPECT_FALSE(ConsentedDebuggingLogger({}, kTestToken).IsConsented());
+  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, ""}},
+                                        /*server_token=*/"")
                    .IsConsented());
-  EXPECT_FALSE(ConsentedDebuggingLogger({}, span_context, /*server_token=*/"")
+  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, ""}},
+                                        /*server_token=*/"")
                    .IsConsented());
   EXPECT_FALSE(
-      ConsentedDebuggingLogger({}, span_context, "test").IsConsented());
-  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, ""}}, span_context,
-                                        /*server_token=*/"")
-                   .IsConsented());
-  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, ""}}, span_context,
-                                        /*server_token=*/"")
-                   .IsConsented());
-  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, ""}}, span_context, "test")
-                   .IsConsented());
-  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, "test"}}, span_context,
+      ConsentedDebuggingLogger({{kToken, ""}}, kTestToken).IsConsented());
+  EXPECT_FALSE(ConsentedDebuggingLogger({{kToken, kTestToken}},
                                         /*server_token=*/"")
                    .IsConsented());
 }
 
 TEST(ConsentedDebuggingLoggerTest, NotConsented_Mismatch) {
-  auto span_context = opentelemetry::trace::SpanContext(/*sampled_flag=*/false,
-                                                        /*is_remote=*/false);
   EXPECT_FALSE(
-      ConsentedDebuggingLogger({{kToken, "test"}}, span_context, "test2")
+      ConsentedDebuggingLogger({{kToken, kTestToken}}, kMismatchedToken)
           .IsConsented());
 }
 
 TEST(ConsentedDebuggingLoggerTest, Consented) {
-  auto span_context = opentelemetry::trace::SpanContext(/*sampled_flag=*/false,
-                                                        /*is_remote=*/false);
-  EXPECT_TRUE(ConsentedDebuggingLogger({{kToken, "test"}}, span_context, "test")
+  EXPECT_TRUE(ConsentedDebuggingLogger({{kToken, kTestToken}}, kTestToken)
                   .IsConsented());
 }
 
 TEST(ConsentedDebuggingLoggerTest, SimpleLog) {
-  auto span_context = opentelemetry::trace::SpanContext(/*sampled_flag=*/false,
-                                                        /*is_remote=*/false);
-  auto logger =
-      ConsentedDebuggingLogger({{kToken, "test"}}, span_context, "test");
+  auto logger = ConsentedDebuggingLogger({{kToken, kTestToken}}, kTestToken);
   logger.vlog(0, "hello world");
   EXPECT_TRUE(logger.IsConsented());
+}
+
+TEST(ConsentedDebuggingLoggerTest, DoNotAddConsentedDebugConfigToContext) {
+  ContextLogger::ContextMap map = {};
+  ConsentedDebugConfiguration config;
+  EXPECT_FALSE(MaybeAddConsentedDebugConfig(config, map));
+
+  config.set_is_consented(true);
+  EXPECT_FALSE(MaybeAddConsentedDebugConfig(config, map));
+
+  config.set_is_consented(false);
+  config.set_token(kTestToken);
+  EXPECT_FALSE(MaybeAddConsentedDebugConfig(config, map));
+  EXPECT_FALSE(MaybeAddConsentedDebugConfig(config, map));
+}
+
+TEST(ConsentedDebuggingLoggerTest, AddConsentedDebugConfigToContext) {
+  ContextLogger::ContextMap map = {};
+  ConsentedDebugConfiguration config;
+  config.set_is_consented(true);
+  config.set_token(kTestToken);
+  ContextLogger::ContextMap expected_map = {{kToken, kTestToken}};
+  EXPECT_TRUE(MaybeAddConsentedDebugConfig(config, map));
+  EXPECT_EQ(map, expected_map);
 }
 
 // TODO(b/279955398): Add a test for the output of vlog().

@@ -32,6 +32,7 @@ export GRPC_DNS_RESOLVER=native
 --buyer_kv_server_addr="https://googleads.g.doubleclick.net/td/bts" \
 --enable_buyer_frontend_benchmarking="true" \
 --generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
+--protected_app_signals_generate_bid_timeout_ms=60000 \
 --create_new_event_engine="false" \
 --enable_encryption="true" \
 --test_mode="true" \

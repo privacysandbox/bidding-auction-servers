@@ -18,6 +18,7 @@ build:clang --client_env=CC=clang
 build:clang --cxxopt=-std=c++17
 build:clang --host_cxxopt=-std=c++17
 build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
+build:clang --linkopt=-rdynamic
 
 test --test_verbose_timeout_warnings
 

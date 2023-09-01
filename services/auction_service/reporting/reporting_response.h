@@ -23,7 +23,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Response received from execution of reportResult() in Roma.
 struct ReportResultResponse {
   std::string report_result_url;
-  std::string signals_for_winner;
   absl::flat_hash_map<std::string, std::string> interaction_reporting_urls;
   bool send_report_to_invoked;
   bool register_ad_beacon_invoked;

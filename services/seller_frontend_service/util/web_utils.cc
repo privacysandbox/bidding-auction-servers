@@ -40,6 +40,8 @@ using BiddingGroupMap =
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using ErrorHandler = const std::function<void(absl::string_view)>&;
 using RepeatedStringProto = ::google::protobuf::RepeatedPtrField<std::string>;
+using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
+using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 
 // Array for mapping from the CBOR data type enum (a number) to a concrete data
 // type. Used for returning helpful error messages when clients incorrectly
@@ -886,17 +888,15 @@ absl::Status CborSerializeReportingUrls(
   }
   ScopedCbor serialized_reporting_urls(
       cbor_new_definite_map(kNumReportingUrlsKeys));
-
+  if (!reporting_urls.reporting_url().empty()) {
+    PS_RETURN_IF_ERROR(AddKVToMap(kReportingUrl, reporting_urls.reporting_url(),
+                                  error_handler, **serialized_reporting_urls));
+  }
   if (!reporting_urls.interaction_reporting_urls().empty()) {
     PS_RETURN_IF_ERROR(CborSerializeInteractionReportingUrls(
         reporting_urls.interaction_reporting_urls(), error_handler,
         **serialized_reporting_urls));
   }
-  if (!reporting_urls.reporting_url().empty()) {
-    PS_RETURN_IF_ERROR(AddKVToMap(kReportingUrl, reporting_urls.reporting_url(),
-                                  error_handler, **serialized_reporting_urls));
-  }
-
   struct cbor_pair serialized_reporting_urls_kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *serialized_reporting_urls,
@@ -913,14 +913,8 @@ absl::Status CborSerializeReportingUrls(
 absl::Status CborSerializeWinReportingUrls(
     const WinReportingUrls& win_reporting_urls, ErrorHandler error_handler,
     cbor_item_t& root) {
-  int key_count = 0;
-  if (win_reporting_urls.has_buyer_reporting_urls()) {
-    key_count++;
-  }
-  if (win_reporting_urls.has_component_seller_reporting_urls()) {
-    key_count++;
-  }
-  if (key_count == 0) {
+  if (!win_reporting_urls.has_buyer_reporting_urls() &&
+      !win_reporting_urls.has_top_level_seller_reporting_urls()) {
     return absl::OkStatus();
   }
   ScopedCbor serialized_win_reporting_urls(
@@ -930,10 +924,10 @@ absl::Status CborSerializeWinReportingUrls(
         kBuyerReportingUrls, win_reporting_urls.buyer_reporting_urls(),
         error_handler, **serialized_win_reporting_urls));
   }
-  if (win_reporting_urls.has_component_seller_reporting_urls()) {
+  if (win_reporting_urls.has_top_level_seller_reporting_urls()) {
     PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
-        kComponentSellerReportingUrls,
-        win_reporting_urls.component_seller_reporting_urls(), error_handler,
+        kTopLevelSellerReportingUrls,
+        win_reporting_urls.top_level_seller_reporting_urls(), error_handler,
         **serialized_win_reporting_urls));
   }
   struct cbor_pair serialized_win_reporting_urls_kv = {

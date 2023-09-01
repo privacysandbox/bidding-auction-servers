@@ -222,6 +222,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:signal_handler",
         "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",

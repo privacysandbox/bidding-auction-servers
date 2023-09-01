@@ -399,10 +399,10 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
                 ->mutable_buyer_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
-          // kComponentSellerReportingUrls
-          case 1:
+          // kTopLevelSellerReportingUrls
+          case 2:
             auction_result.mutable_win_reporting_urls()
-                ->mutable_component_seller_reporting_urls()
+                ->mutable_top_level_seller_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
         }
@@ -418,18 +418,17 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
         for (const auto& [event, url] : interaction_url_map.value()) {
           switch (FindKeyIndex<kNumWinReportingUrlsKeys>(kWinReportingKeys,
                                                          outer_key)) {
-            case 0:
+            case 0:  // winReportingURLs
               auction_result.mutable_win_reporting_urls()
                   ->mutable_buyer_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
               break;
-            case 1:
+            case 2:  // topLevelSellerReportingURLs
               auction_result.mutable_win_reporting_urls()
-                  ->mutable_component_seller_reporting_urls()
+                  ->mutable_top_level_seller_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
-
               break;
           }
         }

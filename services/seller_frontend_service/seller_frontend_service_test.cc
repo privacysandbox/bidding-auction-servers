@@ -80,6 +80,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", SCORE_ADS_RPC_TIMEOUT_MS);
     config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
