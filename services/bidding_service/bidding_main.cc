@@ -47,6 +47,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/status_macros.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
@@ -297,6 +298,7 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
   google::InitGoogleLogging(argv[0]);
 

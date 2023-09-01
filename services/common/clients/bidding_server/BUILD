@@ -41,7 +41,7 @@ cc_test(
     ],
     deps = [
         ":async_client",
-        "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",
+        "//services/common/clients/async_grpc:bidding_async_grpc_client_integration_test_utils",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "@com_github_grpc_grpc//:grpc++",

@@ -107,6 +107,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         std::move(context));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
         .WillRepeatedly(Return(GetPrivateKey()));

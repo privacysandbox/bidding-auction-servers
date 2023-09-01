@@ -16,6 +16,7 @@
 #define SERVICES_COMMON_METRIC_SERVER_DEFINITION_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "services/common/metric/context_map.h"
@@ -28,6 +29,8 @@ namespace metric {
 
 inline constexpr server_common::metric::PrivacyBudget server_total_budget{
     /*epsilon*/ 5};
+
+inline constexpr double kPercentHistogram[] = {0.06, 0.12, 0.25, 0.5, 1};
 
 inline constexpr absl::string_view kAs = "AS";
 inline constexpr absl::string_view kBs = "BS";
@@ -117,6 +120,14 @@ inline constexpr server_common::metric::Definition<
         "business_logic.bidding.zero_bid.count",
         "Total number of times bidding service returns a zero bid");
 
+inline constexpr server_common::metric::Definition<
+    double, server_common::metric::Privacy::kNonImpacting,
+    server_common::metric::Instrument::kHistogram>
+    kBiddingZeroBidPercent(
+        "business_logic.bidding.zero_bid.percent",
+        "Percentage of times bidding service returns a zero bid",
+        kPercentHistogram);
+
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
     kRejectionReasonBlockedByPublisher,
@@ -138,6 +149,14 @@ inline constexpr server_common::metric::Definition<
         "seller rejection reason",
         /*partition_type*/ "seller_rejection_reason",
         /*public_partitions*/ kSellerRejectReasons);
+
+inline constexpr server_common::metric::Definition<
+    double, server_common::metric::Privacy::kNonImpacting,
+    server_common::metric::Instrument::kHistogram>
+    kAuctionBidRejectedPercent(
+        /*name*/ "business_logic.auction.bid_rejected.percent",
+        /*description*/
+        "Percentage of times auction service rejects a bid", kPercentHistogram);
 
 inline constexpr server_common::metric::Definition<
     int, server_common::metric::Privacy::kNonImpacting,
@@ -164,6 +183,7 @@ inline constexpr const server_common::metric::DefinitionName*
         &server_common::metric::kResponseByte,
         &kBiddingTotalBidsCount,
         &kBiddingZeroBidCount,
+        &kBiddingZeroBidPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
 };
@@ -252,6 +272,7 @@ inline constexpr const server_common::metric::DefinitionName*
         &server_common::metric::kResponseByte,
         &kAuctionTotalBidsCount,
         &kAuctionBidRejectedCount,
+        &kAuctionBidRejectedPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
 };
@@ -278,6 +299,90 @@ inline void LogIfError(const absl::Status& s,
           .AtLocation(location.file_name(), location.line())
       << message << ": " << s;
 }
+
+// ToDo(b/298399657): Move utility function, class to another file
+namespace metric {
+
+// InitiatedRequest contains info about a remote request sent to another server,
+// logs metrics at destruction
+template <typename ContextT>
+class InitiatedRequest {
+ public:
+  static std::unique_ptr<InitiatedRequest<ContextT>> Get(
+      absl::string_view request_destination, ContextT* context,
+      int request_size) {
+    return absl::WrapUnique(
+        new InitiatedRequest(request_destination, context, request_size));
+  }
+
+  ~InitiatedRequest() { LogMetrics(); }
+
+ private:
+  InitiatedRequest(absl::string_view request_destination, ContextT* context,
+                   int request_size)
+      : destination_(request_destination),
+        start_(absl::Now()),
+        metric_context_(*context),
+        request_size_(request_size) {}
+
+  void LogMetrics() {
+    int initiated_request_ms = (absl::Now() - start_) / absl::Milliseconds(1);
+    LogIfError(metric_context_.template AccumulateMetric<
+               server_common::metric::kInitiatedRequestCount>(1));
+    LogIfError(
+        metric_context_
+            .template AccumulateMetric<metric::kInitiatedRequestCountByServer>(
+                1, destination_));
+    LogIfError(metric_context_.template AccumulateMetric<
+               server_common::metric::kInitiatedRequestTotalDuration>(
+        initiated_request_ms));
+    LogIfError(metric_context_.template LogHistogram<
+               server_common::metric::kInitiatedRequestByte>(request_size_));
+
+    if (destination_ == metric::kKv) {
+      if constexpr (std::is_same_v<ContextT, SfeContext> ||
+                    std::is_same_v<ContextT, BfeContext>) {
+        LogOneServer<metric::kInitiatedRequestKVDuration,
+                     metric::kInitiatedRequestKVSize>(initiated_request_ms);
+      }
+    } else if (destination_ == metric::kBs) {
+      if constexpr (std::is_same_v<ContextT, BfeContext>) {
+        LogOneServer<metric::kInitiatedRequestBiddingDuration,
+                     metric::kInitiatedRequestBiddingSize>(
+            initiated_request_ms);
+      }
+    } else if (destination_ == metric::kAs) {
+      if constexpr (std::is_same_v<ContextT, SfeContext>) {
+        LogOneServer<metric::kInitiatedRequestAuctionDuration,
+                     metric::kInitiatedRequestAuctionSize>(
+            initiated_request_ms);
+      }
+    }
+  }
+
+  template <const auto& DurationMetric, const auto& SizeMetric>
+  void LogOneServer(int initiated_request_ms) {
+    LogIfError(metric_context_.template LogHistogram<DurationMetric>(
+        initiated_request_ms));
+    LogIfError(
+        metric_context_.template LogHistogram<SizeMetric>(request_size_));
+  }
+
+  std::string destination_;
+  absl::Time start_;
+  ContextT& metric_context_;
+  int request_size_;
+};
+
+template <typename ContextT>
+std::unique_ptr<InitiatedRequest<ContextT>> MakeInitiatedRequest(
+    absl::string_view request_destination, ContextT* context,
+    int request_size) {
+  return InitiatedRequest<ContextT>::Get(request_destination, context,
+                                         request_size);
+}
+
+}  // namespace metric
 
 template <typename T>
 inline void AddSystemMetric(T* context_map) {

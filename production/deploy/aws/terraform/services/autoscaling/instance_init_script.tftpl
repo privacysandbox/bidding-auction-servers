@@ -42,8 +42,8 @@ sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl \
 -c /opt/privacysandbox/otel_collector_config.yaml \
 -a start
 
+# `${debug_mode}` must always be the last input/part of the run-enclave command.
 nitro-cli run-enclave \
 --cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
 --eif-path /opt/privacysandbox/server_enclave_image.eif \
---enclave-cid 16 --attach-console ${debug_mode} \
- > output.log
+--enclave-cid 16 ${debug_mode}

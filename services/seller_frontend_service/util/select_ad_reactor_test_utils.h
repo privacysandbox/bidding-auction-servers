@@ -35,6 +35,7 @@
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
+#include "services/seller_frontend_service/util/web_utils.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -57,6 +58,13 @@ constexpr float kNonZeroBidValue = 1.0;
 constexpr float kZeroBidValue = 0.0;
 constexpr int kNumAdComponentRenderUrl = 1;
 constexpr int kNonZeroDesirability = 1;
+constexpr bool kIsConsentedDebug = true;
+constexpr absl::string_view kConsentedDebugToken = "test";
+inline constexpr char kTestEvent[] = "click";
+inline constexpr char kTestInteractionUrl[] = "http://click.com";
+inline constexpr char kTestTopLevelSellerReportingUrl[] =
+    "http://reportResult.com";
+inline constexpr char kTestBuyerReportingUrl[] = "http://reportWin.com";
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -162,7 +170,7 @@ GetProtoEncodedEncryptedInputAndOhttpContext(const T& protected_auction_input) {
 template <typename T>
 EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
     SelectAdRequest::ClientType client_type,
-    absl::string_view seller_origin_domain) {
+    absl::string_view seller_origin_domain, bool is_consented_debug = false) {
   BuyerInput buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
@@ -188,6 +196,13 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   SelectAdRequest request;
   T protected_auction_input;
   protected_auction_input.set_generation_id(kSampleGenerationId);
+  if (is_consented_debug) {
+    auto* consented_debug_config =
+        protected_auction_input.mutable_consented_debug_config();
+    consented_debug_config->set_is_consented(kIsConsentedDebug);
+    consented_debug_config->set_token(kConsentedDebugToken);
+  }
+
   *protected_auction_input.mutable_buyer_input() =
       std::move(encoded_buyer_inputs);
   request.mutable_auction_config()->set_seller_signals(
@@ -203,20 +218,34 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   request.mutable_auction_config()->set_seller(seller_origin_domain);
   request.set_client_type(client_type);
 
+  const auto* descriptor = protected_auction_input.GetDescriptor();
+  const bool is_protected_auction_input =
+      descriptor->name() == kProtectedAuctionInput;
+
   switch (client_type) {
     case SelectAdRequest::ANDROID: {
       auto [encrypted_request, context] =
           GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-      *request.mutable_protected_audience_ciphertext() =
-          std::move(encrypted_request);
+      if (is_protected_auction_input) {
+        *request.mutable_protected_auction_ciphertext() =
+            std::move(encrypted_request);
+      } else {
+        *request.mutable_protected_audience_ciphertext() =
+            std::move(encrypted_request);
+      }
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
     case SelectAdRequest::BROWSER: {
       auto [encrypted_request, context] =
           GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-      *request.mutable_protected_audience_ciphertext() =
-          std::move(encrypted_request);
+      if (is_protected_auction_input) {
+        *request.mutable_protected_auction_ciphertext() =
+            std::move(encrypted_request);
+      } else {
+        *request.mutable_protected_audience_ciphertext() =
+            std::move(encrypted_request);
+      }
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
@@ -278,8 +307,22 @@ GetSelectAdRequestAndClientRegistryForTest(
               score->set_buyer_bid(bid_value);
               score->set_interest_group_name(bid.interest_group_name());
               score->set_interest_group_owner(kSampleBuyer);
+              score->mutable_win_reporting_urls()
+                  ->mutable_top_level_seller_reporting_urls()
+                  ->set_reporting_url(kTestTopLevelSellerReportingUrl);
+              score->mutable_win_reporting_urls()
+                  ->mutable_top_level_seller_reporting_urls()
+                  ->mutable_interaction_reporting_urls()
+                  ->try_emplace(kTestEvent, kTestInteractionUrl);
+              score->mutable_win_reporting_urls()
+                  ->mutable_buyer_reporting_urls()
+                  ->set_reporting_url(kTestBuyerReportingUrl);
+              score->mutable_win_reporting_urls()
+                  ->mutable_buyer_reporting_urls()
+                  ->mutable_interaction_reporting_urls()
+                  ->try_emplace(kTestEvent, kTestInteractionUrl);
               if (client_type == SelectAdRequest::ANDROID) {
-                score->set_ad_type(AdType::PROTECTED_AUDIENCE_AD);
+                score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }
               std::move(on_done)(std::move(response));
               // Expect only one bid.

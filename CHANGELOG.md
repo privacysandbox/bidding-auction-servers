@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 1.2.0 (2023-09-01)
+
+
+### Features
+
+* Add code blob flags for bidding/auction
+* Log plaintext GetBidsRawRequest in BFE
+* PAS support in SFE
+* Propagate consented debug config from BFE to Bidding
+* Propagate consented debug config from SFE to BFE & Auction
+
+
+### Bug Fixes
+
+* [reporting] Change the order of cbor encoding for win reporting urls in the response.
+* [reporting] Populate win reporting urls for seller in top_level_seller_reporting_urls instead of component_seller_reporting_urls
+* [reporting] Remove unnecessary signalsForWinner in the response from reporting wrapper function
+* Disable enableSellerDebugUrlGeneration flag by default
+
 ## 1.1.0 (2023-08-25)
 
 

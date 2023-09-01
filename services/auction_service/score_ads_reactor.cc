@@ -692,8 +692,10 @@ void ScoreAdsReactor::ScoreAdsCallback(
       ad_rejection_reasons;
 
   std::optional<ScoreAdsResponse::AdScore> winning_ad;
+  int total_bid_count = static_cast<int>(responses.size());
+  int seller_rejected_bid_count = 0;
   LogIfError(metric_context_->AccumulateMetric<metric::kAuctionTotalBidsCount>(
-      static_cast<int>(responses.size())));
+      total_bid_count));
   for (int index = 0; index < responses.size(); index++) {
     if (responses[index].ok()) {
       absl::StatusOr<rapidjson::Document> response_json =
@@ -714,7 +716,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
         score_ads_response.set_interest_group_name(ad->interest_group_name());
         score_ads_response.set_interest_group_owner(ad->interest_group_owner());
         score_ads_response.set_buyer_bid(ad->bid());
-        score_ads_response.set_ad_type(AdType::PROTECTED_AUDIENCE_AD);
+        score_ads_response.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
         // >= ensures that in the edge case where the most desirable ad's
         // desirability is float.min_val, it is still selected.
         if (score_ads_response.desirability() >=
@@ -732,6 +734,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
                                    ad->interest_group_name(), logger_);
         if (ad_rejection_reason.has_value()) {
           ad_rejection_reasons.push_back(ad_rejection_reason.value());
+          seller_rejected_bid_count += 1;
           LogIfError(
               metric_context_
                   ->AccumulateMetric<metric::kAuctionBidRejectedCount>(
@@ -749,6 +752,8 @@ void ScoreAdsReactor::ScoreAdsCallback(
                        absl::StatusToStringMode::kWithEverything));
     }
   }
+  LogIfError(metric_context_->LogHistogram<metric::kAuctionBidRejectedPercent>(
+      (static_cast<double>(seller_rejected_bid_count)) / total_bid_count));
   // An Ad won.
   if (winning_ad.has_value()) {
     // Set the overall response for the winning winning_ad_with_bid.
@@ -836,7 +841,7 @@ void ScoreAdsReactor::ReportingCallback(
       }
       raw_response_.mutable_ad_score()
           ->mutable_win_reporting_urls()
-          ->mutable_component_seller_reporting_urls()
+          ->mutable_top_level_seller_reporting_urls()
           ->set_reporting_url(reporting_response.value()
                                   .report_result_response.report_result_url);
       raw_response_.mutable_ad_score()
@@ -850,7 +855,7 @@ void ScoreAdsReactor::ReportingCallback(
                .report_result_response.interaction_reporting_urls) {
         raw_response_.mutable_ad_score()
             ->mutable_win_reporting_urls()
-            ->mutable_component_seller_reporting_urls()
+            ->mutable_top_level_seller_reporting_urls()
             ->mutable_interaction_reporting_urls()
             ->try_emplace(event, interactionReportingUrl);
       }

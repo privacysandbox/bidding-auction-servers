@@ -33,6 +33,9 @@ using ReportErrorSignature = std::function<void(
     ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code)>;
 
+using ProtectedAppSignalsAdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
+
 namespace {
 
 template <typename T>
@@ -82,6 +85,32 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     auction_result.set_interest_group_name(high_score->interest_group_name());
     auction_result.set_interest_group_owner(high_score->interest_group_owner());
     auction_result.set_ad_render_url(high_score->render());
+    auction_result.mutable_win_reporting_urls()
+        ->mutable_buyer_reporting_urls()
+        ->set_reporting_url(high_score->win_reporting_urls()
+                                .buyer_reporting_urls()
+                                .reporting_url());
+    for (auto& [event, url] : high_score->win_reporting_urls()
+                                  .buyer_reporting_urls()
+                                  .interaction_reporting_urls()) {
+      auction_result.mutable_win_reporting_urls()
+          ->mutable_buyer_reporting_urls()
+          ->mutable_interaction_reporting_urls()
+          ->try_emplace(event, url);
+    }
+    auction_result.mutable_win_reporting_urls()
+        ->mutable_top_level_seller_reporting_urls()
+        ->set_reporting_url(high_score->win_reporting_urls()
+                                .top_level_seller_reporting_urls()
+                                .reporting_url());
+    for (auto& [event, url] : high_score->win_reporting_urls()
+                                  .top_level_seller_reporting_urls()
+                                  .interaction_reporting_urls()) {
+      auction_result.mutable_win_reporting_urls()
+          ->mutable_top_level_seller_reporting_urls()
+          ->mutable_interaction_reporting_urls()
+          ->try_emplace(event, url);
+    }
     *auction_result.mutable_bidding_groups() = std::move(bidding_group_map);
     *auction_result.mutable_ad_component_render_urls() =
         high_score->component_renders();
@@ -152,6 +181,85 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
   }
 
   return decoded_buyer_inputs;
+}
+
+void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
+    GetBidsRequest::GetBidsRawRequest* get_bids_raw_request) {
+  if (!is_pas_enabled_) {
+    VLOG(8) << "Protected app signals is not enabled and hence not populating "
+               "PAS buyer input";
+    // We don't want to forward the protected signals when feature is disabled,
+    // even when if client sent them erroneously.
+    get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+    return;
+  }
+
+  if (!get_bids_raw_request->buyer_input().has_protected_app_signals()) {
+    VLOG(8) << "No protected app signals in buyer inputs from client";
+    return;
+  }
+
+  VLOG(3) << "Found protected signals in buyer input, passing them to get bids";
+  auto* protected_app_signals_buyer_input =
+      get_bids_raw_request->mutable_protected_app_signals_buyer_input();
+  protected_app_signals_buyer_input->mutable_protected_app_signals()->Swap(
+      get_bids_raw_request->mutable_buyer_input()
+          ->mutable_protected_app_signals());
+  get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+}
+
+std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+SelectAdReactorForApp::CreateGetBidsRequest(absl::string_view seller,
+                                            const std::string& buyer_ig_owner,
+                                            const BuyerInput& buyer_input) {
+  auto request = SelectAdReactor::CreateGetBidsRequest(seller, buyer_ig_owner,
+                                                       buyer_input);
+  MayPopulateProtectedAppSignalsBuyerInput(request.get());
+  return request;
+}
+
+std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+SelectAdReactorForApp::CreateScoreAdsRequest() {
+  auto request = SelectAdReactor::CreateScoreAdsRequest();
+  MayPopulateProtectedAppSignalsBids(request.get());
+  return request;
+}
+
+ProtectedAppSignalsAdWithBidMetadata
+SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
+    absl::string_view buyer, const ProtectedAppSignalsAdWithBid& input) {
+  ProtectedAppSignalsAdWithBidMetadata result;
+  if (input.has_ad()) {
+    *result.mutable_ad() = input.ad();
+  }
+  result.set_bid(input.bid());
+  result.set_render(input.render());
+  result.set_modeling_signals(input.modeling_signals());
+  result.set_ad_cost(input.ad_cost());
+  result.set_egress_features(input.egress_features());
+  result.set_owner(buyer);
+  return result;
+}
+
+void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
+    ScoreAdsRequest::ScoreAdsRawRequest* score_ads_raw_request) {
+  if (!is_pas_enabled_) {
+    VLOG(8) << "Protected app signals is not enabled and hence not populating "
+               "PAS bids";
+    return;
+  }
+
+  VLOG(3) << "Protected App signals, may add protected app signals bids to "
+             "score ads request";
+  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
+    for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
+         i++) {
+      auto ad_with_bid_metadata = BuildProtectedAppSignalsAdWithBidMetadata(
+          buyer, get_bid_response->protected_app_signals_bids().at(i));
+      score_ads_raw_request->mutable_protected_app_signals_ad_bids()->Add(
+          std::move(ad_with_bid_metadata));
+    }
+  }
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

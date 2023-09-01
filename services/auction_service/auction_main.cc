@@ -48,6 +48,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/status_macros.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
@@ -172,7 +173,8 @@ absl::Status RunServer() {
       config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).data(),
       &code_fetch_proto);
   CHECK(result.ok()) << "Could not parse SELLER_CODE_FETCH_CONFIG JsonString "
-                        "to a proto message.";
+                        "to a proto message: "
+                     << result;
 
   bool enable_seller_debug_url_generation =
       code_fetch_proto.enable_seller_debug_url_generation();
@@ -325,6 +327,7 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
   google::InitGoogleLogging(argv[0]);
 

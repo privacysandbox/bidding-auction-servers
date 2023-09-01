@@ -533,11 +533,11 @@ TEST_F(AuctionServiceIntegrationTest,
   const auto& scoredAd = raw_response.ad_score();
   EXPECT_GT(scoredAd.desirability(), 0);
   EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             kTestReportResultUrl);
   EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionReportingUrl);
@@ -571,11 +571,11 @@ TEST_F(AuctionServiceIntegrationTest,
   const auto& scoredAd = raw_response.ad_score();
   EXPECT_GT(scoredAd.desirability(), 0);
   EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             kTestReportResultUrl);
   EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionReportingUrl);

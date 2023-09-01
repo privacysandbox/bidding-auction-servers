@@ -10,7 +10,7 @@
 //  distributed under the License is distributed on an "AS IS" BASIS,
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
-//  limitations under the License.
+//  limitations under the License
 #include "services/auction_service/reporting/reporting_helper.h"
 
 #include <memory>
@@ -41,8 +41,6 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   rapidjson::Value& response_obj = document[kReportResultResponse];
   reporting_response.report_result_response.report_result_url =
       response_obj[kReportResultUrl].GetString();
-  reporting_response.report_result_response.signals_for_winner =
-      response_obj[kSignalsForWinner].GetString();
   reporting_response.report_result_response.send_report_to_invoked =
       response_obj[kSendReportToInvoked].GetBool();
   reporting_response.report_result_response.register_ad_beacon_invoked =

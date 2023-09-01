@@ -78,7 +78,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
  private:
   // Process Outputs from Actions to prepare bidding request.
   // All Preload actions must have completed before this is invoked.
-  void PrepareAndGenerateBid(std::unique_ptr<BiddingSignals> bidding_signals);
+  void PrepareAndGenerateProtectedAudienceBid(
+      std::unique_ptr<BiddingSignals> bidding_signals);
 
   // Decrypts the request ciphertext in and returns whether decryption was
   // successful. If successful, the result is written into 'raw_request_'.
@@ -124,10 +125,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;
 
-  // Log metrics for the requests that were initiated by the server
-  void LogInitiatedRequestMetrics(int initiated_request_duration_ms,
-                                  const absl::string_view server_name,
-                                  int initiated_request_size);
+  // Gets Protected Audience Bids.
+  void GetProtectedAudienceBids();
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -70,13 +70,14 @@ module "seller" {
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
-    #     "enableSellerDebugUrlGeneration": true,
+    #     "enableSellerDebugUrlGeneration": false,
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": false,
     #     "enableReportWinUrlGeneration": false,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
     #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
-    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"}
+    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
+    #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
     JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
     JS_WORKER_QUEUE_LEN       = "" # Example: "200".

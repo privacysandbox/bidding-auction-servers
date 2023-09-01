@@ -176,13 +176,13 @@ message AndroidSignals {}
 // Specifies type of the ad. It can help differentiate between ads when
 // B&A is supporting multiple ad targeting use cases concurrently.
 enum AdType {
-  UNKNOWN = 0;
+  AD_TYPE_UNKNOWN = 0;
 
   // Remarketing ad.
-  PROTECTED_AUDIENCE_AD = 1;
+  AD_TYPE_PROTECTED_AUDIENCE_AD = 1;
 
   // An app install ad.
-  PROTECTED_APP_SIGNALS_AD = 2;
+  AD_TYPE_PROTECTED_APP_SIGNALS_AD = 2;
 }
 
 // Protected Audience auction result returned from SellerFrontEnd to the client

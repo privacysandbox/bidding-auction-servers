@@ -33,6 +33,14 @@ using BiddingAsyncClient =
                 GenerateBidsRequest::GenerateBidsRawRequest,
                 GenerateBidsResponse::GenerateBidsRawResponse>;
 
+using ProtectedAppSignalsBiddingAsyncClient =
+    AsyncClient<GenerateProtectedAppSignalsBidsRequest,
+                GenerateProtectedAppSignalsBidsResponse,
+                GenerateProtectedAppSignalsBidsRequest::
+                    GenerateProtectedAppSignalsBidsRawRequest,
+                GenerateProtectedAppSignalsBidsResponse::
+                    GenerateProtectedAppSignalsBidsRawResponse>;
+
 struct BiddingServiceClientConfig {
   std::string server_addr;
   bool compression = false;
@@ -50,7 +58,7 @@ class BiddingAsyncGrpcClient
   BiddingAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      const BiddingServiceClientConfig& client_config);
+      const BiddingServiceClientConfig& client_config, Bidding::Stub* stub);
 
  protected:
   // Sends an asynchronous request via grpc to the Bidding Service.
@@ -61,8 +69,39 @@ class BiddingAsyncGrpcClient
                RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
                                GenerateBidsResponse::GenerateBidsRawResponse>*
                    params) const override;
-  std::unique_ptr<Bidding::Stub> stub_;
+
+  Bidding::Stub* stub_;
 };
+
+class ProtectedAppSignalsBiddingAsyncGrpcClient
+    : public DefaultAsyncGrpcClient<
+          GenerateProtectedAppSignalsBidsRequest,
+          GenerateProtectedAppSignalsBidsResponse,
+          GenerateProtectedAppSignalsBidsRequest::
+              GenerateProtectedAppSignalsBidsRawRequest,
+          GenerateProtectedAppSignalsBidsResponse::
+              GenerateProtectedAppSignalsBidsRawResponse> {
+ public:
+  ProtectedAppSignalsBiddingAsyncGrpcClient(
+      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+      CryptoClientWrapperInterface* crypto_client,
+      const BiddingServiceClientConfig& client_config, Bidding::Stub* stub);
+
+ protected:
+  // Sends an asynchronous request via grpc to the Bidding Service.
+  //
+  // params: a pointer to the ClientParams object which carries data used
+  // by the grpc stub.
+  void SendRpc(const std::string& hpke_secret,
+               RawClientParams<GenerateProtectedAppSignalsBidsRequest,
+                               GenerateProtectedAppSignalsBidsResponse,
+                               GenerateProtectedAppSignalsBidsResponse::
+                                   GenerateProtectedAppSignalsBidsRawResponse>*
+                   params) const override;
+
+  Bidding::Stub* stub_;
+};
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // FLEDGE_SERVICES_COMMON_CLIENTS_BIDDING_ASYNC_CLIENT_H_

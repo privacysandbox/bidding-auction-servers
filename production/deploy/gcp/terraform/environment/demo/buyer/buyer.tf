@@ -49,14 +49,15 @@ module "buyer" {
     ENABLE_ENCRYPTION   = "true"           # Do not change unless you are testing without encryption.
     TEST_MODE           = "false"          # Do not change unless you are testing without key fetching.
 
-    ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
-    BUYER_KV_SERVER_ADDR               = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
-    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
-    ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
-    CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
-    ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
-    ENABLE_PROTECTED_APP_SIGNALS       = "" # Example: "false"
+    ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
+    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
+    PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
+    BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
+    ENABLE_BUYER_FRONTEND_BENCHMARKING            = "" # Example: "false"
+    CREATE_NEW_EVENT_ENGINE                       = "" # Example: "false"
+    ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
+    ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
@@ -64,10 +65,11 @@ module "buyer" {
     # "{
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
+    #    "protectedAppSignalsBiddingJsUrl": "placeholder",
     #    "biddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
-    #    "enableBuyerDebugUrlGeneration": true,
+    #    "enableBuyerDebugUrlGeneration": false,
     #    "enableAdtechCodeLogging": false,
     #  }"
     JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
