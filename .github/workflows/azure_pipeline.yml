@@ -2,7 +2,9 @@
 
 name: Build protected audience services for Azure
 
-on: [workflow_dispatch]
+on: 
+  workflow_dispatch:
+  pull_request:
 
 env:
   CONTAINER_REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
