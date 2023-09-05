@@ -675,6 +675,7 @@ TEST_F(ScoreAdsReactorTest,
   // Since in the above test we are assuming not component auctions, verify.
   EXPECT_FALSE(scored_ad.allow_component_auction());
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
+  EXPECT_EQ(scored_ad.ad_type(), AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
   VLOG(1) << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map()
                 .at(kInterestGroupOwnerOfBarBidder)
@@ -1015,16 +1016,16 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             kTestReportResultUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .size(),
             1);
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionUrl);
@@ -1108,16 +1109,16 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             kTestReportResultUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .size(),
             1);
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionUrl);
@@ -1209,11 +1210,11 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .reporting_url(),
             "");
   EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
+                .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .size(),
             0);

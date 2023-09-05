@@ -30,26 +30,25 @@ rapidjson::Document ParseRequestInputJson(absl::string_view json_contents) {
   CHECK(document.ok()) << document.status();
   CHECK((*document).HasMember(kAuctionConfigField))
       << "Input JSON must contain auction_config";
-  CHECK((*document).HasMember(kProtectedAudienceInputField))
-      << "Input JSON must contain raw_protected_audience_input";
-  CHECK((*document)[kProtectedAudienceInputField].IsObject())
-      << "raw_protected_audience_input must be an object";
+  CHECK((*document).HasMember(kProtectedAuctionInputField))
+      << "Input JSON must contain " << kProtectedAuctionInputField;
+  CHECK((*document)[kProtectedAuctionInputField].IsObject())
+      << kProtectedAuctionInputField << " must be an object";
   // If old buyer input field is present, replace with new field to prevent
-  // collision with field in ProtectedAudienceInput while parsing proto.
-  if (!(*document)[kProtectedAudienceInputField].HasMember(
+  // collision with field in ProtectedAuctionInput while parsing proto.
+  if (!(*document)[kProtectedAuctionInputField].HasMember(
           kBuyerInputMapField) &&
-      (*document)[kProtectedAudienceInputField].HasMember(
+      (*document)[kProtectedAuctionInputField].HasMember(
           kOldBuyerInputMapField)) {
     rapidjson::Value& buyer_map =
-        (*document)[kProtectedAudienceInputField][kOldBuyerInputMapField];
-    (*document)[kProtectedAudienceInputField].AddMember(
+        (*document)[kProtectedAuctionInputField][kOldBuyerInputMapField];
+    (*document)[kProtectedAuctionInputField].AddMember(
         kBuyerInputMapField, buyer_map, document->GetAllocator());
-    (*document)[kProtectedAudienceInputField].RemoveMember(
+    (*document)[kProtectedAuctionInputField].RemoveMember(
         kOldBuyerInputMapField);
   }
-  CHECK(
-      (*document)[kProtectedAudienceInputField].HasMember(kBuyerInputMapField))
-      << "raw_protected_audience_input must contain buyer input map";
+  CHECK((*document)[kProtectedAuctionInputField].HasMember(kBuyerInputMapField))
+      << kProtectedAuctionInputField << " must contain buyer input map";
   return std::move(document.value());
 }
 
@@ -79,34 +78,34 @@ SelectAdRequest::AuctionConfig GetAuctionConfig(
   return auction_config;
 }
 
-ProtectedAudienceInput GetProtectedAudienceInput(
+ProtectedAuctionInput GetProtectedAuctionInput(
     rapidjson::Document* input_json) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
-  rapidjson::Value& protected_audience_json =
-      (*input_json)[kProtectedAudienceInputField];
-  std::string protected_audience_json_str =
-      ValueToJson(&protected_audience_json);
+  rapidjson::Value& protected_auction_json =
+      (*input_json)[kProtectedAuctionInputField];
+  std::string protected_auction_json_str = ValueToJson(&protected_auction_json);
 
-  ProtectedAudienceInput protected_audience_input;
+  ProtectedAuctionInput protected_auction_input;
   google::protobuf::json::ParseOptions parse_options;
   parse_options.ignore_unknown_fields = true;
-  auto protected_audience_parse = google::protobuf::util::JsonStringToMessage(
-      protected_audience_json_str, &protected_audience_input, parse_options);
-  CHECK(protected_audience_parse.ok()) << protected_audience_parse;
-  return protected_audience_input;
+  auto protected_auction_input_parse =
+      google::protobuf::util::JsonStringToMessage(
+          protected_auction_json_str, &protected_auction_input, parse_options);
+  CHECK(protected_auction_input_parse.ok()) << protected_auction_input_parse;
+  return protected_auction_input;
 }
 
 google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
     rapidjson::Document* input_json) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
-  CHECK(input_json->HasMember(kProtectedAudienceInputField))
-      << "Input Must have field " << kProtectedAudienceInputField;
-  CHECK((*input_json)[kProtectedAudienceInputField].HasMember(
-      kBuyerInputMapField))
-      << "Input " << kProtectedAudienceInputField << " must have field "
+  CHECK(input_json->HasMember(kProtectedAuctionInputField))
+      << "Input Must have field " << kProtectedAuctionInputField;
+  CHECK(
+      (*input_json)[kProtectedAuctionInputField].HasMember(kBuyerInputMapField))
+      << "Input " << kProtectedAuctionInputField << " must have field "
       << kBuyerInputMapField;
   rapidjson::Value& buyer_map_json =
-      (*input_json)[kProtectedAudienceInputField][kBuyerInputMapField];
+      (*input_json)[kProtectedAuctionInputField][kBuyerInputMapField];
 
   absl::flat_hash_map<std::string, BuyerInput> buyer_input_map;
   for (auto& buyer_input : buyer_map_json.GetObject()) {
@@ -150,19 +149,19 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
   }
   CHECK(encoded_buyer_map.ok()) << encoded_buyer_map.status();
 
-  ProtectedAudienceInput protected_audience_input =
-      GetProtectedAudienceInput(&input_json);
+  ProtectedAuctionInput protected_auction_input =
+      GetProtectedAuctionInput(&input_json);
   // Set encoded BuyerInput.
-  protected_audience_input.mutable_buyer_input()->swap(*encoded_buyer_map);
-  // Package protected_audience_input.
+  protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
+  // Package protected_auction_input.
   auto pa_ciphertext_encryption_context_pair =
-      PackagePayload(protected_audience_input, client_type);
+      PackagePayload(protected_auction_input, client_type);
   CHECK(pa_ciphertext_encryption_context_pair.ok())
       << pa_ciphertext_encryption_context_pair.status();
   auto select_ad_request = std::make_unique<SelectAdRequest>();
   *(select_ad_request->mutable_auction_config()) =
       GetAuctionConfig(&input_json);
-  select_ad_request->set_protected_audience_ciphertext(
+  select_ad_request->set_protected_auction_ciphertext(
       pa_ciphertext_encryption_context_pair->first);
   select_ad_request->set_client_type(client_type);
   return {std::move(select_ad_request),

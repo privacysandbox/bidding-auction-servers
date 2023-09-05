@@ -22,17 +22,18 @@
 #include <string>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/util/error_accumulator.h"
+#include "services/common/util/request_response_constants.h"
+#include "services/common/util/scoped_cbor.h"
 
 #include "cbor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
-using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 
 // Client facing error messages.
 inline constexpr char kInvalidCborError[] =
@@ -66,7 +67,7 @@ inline constexpr char kCborTypeFloatControl[] = "float control";
 // Constants for fields returned to clients in error messages.
 inline constexpr char kUnknownDataType[] = "unknown";
 inline constexpr char kRootCborKey[] = "Root level CBOR key";
-inline constexpr char kProtectedAudienceInput[] = "ProtectedAudienceInput";
+inline constexpr char kProtectedAuctionInput[] = "ProtectedAuctionInput";
 inline constexpr char kBrowserSignalsKey[] = "browserSignals[x].key";
 inline constexpr char kBrowserSignalsBidCount[] = "browserSignals[x].bidCount";
 inline constexpr char kBrowserSignalsJoinCount[] =
@@ -87,8 +88,8 @@ inline constexpr char kIgBiddingSignalKeysEntry[] =
 inline constexpr char kBuyerInput[] = "BuyerInput";
 inline constexpr char kBuyerInputEntry[] = "BuyerInput[x]";
 inline constexpr char kBuyerInputKey[] = "BuyerInput[x].key";
-inline constexpr char kAdComponent[] = "interestGroups.adComponent";
-inline constexpr char kAdComponentEntry[] = "interestGroups.adComponent[x]";
+inline constexpr char kAdComponent[] = "interestGroups.component";
+inline constexpr char kAdComponentEntry[] = "interestGroups.component[x]";
 
 inline constexpr char kConsentedDebugConfigKey[] = "consentedDebugConfig.key";
 inline constexpr char kConsentedDebugConfigIsConsented[] =
@@ -119,6 +120,11 @@ inline constexpr auto kComparator = [](absl::string_view a,
   return a.size() < b.size();
 };
 
+#define RETURN_IF_PREV_ERRORS(error_accumulator, should_fail_fast, to_return) \
+  if (error_accumulator.HasErrors() && should_fail_fast) {                    \
+    return to_return;                                                         \
+  }
+
 // Encodes the data into a CBOR-serialized AuctionResult response.
 absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -127,12 +133,148 @@ absl::StatusOr<std::string> Encode(
     std::optional<AuctionResult::Error> error,
     const std::function<void(absl::string_view)>& error_handler);
 
+// Finds the provided string needle index in the haystack array.
+template <std::size_t Size>
+int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
+                  absl::string_view needle) {
+  auto it = std::find(haystack.begin(), haystack.end(), needle);
+  if (it == haystack.end()) {
+    return -1;
+  }
+
+  return std::distance(haystack.begin(), it);
+}
+
+// Helper to validate the type of a CBOR object.
+bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
+                 const cbor_item_t* item, absl::string_view field_name,
+                 absl::string_view expected_type,
+                 ErrorAccumulator& error_accumulator,
+                 SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG);
+
+// Reads a cbor item into a string. Caller must verify that the item is a string
+// before calling this method.
+std::string DecodeCborString(const cbor_item_t* item);
+
+// Decodes the key (i.e. owner) in the BuyerInputs in ProtectedAudienceInput
+// and copies the corresponding value (i.e. BuyerInput) as-is. Note: this method
+// doesn't decode the value.
+::google::protobuf::Map<std::string, std::string> DecodeBuyerInputKeys(
+    cbor_item_t& compressed_encoded_buyer_inputs,
+    ErrorAccumulator& error_accumulator, bool fail_fast = true);
+
+// Decodes consented debug config object.
+ConsentedDebugConfiguration DecodeConsentedDebugConfig(
+    const cbor_item_t* root, ErrorAccumulator& error_accumulator,
+    bool fail_fast);
+
+template <typename T>
+T DecodeProtectedAuctionInput(cbor_item_t* root,
+                              ErrorAccumulator& error_accumulator,
+                              bool fail_fast) {
+  T output;
+
+  IsTypeValid(&cbor_isa_map, root, kProtectedAuctionInput, kMap,
+              error_accumulator);
+  RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/true, output);
+
+  absl::Span<cbor_pair> entries(cbor_map_handle(root), cbor_map_size(root));
+  for (const cbor_pair& entry : entries) {
+    bool is_valid_key_type = IsTypeValid(
+        &cbor_isa_string, entry.key, kRootCborKey, kString, error_accumulator);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+    if (!is_valid_key_type) {
+      continue;
+    }
+
+    const int index =
+        FindItemIndex(kRequestRootKeys, DecodeCborString(entry.key));
+    switch (index) {
+      case 0: {  // Schema version.
+        bool is_valid_schema_type = IsTypeValid(
+            &cbor_is_int, entry.value, kVersion, kInt, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        // Only support version 0 schemas for now.
+        if (is_valid_schema_type && cbor_get_int(entry.value) != 0) {
+          const std::string error = absl::StrFormat(
+              kUnsupportedSchemaVersionError, cbor_get_int(entry.value));
+          error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
+                                        ErrorCode::CLIENT_SIDE);
+        }
+        break;
+      }
+      case 1: {  // Publisher.
+        bool is_valid_publisher_type =
+            IsTypeValid(&cbor_isa_string, entry.value, kPublisher, kString,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_publisher_type) {
+          output.set_publisher_name(DecodeCborString(entry.value));
+        }
+        break;
+      }
+      case 2: {  // Interest groups.
+        *output.mutable_buyer_input() =
+            DecodeBuyerInputKeys(*entry.value, error_accumulator, fail_fast);
+        break;
+      }
+      case 3: {  // Generation Id.
+        bool is_valid_gen_type =
+            IsTypeValid(&cbor_isa_string, entry.value, kGenerationId, kString,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_gen_type) {
+          output.set_generation_id(DecodeCborString(entry.value));
+        }
+        break;
+      }
+      case 4: {  // Enable Debug Reporting.
+        bool is_valid_debug_type =
+            IsTypeValid(&cbor_is_bool, entry.value, kDebugReporting, kString,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_debug_type) {
+          output.set_enable_debug_reporting(cbor_get_bool(entry.value));
+        }
+        break;
+      }
+      case 5: {  // Consented Debug Config.
+        *output.mutable_consented_debug_config() = DecodeConsentedDebugConfig(
+            entry.value, error_accumulator, fail_fast);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return output;
+}
+
 // Decodes CBOR-encoded ProtectedAudienceInput. Note that this method doesn't
 // decompress and decodes the BuyerInput values in the buyer input map. Any
 // errors are reported to `error_accumulator`.
-ProtectedAudienceInput Decode(absl::string_view cbor_payload,
-                              ErrorAccumulator& error_accumulator,
-                              bool fail_fast = true);
+template <typename T>
+T Decode(absl::string_view cbor_payload, ErrorAccumulator& error_accumulator,
+         bool fail_fast = true) {
+  T protected_auction_input;
+  cbor_load_result result;
+  ScopedCbor root(
+      cbor_load(reinterpret_cast<const unsigned char*>(cbor_payload.data()),
+                cbor_payload.size(), &result));
+  if (result.error.code != CBOR_ERR_NONE) {
+    error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE,
+                                  kInvalidCborError, ErrorCode::CLIENT_SIDE);
+    return protected_auction_input;
+  }
+
+  return DecodeProtectedAuctionInput<T>(*root, error_accumulator, fail_fast);
+}
 
 // Serializes the bidding groups (buyer origin => interest group indices map)
 // to CBOR. Note: this should not be used directly and is only here to

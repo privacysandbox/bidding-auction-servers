@@ -48,11 +48,12 @@ module "seller" {
   auction_autoscaling_min_size         = 1     # Example: 1
 
   runtime_flags = {
-    AUCTION_PORT         = "50051" # Do not change unless you are modifying the default GCP architecture.
-    SELLER_FRONTEND_PORT = "50051" # Do not change unless you are modifying the default GCP architecture.
-    SFE_INGRESS_TLS      = "false" # Do not change unless you are modifying the default GCP architecture.
-    BUYER_EGRESS_TLS     = "true"  # Do not change unless you are modifying the default GCP architecture.
-    AUCTION_EGRESS_TLS   = "true"  # Do not change unless you are modifying the default GCP architecture.
+    AUCTION_PORT         = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    SELLER_FRONTEND_PORT = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    SFE_INGRESS_TLS      = "false"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_EGRESS_TLS     = "true"           # Do not change unless you are modifying the default GCP architecture.
+    AUCTION_EGRESS_TLS   = "true"           # Do not change unless you are modifying the default GCP architecture.
+    COLLECTOR_ENDPOINT   = "127.0.0.1:4317" # Do not change unless you are modifying the default GCP architecture.
 
     ENABLE_AUCTION_SERVICE_BENCHMARK       = "" # Example: "false"
     GET_BID_RPC_TIMEOUT_MS                 = "" # Example: "60000"
@@ -65,6 +66,7 @@ module "seller" {
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
     ENABLE_ENCRYPTION                      = "" # Example: "true"
     TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
@@ -75,17 +77,18 @@ module "seller" {
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
-    #     "enableSellerDebugUrlGeneration": true,
+    #     "enableSellerDebugUrlGeneration": false,
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": false,
     #     "enableReportWinUrlGeneration": false,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
     #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
-    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"}
+    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
+    #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
+
     #  }"
     JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
-    JS_WORKER_MEM_MB    = "" # Example: "1536" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
     ROMA_TIMEOUT_MS     = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:scoreAd(), reportResult(), reportWin())
     # execution need to be exported as VLOG.

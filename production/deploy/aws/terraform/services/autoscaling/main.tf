@@ -37,7 +37,7 @@ resource "aws_launch_template" "instance_launch_template" {
       enclave_memory_mib = var.enclave_memory_mib,
       enclave_cpu_count  = var.enclave_cpu_count,
       service            = var.service,
-      debug_mode         = "${var.enclave_debug_mode ? "--debug-mode" : " "}"
+      debug_mode         = "${var.enclave_debug_mode ? "--attach-console > output.log" : ""}"
   }))
 
   metadata_options {

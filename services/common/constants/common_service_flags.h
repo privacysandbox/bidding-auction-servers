@@ -53,6 +53,7 @@ ABSL_DECLARE_FLAG(std::optional<std::string>, roma_timeout_ms);
 ABSL_DECLARE_FLAG(std::optional<std::string>, collector_endpoint);
 ABSL_DECLARE_FLAG(std::optional<std::string>, consented_debug_token);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_otel_based_logging);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_protected_app_signals);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -88,6 +89,8 @@ inline constexpr char ROMA_TIMEOUT_MS[] = "ROMA_TIMEOUT_MS";
 inline constexpr char COLLECTOR_ENDPOINT[] = "COLLECTOR_ENDPOINT";
 inline constexpr char CONSENTED_DEBUG_TOKEN[] = "CONSENTED_DEBUG_TOKEN";
 inline constexpr char ENABLE_OTEL_BASED_LOGGING[] = "ENABLE_OTEL_BASED_LOGGING";
+inline constexpr char ENABLE_PROTECTED_APP_SIGNALS[] =
+    "ENABLE_PROTECTED_APP_SIGNALS";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     ENABLE_ENCRYPTION,
@@ -110,7 +113,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     COLLECTOR_ENDPOINT,
     CONSENTED_DEBUG_TOKEN,
     ENABLE_OTEL_BASED_LOGGING,
-};
+    ENABLE_PROTECTED_APP_SIGNALS};
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

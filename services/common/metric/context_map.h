@@ -111,22 +111,30 @@ class ContextMap {
 };
 
 // Get singleton `ContextMap` for T. First call will initialize.
-// `is_debug` must have a value at first call, in following calls can be omitted
-// or has a same value. `meter` being null will be initialized with default
-// meter without metric exporting.
+// `config` must have a value at first call, in following calls can be omitted
+// or has a same value. `provider` being null will be initialized with default
+// MeterProvider without metric exporting.
 template <typename T, const absl::Span<const DefinitionName* const>& L>
-inline auto* GetContextMap(std::optional<BuildDependentConfig> config,
-                           MetricRouter::Meter* meter, PrivacyBudget budget,
-                           absl::Duration dp_output_period = absl::Minutes(5)) {
-  static auto* context_map = [=]() mutable {
+inline auto* GetContextMap(
+    std::optional<BuildDependentConfig> config,
+    std::unique_ptr<MetricRouter::MeterProvider> provider,
+    absl::string_view service, absl::string_view version,
+    PrivacyBudget budget) {
+  static auto* context_map = [&]() mutable {
     CHECK(config != std::nullopt) << "cannot be null at initialization";
-    double total_weight =
-        absl::c_accumulate(L, 0.0, [](double total, auto* definition) {
-          return total += definition->privacy_budget_weight_copy_;
+    absl::Status config_status = config->CheckMetricConfig(L);
+    ABSL_LOG_IF(WARNING, !config_status.ok()) << config_status;
+    double total_weight = absl::c_accumulate(
+        L, 0.0, [&config](double total, const DefinitionName* definition) {
+          return total += config->GetMetricConfig(definition->name_).ok()
+                              ? definition->privacy_budget_weight_copy_
+                              : 0;
         });
     budget.epsilon /= total_weight;
     return new ContextMap<T, L, MetricRouter>(
-        std::make_unique<MetricRouter>(meter, budget, dp_output_period),
+        std::make_unique<MetricRouter>(
+            std::move(provider), service, version, budget,
+            absl::Milliseconds(config->dp_export_interval_ms())),
         *config);
   }();
   CHECK(config == std::nullopt ||

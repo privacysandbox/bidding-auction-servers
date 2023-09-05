@@ -36,11 +36,7 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
       bfe_addr_client_map;
   auto static_client_map = std::make_unique<absl::flat_hash_map<
       std::string, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
-  for (const auto& buyer_info_pair : buyer_ig_owner_to_bfe_addr_map) {
-    // Properties named for clarity's sake.
-    const std::string& ig_owner = buyer_info_pair.first;
-    const std::string& bfe_host_addr = buyer_info_pair.second;
-
+  for (const auto& [ig_owner, bfe_host_addr] : buyer_ig_owner_to_bfe_addr_map) {
     // Can perform additional validations here.
     if (ig_owner.empty() || bfe_host_addr.empty()) {
       continue;

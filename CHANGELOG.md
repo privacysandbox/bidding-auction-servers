@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 1.2.0 (2023-09-01)
+
+
+### Features
+
+* Add code blob flags for bidding/auction
+* Log plaintext GetBidsRawRequest in BFE
+* PAS support in SFE
+* Propagate consented debug config from BFE to Bidding
+* Propagate consented debug config from SFE to BFE & Auction
+
+
+### Bug Fixes
+
+* [reporting] Change the order of cbor encoding for win reporting urls in the response.
+* [reporting] Populate win reporting urls for seller in top_level_seller_reporting_urls instead of component_seller_reporting_urls
+* [reporting] Remove unnecessary signalsForWinner in the response from reporting wrapper function
+* Disable enableSellerDebugUrlGeneration flag by default
+
+## 1.1.0 (2023-08-25)
+
+
+### Features
+
+* Add B&A App Install API
+* Add ConsentedDebuggingLogger to write logs via OTel
+* Add feature flag enabling/disabling PAS
+* Add IG origin to AuctionResult
+* add max surge to instance groups
+* Add owner field for PAS Ad with bid
+* Adds docker build option for local testing
+* Adds PAS buyer input to GetBids
+* Check debug token in ConsentedDebuggingLogger
+* Include IG owner in buyer input
+* Log decoded buyer inputs for consented debugging in SFE
+* make export interval configurable
+* make metric list configurable
+* OpenTelemetry logging can be disabled via TELEMETRY_CONFIG flag
+* Propagate Ad type from Auction => SFE
+* update GCP terraforms to apply updates to instances without
+* update LB policy to default to RATE instead of UTILIZATION
+* Upgrade to functionaltest-system 0.8.0
+* use private meter provider not shared with Otel api
+
+
+### Bug Fixes
+
+* Bump required tf to 1.2.3 to be compatible with replace_triggered_by
+* Change componentAds -> components
+* Correct GCP dashboards
+* Do not set runtime flags with empty strings
+* Fixes race condition in SFE reactor due to mutex lock
+* Log a message in case of server flag lookup failures
+* Removes callback execution from default_async_grpc_client to prevent double invocation
+* specify default cpu util before sending requests to other regions
+* update OTel demo documentation
+* Use bazel config to set instance and platform
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.43.0
+
 ## 1.0.0 (2023-08-10)
 
 

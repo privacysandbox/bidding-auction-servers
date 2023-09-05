@@ -224,11 +224,11 @@ absl::Status CborSerializeInterestGroup(
   PS_RETURN_IF_ERROR(CborSerializeString(kUserBiddingSignals,
                                          interest_group.user_bidding_signals(),
                                          *interest_group_serialized));
-  PS_RETURN_IF_ERROR(CborSerializeStringArray(
-      kAds, interest_group.ad_render_ids(), *interest_group_serialized));
   PS_RETURN_IF_ERROR(CborSerializeStringArray(kAdComponents,
                                               interest_group.component_ads(),
                                               *interest_group_serialized));
+  PS_RETURN_IF_ERROR(CborSerializeStringArray(
+      kAds, interest_group.ad_render_ids(), *interest_group_serialized));
   PS_RETURN_IF_ERROR(CborSerializeBrowserSignals(
       kBrowserSignals, interest_group.browser_signals(),
       *interest_group_serialized));
@@ -399,10 +399,10 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
                 ->mutable_buyer_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
-          // kComponentSellerReportingUrls
-          case 1:
+          // kTopLevelSellerReportingUrls
+          case 2:
             auction_result.mutable_win_reporting_urls()
-                ->mutable_component_seller_reporting_urls()
+                ->mutable_top_level_seller_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
         }
@@ -418,18 +418,17 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
         for (const auto& [event, url] : interaction_url_map.value()) {
           switch (FindKeyIndex<kNumWinReportingUrlsKeys>(kWinReportingKeys,
                                                          outer_key)) {
-            case 0:
+            case 0:  // winReportingURLs
               auction_result.mutable_win_reporting_urls()
                   ->mutable_buyer_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
               break;
-            case 1:
+            case 2:  // topLevelSellerReportingURLs
               auction_result.mutable_win_reporting_urls()
-                  ->mutable_component_seller_reporting_urls()
+                  ->mutable_top_level_seller_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
-
               break;
           }
         }
@@ -581,25 +580,36 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
   return auction_result;
 }
 
-absl::StatusOr<std::string> CborEncodeProtectedAudienceProto(
-    const ProtectedAudienceInput& protected_audience_input) {
+template <typename T>
+absl::StatusOr<std::string> CborEncodeProtectedAuctionProtoHelper(
+    const T& protected_auction_input) {
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumRequestRootKeys));
   auto* cbor_internal = cbor_data_root.get();
 
   PS_RETURN_IF_ERROR(CborSerializeString(
-      kGenerationId, protected_audience_input.generation_id(), *cbor_internal));
+      kGenerationId, protected_auction_input.generation_id(), *cbor_internal));
   PS_RETURN_IF_ERROR(CborSerializeString(
-      kPublisher, protected_audience_input.publisher_name(), *cbor_internal));
+      kPublisher, protected_auction_input.publisher_name(), *cbor_internal));
   PS_RETURN_IF_ERROR(CborSerializeBool(
-      kDebugReporting, protected_audience_input.enable_debug_reporting(),
+      kDebugReporting, protected_auction_input.enable_debug_reporting(),
       *cbor_internal));
   PS_RETURN_IF_ERROR(CborSerializeBuyerInput(
-      protected_audience_input.buyer_input(), *cbor_internal));
-  if (protected_audience_input.has_consented_debug_config()) {
+      protected_auction_input.buyer_input(), *cbor_internal));
+  if (protected_auction_input.has_consented_debug_config()) {
     PS_RETURN_IF_ERROR(CborSerializeConsentedDebugConfig(
-        protected_audience_input.consented_debug_config(), *cbor_internal));
+        protected_auction_input.consented_debug_config(), *cbor_internal));
   }
   return SerializeCbor(*cbor_data_root);
+}
+
+absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
+    const ProtectedAudienceInput& protected_auction_input) {
+  return CborEncodeProtectedAuctionProtoHelper(protected_auction_input);
+}
+
+absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
+    const ProtectedAuctionInput& protected_auction_input) {
+  return CborEncodeProtectedAuctionProtoHelper(protected_auction_input);
 }
 
 absl::StatusOr<BuyerInputMapEncoded> GetEncodedBuyerInputMap(

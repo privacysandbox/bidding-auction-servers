@@ -47,6 +47,7 @@ cc_library(
 cc_library(
     name = "random",
     testonly = 1,
+    srcs = ["random.cc"],
     hdrs = ["random.h"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",

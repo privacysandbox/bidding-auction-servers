@@ -57,7 +57,7 @@ std::string GetValidInput(const SelectAdRequest& expected_output) {
   // Copy auction config from expected output.
   auto document = ProtoToDocument(expected_output.auction_config());
   input.AddMember(kAuctionConfigField, document, input.GetAllocator());
-  input.AddMember(kProtectedAudienceInputField, protected_audience_doc,
+  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
                   input.GetAllocator());
 
   auto input_str = SerializeJsonDoc(input);
@@ -104,7 +104,7 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingBuyerInputMap) {
 
   rapidjson::Value protected_audience_doc;
   protected_audience_doc.SetObject();
-  input.AddMember(kProtectedAudienceInputField, protected_audience_doc,
+  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
                   input.GetAllocator());
 
   auto input_str = SerializeJsonDoc(input);
@@ -126,7 +126,7 @@ TEST(PaylodPackagingTest, HandlesOldBuyerInputMapKey) {
   buyerMapValue.SetObject();
   protected_audience_doc.AddMember(kOldBuyerInputMapField, buyerMapValue,
                                    input.GetAllocator());
-  input.AddMember(kProtectedAudienceInputField, protected_audience_doc,
+  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
                   input.GetAllocator());
 
   auto input_str = SerializeJsonDoc(input);
@@ -143,7 +143,7 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingAuctionConfig) {
   buyerMapValue.SetObject();
   protected_audience_doc.AddMember(kBuyerInputMapField, buyerMapValue,
                                    input.GetAllocator());
-  input.AddMember(kProtectedAudienceInputField, protected_audience_doc,
+  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
                   input.GetAllocator());
 
   auto input_str = SerializeJsonDoc(input);
@@ -152,8 +152,8 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingAuctionConfig) {
 }
 
 TEST(PaylodPackagingTest, CopiesAuctionConfigFromSourceJson) {
-  ProtectedAudienceInput protected_audience_input =
-      MakeARandomProtectedAudienceInput();
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAudienceInput>();
   SelectAdRequest expected =
       MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
   std::string input = GetValidInput(expected);
@@ -172,8 +172,8 @@ TEST(PaylodPackagingTest, CopiesAuctionConfigFromSourceJson) {
 }
 
 TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
-  ProtectedAudienceInput protected_audience_input =
-      MakeARandomProtectedAudienceInput();
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAudienceInput>();
   SelectAdRequest expected =
       MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
   auto input = GetValidInput(expected);

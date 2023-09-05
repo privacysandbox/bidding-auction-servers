@@ -56,6 +56,7 @@ using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(
                            absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
 
+template <typename T>
 class SelectAdReactorForWebTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -63,8 +64,30 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     server_common::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::TelemetryConfig::PROD);
     metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
+    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
+
+  void SetProtectedAuctionCipherText(const T& protected_auction_input,
+                                     const std::string& ciphertext,
+                                     SelectAdRequest& select_ad_request) {
+    const auto* descriptor = protected_auction_input.GetDescriptor();
+    if (descriptor->name() == kProtectedAuctionInput) {
+      *select_ad_request.mutable_protected_auction_ciphertext() =
+          std::move(ciphertext);
+    } else {
+      *select_ad_request.mutable_protected_audience_ciphertext() =
+          std::move(ciphertext);
+    }
+  }
+
+  TrustedServersConfigClient config_ = CreateConfig();
 };
+
+using ProtectedAuctionInputTypes =
+    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+TYPED_TEST_SUITE(SelectAdReactorForWebTest, ProtectedAuctionInputTypes);
 
 template <typename T>
 std::string MessageToJson(const T& message) {
@@ -75,7 +98,7 @@ std::string MessageToJson(const T& message) {
   return response_string;
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -86,16 +109,14 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          config, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request);
   VLOG(0) << "Encrypted SelectAdResponse:\n"
           << MessageToJson(response_with_cbor);
 
@@ -145,7 +166,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyCborEncoding) {
   EXPECT_TRUE(unexpected_interest_group_indices.empty());
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -156,16 +177,14 @@ TEST_F(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          config, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request);
 
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
@@ -213,7 +232,7 @@ auto EqScoreAdsRawRequestWithLogContext(
                         EqLogContext(raw_request.log_context())));
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -292,21 +311,20 @@ TEST_F(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
                               _, _, _));
 
   // Set log context that should be propagated to the downstream services.
-  auto [protected_audience_input, request, context] =
-      GetSampleSelectAdRequest(SelectAdRequest::BROWSER, kSellerOriginDomain);
+  auto [protected_auction_input, request, context] =
+      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+                                          kSellerOriginDomain);
   request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
   auto& buyer_config = (*request.mutable_auction_config()
                              ->mutable_per_buyer_config())[kSampleBuyer];
   buyer_config.set_buyer_debug_id(kSampleBuyerDebugId);
   buyer_config.set_buyer_signals(kSampleBuyerSignals);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
-      RunReactorRequest<SelectAdReactorForWeb>(config, clients, request);
+      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -317,16 +335,15 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   // Setup bad request that should be validated by our validation logic.
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  protected_audience_input.clear_generation_id();
-  protected_audience_input.clear_publisher_name();
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  protected_auction_input.clear_generation_id();
+  protected_auction_input.clear_publisher_name();
 
   google::protobuf::Map<std::string, BuyerInput> buyer_input_map;
   // A Buyer input with IGs.
@@ -349,20 +366,19 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_input_map);
   ASSERT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
-  *protected_audience_input.mutable_buyer_input() =
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
-  *request_with_context.select_ad_request
-       .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  this->SetProtectedAuctionCipherText(protected_auction_input,
+                                      encrypted_request,
+                                      request_with_context.select_ad_request);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          config, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request);
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -394,7 +410,7 @@ TEST_F(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
             static_cast<int>(ErrorCode::CLIENT_SIDE));
 }
 
-TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
+TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -405,27 +421,25 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
   // Setup bad request that should be validated by our validation logic.
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  protected_audience_input.clear_buyer_input();
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  protected_auction_input.clear_buyer_input();
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
-  *request_with_context.select_ad_request
-       .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  this->SetProtectedAuctionCipherText(protected_auction_input,
+                                      encrypted_request,
+                                      request_with_context.select_ad_request);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          config, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request);
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -457,8 +471,8 @@ TEST_F(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   EXPECT_FALSE(deserialized_auction_result->is_chaff());
 }
 
-TEST_F(SelectAdReactorForWebTest,
-       VerifyANonEmptyYetMalformedBuyerInputMapIsCaught) {
+TYPED_TEST(SelectAdReactorForWebTest,
+           VerifyANonEmptyYetMalformedBuyerInputMapIsCaught) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -469,7 +483,7 @@ TEST_F(SelectAdReactorForWebTest,
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
@@ -482,22 +496,20 @@ TEST_F(SelectAdReactorForWebTest,
   buyer_input_map.emplace(kEmptyBuyer, input_with_igs);
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_input_map);
   ASSERT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
-  auto& protected_audience_input =
-      request_with_context.protected_audience_input;
-  *protected_audience_input.mutable_buyer_input() =
+  auto& protected_auction_input = request_with_context.protected_auction_input;
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
 
   // Set up the encoded cipher text in the request.
   auto [encrypted_request, context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
-  *request_with_context.select_ad_request
-       .mutable_protected_audience_ciphertext() = std::move(encrypted_request);
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  this->SetProtectedAuctionCipherText(protected_auction_input,
+                                      encrypted_request,
+                                      request_with_context.select_ad_request);
 
-  auto config = CreateConfig();
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          config, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request);
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -525,6 +537,127 @@ TEST_F(SelectAdReactorForWebTest,
       << deserialized_auction_result->DebugString();
   EXPECT_EQ(deserialized_auction_result->error().code(),
             static_cast<int>(ErrorCode::CLIENT_SIDE));
+}
+
+auto EqConsentedDebugConfig(
+    const ConsentedDebugConfiguration& consented_debug_config) {
+  return AllOf(Property(&ConsentedDebugConfiguration::is_consented,
+                        Eq(consented_debug_config.is_consented())),
+               Property(&ConsentedDebugConfiguration::token,
+                        Eq(consented_debug_config.token())));
+}
+
+auto EqGetBidsRawRequestWithConsentedDebugConfig(
+    const GetBidsRequest::GetBidsRawRequest& raw_request) {
+  return AllOf(
+      Property(&GetBidsRequest::GetBidsRawRequest::consented_debug_config,
+               EqConsentedDebugConfig(raw_request.consented_debug_config())));
+}
+
+auto EqScoreAdsRawRequestWithConsentedDebugConfig(
+    const ScoreAdsRequest::ScoreAdsRawRequest& raw_request) {
+  return AllOf(
+      Property(&ScoreAdsRequest::ScoreAdsRawRequest::consented_debug_config,
+               EqConsentedDebugConfig(raw_request.consented_debug_config())));
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  ClientRegistry clients{scoring_signals_provider, scoring_client,
+                         buyer_front_end_async_client_factory_mock,
+                         *key_fetcher_manager, std::move(async_reporter)};
+
+  // Setup expectation on buyer client from SFE.
+  GetBidsRequest::GetBidsRawRequest expected_get_bid_request;
+  auto* expected_consented_debug_config =
+      expected_get_bid_request.mutable_consented_debug_config();
+  expected_consented_debug_config->set_is_consented(kIsConsentedDebug);
+  expected_consented_debug_config->set_token(kConsentedDebugToken);
+
+  auto MockGetBids =
+      [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
+         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         absl::Duration timeout) {
+        auto get_bids_response =
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+        auto* bid = get_bids_response->mutable_bids()->Add();
+        bid->set_bid(kSampleBidValue);
+        bid->set_interest_group_name(kSampleBuyer);
+        std::move(on_done)(std::move(get_bids_response));
+        return absl::OkStatus();
+      };
+  auto SetupMockBuyer =
+      [&expected_get_bid_request,
+       &MockGetBids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(
+            *buyer,
+            ExecuteInternal(Pointee(EqGetBidsRawRequestWithConsentedDebugConfig(
+                                std::move(expected_get_bid_request))),
+                            _, _, _))
+            .WillRepeatedly(MockGetBids);
+        return buyer;
+      };
+  auto MockBuyerFactoryCall = [SetupMockBuyer](absl::string_view hostname) {
+    return SetupMockBuyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(_))
+      .WillRepeatedly(MockBuyerFactoryCall);
+
+  // Setting up simple scoring signals provider so that the call flow can
+  // proceed to Ad Scoring.
+  auto MockScoringSignalsProvider =
+      [](const ScoringSignalsRequest& scoring_signals_request,
+         ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+        auto scoring_signals = std::make_unique<ScoringSignals>();
+        scoring_signals->scoring_signals =
+            std::make_unique<std::string>(kSampleScoringSignals);
+        std::move(on_done)(std::move(scoring_signals));
+      };
+  EXPECT_CALL(scoring_signals_provider, Get)
+      .WillRepeatedly(MockScoringSignalsProvider);
+
+  // Setup expectation on scoring client from SFE.
+  ScoreAdsRequest::ScoreAdsRawRequest expected_score_ads_request;
+  auto* expected_consented_debug_config_for_score_ads =
+      expected_score_ads_request.mutable_consented_debug_config();
+  expected_consented_debug_config_for_score_ads->set_is_consented(
+      kIsConsentedDebug);
+  expected_consented_debug_config_for_score_ads->set_token(
+      kConsentedDebugToken);
+
+  EXPECT_CALL(
+      scoring_client,
+      ExecuteInternal(Pointee(EqScoreAdsRawRequestWithConsentedDebugConfig(
+                          expected_score_ads_request)),
+                      _, _, _));
+
+  // Set consented debug config that should be propagated to the downstream
+  // services.
+  auto [protected_auction_input, request, context] =
+      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+                                          kSellerOriginDomain,
+                                          /*is_consented_debug=*/true);
+
+  request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
+  auto& buyer_config = (*request.mutable_auction_config()
+                             ->mutable_per_buyer_config())[kSampleBuyer];
+  buyer_config.set_buyer_debug_id(kSampleBuyerDebugId);
+  buyer_config.set_buyer_signals(kSampleBuyerSignals);
+
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
 }
 
 }  // namespace

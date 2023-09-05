@@ -1,7 +1,6 @@
 build --announce_rc
 build --verbose_failures
 build --config=clang
-build --config=roma_sandboxed
 build --compilation_mode=opt
 build --output_filter='^//((?!(third_party):).)*$'`
 build --color=yes
@@ -19,20 +18,17 @@ build:clang --client_env=CC=clang
 build:clang --cxxopt=-std=c++17
 build:clang --host_cxxopt=-std=c++17
 build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
-
-build:roma_legacy --@control_plane_shared//cc/roma/roma_service/src:service=legacy
-
-build:roma_sandboxed --@control_plane_shared//cc/roma/roma_service/src:service=sandboxed
+build:clang --linkopt=-rdynamic
 
 test --test_verbose_timeout_warnings
 
-build:instance_local  --//:instance=local
+build:instance_local --//:instance=local
 build:instance_local --@google_privacysandbox_servers_common//:instance=local
 
 build:instance_gcp --//:instance=gcp
 build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
 
-build:instance_aws  --//:instance=aws
+build:instance_aws --//:instance=aws
 build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
 build:platform_local --//:platform=local

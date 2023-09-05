@@ -36,7 +36,7 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
   }
 }
 
-absl::Status BuyerFrontEndAsyncGrpcClient::SendRpc(
+void BuyerFrontEndAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
     RawClientParams<GetBidsRequest, GetBidsResponse,
                     GetBidsResponse::GetBidsRawResponse>* params) const {
@@ -66,8 +66,6 @@ absl::Status BuyerFrontEndAsyncGrpcClient::SendRpc(
         VLOG(6) << "Returning the decrypted response via callback";
         params->OnDone(status);
       });
-
-  return absl::OkStatus();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

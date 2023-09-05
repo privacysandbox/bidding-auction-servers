@@ -65,6 +65,7 @@ using ScoreAdsDoneCallback =
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
+template <typename T>
 class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -78,13 +79,19 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest("0", GET_BID_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", SCORE_ADS_RPC_TIMEOUT_MS);
+    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
 };
 
-TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+using ProtectedAuctionInputTypes =
+    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+TYPED_TEST_SUITE(SellerFrontEndServiceTest, ProtectedAuctionInputTypes);
+
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   // Reporting Client.
@@ -97,7 +104,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -108,11 +116,11 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kEmptyRemarketingCiphertextError);
+  ASSERT_EQ(status.error_message(), kEmptyProtectedAuctionCiphertextError);
 }
 
-TEST_F(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -128,7 +136,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -144,8 +153,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
   ASSERT_EQ(status.error_message(), kMissingPrivateKey);
 }
 
-TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
@@ -159,7 +168,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -175,9 +185,9 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
       absl::StrContains(status.error_message(), kUnsupportedClientType));
 }
 
-TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -193,13 +203,15 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
-  auto [protected_audience_input, request, encryption_context] =
-      GetSampleSelectAdRequest(SelectAdRequest::ANDROID, kSampleSellerDomain);
+  auto [protected_auction_input, request, encryption_context] =
+      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::ANDROID,
+                                          kSampleSellerDomain);
   request.mutable_auction_config()->clear_buyer_list();
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
@@ -208,15 +220,15 @@ TEST_F(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   ASSERT_EQ(status.error_message(), kEmptyBuyerList);
 }
 
-TEST_F(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
+TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   // If ALL buyer inputs are missing, pending bids will decrease to 0
   // and we should abort the request. This test checks this behavior
   // assuming there is only a single buyer. If there are multiple buyers
   // and only a subset have missing inputs, the request should continue
   // with pending bids decreased by the amount of missing inputs.
 
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -232,19 +244,20 @@ TEST_F(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   ClientRegistry clients{async_provider, scoring, bfe_client,
                          key_fetcher_manager, std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
   SelectAdRequest request;
-  ProtectedAudienceInput protected_audience_input;
-  protected_audience_input.set_generation_id(kSampleGenerationId);
-  protected_audience_input.set_publisher_name(kSamplePublisherName);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetProtoEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  TypeParam protected_auction_input;
+  protected_auction_input.set_generation_id(kSampleGenerationId);
+  protected_auction_input.set_publisher_name(kSamplePublisherName);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
   request.mutable_auction_config()->mutable_buyer_list()->Add("Test");
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals("Test");
@@ -260,15 +273,15 @@ TEST_F(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   EXPECT_EQ(auction_result.error().message(), kMissingBuyerInputs);
 }
 
-TEST_F(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
+TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   // If ALL buyer clients are missing, pending bids will decrease to 0
   // and we should mark the response as chaff. This test checks this behavior
   // assuming there is only a single buyer. If there are multiple buyers
   // and only a subset have missing clients, the request should continue
   // with pending bids decreased by the amount of missing clients.
 
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerFrontEndAsyncClientFactoryMock client_factory_mock;
   EXPECT_CALL(client_factory_mock, Get)
@@ -286,13 +299,15 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   ClientRegistry clients{async_provider, scoring, client_factory_mock,
                          key_fetcher_manager, std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
-  auto [protected_audience_input, request, encryption_context] =
-      GetSampleSelectAdRequest(SelectAdRequest::BROWSER, kSampleSellerDomain);
+  auto [protected_auction_input, request, encryption_context] =
+      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+                                          kSampleSellerDomain);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -302,9 +317,9 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   ASSERT_TRUE(auction_result.is_chaff());
 }
 
-TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -317,32 +332,33 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_inputs =
       GetEncodedBuyerInputMap(decoded_buyer_inputs);
   EXPECT_TRUE(encoded_buyer_inputs.ok()) << encoded_buyer_inputs.status();
-  ProtectedAudienceInput protected_audience_input;
-  *protected_audience_input.mutable_buyer_input() =
+  TypeParam protected_auction_input;
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         local_buyer;
   }
-  protected_audience_input.set_publisher_name(MakeARandomString());
-  protected_audience_input.set_generation_id(kSampleGenerationId);
+  protected_auction_input.set_publisher_name(MakeARandomString());
+  protected_auction_input.set_generation_id(kSampleGenerationId);
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals(kSampleSellerSignals);
   request.mutable_auction_config()->set_auction_signals(kSampleAuctionSignals);
   request.set_client_type(SelectAdRequest::BROWSER);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
+          protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   EXPECT_EQ(request.auction_config().buyer_list_size(),
-            protected_audience_input.buyer_input_size());
+            protected_auction_input.buyer_input_size());
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     GetBidsResponse::GetBidsRawResponse response;
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
                          /*repeated_get_allowed=*/true);
@@ -369,7 +385,8 @@ TEST_F(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
                          buyer_clients, key_fetcher_manager,
                          std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -428,9 +445,9 @@ void SetupBuyerClientMock(
   EXPECT_CALL(buyer_clients, Get(hostname)).WillOnce(MockBuyerFactoryCall);
 }
 
-TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -443,37 +460,37 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
 
   // Setup a SelectAdRequest with the aforementioned buyer input.
   SelectAdRequest request;
-  ProtectedAudienceInput protected_audience_input;
-  protected_audience_input.set_generation_id(kSampleGenerationId);
-  *protected_audience_input.mutable_buyer_input() =
+  TypeParam protected_auction_input;
+  protected_auction_input.set_generation_id(kSampleGenerationId);
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals(kSampleSellerSignals);
   request.mutable_auction_config()->set_auction_signals(kSampleAuctionSignals);
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         local_buyer;
   }
-  protected_audience_input.set_publisher_name(MakeARandomString());
+  protected_auction_input.set_publisher_name(MakeARandomString());
   request.set_client_type(SelectAdRequest::BROWSER);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = request.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 1);
-  int buyer_input_count = protected_audience_input.buyer_input_size();
+  int buyer_input_count = protected_auction_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 1);
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
   const float bid_value = 1.0;
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     std::string url = buyer_to_ad_url.at(local_buyer);
     AdWithBid bid = BuildNewAdWithBid(url, kSampleInterestGroupName, bid_value,
                                       kNumberOfComponentAdUrls);
@@ -516,7 +533,8 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
                          buyer_clients, key_fetcher_manager,
                          std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -527,9 +545,10 @@ TEST_F(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
 }
 
-TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest,
+           BuyerClientFailsWithCorrectOverallStatus) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -542,34 +561,34 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
 
   // Setup a valid SelectAdRequest with the aforementioned buyer input.
   SelectAdRequest request;
-  ProtectedAudienceInput protected_audience_input;
-  protected_audience_input.set_generation_id(kSampleGenerationId);
-  *protected_audience_input.mutable_buyer_input() =
+  TypeParam protected_auction_input;
+  protected_auction_input.set_generation_id(kSampleGenerationId);
+  *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_inputs);
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals(kSampleSellerSignals);
   request.mutable_auction_config()->set_auction_signals(kSampleAuctionSignals);
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         local_buyer;
   }
-  protected_audience_input.set_publisher_name(MakeARandomString());
+  protected_auction_input.set_publisher_name(MakeARandomString());
   request.set_client_type(SelectAdRequest::BROWSER);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = request.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 1);
-  int buyer_input_count = protected_audience_input.buyer_input_size();
+  int buyer_input_count = protected_auction_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 1);
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     SetupFailingBuyerClientMock(local_buyer, buyer_clients);
   }
 
@@ -589,7 +608,8 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
                          buyer_clients, key_fetcher_manager,
                          std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -602,30 +622,29 @@ TEST_F(SellerFrontEndServiceTest, BuyerClientFailsWithCorrectOverallStatus) {
   ASSERT_EQ(status.error_message(), kInternalServerError);
 }
 
-TEST_F(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
-  ProtectedAudienceInput protected_audience_input =
-      MakeARandomProtectedAudienceInput();
+  auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
   SelectAdRequest request =
-      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_audience_input);
+      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
   request.set_client_type(SelectAdRequest::BROWSER);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = request.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 2);
-  int buyer_input_count = protected_audience_input.buyer_input_size();
+  int buyer_input_count = protected_auction_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
   auto i = 0;
   for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
+       protected_auction_input.buyer_input()) {
     if (i > 0) {
       SetupBuyerClientMock(local_buyer, buyer_clients);
     } else {
@@ -650,7 +669,8 @@ TEST_F(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
                          buyer_clients, key_fetcher_manager,
                          std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
@@ -661,31 +681,31 @@ TEST_F(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   EXPECT_TRUE(status.ok()) << ToAbslStatus(status);
 }
 
-TEST_F(SellerFrontEndServiceTest,
-       OneBogusAndOneLegitBuyerWaitsForAllBuyerBids) {
-  config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+TYPED_TEST(SellerFrontEndServiceTest,
+           OneBogusAndOneLegitBuyerWaitsForAllBuyerBids) {
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
-  ProtectedAudienceInput protected_audience_input =
-      MakeARandomProtectedAudienceInput();
+  TypeParam protected_auction_input =
+      MakeARandomProtectedAuctionInput<TypeParam>();
   SelectAdRequest request =
-      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_audience_input);
+      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
   request.set_client_type(SelectAdRequest::BROWSER);
-  auto [encrypted_protected_audience_input, encryption_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+      std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   int client_count = request.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 2);
-  int buyer_input_count = protected_audience_input.buyer_input_size();
+  int buyer_input_count = protected_auction_input.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
   auto i = 0;
   BuyerBidsResponseMap expected_buyer_bids;
-  for (const auto& [buyer, unused] : protected_audience_input.buyer_input()) {
+  for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     if (i == 1) {
       // Setup valid client for only the last of the buyer since we want to
       // cover the scenario where select ad reactor may be terminating the
@@ -755,7 +775,8 @@ TEST_F(SellerFrontEndServiceTest,
                          buyer_clients, key_fetcher_manager,
                          std::move(async_reporter)};
 
-  SellerFrontEndService seller_frontend_service(&config_, std::move(clients));
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 

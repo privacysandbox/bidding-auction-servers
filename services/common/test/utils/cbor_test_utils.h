@@ -36,8 +36,12 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
     const std::string& serialized_input);
 
 // Converts the raw protected audience input into CBOR encoded byte string.
-absl::StatusOr<std::string> CborEncodeProtectedAudienceProto(
+[[deprecated]] absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
     const ProtectedAudienceInput& protected_audience_input);
+
+// Converts the raw protected audience input into CBOR encoded byte string.
+absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
+    const ProtectedAuctionInput& protected_auction_input);
 
 // Encodes and compresses each BuyerInput in the input map. Returns the encoded
 // BuyerInput Map (note that keys in the map are not encoded).

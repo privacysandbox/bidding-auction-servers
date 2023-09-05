@@ -34,6 +34,30 @@ using BiddingGroupsMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using ReportErrorSignature = std::function<void(
+    ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+    const std::string& msg, ErrorCode error_code)>;
+
+namespace {
+
+template <typename T>
+T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
+                                        bool fail_fast,
+                                        ReportErrorSignature ReportError,
+                                        ErrorAccumulator& error_accumulator) {
+  absl::StatusOr<server_common::DecodedRequest> decoded_request =
+      server_common::DecodeRequestPayload(encoded_data);
+  if (!decoded_request.ok()) {
+    ReportError(ErrorVisibility::CLIENT_VISIBLE,
+                std::string(decoded_request.status().message()),
+                ErrorCode::CLIENT_SIDE);
+    return T{};
+  }
+  std::string payload = std::move(decoded_request->compressed_data);
+  return Decode<T>(payload, error_accumulator, fail_fast);
+}
+
+}  // namespace
 
 SelectAdReactorForWeb::SelectAdReactorForWeb(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
@@ -69,16 +93,22 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
 
 ProtectedAudienceInput SelectAdReactorForWeb::GetDecodedProtectedAudienceInput(
     absl::string_view encoded_data) {
-  absl::StatusOr<server_common::DecodedRequest> decoded_request =
-      server_common::DecodeRequestPayload(encoded_data);
-  if (!decoded_request.ok()) {
-    ReportError(ErrorVisibility::CLIENT_VISIBLE,
-                std::string(decoded_request.status().message()),
-                ErrorCode::CLIENT_SIDE);
-    return ProtectedAudienceInput{};
-  }
-  std::string payload = std::move(decoded_request->compressed_data);
-  return Decode(payload, error_accumulator_, fail_fast_);
+  return GetDecodedProtectedAuctionInputHelper<ProtectedAudienceInput>(
+      encoded_data, fail_fast_,
+      std::bind(&SelectAdReactorForWeb::ReportError, this,
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3),
+      error_accumulator_);
+}
+
+ProtectedAuctionInput SelectAdReactorForWeb::GetDecodedProtectedAuctionInput(
+    absl::string_view encoded_data) {
+  return GetDecodedProtectedAuctionInputHelper<ProtectedAuctionInput>(
+      encoded_data, fail_fast_,
+      std::bind(&SelectAdReactorForWeb::ReportError, this,
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3),
+      error_accumulator_);
 }
 
 DecodedBuyerInputs SelectAdReactorForWeb::GetDecodedBuyerinputs(

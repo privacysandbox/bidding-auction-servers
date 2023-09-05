@@ -41,4 +41,8 @@ message BuyerCodeFetchConfig {
 
    // Allow handling of console.logs from AdTech script execution.
    bool enable_adtech_code_logging = 8;
+
+   // URL endpoint for fetching AdTech code blob, js file for protected app
+   // signals.
+   string protected_app_signals_bidding_js_url = 9;
 }

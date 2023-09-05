@@ -29,8 +29,8 @@
 // 1. Buyer Inputs are CBOR encoded and GZip compressed using
 // PackageBuyerInputsForBrowser.
 // 2. Output from PackageBuyerInputsForBrowser is included in a
-// ProtectedAudienceInput object.
-// 3. ProtectedAudienceInput is CBOR encoded and OHTTP Encrypted using
+// ProtectedAuctionInput object.
+// 3. ProtectedAuctionInput is CBOR encoded and OHTTP Encrypted using
 // PackagePayloadForBrowser. This produces a string which can be included in a
 // SelectAdRequest object.
 
@@ -56,7 +56,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // The encryption context from this should be used for decrypting the
 // response.
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
-PackagePayload(const ProtectedAudienceInput& protected_audience_input,
+PackagePayload(const ProtectedAuctionInput& protected_auction_input,
                SelectAdRequest::ClientType client_type,
                absl::string_view public_key = kDefaultPublicKey);
 
@@ -70,7 +70,7 @@ PackageBuyerInputsForBrowser(
 
 // Returns a map of IG owners -> GZIP compressed proto binary Buyer Inputs.
 // The output from this method can be used to populate the buyer_input map in
-// ProtectedAudienceInput for mimicking requests from android.
+// ProtectedAuctionInput for mimicking requests from android.
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 PackageBuyerInputsForApp(
     const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs);

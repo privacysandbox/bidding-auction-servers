@@ -502,6 +502,8 @@ void GenerateBidsReactor::Execute() {
     TextFormat::PrintToString(raw_request_, &original_request);
     logger_.vlog(1, "Execution request failed for batch: ", original_request,
                  status.ToString(absl::StatusToStringMode::kWithEverything));
+    LogIfError(
+        metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     EncryptResponseAndFinish(
         grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
@@ -523,9 +525,14 @@ void GenerateBidsReactor::GenerateBidsCallback(
     }
   }
   benchmarking_logger_->HandleResponseBegin();
+  int total_bid_count = static_cast<int>(output.size());
+  int zero_bid_count = 0;
+  LogIfError(metric_context_->AccumulateMetric<metric::kBiddingTotalBidsCount>(
+      total_bid_count));
   int failed_requests = 0;
   for (int i = 0; i < output.size(); i++) {
     auto& result = output.at(i);
+    bool is_bid_zero = true;
     if (result.ok()) {
       AdWithBid bid;
       absl::StatusOr<std::string> generate_bid_response =
@@ -546,6 +553,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
         } else {
           bid.set_interest_group_name(interest_group_name);
           *raw_response_.add_bids() = bid;
+          is_bid_zero = false;
         }
       } else {
         logger_.vlog(
@@ -558,7 +566,14 @@ void GenerateBidsReactor::GenerateBidsCallback(
           1, "Invalid execution (possibly invalid input): ",
           result.status().ToString(absl::StatusToStringMode::kWithEverything));
     }
+    if (is_bid_zero) {
+      zero_bid_count += 1;
+      LogIfError(
+          metric_context_->AccumulateMetric<metric::kBiddingZeroBidCount>(1));
+    }
   }
+  LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
+      (static_cast<double>(zero_bid_count)) / total_bid_count));
 
   logger_.vlog(1, "\n\nFailed of total: ", failed_requests, "/", output.size());
   benchmarking_logger_->HandleResponseEnd();

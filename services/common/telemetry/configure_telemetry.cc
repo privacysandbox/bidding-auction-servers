@@ -27,10 +27,6 @@ namespace semantic_conventions =
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// TODO (b/278900019): set these as configurable parameters
-static constexpr uint32_t kMetricsExportIntervalMillis = 60000;
-static constexpr uint32_t kMetricsExportTimeoutMillis = 30000;
-
 Resource CreateSharedAttributes(TrustedServerConfigUtil* config_util) {
   const auto attributes = ResourceAttributes{
       {semantic_conventions::kServiceName, config_util->GetService()},
@@ -41,16 +37,10 @@ Resource CreateSharedAttributes(TrustedServerConfigUtil* config_util) {
 }
 
 opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions
-CreateMetricsOptions() {
-  opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions
-      metrics_options;
-
-  metrics_options.export_interval_millis =
-      std::chrono::milliseconds(kMetricsExportIntervalMillis);
-  metrics_options.export_timeout_millis =
-      std::chrono::milliseconds(kMetricsExportTimeoutMillis);
-
-  return metrics_options;
+CreateMetricsOptions(int export_interval_millis) {
+  return {std::chrono::milliseconds(export_interval_millis),
+          // use half of export interval for export_timeout_millis
+          std::chrono::milliseconds(export_interval_millis / 2)};
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

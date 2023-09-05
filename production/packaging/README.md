@@ -3,7 +3,7 @@
 ## Build docker image
 
 ```shell
-./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path seller_frontend_service --service-path buyer_frontend_service --service-path auction_service --instance local --platform gcp --no-precommit --no-tests --gcp-image-tag <ENV_NAME> --gcp-image-repo ${DOCKER_REPO}  --build-flavor prod
+./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path seller_frontend_service --service-path buyer_frontend_service --service-path auction_service --config=local_gcp --no-precommit --no-tests --gcp-image-tag <ENV_NAME> --gcp-image-repo ${DOCKER_REPO}  --build-flavor prod
 ```
 
 -   switch `prod` to `non_prod` for debugging build that turn on all vlog.
@@ -24,7 +24,7 @@ enable the attestation.
 ## build AMI
 
 ```shell
-./production/packaging/build_and_test_all_in_docker --service-path auction_service  --service-path  bidding_service  --service-path buyer_frontend_service  --service-path seller_frontend_service --platform aws --instance aws --with-ami us-west-1 --no-precommit --no-tests  --build-flavor prod
+./production/packaging/build_and_test_all_in_docker --service-path auction_service  --service-path  bidding_service  --service-path buyer_frontend_service  --service-path seller_frontend_service --config=aws_aws --with-ami us-west-1 --no-precommit --no-tests  --build-flavor prod
 ```
 
 -   switch `prod` to `non_prod` for debugging build that turn on all vlog.

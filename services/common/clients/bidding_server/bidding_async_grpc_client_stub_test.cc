@@ -12,9 +12,10 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include "services/common/clients/async_grpc/bidding_async_grpc_client_stub_test.h"
+
 #include "absl/synchronization/notification.h"
 #include "gtest/gtest.h"
-#include "services/common/clients/async_grpc/default_async_grpc_client_stub_test.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
@@ -25,16 +26,37 @@ namespace {
 using Request = GenerateBidsRequest;
 using Response = GenerateBidsResponse;
 using ServiceThread = MockServerThread<BiddingServiceMock, Request, Response>;
+using ProtectedAppSignalsRequest = GenerateProtectedAppSignalsBidsRequest;
+using ProtectedAppSignalsResponse = GenerateProtectedAppSignalsBidsResponse;
+using ProtectedAppSignalsRawRequest =
+    ProtectedAppSignalsRequest::GenerateProtectedAppSignalsBidsRawRequest;
+using ProtectedAppSignalsRawResponse =
+    ProtectedAppSignalsResponse::GenerateProtectedAppSignalsBidsRawResponse;
+using ProtectedAppSignalsServiceThread =
+    MockServerThread<BiddingServiceMock, ProtectedAppSignalsRequest,
+                     ProtectedAppSignalsResponse>;
 
 using BiddingImplementationType =
     ::testing::Types<AsyncGrpcClientTypeDefinitions<
         Request, GenerateBidsRequest::GenerateBidsRawRequest, Response,
         GenerateBidsResponse::GenerateBidsRawResponse, ServiceThread,
-        BiddingAsyncGrpcClient, BiddingServiceClientConfig>>;
+        BiddingAsyncGrpcClient, BiddingServiceClientConfig, Bidding>>;
 
 INSTANTIATE_TYPED_TEST_SUITE_P(BiddingAsyncGrpcClientStubTest,
                                AsyncGrpcClientStubTest,
                                BiddingImplementationType);
+
+using BiddingProtectedAppSignalsImplementationType =
+    ::testing::Types<AsyncGrpcClientTypeDefinitions<
+        ProtectedAppSignalsRequest, ProtectedAppSignalsRawRequest,
+        ProtectedAppSignalsResponse, ProtectedAppSignalsRawResponse,
+        ProtectedAppSignalsServiceThread,
+        ProtectedAppSignalsBiddingAsyncGrpcClient, BiddingServiceClientConfig,
+        Bidding>>;
+
+INSTANTIATE_TYPED_TEST_SUITE_P(
+    ProtectedAppSignalsBiddingAsyncGrpcClientStubTest, AsyncGrpcClientStubTest,
+    BiddingProtectedAppSignalsImplementationType);
 
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers
