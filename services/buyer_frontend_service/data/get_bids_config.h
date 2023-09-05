@@ -26,6 +26,16 @@ struct GetBidsConfig {
   int bidding_signals_load_timeout_ms;
   // Enables encryption when communicating with clients and other servers.
   bool encryption_enabled;
+  // The max time to wait for protected app signals generate bid request to
+  // finish.
+  int protected_app_signals_generate_bid_timeout_ms;
+  // Indicates whether Protected App Signals support is enabled or not.
+  bool is_protected_app_signals_enabled;
+  // Whether the OpenTelemetry Logs is enabled. It's used for consented
+  // debugging.
+  bool enable_otel_based_logging;
+  // The secret token for AdTech consented debugging.
+  std::string consented_debug_token;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -207,10 +207,24 @@ class BiddingServiceMock : public Bidding::CallbackService {
           rpc_method)
       : server_rpc_(std::move(rpc_method)) {}
 
+  explicit BiddingServiceMock(std::function<grpc::ServerUnaryReactor*(
+                                  grpc::CallbackServerContext*,
+                                  const GenerateProtectedAppSignalsBidsRequest*,
+                                  GenerateProtectedAppSignalsBidsResponse*)>
+                                  rpc_method)
+      : server_pas_rpc_(std::move(rpc_method)) {}
+
   grpc::ServerUnaryReactor* GenerateBids(grpc::CallbackServerContext* ctxt,
                                          const GenerateBidsRequest* req,
                                          GenerateBidsResponse* resp) override {
     return server_rpc_(ctxt, req, resp);
+  }
+
+  grpc::ServerUnaryReactor* GenerateProtectedAppSignalsBids(
+      grpc::CallbackServerContext* ctxt,
+      const GenerateProtectedAppSignalsBidsRequest* req,
+      GenerateProtectedAppSignalsBidsResponse* resp) override {
+    return server_pas_rpc_(ctxt, req, resp);
   }
 
  private:
@@ -218,6 +232,12 @@ class BiddingServiceMock : public Bidding::CallbackService {
                                           const GenerateBidsRequest*,
                                           GenerateBidsResponse*)>
       server_rpc_;
+
+  std::function<grpc::ServerUnaryReactor*(
+      grpc::CallbackServerContext*,
+      const GenerateProtectedAppSignalsBidsRequest*,
+      GenerateProtectedAppSignalsBidsResponse*)>
+      server_pas_rpc_;
 };
 
 // Dummy server in leu of no support for mocking async stubs

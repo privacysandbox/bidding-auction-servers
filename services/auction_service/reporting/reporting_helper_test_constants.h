@@ -18,7 +18,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kTestReportResultUrl[] = "http://reportResultUrl.com";
 constexpr char kTestReportWinUrl[] = "http://reportWinUrl.com";
-constexpr char kTestSignalsForWinner[] = "{testKey:testValue}";
 constexpr char kTestLog[] = "testLog";
 constexpr bool kSendReportToInvokedTrue = true;
 constexpr bool kRegisterAdBeaconInvokedTrue = true;

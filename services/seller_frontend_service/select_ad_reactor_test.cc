@@ -25,6 +25,7 @@
 #include <grpcpp/server.h>
 
 #include <gmock/gmock-matchers.h>
+#include <google/protobuf/reflection.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <include/gmock/gmock-actions.h>
 
@@ -50,6 +51,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
+inline constexpr absl::string_view kProtectedAudienceInput =
+    "ProtectedAudienceInput";
 
 using ::google::protobuf::TextFormat;
 using ::testing::_;
@@ -90,16 +94,20 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
   return response;
 }
 
+template <typename T>
 class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    auto [protected_audience_input, request, context] =
-        GetSampleSelectAdRequest(SelectAdRequest::BROWSER, kSellerOriginDomain);
-    protected_audience_input_ = std::move(protected_audience_input);
+    auto [protected_auction_input, request, context] =
+        GetSampleSelectAdRequest<T>(SelectAdRequest::BROWSER,
+                                    kSellerOriginDomain);
+    protected_auction_input_ = std::move(protected_auction_input);
     request_ = std::move(request);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(context));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
         .WillRepeatedly(Return(GetPrivateKey()));
@@ -112,35 +120,48 @@ class SellerFrontEndServiceTest : public ::testing::Test {
   }
 
   void SetupRequestWithTwoBuyers() {
-    protected_audience_input_ = MakeARandomProtectedAudienceInput();
+    protected_auction_input_ = MakeARandomProtectedAuctionInput<T>();
     request_ = MakeARandomSelectAdRequest(kSellerOriginDomain,
-                                          protected_audience_input_);
-    auto [encrypted_protected_audience_input, encryption_context] =
-        GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input_);
-    *request_.mutable_protected_audience_ciphertext() =
-        std::move(encrypted_protected_audience_input);
+                                          protected_auction_input_);
+    auto [encrypted_protected_auction_input, encryption_context] =
+        GetCborEncodedEncryptedInputAndOhttpContext<T>(
+            protected_auction_input_);
+    SetProtectedAuctionCipherText(encrypted_protected_auction_input);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(encryption_context));
+  }
+
+  void SetProtectedAuctionCipherText(const std::string& ciphertext) {
+    const auto* descriptor = protected_auction_input_.GetDescriptor();
+    if (descriptor->name() == kProtectedAudienceInput) {
+      *request_.mutable_protected_audience_ciphertext() = std::move(ciphertext);
+    } else {
+      *request_.mutable_protected_auction_ciphertext() = std::move(ciphertext);
+    }
   }
 
   void PopulateProtectedAudienceInputCiphertextOnRequest() {
-    auto [encrypted_protected_audience_input, encryption_context] =
-        GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input_);
-    *request_.mutable_protected_audience_ciphertext() =
-        std::move(encrypted_protected_audience_input);
+    auto [encrypted_protected_auction_input, encryption_context] =
+        GetCborEncodedEncryptedInputAndOhttpContext<T>(
+            protected_auction_input_);
+    SetProtectedAuctionCipherText(encrypted_protected_auction_input);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(encryption_context));
   }
 
-  ProtectedAudienceInput protected_audience_input_;
+  T protected_auction_input_;
   Request request_;
   std::unique_ptr<quiche::ObliviousHttpRequest::Context> context_;
   TrustedServersConfigClient config_ = CreateConfig();
   server_common::MockKeyFetcherManager key_fetcher_manager_;
 };
 
-TEST_F(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
-  SetupRequestWithTwoBuyers();
+using ProtectedAuctionInputTypes =
+    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+TYPED_TEST_SUITE(SellerFrontEndServiceTest, ProtectedAuctionInputTypes);
+
+TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
+  this->SetupRequestWithTwoBuyers();
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -150,10 +171,10 @@ TEST_F(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = request_.auction_config().buyer_list_size();
+  int client_count = this->request_.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 2);
 
-  int buyer_input_count = protected_audience_input_.buyer_input_size();
+  int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
 
   auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
@@ -170,22 +191,23 @@ TEST_F(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           diff.ReportDifferencesToString(&diff_output);
           EXPECT_TRUE(
               diff.Compare(buyer_input, get_values_request->buyer_input()));
-          EXPECT_EQ(request_.auction_config().auction_signals(),
+          EXPECT_EQ(this->request_.auction_config().auction_signals(),
                     get_values_request->auction_signals());
-          EXPECT_STREQ(protected_audience_input_.publisher_name().c_str(),
+          EXPECT_STREQ(this->protected_auction_input_.publisher_name().c_str(),
                        get_values_request->publisher_name().c_str());
-          EXPECT_FALSE(request_.auction_config().seller().empty());
-          EXPECT_STREQ(request_.auction_config().seller().c_str(),
+          EXPECT_FALSE(this->request_.auction_config().seller().empty());
+          EXPECT_STREQ(this->request_.auction_config().seller().c_str(),
                        get_values_request->seller().c_str());
           return absl::OkStatus();
         });
     return buyer;
   };
   ErrorAccumulator error_accumulator;
-  for (const auto& buyer_ig_owner : request_.auction_config().buyer_list()) {
+  for (const auto& buyer_ig_owner :
+       this->request_.auction_config().buyer_list()) {
     auto decoded_buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
-        protected_audience_input_.buyer_input().at(buyer_ig_owner),
+        this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
     const BuyerInput& buyer_input = std::move(decoded_buyer_input);
@@ -202,18 +224,18 @@ TEST_F(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
 
   // Client Registry
   ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         key_fetcher_manager_, std::move(async_reporter)};
+                         this->key_fetcher_manager_, std::move(async_reporter)};
 
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
 
-TEST_F(SellerFrontEndServiceTest,
-       FetchesBidsFromAllBuyersWithDebugReportingEnabled) {
-  SetupRequestWithTwoBuyers();
+TYPED_TEST(SellerFrontEndServiceTest,
+           FetchesBidsFromAllBuyersWithDebugReportingEnabled) {
+  this->SetupRequestWithTwoBuyers();
 
   // Enable debug reporting for this request_.
-  protected_audience_input_.set_enable_debug_reporting(true);
+  this->protected_auction_input_.set_enable_debug_reporting(true);
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
 
@@ -222,10 +244,10 @@ TEST_F(SellerFrontEndServiceTest,
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = request_.auction_config().buyer_list_size();
+  int client_count = this->request_.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 2);
 
-  int buyer_input_count = protected_audience_input_.buyer_input_size();
+  int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
 
   auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
@@ -242,7 +264,7 @@ TEST_F(SellerFrontEndServiceTest,
           diff.ReportDifferencesToString(&diff_output);
           EXPECT_TRUE(
               diff.Compare(buyer_input, get_values_request->buyer_input()));
-          EXPECT_EQ(protected_audience_input_.enable_debug_reporting(),
+          EXPECT_EQ(this->protected_auction_input_.enable_debug_reporting(),
                     get_values_request->enable_debug_reporting());
           return absl::OkStatus();
         });
@@ -250,10 +272,11 @@ TEST_F(SellerFrontEndServiceTest,
   };
 
   ErrorAccumulator error_accumulator;
-  for (const auto& buyer_ig_owner : request_.auction_config().buyer_list()) {
+  for (const auto& buyer_ig_owner :
+       this->request_.auction_config().buyer_list()) {
     auto decoded_buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
-        protected_audience_input_.buyer_input().at(buyer_ig_owner),
+        this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
     const BuyerInput& buyer_input = std::move(decoded_buyer_input);
@@ -269,16 +292,16 @@ TEST_F(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
   ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         key_fetcher_manager_, std::move(async_reporter)};
+                         this->key_fetcher_manager_, std::move(async_reporter)};
 
-  PopulateProtectedAudienceInputCiphertextOnRequest();
+  this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
 
-TEST_F(SellerFrontEndServiceTest,
-       FetchesScoringSignalsWithBidResponseAdRenderUrls) {
-  SetupRequestWithTwoBuyers();
+TYPED_TEST(SellerFrontEndServiceTest,
+           FetchesScoringSignalsWithBidResponseAdRenderUrls) {
+  this->SetupRequestWithTwoBuyers();
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   // Expects no calls because we do not finish fetching the decision logic
@@ -286,13 +309,14 @@ TEST_F(SellerFrontEndServiceTest,
   EXPECT_CALL(scoring_client, ExecuteInternal).Times(0);
 
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request_);
+      BuildBuyerWinningAdUrlMap(this->request_);
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = protected_audience_input_.buyer_input_size();
+  int client_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
   BuyerBidsResponseMap expected_buyer_bids;
-  for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(buyer);
     auto get_bids_response =
         BuildGetBidsResponseWithSingleAd(url, "testIg", 1.9, true);
@@ -313,25 +337,26 @@ TEST_F(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager_,
+                         buyer_clients, this->key_fetcher_manager_,
                          std::move(async_reporter)};
-  PopulateProtectedAudienceInputCiphertextOnRequest();
+  this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
 
-TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
-  SetupRequestWithTwoBuyers();
+TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
+  this->SetupRequestWithTwoBuyers();
   absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request_);
+      BuildBuyerWinningAdUrlMap(this->request_);
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = protected_audience_input_.buyer_input_size();
+  int client_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
   absl::flat_hash_map<AdUrl, AdWithBid> bids;
   BuyerBidsResponseMap expected_buyer_bids;
-  for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(buyer);
     GetBidsResponse::GetBidsRawResponse response =
         BuildGetBidsResponseWithSingleAd(url);
@@ -351,8 +376,9 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillOnce(
-          [select_ad_req = request_,
-           protected_audience_input = protected_audience_input_, ad_render_urls,
+          [select_ad_req = this->request_,
+           protected_auction_input = this->protected_auction_input_,
+           ad_render_urls,
            bids](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
                  const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
                  absl::Duration timeout) {
@@ -361,7 +387,7 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
             diff.ReportDifferencesToString(&diff_output);
 
             EXPECT_STREQ(request->publisher_hostname().data(),
-                         protected_audience_input.publisher_name().data());
+                         protected_auction_input.publisher_name().data());
             EXPECT_EQ(request->seller_signals(),
                       select_ad_req.auction_config().seller_signals());
             EXPECT_EQ(request->auction_signals(),
@@ -387,24 +413,24 @@ TEST_F(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager_,
+                         buyer_clients, this->key_fetcher_manager_,
                          std::move(async_reporter)};
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
 
-TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   std::string decision_logic = "function scoreAds(){}";
 
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request_);
+      BuildBuyerWinningAdUrlMap(this->request_);
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
   BuyerBidsResponseMap expected_buyer_bids;
   ErrorAccumulator error_accumulator;
   auto decoded_buyer_inputs = DecodeBuyerInputs(
-      protected_audience_input_.buyer_input(), error_accumulator);
+      this->protected_auction_input_.buyer_input(), error_accumulator);
   ASSERT_FALSE(error_accumulator.HasErrors());
   for (const auto& [buyer, buyerInput] : decoded_buyer_inputs) {
     EXPECT_EQ(buyerInput.interest_groups_size(), 1);
@@ -413,7 +439,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
     auto get_bid_response =
         BuildGetBidsResponseWithSingleAd(buyer_to_ad_url.at(buyer), ig);
     EXPECT_FALSE(get_bid_response.bids(0).render().empty());
-    EXPECT_EQ(get_bid_response.bids(0).ad_component_render_size(),
+    EXPECT_EQ(get_bid_response.bids(0).ad_components_size(),
               kDefaultNumAdComponents);
     SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
     expected_buyer_bids.try_emplace(
@@ -447,7 +473,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
         for (const auto& bid : score_ads_request->ad_bids()) {
           EXPECT_EQ(bid.ad_cost(), kAdCost);
           const std::string encoded_buyer_input =
-              protected_audience_input_.buyer_input()
+              this->protected_auction_input_.buyer_input()
                   .find(bid.interest_group_owner())
                   ->second;
           BuyerInput decoded_buyer_input =
@@ -470,9 +496,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
           AdScore score;
           EXPECT_FALSE(bid.render().empty());
           score.set_render(bid.render());
-          score.mutable_component_renders()->CopyFrom(
-              bid.ad_component_render());
-          EXPECT_EQ(bid.ad_component_render_size(), kDefaultNumAdComponents);
+          score.mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
           score.set_desirability(i++);
           score.set_buyer_bid(i);
           score.set_interest_group_name(bid.interest_group_name());
@@ -492,14 +517,14 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
 
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager_,
+                         buyer_clients, this->key_fetcher_manager_,
                          std::move(async_reporter)};
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.Wait();
 
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), *context_);
+      response.auction_result_ciphertext(), *this->context_);
 
   EXPECT_EQ(auction_result.score(), winner.desirability());
   EXPECT_EQ(auction_result.ad_component_render_urls_size(), 3);
@@ -512,7 +537,7 @@ TEST_F(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
             winner.interest_group_owner());
 }
 
-TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   // Setup a buyer input with two interest groups that will have non-zero bids
   // from the bidding service, another interest group with 0 bid and the last
   // interest group that is not present in the bidding data returned by the
@@ -529,44 +554,44 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   buyer_input.mutable_interest_groups()->Add()->set_name(unexpected_ig_2);
 
   // Setup a SelectAdRequest with the aforementioned buyer input.
-  request_ = SelectAdRequest();
-  request_.mutable_auction_config()->set_seller(kSellerOriginDomain);
+  this->request_ = SelectAdRequest();
+  this->request_.mutable_auction_config()->set_seller(kSellerOriginDomain);
   google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
   buyer_inputs.emplace(buyer, buyer_input);
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_inputs);
   EXPECT_TRUE(encoded_buyer_inputs.ok());
-  *protected_audience_input_.mutable_buyer_input() =
+  *this->protected_auction_input_.mutable_buyer_input() =
       std::move(*encoded_buyer_inputs);
-  request_.mutable_auction_config()->set_seller_signals(
+  this->request_.mutable_auction_config()->set_seller_signals(
       absl::StrCat("{\"seller_signal\": \"", MakeARandomString(), "\"}"));
-  request_.mutable_auction_config()->set_auction_signals(
+  this->request_.mutable_auction_config()->set_auction_signals(
       absl::StrCat("{\"auction_signal\": \"", MakeARandomString(), "\"}"));
   for (const auto& [local_buyer, unused] :
-       protected_audience_input_.buyer_input()) {
-    *request_.mutable_auction_config()->mutable_buyer_list()->Add() =
+       this->protected_auction_input_.buyer_input()) {
+    *this->request_.mutable_auction_config()->mutable_buyer_list()->Add() =
         local_buyer;
   }
-  protected_audience_input_.set_generation_id(MakeARandomString());
-  protected_audience_input_.set_publisher_name(MakeARandomString());
-  request_.set_client_type(SelectAdRequest_ClientType_ANDROID);
+  this->protected_auction_input_.set_generation_id(MakeARandomString());
+  this->protected_auction_input_.set_publisher_name(MakeARandomString());
+  this->request_.set_client_type(SelectAdRequest_ClientType_ANDROID);
 
   // KV Client
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = request_.auction_config().buyer_list_size();
+  int client_count = this->request_.auction_config().buyer_list_size();
   EXPECT_EQ(client_count, 1);
 
-  int buyer_input_count = protected_audience_input_.buyer_input_size();
+  int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 1);
 
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request_);
+      BuildBuyerWinningAdUrlMap(this->request_);
 
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
-       protected_audience_input_.buyer_input()) {
+       this->protected_auction_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(local_buyer);
     AdWithBid bid1 = BuildNewAdWithBid(url, std::move(expected_ig_1), 1);
     AdWithBid bid2 = BuildNewAdWithBid(url, std::move(expected_ig_2), 10);
@@ -601,9 +626,8 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
           AdScore* score = response->mutable_ad_score();
           EXPECT_FALSE(bid.render().empty());
           score->set_render(bid.render());
-          score->mutable_component_renders()->CopyFrom(
-              bid.ad_component_render());
-          EXPECT_EQ(bid.ad_component_render_size(), kDefaultNumAdComponents);
+          score->mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
           score->set_desirability(kNonZeroDesirability);
           score->set_buyer_bid(1);
           score->set_interest_group_name(bid.interest_group_name());
@@ -621,14 +645,14 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
 
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager_,
+                         buyer_clients, this->key_fetcher_manager_,
                          std::move(async_reporter)};
-  auto [encrypted_protected_audience_input, encrypted_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input_);
-  *request_.mutable_protected_audience_ciphertext() =
-      std::move(encrypted_protected_audience_input);
+  auto [encrypted_protected_auction_input, encrypted_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
+          this->protected_auction_input_);
+  this->SetProtectedAuctionCipherText(encrypted_protected_auction_input);
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       response.auction_result_ciphertext(), encrypted_context);
 
@@ -654,20 +678,21 @@ TEST_F(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   EXPECT_TRUE(unexpected_interest_group_indices.empty());
 }
 
-TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
-  SetupRequestWithTwoBuyers();
+TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
+  this->SetupRequestWithTwoBuyers();
   std::string decision_logic = "function scoreAds(){}";
   // Enable Event Level debug reporting for this request.
-  protected_audience_input_.set_enable_debug_reporting(true);
+  this->protected_auction_input_.set_enable_debug_reporting(true);
 
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request_);
+      BuildBuyerWinningAdUrlMap(this->request_);
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
-  int client_count = protected_audience_input_.buyer_input_size();
+  int client_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(client_count, 2);
   BuyerBidsResponseMap expected_buyer_bids;
-  for (const auto& [buyer, unused] : protected_audience_input_.buyer_input()) {
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
     auto get_bid_response = BuildGetBidsResponseWithSingleAd(
         buyer_to_ad_url.at(buyer), "testIg", 1.9, true);
     SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
@@ -703,10 +728,8 @@ TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
               AdScore score;
               EXPECT_FALSE(bid.render().empty());
               score.set_render(bid.render());
-              score.mutable_component_renders()->CopyFrom(
-                  bid.ad_component_render());
-              EXPECT_EQ(bid.ad_component_render_size(),
-                        kDefaultNumAdComponents);
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
               score.set_desirability(i++);
               score.set_buyer_bid(i);
               score.set_interest_group_name(bid.interest_group_name());
@@ -727,11 +750,11 @@ TEST_F(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
   ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager_,
+                         buyer_clients, this->key_fetcher_manager_,
                          std::move(async_reporter)};
 
   Response response =
-      RunRequest<SelectAdReactorForWeb>(config_, clients, request_);
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.Wait();
 }
 

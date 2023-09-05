@@ -19,19 +19,15 @@
 #include <string>
 #include <utility>
 
-#include "absl/functional/any_invocable.h"
 #include "absl/numeric/bits.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "glog/logging.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "services/common/compression/gzip.h"
-#include "services/common/util/request_response_constants.h"
-#include "services/common/util/scoped_cbor.h"
 #include "services/common/util/status_macros.h"
 
 #include "cbor.h"
@@ -39,16 +35,13 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-#define RETURN_IF_PREV_ERRORS(error_accumulator, should_fail_fast, to_return) \
-  if (error_accumulator.HasErrors() && should_fail_fast) {                    \
-    return to_return;                                                         \
-  }
-
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using ErrorHandler = const std::function<void(absl::string_view)>&;
 using RepeatedStringProto = ::google::protobuf::RepeatedPtrField<std::string>;
+using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
+using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 
 // Array for mapping from the CBOR data type enum (a number) to a concrete data
 // type. Used for returning helpful error messages when clients incorrectly
@@ -68,17 +61,6 @@ inline constexpr std::array<absl::string_view, kNumCborDataTypes>
                                 // values")
 };
 
-template <std::size_t Size>
-int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
-                  absl::string_view needle) {
-  auto it = std::find(haystack.begin(), haystack.end(), needle);
-  if (it == haystack.end()) {
-    return -1;
-  }
-
-  return std::distance(haystack.begin(), it);
-}
-
 struct cbor_pair BuildCborKVPair(absl::string_view key,
                                  absl::string_view value) {
   return {.key = cbor_move(cbor_build_stringn(key.data(), key.size())),
@@ -93,37 +75,6 @@ absl::Status AddKVToMap(absl::string_view key, absl::string_view value,
   }
 
   return absl::OkStatus();
-}
-
-// Helper to validate the type of a CBOR object.
-bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
-                 const cbor_item_t* item, absl::string_view field_name,
-                 absl::string_view expected_type,
-                 ErrorAccumulator& error_accumulator,
-                 SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG) {
-  if (!is_valid_type(item)) {
-    absl::string_view actual_type = kUnknownDataType;
-    if (item->type < kCborDataTypesLookup.size()) {
-      actual_type = kCborDataTypesLookup[item->type];
-    }
-
-    std::string error = absl::StrFormat(kInvalidTypeError, field_name,
-                                        expected_type, actual_type);
-    VLOG(3) << "CBOR type validation failure at: " << location.file_name()
-            << ":" << location.line();
-    error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
-                                  ErrorCode::CLIENT_SIDE);
-    return false;
-  }
-
-  return true;
-}
-
-// Reads a cbor item into a string. Caller must verify that the item is a string
-// before calling this method.
-std::string DecodeCborString(const cbor_item_t* item) {
-  return std::string(reinterpret_cast<char*>(cbor_string_handle(item)),
-                     cbor_string_length(item));
 }
 
 // Decodes a Span of cbor* string objects and adds them to the provided list.
@@ -282,52 +233,6 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
   return signals;
 }
 
-// Decodes the key (i.e. owner) in the BuyerInputs in ProtectedAudienceInput
-// and copies the corresponding value (i.e. BuyerInput) as-is. Note: this method
-// doesn't decode the value.
-EncodedBuyerInputs DecodeBuyerInputKeys(
-    cbor_item_t& compressed_encoded_buyer_inputs,
-    ErrorAccumulator& error_accumulator, bool fail_fast = true) {
-  EncodedBuyerInputs encoded_buyer_inputs;
-  bool is_buyer_inputs_valid_type =
-      IsTypeValid(&cbor_isa_map, &compressed_encoded_buyer_inputs,
-                  kInterestGroups, kMap, error_accumulator);
-  RETURN_IF_PREV_ERRORS(error_accumulator,
-                        /*fail_fast=*/!is_buyer_inputs_valid_type,
-                        encoded_buyer_inputs);
-
-  absl::Span<cbor_pair> interest_group_data_entries(
-      cbor_map_handle(&compressed_encoded_buyer_inputs),
-      cbor_map_size(&compressed_encoded_buyer_inputs));
-  for (const cbor_pair& interest_group : interest_group_data_entries) {
-    bool is_ig_key_valid_type =
-        IsTypeValid(&cbor_isa_string, interest_group.key, kIgKey, kString,
-                    error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, encoded_buyer_inputs);
-
-    if (!is_ig_key_valid_type) {
-      continue;
-    }
-
-    const std::string owner = DecodeCborString(interest_group.key);
-    // The value is a gzip compressed bytestring.
-    bool is_ig_val_valid_type =
-        IsTypeValid(&cbor_isa_bytestring, interest_group.value, kIgValue,
-                    kByteString, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, encoded_buyer_inputs);
-
-    if (!is_ig_val_valid_type) {
-      continue;
-    }
-    const std::string compressed_igs(
-        reinterpret_cast<char*>(cbor_bytestring_handle(interest_group.value)),
-        cbor_bytestring_length(interest_group.value));
-    encoded_buyer_inputs.insert({std::move(owner), std::move(compressed_igs)});
-  }
-
-  return encoded_buyer_inputs;
-}
-
 google::protobuf::Map<std::string, BuyerInput> DecodeInterestGroupEntries(
     absl::Span<cbor_pair> interest_group_data_entries,
     ErrorAccumulator& error_accumulator, bool fail_fast) {
@@ -371,86 +276,6 @@ google::protobuf::Map<std::string, BuyerInput> DecodeInterestGroupEntries(
   }
 
   return result;
-}
-
-ProtectedAudienceInput DecodeProtectedAudienceInput(
-    cbor_item_t* root, ErrorAccumulator& error_accumulator, bool fail_fast) {
-  ProtectedAudienceInput output;
-
-  IsTypeValid(&cbor_isa_map, root, kProtectedAudienceInput, kMap,
-              error_accumulator);
-  RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/true, output);
-
-  absl::Span<cbor_pair> entries(cbor_map_handle(root), cbor_map_size(root));
-  for (const cbor_pair& entry : entries) {
-    bool is_valid_key_type = IsTypeValid(
-        &cbor_isa_string, entry.key, kRootCborKey, kString, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
-    if (!is_valid_key_type) {
-      continue;
-    }
-
-    const int index =
-        FindItemIndex(kRequestRootKeys, DecodeCborString(entry.key));
-    switch (index) {
-      case 0: {  // Schema version.
-        bool is_valid_schema_type = IsTypeValid(
-            &cbor_is_int, entry.value, kVersion, kInt, error_accumulator);
-        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
-
-        // Only support version 0 schemas for now.
-        if (is_valid_schema_type && cbor_get_int(entry.value) != 0) {
-          const std::string error = absl::StrFormat(
-              kUnsupportedSchemaVersionError, cbor_get_int(entry.value));
-          error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
-                                        ErrorCode::CLIENT_SIDE);
-        }
-        break;
-      }
-      case 1: {  // Publisher.
-        bool is_valid_publisher_type =
-            IsTypeValid(&cbor_isa_string, entry.value, kPublisher, kString,
-                        error_accumulator);
-        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
-
-        if (is_valid_publisher_type) {
-          output.set_publisher_name(DecodeCborString(entry.value));
-        }
-        break;
-      }
-      case 2: {  // Interest groups.
-        *output.mutable_buyer_input() =
-            DecodeBuyerInputKeys(*entry.value, error_accumulator, fail_fast);
-        break;
-      }
-      case 3: {  // Generation Id.
-        bool is_valid_gen_type =
-            IsTypeValid(&cbor_isa_string, entry.value, kGenerationId, kString,
-                        error_accumulator);
-        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
-
-        if (is_valid_gen_type) {
-          output.set_generation_id(DecodeCborString(entry.value));
-        }
-        break;
-      }
-      case 4: {  // Enable Debug Reporting.
-        bool is_valid_debug_type =
-            IsTypeValid(&cbor_is_bool, entry.value, kDebugReporting, kString,
-                        error_accumulator);
-        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
-
-        if (is_valid_debug_type) {
-          output.set_enable_debug_reporting(cbor_get_bool(entry.value));
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  return output;
 }
 
 absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
@@ -529,10 +354,10 @@ absl::Status CborSerializeScoreAdResponse(
   PS_RETURN_IF_ERROR(
       CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
-  PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
-                                         error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
       kAdComponents, ad_score.component_renders(), error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
+                                         error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeWinReportingUrls(
@@ -601,6 +426,125 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
 }
 
 }  // namespace
+
+ConsentedDebugConfiguration DecodeConsentedDebugConfig(
+    const cbor_item_t* root, ErrorAccumulator& error_accumulator,
+    bool fail_fast) {
+  ConsentedDebugConfiguration consented_debug_config;
+  bool is_config_valid_type = IsTypeValid(
+      &cbor_isa_map, root, kConsentedDebugConfig, kMap, error_accumulator);
+  RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/!is_config_valid_type,
+                        consented_debug_config);
+
+  absl::Span<cbor_pair> entries(cbor_map_handle(root), cbor_map_size(root));
+  for (const cbor_pair& entry : entries) {
+    bool is_valid_key_type =
+        IsTypeValid(&cbor_isa_string, entry.key, kConsentedDebugConfigKey,
+                    kString, error_accumulator);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, consented_debug_config);
+    if (!is_valid_key_type) {
+      continue;
+    }
+
+    const int index =
+        FindItemIndex(kConsentedDebugConfigKeys, DecodeCborString(entry.key));
+    switch (index) {
+      case 0: {  // IsConsented.
+        bool is_valid_type = IsTypeValid(&cbor_is_bool, entry.value,
+                                         kConsentedDebugConfigIsConsented,
+                                         kString, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                              consented_debug_config);
+        if (is_valid_type) {
+          consented_debug_config.set_is_consented(cbor_get_bool(entry.value));
+        }
+        break;
+      }
+      case 1: {  // Token.
+        bool is_valid_type =
+            IsTypeValid(&cbor_isa_string, entry.value,
+                        kConsentedDebugConfigToken, kString, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                              consented_debug_config);
+        if (is_valid_type) {
+          consented_debug_config.set_token(DecodeCborString(entry.value));
+        }
+        break;
+      }
+    }
+  }
+  return consented_debug_config;
+}
+
+EncodedBuyerInputs DecodeBuyerInputKeys(
+    cbor_item_t& compressed_encoded_buyer_inputs,
+    ErrorAccumulator& error_accumulator, bool fail_fast) {
+  EncodedBuyerInputs encoded_buyer_inputs;
+  bool is_buyer_inputs_valid_type =
+      IsTypeValid(&cbor_isa_map, &compressed_encoded_buyer_inputs,
+                  kInterestGroups, kMap, error_accumulator);
+  RETURN_IF_PREV_ERRORS(error_accumulator,
+                        /*fail_fast=*/!is_buyer_inputs_valid_type,
+                        encoded_buyer_inputs);
+
+  absl::Span<cbor_pair> interest_group_data_entries(
+      cbor_map_handle(&compressed_encoded_buyer_inputs),
+      cbor_map_size(&compressed_encoded_buyer_inputs));
+  for (const cbor_pair& interest_group : interest_group_data_entries) {
+    bool is_ig_key_valid_type =
+        IsTypeValid(&cbor_isa_string, interest_group.key, kIgKey, kString,
+                    error_accumulator);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, encoded_buyer_inputs);
+
+    if (!is_ig_key_valid_type) {
+      continue;
+    }
+
+    const std::string owner = DecodeCborString(interest_group.key);
+    // The value is a gzip compressed bytestring.
+    bool is_ig_val_valid_type =
+        IsTypeValid(&cbor_isa_bytestring, interest_group.value, kIgValue,
+                    kByteString, error_accumulator);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, encoded_buyer_inputs);
+
+    if (!is_ig_val_valid_type) {
+      continue;
+    }
+    const std::string compressed_igs(
+        reinterpret_cast<char*>(cbor_bytestring_handle(interest_group.value)),
+        cbor_bytestring_length(interest_group.value));
+    encoded_buyer_inputs.insert({std::move(owner), std::move(compressed_igs)});
+  }
+
+  return encoded_buyer_inputs;
+}
+
+bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
+                 const cbor_item_t* item, absl::string_view field_name,
+                 absl::string_view expected_type,
+                 ErrorAccumulator& error_accumulator, SourceLocation location) {
+  if (!is_valid_type(item)) {
+    absl::string_view actual_type = kUnknownDataType;
+    if (item->type < kCborDataTypesLookup.size()) {
+      actual_type = kCborDataTypesLookup[item->type];
+    }
+
+    std::string error = absl::StrFormat(kInvalidTypeError, field_name,
+                                        expected_type, actual_type);
+    VLOG(3) << "CBOR type validation failure at: " << location.file_name()
+            << ":" << location.line();
+    error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
+                                  ErrorCode::CLIENT_SIDE);
+    return false;
+  }
+
+  return true;
+}
+
+std::string DecodeCborString(const cbor_item_t* item) {
+  return std::string(reinterpret_cast<char*>(cbor_string_handle(item)),
+                     cbor_string_length(item));
+}
 
 cbor_item_t* cbor_build_uint(uint32_t input) {
   if (input <= 255) {
@@ -746,25 +690,6 @@ absl::Status CborSerializeInteractionReportingUrls(
     return absl::InternalError("");
   }
   return absl::OkStatus();
-}
-
-ProtectedAudienceInput Decode(absl::string_view cbor_payload,
-                              ErrorAccumulator& error_accumulator,
-                              bool fail_fast) {
-  ProtectedAudienceInput protected_audience_input;
-  cbor_load_result result;
-  ScopedCbor root(
-      cbor_load(reinterpret_cast<const unsigned char*>(cbor_payload.data()),
-                cbor_payload.size(), &result));
-  if (result.error.code != CBOR_ERR_NONE) {
-    error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE,
-                                  kInvalidCborError, ErrorCode::CLIENT_SIDE);
-    return protected_audience_input;
-  }
-
-  protected_audience_input =
-      DecodeProtectedAudienceInput(*root, error_accumulator, fail_fast);
-  return protected_audience_input;
 }
 
 absl::StatusOr<std::string> Encode(
@@ -963,17 +888,15 @@ absl::Status CborSerializeReportingUrls(
   }
   ScopedCbor serialized_reporting_urls(
       cbor_new_definite_map(kNumReportingUrlsKeys));
-
+  if (!reporting_urls.reporting_url().empty()) {
+    PS_RETURN_IF_ERROR(AddKVToMap(kReportingUrl, reporting_urls.reporting_url(),
+                                  error_handler, **serialized_reporting_urls));
+  }
   if (!reporting_urls.interaction_reporting_urls().empty()) {
     PS_RETURN_IF_ERROR(CborSerializeInteractionReportingUrls(
         reporting_urls.interaction_reporting_urls(), error_handler,
         **serialized_reporting_urls));
   }
-  if (!reporting_urls.reporting_url().empty()) {
-    PS_RETURN_IF_ERROR(AddKVToMap(kReportingUrl, reporting_urls.reporting_url(),
-                                  error_handler, **serialized_reporting_urls));
-  }
-
   struct cbor_pair serialized_reporting_urls_kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *serialized_reporting_urls,
@@ -990,14 +913,8 @@ absl::Status CborSerializeReportingUrls(
 absl::Status CborSerializeWinReportingUrls(
     const WinReportingUrls& win_reporting_urls, ErrorHandler error_handler,
     cbor_item_t& root) {
-  int key_count = 0;
-  if (win_reporting_urls.has_buyer_reporting_urls()) {
-    key_count++;
-  }
-  if (win_reporting_urls.has_component_seller_reporting_urls()) {
-    key_count++;
-  }
-  if (key_count == 0) {
+  if (!win_reporting_urls.has_buyer_reporting_urls() &&
+      !win_reporting_urls.has_top_level_seller_reporting_urls()) {
     return absl::OkStatus();
   }
   ScopedCbor serialized_win_reporting_urls(
@@ -1007,10 +924,10 @@ absl::Status CborSerializeWinReportingUrls(
         kBuyerReportingUrls, win_reporting_urls.buyer_reporting_urls(),
         error_handler, **serialized_win_reporting_urls));
   }
-  if (win_reporting_urls.has_component_seller_reporting_urls()) {
+  if (win_reporting_urls.has_top_level_seller_reporting_urls()) {
     PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
-        kComponentSellerReportingUrls,
-        win_reporting_urls.component_seller_reporting_urls(), error_handler,
+        kTopLevelSellerReportingUrls,
+        win_reporting_urls.top_level_seller_reporting_urls(), error_handler,
         **serialized_win_reporting_urls));
   }
   struct cbor_pair serialized_win_reporting_urls_kv = {

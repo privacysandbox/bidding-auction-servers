@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+resource "null_resource" "runtime_flags" {
+  triggers = var.runtime_flags
+}
+
 ###############################################################
 #
 #                         FRONTEND
@@ -25,7 +29,7 @@ resource "google_compute_instance_template" "frontends" {
   for_each = var.subnets
 
   region      = each.value.region
-  name        = "${var.operator}-${var.environment}-${var.frontend_service_name}-${each.value.region}-it"
+  name        = "${var.operator}-${var.environment}-${var.frontend_service_name}-${each.value.region}-it-${substr(replace(uuid(), "/-/", ""), 0, 8)}"
   provider    = google-beta
   description = "This template is used to create confidential compute instances, one service per instance."
   tags        = ["allow-hc", "allow-ssh", "allow-all-egress"]
@@ -92,6 +96,8 @@ resource "google_compute_instance_template" "frontends" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [name]
+    replace_triggered_by  = [null_resource.runtime_flags]
   }
 }
 
@@ -115,6 +121,19 @@ resource "google_compute_region_instance_group_manager" "frontends" {
   auto_healing_policies {
     health_check      = google_compute_health_check.frontend.id
     initial_delay_sec = var.vm_startup_delay_seconds
+  }
+
+  update_policy {
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+  }
+  wait_for_instances_status = "UPDATED"
+  wait_for_instances        = var.instance_template_waits_for_instances
+  timeouts {
+    create = "1h"
+    delete = "1h"
+    update = "1h"
   }
 }
 
@@ -167,7 +186,7 @@ resource "google_compute_instance_template" "backends" {
   for_each = var.subnets
 
   region      = each.value.region
-  name        = "${var.operator}-${var.environment}-${var.backend_service_name}-${each.value.region}-it"
+  name        = "${var.operator}-${var.environment}-${var.backend_service_name}-${each.value.region}-it-${substr(replace(uuid(), "/-/", ""), 0, 8)}"
   provider    = google-beta
   description = "This template is used to create confidential compute instances, one service per instance."
   tags        = ["allow-hc", "allow-ssh", "allow-backend-ingress", "allow-all-egress"]
@@ -230,6 +249,8 @@ resource "google_compute_instance_template" "backends" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [name]
+    replace_triggered_by  = [null_resource.runtime_flags]
   }
 }
 
@@ -253,6 +274,19 @@ resource "google_compute_region_instance_group_manager" "backends" {
   auto_healing_policies {
     health_check      = google_compute_health_check.backend.id
     initial_delay_sec = var.vm_startup_delay_seconds
+  }
+
+  update_policy {
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+  }
+  wait_for_instances_status = "UPDATED"
+  wait_for_instances        = var.instance_template_waits_for_instances
+  timeouts {
+    create = "1h"
+    delete = "1h"
+    update = "1h"
   }
 }
 
@@ -296,7 +330,7 @@ resource "google_compute_instance_template" "collector" {
   for_each = var.subnets
 
   region      = each.value.region
-  name        = "${var.operator}-${var.environment}-${var.collector_service_name}-${each.value.region}-it"
+  name        = "${var.operator}-${var.environment}-${var.collector_service_name}-${each.value.region}-it-${substr(replace(uuid(), "/-/", ""), 0, 8)}"
   provider    = google-beta
   description = "This template is used to create an opentelemetry collector for the region."
   tags        = ["allow-otlp", "allow-hc", "allow-all-egress", ]
@@ -343,6 +377,7 @@ resource "google_compute_instance_template" "collector" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [name]
   }
 }
 
@@ -366,6 +401,19 @@ resource "google_compute_region_instance_group_manager" "collector" {
   auto_healing_policies {
     health_check      = google_compute_health_check.collector.id
     initial_delay_sec = var.vm_startup_delay_seconds
+  }
+
+  update_policy {
+    minimal_action  = "REPLACE"
+    type            = "PROACTIVE"
+    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+  }
+  wait_for_instances_status = "UPDATED"
+  wait_for_instances        = var.instance_template_waits_for_instances
+  timeouts {
+    create = "1h"
+    delete = "1h"
+    update = "1h"
   }
 }
 

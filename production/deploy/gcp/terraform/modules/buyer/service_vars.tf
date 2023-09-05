@@ -124,3 +124,9 @@ variable "collector_machine_type" {
   description = "Machine type for the collector service."
   type        = string
 }
+
+variable "instance_template_waits_for_instances" {
+  description = "True if terraform should wait for instances before returning from instance template application. False if faster apply is desired."
+  type        = bool
+  default     = true
+}

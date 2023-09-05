@@ -37,6 +37,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
@@ -146,12 +147,16 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
                         ENABLE_OTEL_BASED_LOGGING);
+  config_client.SetFlag(FLAGS_enable_protected_app_signals,
+                        ENABLE_PROTECTED_APP_SIGNALS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
 
+  VLOG(1) << "Protected App Signals support enabled on the service: "
+          << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   VLOG(1) << "Successfully constructed the config client.";
   return config_client;
 }
@@ -172,18 +177,19 @@ absl::Status RunServer() {
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions(), collector_endpoint);
+      telemetry_config.LogsAllowed() &&
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::SfeContextMap(
       std::move(telemetry_config),
-      opentelemetry::metrics::Provider::GetMeterProvider()
-          ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get()));
+      server_common::ConfigurePrivateMetrics(
+          CreateSharedAttributes(&config_util),
+          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
+          collector_endpoint),
+      config_util.GetService(), kOpenTelemetryVersion.data()));
 
   std::string server_address =
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
@@ -235,6 +241,7 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
   google::InitGoogleLogging(argv[0]);
 

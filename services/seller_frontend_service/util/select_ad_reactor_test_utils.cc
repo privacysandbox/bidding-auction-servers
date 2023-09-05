@@ -29,7 +29,6 @@
 #include "absl/strings/string_view.h"
 #include "gmock/gmock.h"
 #include "services/common/compression/gzip.h"
-#include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
@@ -44,13 +43,9 @@ using GetBidDoneCallback =
                                 GetBidsResponse::GetBidsRawResponse>>) &&>;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
-using AdScore = ScoreAdsResponse::AdScore;
 using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(
                            absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
-using ScoreAdsDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                ScoreAdsResponse::ScoreAdsRawResponse>>) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
@@ -111,7 +106,7 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   }
   result->set_bid(input.bid());
   result->set_render(input.render());
-  result->mutable_ad_component_render()->CopyFrom(input.ad_component_render());
+  result->mutable_ad_components()->CopyFrom(input.ad_components());
   result->set_allow_component_auction(input.allow_component_auction());
   result->set_interest_group_name(input.interest_group_name());
   result->set_ad_cost(kAdCost);
@@ -126,7 +121,7 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
-    bid.add_ad_component_render(
+    bid.add_ad_components(
         absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
   if (bid_value.has_value()) {
@@ -205,171 +200,6 @@ TrustedServersConfigClient CreateConfig() {
   return config;
 }
 
-EncryptedSelectAdRequestWithContext GetSampleSelectAdRequest(
-    SelectAdRequest::ClientType client_type,
-    absl::string_view seller_origin_domain) {
-  BuyerInput buyer_input;
-  auto* interest_group = buyer_input.mutable_interest_groups()->Add();
-  interest_group->set_name(kSampleInterestGroupName);
-  *interest_group->mutable_bidding_signals_keys()->Add() = "[]";
-
-  DecodedBuyerInputs decoded_buyer_inputs;
-  decoded_buyer_inputs.emplace(kSampleBuyer, buyer_input);
-  EncodedBuyerInputs encoded_buyer_inputs;
-  switch (client_type) {
-    case SelectAdRequest::BROWSER:
-      encoded_buyer_inputs = *GetEncodedBuyerInputMap(decoded_buyer_inputs);
-      break;
-    case SelectAdRequest::ANDROID:
-      encoded_buyer_inputs = GetProtoEncodedBuyerInputs(decoded_buyer_inputs);
-      break;
-    default:
-      EXPECT_TRUE(false)
-          << "Test configuration error, unsupported client type: "
-          << client_type;
-      break;
-  }
-
-  SelectAdRequest request;
-  ProtectedAudienceInput protected_audience_input;
-  protected_audience_input.set_generation_id(kSampleGenerationId);
-  *protected_audience_input.mutable_buyer_input() =
-      std::move(encoded_buyer_inputs);
-  request.mutable_auction_config()->set_seller_signals(
-      absl::StrCat("{\"seller_signal\": \"", MakeARandomString(), "\"}"));
-  request.mutable_auction_config()->set_auction_signals(
-      absl::StrCat("{\"auction_signal\": \"", MakeARandomString(), "\"}"));
-  for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
-    *request.mutable_auction_config()->mutable_buyer_list()->Add() =
-        local_buyer;
-  }
-  protected_audience_input.set_publisher_name(MakeARandomString());
-  request.mutable_auction_config()->set_seller(seller_origin_domain);
-  request.set_client_type(client_type);
-
-  switch (client_type) {
-    case SelectAdRequest::ANDROID: {
-      auto [encrypted_request, context] =
-          GetProtoEncodedEncryptedInputAndOhttpContext(
-              protected_audience_input);
-      *request.mutable_protected_audience_ciphertext() =
-          std::move(encrypted_request);
-      return {std::move(protected_audience_input), std::move(request),
-              std::move(context)};
-    }
-    case SelectAdRequest::BROWSER: {
-      auto [encrypted_request, context] =
-          GetCborEncodedEncryptedInputAndOhttpContext(protected_audience_input);
-      *request.mutable_protected_audience_ciphertext() =
-          std::move(encrypted_request);
-      return {std::move(protected_audience_input), std::move(request),
-              std::move(context)};
-    }
-    default:
-      break;
-  }
-}
-
-BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
-    const SelectAdRequest& request,
-    const ProtectedAudienceInput& protected_audience_input,
-    const BuyerFrontEndAsyncClientFactoryMock& buyer_clients) {
-  BuyerBidsResponseMap buyer_bids;
-  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
-      BuildBuyerWinningAdUrlMap(request);
-
-  for (const auto& [local_buyer, unused] :
-       protected_audience_input.buyer_input()) {
-    const std::string& url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(url, kSampleInterestGroupName, kNonZeroBidValue,
-                          kNumAdComponentRenderUrl);
-    GetBidsResponse::GetBidsRawResponse response;
-    auto mutable_bids = response.mutable_bids();
-    mutable_bids->Add(std::move(bid));
-
-    SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
-    buyer_bids.try_emplace(
-        local_buyer,
-        std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
-  }
-
-  return buyer_bids;
-}
-
-std::pair<EncryptedSelectAdRequestWithContext, ClientRegistry>
-GetSelectAdRequestAndClientRegistryForTest(
-    SelectAdRequest::ClientType client_type, std::optional<float> buyer_bid,
-    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
-        scoring_signals_provider,
-    const ScoringAsyncClientMock& scoring_client,
-    const BuyerFrontEndAsyncClientFactoryMock&
-        buyer_front_end_async_client_factory_mock,
-    server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
-    BuyerBidsResponseMap& expected_buyer_bids,
-    absl::string_view seller_origin_domain) {
-  auto encrypted_request_with_context =
-      GetSampleSelectAdRequest(client_type, seller_origin_domain);
-
-  // Sets up buyer client while populating the expected buyer bids that can then
-  // be used to setup the scoring signals provider.
-  expected_buyer_bids = GetBuyerClientsAndBidsForReactor(
-      encrypted_request_with_context.select_ad_request,
-      encrypted_request_with_context.protected_audience_input,
-      buyer_front_end_async_client_factory_mock);
-
-  // Scoring signals provider
-  std::string ad_render_urls = "test scoring signals";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           ad_render_urls, /*repeated_get_allowed=*/true);
-
-  float bid_value = kNonZeroBidValue;
-  if (buyer_bid.has_value()) {
-    bid_value = *buyer_bid;
-  }
-
-  // Sets up scoring Client
-  EXPECT_CALL(scoring_client, ExecuteInternal)
-      .WillRepeatedly(
-          [bid_value](
-              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
-              absl::Duration timeout) {
-            for (const auto& bid : request->ad_bids()) {
-              auto response =
-                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
-              AdScore* score = response->mutable_ad_score();
-              EXPECT_FALSE(bid.render().empty());
-              score->set_render(bid.render());
-              score->mutable_component_renders()->CopyFrom(
-                  bid.ad_component_render());
-              EXPECT_EQ(bid.ad_component_render_size(),
-                        kDefaultNumAdComponents);
-              score->set_desirability(kNonZeroDesirability);
-              score->set_buyer_bid(bid_value);
-              score->set_interest_group_name(bid.interest_group_name());
-              score->set_interest_group_owner(kSampleBuyer);
-              std::move(on_done)(std::move(response));
-              // Expect only one bid.
-              break;
-            }
-            return absl::OkStatus();
-          });
-
-  // Reporting Client.
-  std::unique_ptr<MockAsyncReporter> async_reporter =
-      std::make_unique<MockAsyncReporter>(
-          std::make_unique<MockHttpFetcherAsync>());
-  // Sets up client registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_front_end_async_client_factory_mock,
-                         *mock_key_fetcher_manager, std::move(async_reporter)};
-
-  return {std::move(encrypted_request_with_context), std::move(clients)};
-}
-
 // Gets the encoded and encrypted request as well as the OHTTP context used
 // for encrypting the request.
 std::pair<std::string, quiche::ObliviousHttpRequest::Context>
@@ -384,24 +214,6 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
   std::string encrypted_request = ohttp_request->EncapsulateAndSerialize();
   auto context = std::move(*ohttp_request).ReleaseContext();
   return {std::move(encrypted_request), std::move(context)};
-}
-
-std::pair<std::string, quiche::ObliviousHttpRequest::Context>
-GetCborEncodedEncryptedInputAndOhttpContext(
-    const ProtectedAudienceInput& protected_audience_input) {
-  absl::StatusOr<std::string> encoded_request =
-      CborEncodeProtectedAudienceProto(protected_audience_input);
-  EXPECT_TRUE(encoded_request.ok()) << encoded_request.status();
-  return GetFramedInputAndOhttpContext(*encoded_request);
-}
-
-// Gets the encoded and encrypted request as well as the OHTTP context used
-// for encrypting the request.
-std::pair<std::string, quiche::ObliviousHttpRequest::Context>
-GetProtoEncodedEncryptedInputAndOhttpContext(
-    const ProtectedAudienceInput& protected_audience_input) {
-  return GetFramedInputAndOhttpContext(
-      protected_audience_input.SerializeAsString());
 }
 
 AuctionResult DecryptAppProtoAuctionResult(

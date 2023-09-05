@@ -14,12 +14,15 @@
 
 #include "services/common/metric/server_definition.h"
 
+#include <list>
+
 #include "absl/log/check.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace privacy_sandbox::bidding_auction_servers::metric {
 namespace {
+
 TEST(Sever, Initialization) {
   server_common::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::TelemetryConfig::PROD);
@@ -40,6 +43,26 @@ TEST(Sever, GetContext) {
   EXPECT_TRUE(bidding->Get(&request).is_decrypted());
   CHECK_OK(bidding->Remove(&request));
   EXPECT_FALSE(bidding->Get(&request).is_decrypted());
+}
+
+constexpr bool IsInList(absl::string_view proto_elem) {
+  for (auto m : kSellerRejectReasons) {
+    if (proto_elem == m) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TEST(Init, AllTypes) {
+  std::list<SellerRejectionReason> sellerRejectionReasonProtoList;
+  for (int i = SellerRejectionReason_MIN; i <= SellerRejectionReason_MAX; ++i) {
+    sellerRejectionReasonProtoList.push_back(
+        static_cast<SellerRejectionReason>(i));
+  }
+  for (const auto& value : sellerRejectionReasonProtoList) {
+    EXPECT_TRUE(IsInList(ToSellerRejectionReasonString(value)));
+  }
 }
 
 }  // namespace

@@ -28,11 +28,13 @@ message TelemetryConfig {
     PROD = 2;
 
     // Same as PROD in prod build;
-    // In experiment build, enables metrics without noise; and tracing is also enabled.
+    // In experiment build, enables metrics without noise; and tracing is also
+    // enabled.
     EXPERIMENT = 3;
 
     // Same as PROD in prod build;
-    // In experiment build, exports both noised and raw data for `Privacy::kImpacting` metrics.
+    // In experiment build, exports both noised and raw data for
+    // `Privacy::kImpacting` metrics.
     COMPARE = 4;
   }
   TelemetryMode mode = 1;
@@ -40,8 +42,17 @@ message TelemetryConfig {
   // If non-empty, only output these metrics in both here and default list.
   // If empty, the default list of metrics is used.
   repeated MetricConfig metric = 2;
+
+  // The time interval between two consecutive metric exports.
+  int32 metric_export_interval_ms = 3;
+
+  // The time interval between two consecutive differential privacy aggregated.
+  // metric exports, must be at least metric_export_interval_ms
+  int32 dp_export_interval_ms = 4;
 }
 
 message MetricConfig {
+  // name should match `metric::Definition` in the list of server's metric
+  // provided when creating `ContextMap`
   string name = 1;
 }

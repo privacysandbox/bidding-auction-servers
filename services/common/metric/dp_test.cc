@@ -36,6 +36,8 @@ namespace privacy_sandbox::server_common::metric {
 
 using ::testing::_;
 using ::testing::A;
+using ::testing::AtLeast;
+using ::testing::Between;
 using ::testing::DoubleNear;
 using ::testing::Eq;
 using ::testing::Matcher;
@@ -47,6 +49,8 @@ using DefinitionUnSafe =
     Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter>;
 using DefinitionPartition =
     Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>;
+using DefinitionHistogram =
+    Definition<double, Privacy::kImpacting, Instrument::kHistogram>;
 
 constexpr DefinitionUnSafe kIntUnSafeCounter("kIntUnSafeCounter", "", 1, 2);
 constexpr DefinitionUnSafe kUnitCounter("kUnitCounter", "", 0, 1);
@@ -59,12 +63,18 @@ constexpr DefinitionPartition kUnitPartionCounter(
     /*upper_bound*/ 1,
     /*lower_bound*/ 0);
 
+constexpr double kHistogram[] = {50, 100, 250};
+constexpr DefinitionHistogram kHistogramCounter("kHistogramCounter", "",
+                                                kHistogram);
+
 class MockMetricRouter {
  public:
   MOCK_METHOD(absl::Status, LogSafe,
               ((const DefinitionUnSafe&), int, absl::string_view));
   MOCK_METHOD(absl::Status, LogSafe,
               ((const DefinitionPartition&), int, absl::string_view));
+  MOCK_METHOD(absl::Status, LogSafe,
+              ((const DefinitionHistogram&), int, absl::string_view));
 };
 
 class NoNoiseTest : public ::testing::Test {
@@ -154,6 +164,37 @@ TEST_F(NoNoiseTest, PartitionedCounter) {
   PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
 }
 
+TEST_F(NoNoiseTest, HistogramCounter) {
+  internal::DpAggregator d(&mock_metric_router_, &kHistogramCounter,
+                           fraction());
+  for (int i = 0; i < 5; ++i) {
+    CHECK_OK(d.Aggregate(i * 100, ""));
+  }
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(25), Eq("")))
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(75), Eq("")))
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(175), Eq("")))
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(251), Eq("")))
+      .Times(2)
+      .WillRepeatedly(Return(absl::OkStatus()));
+
+  PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
+}
+
 class NoiseTest : public NoNoiseTest {
  protected:
   virtual PrivacyBudget fraction() { return PrivacyBudget{1}; }
@@ -193,6 +234,42 @@ TEST_F(NoiseTest, DPPartitionCounterNoise) {
   for (const differential_privacy::Output& o : s) {
     EXPECT_THAT(GetNoiseConfidenceInterval(o).upper_bound(),
                 DoubleNear(6, 0.1));
+  }
+}
+
+TEST_F(NoiseTest, HistogramCounter) {
+  internal::DpAggregator d(&mock_metric_router_, &kHistogramCounter,
+                           fraction());
+  for (int i = 0; i < 100; ++i) {
+    CHECK_OK(d.Aggregate(100, ""));
+  }
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(75), Eq("")))
+      .Times(AtLeast(50))
+      .WillRepeatedly(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(25), Eq("")))
+      .WillRepeatedly(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(175), Eq("")))
+      .WillRepeatedly(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
+              Eq(251), Eq("")))
+      .WillRepeatedly(Return(absl::OkStatus()));
+
+  PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
+  for (const differential_privacy::Output& o : s) {
+    EXPECT_THAT(GetNoiseConfidenceInterval(o).upper_bound(),
+                DoubleNear(3, 0.1));
   }
 }
 

@@ -26,7 +26,11 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Maximum number of keys in the incoming ProtectedAudienceInput request.
-inline constexpr int kNumRequestRootKeys = 5;
+inline constexpr int kNumRequestRootKeys = 6;
+
+// Maximum number of keys that will be populated in the encoded CBOR
+// ConsentedDebugConfig request.
+inline constexpr int kNumConsentedDebugConfigKeys = 2;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
@@ -57,12 +61,15 @@ inline constexpr char kName[] = "name";
 inline constexpr char kBiddingSignalsKeys[] = "biddingSignalsKeys";
 inline constexpr char kUserBiddingSignals[] = "userBiddingSignals";
 inline constexpr char kAds[] = "ads";
-inline constexpr char kAdComponents[] = "componentAds";
+inline constexpr char kAdComponents[] = "components";
 inline constexpr char kBrowserSignals[] = "browserSignals";
 inline constexpr char kBidCount[] = "bidCount";
 inline constexpr char kJoinCount[] = "joinCount";
 inline constexpr char kRecency[] = "recency";
 inline constexpr char kPrevWins[] = "prevWins";
+inline constexpr char kConsentedDebugConfig[] = "consentedDebugConfig";
+inline constexpr char kIsConsented[] = "isConsented";
+inline constexpr char kToken[] = "token";
 inline constexpr int kRelativeTimeIndex = 0;
 inline constexpr int kAdRenderIdIndex = 1;
 
@@ -75,9 +82,11 @@ inline constexpr char kBiddingGroups[] = "biddingGroups";
 inline constexpr char kInterestGroupName[] = "interestGroupName";
 inline constexpr char kInterestGroupOwner[] = "interestGroupOwner";
 inline constexpr char kWinReportingUrls[] = "winReportingURLs";
+
 inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
     kRequestRootKeys = {
-        kVersion, kPublisher, kInterestGroups, kGenerationId, kDebugReporting,
+        kVersion,      kPublisher,      kInterestGroups,
+        kGenerationId, kDebugReporting, kConsentedDebugConfig,
 };
 inline constexpr int kNumInterestGroupKeys = 6;
 inline constexpr std::array<absl::string_view, kNumInterestGroupKeys>
@@ -91,6 +100,11 @@ inline constexpr std::array<absl::string_view, kNumBrowserSignalKeys>
         kJoinCount,
         kRecency,
         kPrevWins,
+};
+inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
+    kConsentedDebugConfigKeys = {
+        kIsConsented,
+        kToken,
 };
 
 inline constexpr int kNumErrorKeys = 2;

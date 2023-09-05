@@ -16,14 +16,11 @@
 
 #include <algorithm>
 #include <memory>
-#include <set>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
-#include "absl/functional/bind_front.h"
 #include "absl/numeric/bits.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
@@ -32,9 +29,9 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "glog/logging.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
-#include "services/common/compression/gzip.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/web_utils.h"
@@ -71,7 +68,11 @@ SelectAdReactor::SelectAdReactor(
                                                     kBuyerMetadataKeysMap)),
       error_accumulator_(&logger_),
       fail_fast_(fail_fast),
-      bid_stats_(request->auction_config().buyer_list_size()) {
+      bid_stats_(request->auction_config().buyer_list_size(), logger_,
+                 [this](bool successful) { OnAllBidsDone(successful); }),
+      is_protected_auction_request_(false),
+      is_pas_enabled_(
+          config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)) {
   if (config_client_.GetBooleanParameter(ENABLE_SELLER_FRONTEND_BENCHMARKING)) {
     benchmarking_logger_ =
         std::make_unique<BuildInputProcessResponseBenchmarkingLogger>(
@@ -86,52 +87,6 @@ SelectAdReactor::SelectAdReactor(
   }()) << "SfeContextMap()->Get(request) should have been called";
 }
 
-BidStats::BidStats(int initial_bids_count_input)
-    : initial_bids_count(initial_bids_count_input),
-      pending_bids_count(initial_bids_count_input),
-      successful_bids_count(0),
-      empty_bids_count(0),
-      skipped_bids_count(0),
-      error_bids_count(0) {}
-
-void BidStats::BidCompleted(CompletedBidState completed_bid_state) {
-  pending_bids_count--;
-  switch (completed_bid_state) {
-    case CompletedBidState::ERROR:
-      error_bids_count++;
-      break;
-    case CompletedBidState::EMPTY_RESPONSE:
-      empty_bids_count++;
-      break;
-    case CompletedBidState::SKIPPED:
-      skipped_bids_count++;
-      break;
-    case CompletedBidState::SUCCESS:
-      successful_bids_count++;
-      break;
-    default:
-      // This indicates be a bug in our logic.
-      break;
-  }
-}
-
-bool BidStats::HasAnySuccessfulBids() {
-  const int sum_bids_count = skipped_bids_count + successful_bids_count +
-                             error_bids_count + empty_bids_count +
-                             pending_bids_count;
-  DCHECK_EQ(initial_bids_count, sum_bids_count);
-
-  const bool possible_chaff = empty_bids_count > 0 || skipped_bids_count > 0;
-  return successful_bids_count > 0 || possible_chaff || error_bids_count == 0;
-}
-
-std::string BidStats::ToString() {
-  return absl::StrCat(
-      "Bidding Stats: succeeded=", successful_bids_count,
-      ", errored=", error_bids_count, ", skipped=", skipped_bids_count,
-      ", returned empty=", empty_bids_count, ", pending=", pending_bids_count);
-}
-
 AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
     const AdWithBid& input, absl::string_view interest_group_owner) {
   AdWithBidMetadata result;
@@ -141,7 +96,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_bid(input.bid());
   result.set_render(input.render());
   result.set_allow_component_auction(input.allow_component_auction());
-  result.mutable_ad_component_render()->CopyFrom(input.ad_component_render());
+  result.mutable_ad_components()->CopyFrom(input.ad_components());
   result.set_interest_group_name(input.interest_group_name());
   result.set_interest_group_owner(interest_group_owner);
   result.set_ad_cost(input.ad_cost());
@@ -171,8 +126,6 @@ bool SelectAdReactor::HaveAdServerVisibleErrors() {
 }
 
 void SelectAdReactor::MayPopulateClientVisibleErrors() {
-  const ErrorAccumulator::ErrorMap& error_map =
-      error_accumulator_.GetErrors(ErrorVisibility::CLIENT_VISIBLE);
   if (!HaveClientVisibleErrors()) {
     return;
   }
@@ -182,66 +135,26 @@ void SelectAdReactor::MayPopulateClientVisibleErrors() {
       GetAccumulatedErrorString(ErrorVisibility::CLIENT_VISIBLE));
 }
 
-void SelectAdReactor::ValidateProtectedAudienceInput(
-    const ProtectedAudienceInput& protected_audience_input) {
-  if (protected_audience_input.generation_id().empty()) {
-    ReportError(CLIENT_VISIBLE, kMissingGenerationId, ErrorCode::CLIENT_SIDE);
-  }
-
-  if (protected_audience_input.publisher_name().empty()) {
-    ReportError(CLIENT_VISIBLE, kMissingPublisherName, ErrorCode::CLIENT_SIDE);
-  }
-
-  // Validate Buyer Inputs.
-  if (buyer_inputs_->empty()) {
-    ReportError(CLIENT_VISIBLE, kMissingBuyerInputs, ErrorCode::CLIENT_SIDE);
-  } else {
-    bool is_any_buyer_input_valid = false;
-    std::set<std::string> observed_errors;
-    for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
-      bool any_error = false;
-      if (buyer.empty()) {
-        observed_errors.insert(kEmptyInterestGroupOwner);
-        any_error = true;
-      }
-      if (buyer_input.interest_groups().empty()) {
-        observed_errors.insert(absl::StrFormat(kMissingInterestGroups, buyer));
-        any_error = true;
-      }
-      if (any_error) {
-        continue;
-      }
-      is_any_buyer_input_valid = true;
-    }
-    // Buyer inputs have keys but none of the key/value pairs are usable to get
-    // bids from buyers.
-    if (!is_any_buyer_input_valid) {
-      std::string error =
-          absl::StrFormat(kNonEmptyBuyerInputMalformed,
-                          absl::StrJoin(observed_errors, kErrorDelimiter));
-      ReportError(CLIENT_VISIBLE, error, ErrorCode::CLIENT_SIDE);
-    } else {
-      // Log but don't report the errors for malformed buyer inputs because we
-      // have found at least one buyer input that is well formed.
-      for (const auto& observed_error : observed_errors) {
-        logger_.vlog(2, observed_error);
-      }
-    }
-  }
-}
-
 bool SelectAdReactor::DecryptRequest() {
-  if (request_->protected_audience_ciphertext().empty()) {
+  if (request_->protected_auction_ciphertext().empty() &&
+      request_->protected_audience_ciphertext().empty()) {
     Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        kEmptyRemarketingCiphertextError));
+                        kEmptyProtectedAuctionCiphertextError));
     return false;
   }
+  is_protected_auction_request_ =
+      !request_->protected_auction_ciphertext().empty();
 
-  absl::string_view encapsulated_req =
-      request_->protected_audience_ciphertext();
+  absl::string_view encapsulated_req;
+  if (is_protected_auction_request_) {
+    encapsulated_req = request_->protected_auction_ciphertext();
+  } else {
+    encapsulated_req = request_->protected_audience_ciphertext();
+  }
   if (VLOG_IS_ON(5)) {
-    logger_.vlog(5, "Protected audience ciphertext: ",
-                 absl::Base64Escape(encapsulated_req));
+    logger_.vlog(5, "Protected ",
+                 is_protected_auction_request_ ? "auction" : "audience",
+                 " ciphertext: ", absl::Base64Escape(encapsulated_req));
   }
 
   // Parse the encapsulated request for the key ID.
@@ -279,9 +192,9 @@ bool SelectAdReactor::DecryptRequest() {
     return false;
   }
 
-  logger_.vlog(5,
-               "Successfully decrypted the protected audience input "
-               "ciphertext");
+  logger_.vlog(5, "Successfully decrypted the protected ",
+               is_protected_auction_request_ ? "auction" : "audience",
+               " input ciphertext");
   quiche::ObliviousHttpRequest::Context ohttp_context =
       std::move(ohttp_request.value()).ReleaseContext();
   RequestContext request = {
@@ -290,16 +203,40 @@ bool SelectAdReactor::DecryptRequest() {
           std::move(ohttp_context)),
       *private_key};
   request_context_ = std::move(request);
-  protected_audience_input_ =
-      GetDecodedProtectedAudienceInput(ohttp_request->GetPlaintextData());
-  buyer_inputs_ =
-      GetDecodedBuyerinputs(protected_audience_input_.buyer_input());
+  if (is_protected_auction_request_) {
+    protected_auction_input_ =
+        GetDecodedProtectedAuctionInput(ohttp_request->GetPlaintextData());
+  } else {
+    protected_auction_input_ =
+        GetDecodedProtectedAudienceInput(ohttp_request->GetPlaintextData());
+  }
+  std::visit(
+      [this](const auto& protected_auction_input) {
+        buyer_inputs_ =
+            GetDecodedBuyerinputs(protected_auction_input.buyer_input());
+      },
+      protected_auction_input_);
   return true;
 }
 
 ContextLogger::ContextMap SelectAdReactor::GetLoggingContext() {
-  return {{kGenerationId, protected_audience_input_.generation_id()},
-          {kSellerDebugId, request_->auction_config().seller_debug_id()}};
+  ContextLogger::ContextMap context_map;
+  std::visit(
+      [&context_map, this](const auto& protected_auction_input) {
+        context_map = {
+            {kGenerationId, protected_auction_input.generation_id()},
+            {kSellerDebugId, request_->auction_config().seller_debug_id()}};
+        if (protected_auction_input.has_consented_debug_config() &&
+            protected_auction_input.consented_debug_config().is_consented()) {
+          absl::string_view token =
+              protected_auction_input.consented_debug_config().token();
+          if (!token.empty()) {
+            context_map[kToken] = std::string(token);
+          }
+        }
+      },
+      protected_auction_input_);
+  return context_map;
 }
 
 void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
@@ -348,6 +285,17 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
   }
 }
 
+void SelectAdReactor::MayLogBuyerInput() {
+  if (!buyer_inputs_.ok()) {
+    logger_.vlog(1, "Failed to decode buyer inputs");
+  } else if (VLOG_IS_ON(6)) {
+    for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
+      logger_.vlog(6, "Decoded buyer input for buyer: ", buyer,
+                   " is: ", buyer_input.DebugString());
+    }
+  }
+}
+
 void SelectAdReactor::Execute() {
   if (!config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)) {
     LOG(DFATAL) << "Expected encryption to be enabled";
@@ -356,8 +304,8 @@ void SelectAdReactor::Execute() {
     VLOG(1) << "SelectAdRequest decryption failed";
     return;
   }
-
   logger_.Configure(GetLoggingContext());
+  MayLogBuyerInput();
   MayPopulateAdServerVisibleErrors();
   if (HaveAdServerVisibleErrors()) {
     logger_.vlog(1, "AdServerVisible errors found, failing now");
@@ -370,7 +318,11 @@ void SelectAdReactor::Execute() {
   // Validate mandatory fields if decoding went through fine.
   if (!HaveClientVisibleErrors()) {
     logger_.vlog(5, "No ClientVisible errors found, validating input now");
-    ValidateProtectedAudienceInput(protected_audience_input_);
+    std::visit(
+        [this](const auto& protected_auction_input) {
+          ValidateProtectedAuctionInput(protected_auction_input);
+        },
+        protected_auction_input_);
   }
 
   // Populate errors on the response immediately after decoding and input
@@ -386,8 +338,37 @@ void SelectAdReactor::Execute() {
   }
   logger_.vlog(1, "No client / Adtech server errors found");
 
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("SelectAdReactor_Execute"));
+  auto span = server_common::GetTracer()->StartSpan("SelectAdReactor_Execute");
+  auto scope = opentelemetry::trace::Scope(span);
+  // Logger for consented debugging.
+  // TODO(b/279955398): Move the object to a member variable.
+  if (config_client_.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING)) {
+    if (absl::string_view token =
+            config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN);
+        !token.empty()) {
+      ConsentedDebuggingLogger debug_logger(GetLoggingContext(), token);
+      std::visit(
+          [&debug_logger](const auto& protected_auction_input) {
+            debug_logger.vlog(
+                0, absl::StrCat("ProtectedAudienceInput: ",
+                                protected_auction_input.DebugString()));
+          },
+          protected_auction_input_);
+      if (!buyer_inputs_.ok()) {
+        debug_logger.vlog(
+            0, absl::StrCat("Failed to decode buyer inputs. Reason: ",
+                            buyer_inputs_.status().ToString()));
+      } else if (buyer_inputs_->empty()) {
+        debug_logger.vlog(0, "buyer inputs are missing.");
+      } else {
+        for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
+          debug_logger.vlog(0, absl::StrCat("buyer_input[", buyer,
+                                            "]: ", buyer_input.DebugString()));
+        }
+      }
+    }
+  }
+
   benchmarking_logger_->Begin();
 
   logger_.vlog(
@@ -404,20 +385,50 @@ void SelectAdReactor::Execute() {
       // Pending bids count is set on reactor construction to buyer_list_size().
       // If no BuyerInput is found for a buyer in buyer_list, must decrement
       // pending bids count.
-      UpdatePendingBidsState(CompletedBidState::SKIPPED);
+      bid_stats_.BidCompleted(CompletedBidState::SKIPPED);
     }
   }
   logger_.vlog(5, "Finishing execute call, response may be available later");
 }
 
-void SelectAdReactor::LogInitiatedRequestMetrics(
-    int initiated_request_duration) {
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<server_common::metric::kInitiatedRequestCount>(1));
-  LogIfError(metric_context_->AccumulateMetric<
-             server_common::metric::kInitiatedRequestTotalDuration>(
-      initiated_request_duration));
+std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+SelectAdReactor::CreateGetBidsRequest(absl::string_view seller,
+                                      const std::string& buyer_ig_owner,
+                                      const BuyerInput& buyer_input) {
+  auto get_bids_request = std::make_unique<GetBidsRequest::GetBidsRawRequest>();
+  get_bids_request->set_is_chaff(false);
+  get_bids_request->set_seller(seller);
+  get_bids_request->set_auction_signals(
+      request_->auction_config().auction_signals());
+  std::string buyer_debug_id;
+  const auto& per_buyer_config_itr =
+      request_->auction_config().per_buyer_config().find(buyer_ig_owner);
+  if (per_buyer_config_itr !=
+      request_->auction_config().per_buyer_config().end()) {
+    buyer_debug_id = per_buyer_config_itr->second.buyer_debug_id();
+    if (!per_buyer_config_itr->second.buyer_signals().empty()) {
+      get_bids_request->set_buyer_signals(
+          per_buyer_config_itr->second.buyer_signals());
+    }
+  }
+  *get_bids_request->mutable_buyer_input() = buyer_input;
+  std::visit(
+      [&get_bids_request,
+       &buyer_debug_id](const auto& protected_auction_input) {
+        get_bids_request->set_publisher_name(
+            protected_auction_input.publisher_name());
+        get_bids_request->set_enable_debug_reporting(
+            protected_auction_input.enable_debug_reporting());
+        auto* log_context = get_bids_request->mutable_log_context();
+        log_context->set_generation_id(protected_auction_input.generation_id());
+        log_context->set_adtech_debug_id(buyer_debug_id);
+        if (protected_auction_input.has_consented_debug_config()) {
+          *get_bids_request->mutable_consented_debug_config() =
+              protected_auction_input.consented_debug_config();
+        }
+      },
+      protected_auction_input_);
+  return get_bids_request;
 }
 
 void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
@@ -428,49 +439,27 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
   if (buyer_client == nullptr) {
     logger_.vlog(2, "No buyer client found for buyer: ", buyer_ig_owner);
-    UpdatePendingBidsState(CompletedBidState::SKIPPED);
+    bid_stats_.BidCompleted(CompletedBidState::SKIPPED);
   } else {
-    auto get_bids_request =
-        std::make_unique<GetBidsRequest::GetBidsRawRequest>();
-    get_bids_request->set_is_chaff(false);
-    get_bids_request->set_publisher_name(
-        protected_audience_input_.publisher_name());
-    get_bids_request->set_seller(seller);
-    get_bids_request->set_auction_signals(
-        request_->auction_config().auction_signals());
+    VLOG(6) << "Getting bid from a BFE";
     absl::Duration timeout = absl::Milliseconds(
         config_client_.GetIntParameter(GET_BID_RPC_TIMEOUT_MS));
     if (request_->auction_config().buyer_timeout_ms() > 0) {
       timeout =
           absl::Milliseconds(request_->auction_config().buyer_timeout_ms());
     }
-    std::string buyer_debug_id;
-    const auto& per_buyer_config_itr =
-        request_->auction_config().per_buyer_config().find(buyer_ig_owner);
-    if (per_buyer_config_itr !=
-        request_->auction_config().per_buyer_config().end()) {
-      buyer_debug_id = per_buyer_config_itr->second.buyer_debug_id();
-      if (!per_buyer_config_itr->second.buyer_signals().empty()) {
-        get_bids_request->set_buyer_signals(
-            per_buyer_config_itr->second.buyer_signals());
-      }
-    }
-    *get_bids_request->mutable_buyer_input() = buyer_input;
-    get_bids_request->set_enable_debug_reporting(
-        protected_audience_input_.enable_debug_reporting());
-    auto* log_context = get_bids_request->mutable_log_context();
-    log_context->set_generation_id(protected_audience_input_.generation_id());
-    log_context->set_adtech_debug_id(buyer_debug_id);
-    VLOG(6) << "Getting bid from a BFE";
-    absl::Time bfe_request_start_time = absl::Now();
+    auto get_bids_request =
+        CreateGetBidsRequest(seller, buyer_ig_owner, buyer_input);
+    auto bfe_request =
+        metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get(), 0);
     absl::Status execute_result = buyer_client->ExecuteInternal(
         std::move(get_bids_request), buyer_metadata_,
-        [buyer_ig_owner, this, bfe_request_start_time](
+        [buyer_ig_owner, this, bfe_request = std::move(bfe_request)](
             absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
-                response) {
-          int bfe_request_duration_ms =
-              (absl::Now() - bfe_request_start_time) / absl::Milliseconds(1);
-          LogInitiatedRequestMetrics(bfe_request_duration_ms);
+                response) mutable {
+          {  // destruct bfe_request, destructor measures request time
+            auto not_used = std::move(bfe_request);
+          }
           VLOG(6) << "Received a bid response from a BFE";
           OnFetchBidsDone(std::move(response), buyer_ig_owner);
         },
@@ -481,7 +470,7 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
                           "seller: %s, error: "
                           "%s)",
                           buyer_ig_owner, seller, execute_result.ToString()));
-      UpdatePendingBidsState(CompletedBidState::ERROR);
+      bid_stats_.BidCompleted(CompletedBidState::ERROR);
     }
   }
 }
@@ -491,69 +480,67 @@ void SelectAdReactor::OnFetchBidsDone(
         response,
     const std::string& buyer_ig_owner) {
   VLOG(5) << "Received response from a BFE ... ";
-  auto completed_bid_state = CompletedBidState::UNKNOWN;
   if (response.ok()) {
     auto& found_response = *response;
     logger_.vlog(2, "\nGetBidsResponse:\n", found_response->DebugString());
-    if (found_response->bids().empty()) {
+    if (found_response->bids().empty() &&
+        (!is_pas_enabled_ ||
+         found_response->protected_app_signals_bids().empty())) {
       logger_.vlog(2, "Skipping buyer ", buyer_ig_owner,
                    " due to empty GetBidsResponse.");
-      completed_bid_state = CompletedBidState::EMPTY_RESPONSE;
+      bid_stats_.BidCompleted(CompletedBidState::EMPTY_RESPONSE);
     } else {
-      absl::MutexLock lock(&bid_data_mu_);
-      shared_buyer_bids_map_.try_emplace(buyer_ig_owner, *std::move(response));
-      completed_bid_state = CompletedBidState::SUCCESS;
+      bid_stats_.BidCompleted(
+          CompletedBidState::SUCCESS,
+          [this, &buyer_ig_owner, response = *std::move(response)]() mutable {
+            shared_buyer_bids_map_.try_emplace(buyer_ig_owner,
+                                               std::move(response));
+          });
     }
   } else {
     LogIfError(metric_context_->AccumulateMetric<
                server_common::metric::kInitiatedRequestErrorCount>(1));
     logger_.vlog(1, "GetBidsRequest failed for buyer ", buyer_ig_owner,
                  "\nresponse status: ", response.status());
-    completed_bid_state = CompletedBidState::ERROR;
+    bid_stats_.BidCompleted(CompletedBidState::ERROR);
   }
-  DCHECK(completed_bid_state != CompletedBidState::UNKNOWN);
-
-  UpdatePendingBidsState(completed_bid_state);
 }
 
-void SelectAdReactor::UpdatePendingBidsState(
-    CompletedBidState completed_bid_state) {
-  absl::MutexLock lock(&bid_data_mu_);
-  bid_stats_.BidCompleted(completed_bid_state);
-  logger_.vlog(5, "Updated pending bids state: ", bid_stats_.ToString());
+void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
+  if (this->context_->IsCancelled()) {
+    // Early return if request is cancelled. DO NOT move to next step.
+    FinishWithAborted();
+    return;
+  }
 
-  if (bid_stats_.pending_bids_count == 0) {
-    if (shared_buyer_bids_map_.empty()) {
-      logger_.vlog(2, kNoBidsReceived);
-      if (!bid_stats_.HasAnySuccessfulBids()) {
-        logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
-        FinishWithInternalError(kInternalError);
-        return;
-      }
-      // Since no buyers have returned bids, we would still finish the call RPC
-      // call here and send a chaff back.
-      OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+  // No successful bids received.
+  if (shared_buyer_bids_map_.empty()) {
+    logger_.vlog(2, kNoBidsReceived);
+    if (!any_successful_bids) {
+      logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
+      FinishWithInternalError(kInternalError);
       return;
     }
-
-    // Safe to access Buyer responses through buyer_bids_map_ now
-    // (without mutex lock). shared_buyer_bids_map_ is empty after this point.
-    buyer_bids_map_.swap(shared_buyer_bids_map_);
-    FetchScoringSignals();
+    // Since no buyers have returned bids, we would still finish the call RPC
+    // call here and send a chaff back.
+    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    return;
   }
+  FetchScoringSignals();
 }
 
 void SelectAdReactor::FetchScoringSignals() {
-  ScoringSignalsRequest scoring_signals_request(buyer_bids_map_,
+  ScoringSignalsRequest scoring_signals_request(shared_buyer_bids_map_,
                                                 buyer_metadata_);
-  absl::Time kv_request_start_time = absl::Now();
+  auto kv_request =
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get(), 0);
   clients_.scoring_signals_async_provider.Get(
       scoring_signals_request,
-      [this, kv_request_start_time](
-          absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
-        int kv_request_duration_ms =
-            (absl::Now() - kv_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(kv_request_duration_ms);
+      [this, kv_request = std::move(kv_request)](
+          absl::StatusOr<std::unique_ptr<ScoringSignals>> result) mutable {
+        {  // destruct kv_request, destructor measures request time
+          auto not_used = std::move(kv_request);
+        }
         OnFetchScoringSignalsDone(std::move(result));
       },
       absl::Milliseconds(config_client_.GetIntParameter(
@@ -574,9 +561,10 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
   ScoreAds();
 }
 
-void SelectAdReactor::ScoreAds() {
+std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+SelectAdReactor::CreateScoreAdsRequest() {
   auto raw_request = std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>();
-  for (const auto& [buyer, get_bid_response] : buyer_bids_map_) {
+  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       AdWithBidMetadata ad_with_bid_metadata =
           BuildAdWithBidMetadata(get_bid_response->bids().at(i), buyer);
@@ -592,29 +580,43 @@ void SelectAdReactor::ScoreAds() {
     raw_request->set_allocated_scoring_signals(
         scoring_signals_->scoring_signals.release());
   }
-  raw_request->set_publisher_hostname(
-      protected_audience_input_.publisher_name());
-  raw_request->set_enable_debug_reporting(
-      protected_audience_input_.enable_debug_reporting());
+  std::visit(
+      [&raw_request, this](const auto& protected_auction_input) {
+        raw_request->set_publisher_hostname(
+            protected_auction_input.publisher_name());
+        raw_request->set_enable_debug_reporting(
+            protected_auction_input.enable_debug_reporting());
+        auto* log_context = raw_request->mutable_log_context();
+        log_context->set_generation_id(protected_auction_input.generation_id());
+        log_context->set_adtech_debug_id(
+            request_->auction_config().seller_debug_id());
+        if (protected_auction_input.has_consented_debug_config()) {
+          *raw_request->mutable_consented_debug_config() =
+              protected_auction_input.consented_debug_config();
+        }
+      },
+      protected_auction_input_);
 
-  auto* log_context = raw_request->mutable_log_context();
-  log_context->set_generation_id(protected_audience_input_.generation_id());
-  log_context->set_adtech_debug_id(
-      request_->auction_config().seller_debug_id());
   for (const auto& [buyer, per_buyer_config] :
        request_->auction_config().per_buyer_config()) {
     raw_request->mutable_per_buyer_signals()->try_emplace(
         buyer, per_buyer_config.buyer_signals());
   }
+  return raw_request;
+}
+
+void SelectAdReactor::ScoreAds() {
+  auto raw_request = CreateScoreAdsRequest();
   logger_.vlog(2, "\nScoreAdsRawRequest:\n", raw_request->DebugString());
-  absl::Time auction_request_start_time = absl::Now();
+  auto auction_request = metric::MakeInitiatedRequest(
+      metric::kAs, metric_context_.get(), raw_request->ByteSizeLong());
   auto on_scoring_done =
-      [this, auction_request_start_time](
+      [this, auction_request = std::move(auction_request)](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
-              result) {
-        int auction_request_duration_ms =
-            (absl::Now() - auction_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(auction_request_duration_ms);
+              result) mutable {
+        {  // destruct auction_request, destructor measures request time
+          auto not_used = std::move(auction_request);
+        }
         OnScoreAdsDone(std::move(result));
       };
   absl::Status execute_result = clients_.scoring.ExecuteInternal(
@@ -631,7 +633,7 @@ void SelectAdReactor::ScoreAds() {
 
 BiddingGroupMap SelectAdReactor::GetBiddingGroups() {
   BiddingGroupMap bidding_groups;
-  for (const auto& [buyer, ad_with_bids] : buyer_bids_map_) {
+  for (const auto& [buyer, ad_with_bids] : shared_buyer_bids_map_) {
     // Mapping from buyer to interest groups that are associated with non-zero
     // bids.
     absl::flat_hash_set<absl::string_view> buyer_interest_groups;
@@ -666,6 +668,12 @@ void SelectAdReactor::FinishWithInternalError(absl::string_view error) {
   logger_.error("RPC failed: ", error);
   benchmarking_logger_->End();
   Finish(grpc::Status(grpc::INTERNAL, kInternalServerError));
+}
+
+void SelectAdReactor::FinishWithAborted() {
+  logger_.error("RPC aborted: Request Cancelled by Client.");
+  benchmarking_logger_->End();
+  Finish(grpc::Status(grpc::ABORTED, kRequestCancelled));
 }
 
 std::string SelectAdReactor::GetAccumulatedErrorString(
@@ -720,6 +728,7 @@ void SelectAdReactor::OnScoreAdsDone(
   if (!non_encrypted_response.ok()) {
     return;
   }
+
   std::string plaintext_response = std::move(*non_encrypted_response);
   if (!EncryptResponse(std::move(plaintext_response))) {
     return;
@@ -769,7 +778,7 @@ void SelectAdReactor::PerformDebugReporting(
     const std::optional<AdScore>& high_score) {
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(high_score);
-  for (const auto& [buyer, get_bid_response] : buyer_bids_map_) {
+  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
     std::string ig_owner = buyer;
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       AdWithBid adWithBid = get_bid_response->bids().at(i);

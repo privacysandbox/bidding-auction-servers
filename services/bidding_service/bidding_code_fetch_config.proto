@@ -39,12 +39,10 @@ message BuyerCodeFetchConfig {
    // Allow buyer debug URL generation.
    bool enable_buyer_debug_url_generation = 6;
 
-   // Enables use of code wrapper.
-   bool enable_buyer_code_wrapper = 7;
-
    // Allow handling of console.logs from AdTech script execution.
    bool enable_adtech_code_logging = 8;
 
-   // Enables executing reportWin function from Seller's script by providing buyers' url endpoints.
-   bool enable_report_win_url_generation = 9;
+   // URL endpoint for fetching AdTech code blob, js file for protected app
+   // signals.
+   string protected_app_signals_bidding_js_url = 9;
 }

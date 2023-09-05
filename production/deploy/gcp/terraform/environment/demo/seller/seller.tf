@@ -14,7 +14,7 @@
 
 locals {
   gcp_project_id = "" # Example: "your-gcp-project-123"
-  environment    = "" # Example: "testing"
+  environment    = "" # # Must be <= 3 characters. Example: "abc"
   image_repo     = "" # Example: "us-docker.pkg.dev/your-gcp-project-123/services"
 
 }
@@ -62,6 +62,7 @@ module "seller" {
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
     # "{
@@ -69,22 +70,25 @@ module "seller" {
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
-    #     "enableSellerDebugUrlGeneration": true,
-    #     "enableSellerCodeWrapper": false,
+    #     "enableSellerDebugUrlGeneration": false,
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": false,
     #     "enableReportWinUrlGeneration": false,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
     #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
-    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"}
+    #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
+    #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
-    JS_NUM_WORKERS      = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
-    JS_WORKER_QUEUE_LEN = "" # Example: "200".
-    JS_WORKER_MEM_MB    = "" # Example: "3072" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
-    ROMA_TIMEOUT_MS     = "" # Example: "10000"
-    TELEMETRY_CONFIG    = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT  = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
+    JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    JS_WORKER_QUEUE_LEN       = "" # Example: "200".
+    ROMA_TIMEOUT_MS           = "" # Example: "10000"
+    TELEMETRY_CONFIG          = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT        = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
+    ENABLE_OTEL_BASED_LOGGING = "" # Example: "false"
+    CONSENTED_DEBUG_TOKEN     = "" # Example: "<unique_id>"
 
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "" # Example: "https://privatekeyservice-staging-a.gcp.testing.dev/v1alpha/encryptionKeys"

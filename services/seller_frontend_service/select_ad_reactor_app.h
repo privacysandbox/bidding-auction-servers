@@ -17,6 +17,7 @@
 #ifndef SERVICES_SELLER_FRONTEND_SERVICE_SELECT_AD_REACTOR_APP_H_
 #define SERVICES_SELLER_FRONTEND_SERVICE_SELECT_AD_REACTOR_APP_H_
 
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -47,12 +48,42 @@ class SelectAdReactorForApp : public SelectAdReactor {
           std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
       const std::optional<AuctionResult::Error>& error) override;
 
-  ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+  [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
+      absl::string_view encoded_data) override;
+
+  ProtectedAuctionInput GetDecodedProtectedAuctionInput(
       absl::string_view encoded_data) override;
 
   absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
+
+  // Protected App Signals (PAS) related methods follow.
+
+  // PAS buyer input for the GetBid Request to be sent to BFE. The buyer input
+  // from client may carry both Protected Audience (PA) and Protected App
+  // Signals (PAS) buyer inputs and this method forks those out while making the
+  // outbound call.
+  void MayPopulateProtectedAppSignalsBuyerInput(
+      GetBidsRequest::GetBidsRawRequest* get_bids_raw_request);
+
+  // Creates a GetBids request to be sent to BFE. If PAS is enabled and client
+  // specified PAS, then the created GetBid request will have separate PA and
+  // PAS buyer inputs populated properly.
+  std::unique_ptr<GetBidsRequest::GetBidsRawRequest> CreateGetBidsRequest(
+      absl::string_view seller, const std::string& buyer_ig_owner,
+      const BuyerInput& buyer_input) override;
+
+  // Populates PAS bids in the scoring request to be sent to auction service.
+  void MayPopulateProtectedAppSignalsBids(
+      ScoreAdsRequest::ScoreAdsRawRequest* score_ads_raw_request);
+
+  ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata
+  BuildProtectedAppSignalsAdWithBidMetadata(
+      absl::string_view buyer, const ProtectedAppSignalsAdWithBid& input);
+
+  std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> CreateScoreAdsRequest()
+      override;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

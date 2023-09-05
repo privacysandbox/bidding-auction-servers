@@ -48,6 +48,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/status_macros.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
@@ -69,11 +70,6 @@ ABSL_FLAG(
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
-ABSL_FLAG(
-    std::optional<std::int64_t>, js_worker_mem_mb, std::nullopt,
-    "Shared memory used to store requests and responses shared between ROMA "
-    "and JS workers. "
-    "js_worker_mem_mb/js_worker_queue_len > average JS request size.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -123,16 +119,19 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         SELLER_CODE_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
-  config_client.SetFlag(FLAGS_js_worker_mem_mb, JS_WORKER_MEM_MB);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
                         ENABLE_OTEL_BASED_LOGGING);
+  config_client.SetFlag(FLAGS_enable_protected_app_signals,
+                        ENABLE_PROTECTED_APP_SIGNALS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
 
+  VLOG(1) << "Protected App Signals support enabled on the service: "
+          << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   VLOG(1) << "Successfully constructed the config client.";
   return config_client;
 }
@@ -152,8 +151,6 @@ absl::Status RunServer() {
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
   DispatchConfig config;
-  config.ipc_memory_size_in_mb =
-      config_client.GetIntParameter(JS_WORKER_MEM_MB);
   config.worker_queue_max_items =
       config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
   config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
@@ -176,12 +173,11 @@ absl::Status RunServer() {
       config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).data(),
       &code_fetch_proto);
   CHECK(result.ok()) << "Could not parse SELLER_CODE_FETCH_CONFIG JsonString "
-                        "to a proto message.";
+                        "to a proto message: "
+                     << result;
 
   bool enable_seller_debug_url_generation =
       code_fetch_proto.enable_seller_debug_url_generation();
-  bool enable_seller_code_wrapper =
-      code_fetch_proto.enable_seller_code_wrapper();
   bool enable_adtech_code_logging =
       code_fetch_proto.enable_adtech_code_logging();
   bool enable_report_result_url_generation =
@@ -201,24 +197,21 @@ absl::Status RunServer() {
   // specified
   if (!js_url.empty()) {
     auto wrap_code =
-        [enable_seller_code_wrapper, enable_seller_debug_url_generation,
+        [enable_seller_debug_url_generation,
          enable_report_result_url_generation, enable_report_win_url_generation,
          buyer_origins](const std::vector<std::string>& adtech_code_blobs) {
-          if (enable_seller_code_wrapper) {
-            absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
-            CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
-                << "Error fetching code blobs from buyer. Buyer size:"
-                << buyer_origins.size()
-                << " and blobs count:" << adtech_code_blobs.size();
-            for (int i = 0; i < buyer_origins.size(); i++) {
-              buyer_origin_code_map.try_emplace(buyer_origins.at(i),
-                                                adtech_code_blobs.at(i + 1));
-            }
-            return GetSellerWrappedCode(
-                adtech_code_blobs.at(0), enable_report_result_url_generation,
-                enable_report_win_url_generation, buyer_origin_code_map);
+          absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
+          CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
+              << "Error fetching code blobs from buyer. Buyer size:"
+              << buyer_origins.size()
+              << " and blobs count:" << adtech_code_blobs.size();
+          for (int i = 0; i < buyer_origins.size(); i++) {
+            buyer_origin_code_map.try_emplace(buyer_origins.at(i),
+                                              adtech_code_blobs.at(i + 1));
           }
-          return adtech_code_blobs.at(0);
+          return GetSellerWrappedCode(
+              adtech_code_blobs.at(0), enable_report_result_url_generation,
+              enable_report_win_url_generation, buyer_origin_code_map);
         };
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
@@ -232,10 +225,9 @@ absl::Status RunServer() {
     std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
                                  (std::istreambuf_iterator<char>()));
 
-    if (enable_seller_code_wrapper) {
-      adtech_code_blob = GetSellerWrappedCode(
-          adtech_code_blob, enable_report_result_url_generation, false, {});
-    }
+    adtech_code_blob = GetSellerWrappedCode(
+        adtech_code_blob, enable_report_result_url_generation, false, {});
+
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
   } else {
@@ -255,18 +247,19 @@ absl::Status RunServer() {
   server_common::InitTelemetry(
       config_util.GetService(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureMetrics(CreateSharedAttributes(&config_util),
-                                  CreateMetricsOptions(), collector_endpoint);
+      telemetry_config.LogsAllowed() &&
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
   server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::AuctionContextMap(
       std::move(telemetry_config),
-      opentelemetry::metrics::Provider::GetMeterProvider()
-          ->GetMeter(config_util.GetService(), kOpenTelemetryVersion.data())
-          .get()));
+      server_common::ConfigurePrivateMetrics(
+          CreateSharedAttributes(&config_util),
+          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
+          collector_endpoint),
+      config_util.GetService(), kOpenTelemetryVersion.data()));
   auto executer = std::make_unique<server_common::EventEngineExecutor>(
       grpc_event_engine::experimental::CreateEventEngine());
   auto score_ads_reactor_factory =
@@ -295,7 +288,6 @@ absl::Status RunServer() {
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
-      .enable_seller_code_wrapper = enable_seller_code_wrapper,
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
@@ -335,6 +327,7 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
   google::InitGoogleLogging(argv[0]);
 

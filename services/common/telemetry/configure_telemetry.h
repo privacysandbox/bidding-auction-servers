@@ -37,10 +37,7 @@ opentelemetry::sdk::resource::Resource CreateSharedAttributes(
 
 // Creates the metrics collection options for OpenTelemtry configuration.
 opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions
-CreateMetricsOptions();
-
-// Returns a double vector of the default histogram buckets for latency
-std::vector<double> DefaultLatencyBuckets();
+CreateMetricsOptions(int export_interval_millis);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

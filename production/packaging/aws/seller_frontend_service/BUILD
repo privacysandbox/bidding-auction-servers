@@ -36,7 +36,7 @@ pkg_files(
         "@control_plane_shared//cc/aws/proxy/src:socket_vendor",
     ],
     attributes = pkg_attributes(mode = "0555"),
-    prefix = "/server/bin",
+    prefix = "/",
 )
 
 pkg_files(
@@ -45,7 +45,7 @@ pkg_files(
         "@control_plane_shared//cc/aws/proxy/src:proxy_preload",
     ],
     attributes = pkg_attributes(mode = "0444"),
-    prefix = "/server/bin",
+    prefix = "/",
 )
 
 pkg_files(
@@ -85,11 +85,22 @@ pkg_tar(
     visibility = ["//visibility:public"],
 )
 
+# Create a symlink between where kmstool_enclave_cli expects shell to be
+# (/bin/sh) and where it actually is on our image (/busybox/sh).
+container_layer(
+    name = "kmstool_enclave_cli_layer",
+    symlinks = {
+        "/bin/sh": "/busybox/sh",
+    },
+    tars = [
+        ":libnsm-tar",
+    ],
+)
+
 container_layer(
     name = "server_binary_layer",
     directory = "/",
     tars = [
-        ":libnsm-tar",
         ":server_binaries_tar",
     ],
 )
@@ -103,12 +114,13 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "/server/bin/init_server_basic",
+        "/init_server_basic",
     ],
     entrypoint = ["sh"],
     env = LOG_ENV_VARS,
     layers = [
         ":server_binary_layer",
+        ":kmstool_enclave_cli_layer",
     ],
 )
 

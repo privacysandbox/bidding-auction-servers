@@ -2,79 +2,143 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 1.2.0 (2023-09-01)
+
+
+### Features
+
+* Add code blob flags for bidding/auction
+* Log plaintext GetBidsRawRequest in BFE
+* PAS support in SFE
+* Propagate consented debug config from BFE to Bidding
+* Propagate consented debug config from SFE to BFE & Auction
+
+
+### Bug Fixes
+
+* [reporting] Change the order of cbor encoding for win reporting urls in the response.
+* [reporting] Populate win reporting urls for seller in top_level_seller_reporting_urls instead of component_seller_reporting_urls
+* [reporting] Remove unnecessary signalsForWinner in the response from reporting wrapper function
+* Disable enableSellerDebugUrlGeneration flag by default
+
+## 1.1.0 (2023-08-25)
+
+
+### Features
+
+* Add B&A App Install API
+* Add ConsentedDebuggingLogger to write logs via OTel
+* Add feature flag enabling/disabling PAS
+* Add IG origin to AuctionResult
+* add max surge to instance groups
+* Add owner field for PAS Ad with bid
+* Adds docker build option for local testing
+* Adds PAS buyer input to GetBids
+* Check debug token in ConsentedDebuggingLogger
+* Include IG owner in buyer input
+* Log decoded buyer inputs for consented debugging in SFE
+* make export interval configurable
+* make metric list configurable
+* OpenTelemetry logging can be disabled via TELEMETRY_CONFIG flag
+* Propagate Ad type from Auction => SFE
+* update GCP terraforms to apply updates to instances without
+* update LB policy to default to RATE instead of UTILIZATION
+* Upgrade to functionaltest-system 0.8.0
+* use private meter provider not shared with Otel api
+
+
+### Bug Fixes
+
+* Bump required tf to 1.2.3 to be compatible with replace_triggered_by
+* Change componentAds -> components
+* Correct GCP dashboards
+* Do not set runtime flags with empty strings
+* Fixes race condition in SFE reactor due to mutex lock
+* Log a message in case of server flag lookup failures
+* Removes callback execution from default_async_grpc_client to prevent double invocation
+* specify default cpu util before sending requests to other regions
+* update OTel demo documentation
+* Use bazel config to set instance and platform
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.43.0
+
+## 1.0.0 (2023-08-10)
+
+
+### BREAKING CHANGES
+
+* if your generateBid() returns ad component render urls in a field named "adComponentRender". You will have to update this to return these in a field named "adComponents".
+Changed name in the API. Updated in reactors. Added a unit test.
+
+Testing: Unit test
+Bug: b/294917906
+Change-Id: Ie4344f55b18ef10f7a81b197ec997be393fa7368
+
+### Features
+
+* Adds Readme for running B&A servers locally
+* Enable CBOR encode/decode for ConsentedDebugConfig
+* implement dp aggregated histogram metric
+* include local server start scripts
+* periodic bucket fetching using BlobStorageClient
+
+
+### Bug Fixes
+
+* Correct paths to terraform modules in AWS demo.tf files
+* Improve clarity of aws vs gcp cases
+* Improve flag error handling
+* include required dep for bucket code fetcher
+* Remove enable_buyer_code_wrapper flag.
+* Remove enable_seller_code_wrapper flag.
+* Remove enableSellerCodeWrapper flag from aws and demo configs
+* remove unnecessary flags in terraform configs
+* Set cbuild flag --seccomp-unconfined
+
+
+### cleanup
+
+* Change AdWithBid.ad_component_render to .ad_components to align with OnDevice generateBid() spec
+
+
+### Documentation
+
+* Update terraform comments to communicate requirement for env name <= 3 characters
+
 ## 0.10.0 (2023-08-03)
 
 
 ### Features
 
-*  [AWS] add example terraform directory with README
-* [GCP] add example terraform directory with README
 * [reporting] Add helper function for cbor encoding and decoding of Win Reporting Urls
-* [reporting] Add helper function to build the dispatch request for
 * [reporting] Execute reportWin script and return the urls in the response.
 * [reporting] Fix reportWin function execution.
 * add AWS enclave PCR0 in release notes
-* Add bazel build flag --announce_rc
 * Add bazel configs for roma legacy vs sandboxed
-* add build_flavor for AWS packaging
-* add build_flavor for packaging
-* add buyerReportWinJsUrls to terraform files and enable_report_win_url_generation to BuyerCodeFetchConfig
-* add cpu memory metric for debugging
-* add FetchUrls utility to MultiCurlHttpFetcher
-* add GCP metric dashboard
-* add method to accumulate metric values before logging
 * Add OSSF Scorecard badge to top-level README
 * Add OSSF Scorecard GitHub workflow
 * Add the server flags to support user consented debugging
 * change autoscale cpu utilization measure to GCP suggested default (60%)
-* changing PeriodicCodeFetcher to add wasm support and runtime config support
 * clarify default lb policy within an instance group is ROUND_ROBIN
-* enable counter metrics with dp aggregation
 * Enable logging in the OTel collector
 * Encrypt GetBidsRequest for benchmarking
 * Flag protect the opentelemetry based logging
-* include coordinator and attestation support for GCP
-* load and append wasm string to the JS code wrapper
 * move observable system metric to server definition
-* support different instance types per service in GCP
-* update multi-region.tf to use prod js urls and test mode true
-* Upgrade build-system to release-0.30.1
-* Upgrade build-system to release-0.31.0
 * Upgrade data-plane-shared-libraries for Opentelemetry logs API
-* use //:non_prod_build to configure build
 
 
 ### Bug Fixes
 
-* Add seller_code_fetch_config and buyer_code_fetch_config to server start scripts
-* Adjust all/small test configs
-* Adjust sanitizer configs
-* Adjust SFE DCHECKs
-* bidding_service_test
-* Change PeriodicCodeFetcher to use std::string instead of absl::string_view in the parameters
-* Correct example BFE hostname
-* Correct license block
-* CPU monitoring is not limited to a specific environment
-* Define container image log variables once
-* Don't end select ad request prematurely
 * Encode Ad Component Render URLs when sending request to Seller Key-Value Server
-* Ensure --gcp-image flags are specified for gcp
-* Ensure --instance flag is specified
-* fix missing telemetry flag and readme
 * Fixes few ASAN issues
-* Improve build_and_test_all_in_docker usage text
 * Minimal CBOR encoding for uint/float
 * Order the keys in the response
-* patch google dp library to replace logging with absl
-* refactor the test to share initialization
-* remove unnecessary flags
 * Remove unwanted seller_origin flag from start_auction script
-* Rename `adRenderUrl` to `adRenderURL`
 * Rename the opentelemetry endpoint flag
 * secure_invoke respects --insecure flag for BFE
-* TEE<>TEE fix
-* temporarily eliminate requirement to have device signals to generate bids
-* Update and read the buyer_bids_ with lock
 
 
 ### API: Features
@@ -84,7 +148,6 @@ All notable changes to this project will be documented in this file. See [commit
 
 ### Dependencies
 
-* **deps:** Upgrade build-system to v0.33.0
 * **deps:** Upgrade build-system to v0.39.0
 * **deps:** Upgrade build-system to v0.41.0
 * **deps:** upgrade opentelemetry-cpp to 1.9.1 for B&A servers
@@ -94,6 +157,7 @@ All notable changes to this project will be documented in this file. See [commit
 
 * update release README instructions
 * Update secure_invoke README with new instructions for running.
+
 
 ## 0.9.0 (2023-07-20)
 

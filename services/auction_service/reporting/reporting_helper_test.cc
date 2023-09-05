@@ -69,13 +69,6 @@ rapidjson::Document GetReportResultJsonObj(const ReportingResponse& response) {
   report_result_url.SetString(
       response.report_result_response.report_result_url.c_str(),
       document.GetAllocator());
-  rapidjson::Value signals_for_winner;
-  signals_for_winner.SetString(
-      response.report_result_response.signals_for_winner.c_str(),
-      document.GetAllocator());
-  signals_for_winner.SetString(
-      response.report_result_response.signals_for_winner.c_str(),
-      document.GetAllocator());
 
   rapidjson::Value seller_logs(rapidjson::kArrayType);
   for (const std::string& log : response.seller_logs) {
@@ -83,8 +76,6 @@ rapidjson::Document GetReportResultJsonObj(const ReportingResponse& response) {
     seller_logs.PushBack(value, document.GetAllocator());
   }
   document.AddMember(kReportResultUrl, report_result_url,
-                     document.GetAllocator());
-  document.AddMember(kSignalsForWinner, signals_for_winner,
                      document.GetAllocator());
   document.AddMember(kSendReportToInvoked,
                      response.report_result_response.send_report_to_invoked,
@@ -136,8 +127,6 @@ void TestResponse(const ReportingResponse& response,
                   const ReportingResponse& expected_response) {
   EXPECT_EQ(response.report_result_response.report_result_url,
             expected_response.report_result_response.report_result_url);
-  EXPECT_EQ(response.report_result_response.signals_for_winner,
-            expected_response.report_result_response.signals_for_winner);
   EXPECT_EQ(response.report_result_response.send_report_to_invoked,
             expected_response.report_result_response.send_report_to_invoked);
   EXPECT_EQ(
@@ -179,7 +168,6 @@ TEST(ParseAndGetReportingResponseJson, ParsesReportingResultSuccessfully) {
   bool enable_adtech_code_logging = true;
   ReportingResponse expected_response = {
       .report_result_response = {.report_result_url = kTestReportResultUrl,
-                                 .signals_for_winner = kTestSignalsForWinner,
                                  .send_report_to_invoked =
                                      kSendReportToInvokedTrue,
                                  .register_ad_beacon_invoked =
@@ -204,8 +192,6 @@ TEST(ParseAndGetReportingResponseJson, OnlyFewFieldsSetParsesSuccessfully) {
   bool enable_adtech_code_logging = true;
   ReportingResponse expected_response;
   expected_response.report_result_response.report_result_url = kReportResultUrl;
-  expected_response.report_result_response.signals_for_winner =
-      kSignalsForWinner;
   expected_response.report_result_response.send_report_to_invoked =
       kSendReportToInvokedTrue;
   expected_response.report_result_response.register_ad_beacon_invoked =

@@ -16,7 +16,7 @@
 
 locals {
   region      = "" # Example: ["us-central1", "us-west1"]
-  environment = "" # Example: "test"
+  environment = "" # Must be <= 3 characters. Example: "abc"
 }
 
 provider "aws" {
@@ -24,7 +24,7 @@ provider "aws" {
 }
 
 module "buyer" {
-  source                               = "../../modules/buyer"
+  source                               = "../../../modules/buyer"
   environment                          = local.environment
   region                               = local.region
   enclave_debug_mode                   = false # Example: false
@@ -48,43 +48,46 @@ module "buyer" {
   bidding_autoscaling_min_size         = 1     # Example: 1
 
   runtime_flags = {
-    BIDDING_PORT        = "50051" # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_PORT = "50051" # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS     = "false" # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_EGRESS_TLS  = "true"  # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_PORT        = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_FRONTEND_PORT = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BFE_INGRESS_TLS     = "false"          # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_EGRESS_TLS  = "true"           # Do not change unless you are modifying the default GCP architecture.
+    COLLECTOR_ENDPOINT  = "127.0.0.1:4317" # Do not change unless you are modifying the default GCP architecture.
 
-    ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
-    BIDDING_SERVER_ADDR                = "" # Example: "dns:///bidding1.com:443"
-    BUYER_KV_SERVER_ADDR               = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
-    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
-    ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
-    CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
-    ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
-    ENABLE_ENCRYPTION                  = "" # Example: "true"
-    TELEMETRY_CONFIG                   = "" # Example: "mode: EXPERIMENT"
-    TEST_MODE                          = "" # Example: "false"
-    BUYER_CODE_FETCH_CONFIG            = "" # Example:
+    ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
+    BIDDING_SERVER_ADDR                           = "" # Example: "dns:///bidding1.com:443"
+    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
+    BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
+    ENABLE_BUYER_FRONTEND_BENCHMARKING            = "" # Example: "false"
+    CREATE_NEW_EVENT_ENGINE                       = "" # Example: "false"
+    ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
+    ENABLE_ENCRYPTION                             = "" # Example: "true"
+    PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
+    TELEMETRY_CONFIG                              = "" # Example: "mode: EXPERIMENT"
+    TEST_MODE                                     = "" # Example: "false"
+    BUYER_CODE_FETCH_CONFIG                       = "" # Example:
+    ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
     # "{
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
+    #    "protectedAppSignalsBiddingJsUrl": "placeholder",
     #    "biddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
-    #    "enableBuyerDebugUrlGeneration": true,
-    #    "enableBuyerCodeWrapper": false,
+    #    "enableBuyerDebugUrlGeneration": false,
     #    "enableAdtechCodeLogging": false,
-    #    "enableReportWinUrlGeneration": false
     #  }"
     JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
-    JS_WORKER_MEM_MB    = "" # Example: "1536" JS_WORKER_MEM_MB/JS_WORKER_QUEUE_LEN > average JS request size.
     ROMA_TIMEOUT_MS     = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
 
 
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"

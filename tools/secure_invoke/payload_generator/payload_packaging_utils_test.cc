@@ -43,15 +43,15 @@ server_common::PrivateKey GetPrivateKey(absl::string_view private_key_hex) {
 }
 
 // This test follows the exact steps for decoding and decryption for the
-// protected audience payload in a SelectAdRequest as followed in
+// protected auction input payload in a SelectAdRequest as followed in
 // the SFE service for a request from a browser type client.
 // These steps must always remain in sync with the SelectAdReactor.
-// Therefore, it verifies that the ProtectedAudienceInput payload packaged
+// Therefore, it verifies that the ProtectedAuctionInput payload packaged
 // by PackagePayloadForBrowser method is correctly parsed in the
 // SelectAdReactor.
 TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
-  ProtectedAudienceInput expected =
-      MakeARandomProtectAudienceInput(SelectAdRequest::BROWSER);
+  ProtectedAuctionInput expected =
+      MakeARandomProtectedAuctionInput(SelectAdRequest::BROWSER);
   auto output =
       PackagePayload(expected, SelectAdRequest::BROWSER, kDefaultPublicKey);
   ASSERT_TRUE(output.ok()) << output.status();
@@ -68,8 +68,8 @@ TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
 
   // Decode.
   ErrorAccumulator error_accumulator;
-  absl::StatusOr<ProtectedAudienceInput> actual =
-      Decode(decoded_request->compressed_data, error_accumulator);
+  absl::StatusOr<ProtectedAuctionInput> actual = Decode<ProtectedAuctionInput>(
+      decoded_request->compressed_data, error_accumulator);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;
@@ -143,7 +143,7 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
 
   // Encrypt.
   auto input_ctxt_pair =
-      PackagePayload(MakeARandomProtectAudienceInput(SelectAdRequest::BROWSER),
+      PackagePayload(MakeARandomProtectedAuctionInput(SelectAdRequest::BROWSER),
                      SelectAdRequest::BROWSER, kDefaultPublicKey);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =
@@ -163,8 +163,8 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
 }
 
 TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
-  ProtectedAudienceInput expected =
-      MakeARandomProtectAudienceInput(SelectAdRequest::ANDROID);
+  ProtectedAuctionInput expected =
+      MakeARandomProtectedAuctionInput(SelectAdRequest::ANDROID);
   absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
       output =
           PackagePayload(expected, SelectAdRequest::ANDROID, kDefaultPublicKey);
@@ -183,7 +183,7 @@ TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
   ASSERT_TRUE(decoded_request.ok()) << decoded_request.status();
 
   std::string payload = std::move(decoded_request->compressed_data);
-  ProtectedAudienceInput actual;
+  ProtectedAuctionInput actual;
   ASSERT_TRUE(actual.ParseFromArray(payload.data(), payload.size()))
       << "Failed to parse the input payload to proto";
 
@@ -234,7 +234,7 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
 
   // Encrypt.
   auto input_ctxt_pair =
-      PackagePayload(MakeARandomProtectAudienceInput(SelectAdRequest::ANDROID),
+      PackagePayload(MakeARandomProtectedAuctionInput(SelectAdRequest::ANDROID),
                      SelectAdRequest::ANDROID, kDefaultPublicKey);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =

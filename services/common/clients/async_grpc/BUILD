@@ -55,6 +55,25 @@ cc_test(
 )
 
 cc_test(
+    name = "bidding_async_grpc_client_integration_test_utils",
+    size = "medium",
+    srcs = ["bidding_async_grpc_client_stub_test.h"],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/clients/async_grpc:default_async_grpc_client",
+        "//services/common/constants:common_service_flags",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+    ],
+)
+
+cc_test(
     name = "default_async_grpc_client_test",
     size = "medium",
     srcs = ["default_async_grpc_client_test.cc"],

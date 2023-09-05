@@ -23,6 +23,7 @@ cc_library(
     hdrs = [
         "definition.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
@@ -146,6 +147,7 @@ cc_library(
     deps = [
         ":context_map",
         "//services/common/util:read_system",
+        "//services/common/util:reporting_util",
     ],
 )
 

@@ -341,3 +341,66 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "consented_debugging_logger",
+    srcs = ["consented_debugging_logger.cc"],
+    hdrs = ["consented_debugging_logger.h"],
+    deps = [
+        ":context_logger",
+        ":request_response_constants",
+        ":source_location",
+        "//api:bidding_auction_servers_cc_proto",
+        "@com_github_google_glog//:glog",
+        "@io_opentelemetry_cpp//api",
+        "@io_opentelemetry_cpp//sdk:headers",
+        "@io_opentelemetry_cpp//sdk/src/logs",
+        "@io_opentelemetry_cpp//sdk/src/trace",
+    ],
+)
+
+cc_test(
+    name = "consented_debugging_logger_test",
+    size = "small",
+    srcs = [
+        "consented_debugging_logger_test.cc",
+    ],
+    deps = [
+        ":consented_debugging_logger",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "signal_handler",
+    hdrs = ["signal_handler.h"],
+    deps = [
+        ":examine_stack",
+    ],
+)
+
+cc_library(
+    name = "bid_stats",
+    srcs = ["bid_stats.cc"],
+    hdrs = ["bid_stats.h"],
+    deps = [
+        ":context_logger",
+        ":source_location",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "bid_stats_test",
+    size = "small",
+    srcs = [
+        "bid_stats_test.cc",
+    ],
+    deps = [
+        ":bid_stats",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

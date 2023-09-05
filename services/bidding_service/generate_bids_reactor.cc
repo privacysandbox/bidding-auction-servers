@@ -276,11 +276,9 @@ constexpr int BidArgIndex(GenerateBidArgs arg) {
 // shared by all dispatch requests are left empty, to be  filled in with values
 // specific to the request.
 std::vector<std::shared_ptr<std::string>> BuildBaseInput(
-    const RawRequest& raw_request, bool enable_buyer_code_wrapper) {
-  int args_size = kArgsSizeDefault;
-  if (enable_buyer_code_wrapper) {
-    args_size = kArgsSizeWithWrapper;
-  }
+    const RawRequest& raw_request) {
+  int args_size = kArgsSizeWithWrapper;
+
   std::vector<std::shared_ptr<std::string>> input(
       args_size, std::make_shared<std::string>());  // GenerateBidArgs size.
   input[BidArgIndex(GenerateBidArgs::kAuctionSignals)] =
@@ -300,7 +298,6 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation, const ContextLogger& logger,
-    const bool enable_buyer_code_wrapper,
     const bool enable_adtech_code_logging) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
@@ -357,17 +354,13 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(R"JSON("")JSON");
   }
-  if (enable_buyer_code_wrapper) {
-    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kFeatureFlags)] =
-        std::make_shared<std::string>(
-            GetFeatureFlagJson(enable_adtech_code_logging,
-                               enable_buyer_debug_url_generation &&
-                                   raw_request.enable_debug_reporting()));
-    generate_bid_request.handler_name =
-        kDispatchHandlerFunctionNameWithCodeWrapper;
-  } else {
-    generate_bid_request.handler_name = kDispatchHandlerFunctionName;
-  }
+  generate_bid_request.input[BidArgIndex(GenerateBidArgs::kFeatureFlags)] =
+      std::make_shared<std::string>(
+          GetFeatureFlagJson(enable_adtech_code_logging,
+                             enable_buyer_debug_url_generation &&
+                                 raw_request.enable_debug_reporting()));
+  generate_bid_request.handler_name =
+      kDispatchHandlerFunctionNameWithCodeWrapper;
 
   // Only add parsed keys.
   interest_group.clear_trusted_bidding_signals_keys();
@@ -398,11 +391,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
 }
 
 absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
-    bool enable_buyer_code_wrapper, bool enable_adtech_code_logging,
-    const std::string& response, const ContextLogger& logger) {
-  if (!enable_buyer_code_wrapper) {
-    return response;
-  }
+    bool enable_adtech_code_logging, const std::string& response,
+    const ContextLogger& logger) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   rapidjson::Value& response_obj = document["response"];
   std::string response_json;
@@ -441,7 +431,6 @@ GenerateBidsReactor::GenerateBidsReactor(
       benchmarking_logger_(std::move(benchmarking_logger)),
       enable_buyer_debug_url_generation_(
           runtime_config.enable_buyer_debug_url_generation),
-      enable_buyer_code_wrapper_(runtime_config.enable_buyer_code_wrapper),
       enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
       roma_timeout_ms_(runtime_config.roma_timeout_ms) {
   CHECK_OK([this]() {
@@ -469,13 +458,13 @@ void GenerateBidsReactor::Execute() {
 
   // Build base input.
   std::vector<std::shared_ptr<std::string>> base_input =
-      BuildBaseInput(raw_request_, enable_buyer_code_wrapper_);
+      BuildBaseInput(raw_request_);
   for (int i = 0; i < interest_groups.size(); i++) {
     absl::StatusOr<DispatchRequest> generate_bid_request =
-        BuildGenerateBidRequest(
-            interest_groups.at(i), raw_request_, base_input,
-            ig_trusted_signals_map.value(), enable_buyer_debug_url_generation_,
-            logger_, enable_buyer_code_wrapper_, enable_adtech_code_logging_);
+        BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
+                                ig_trusted_signals_map.value(),
+                                enable_buyer_debug_url_generation_, logger_,
+                                enable_adtech_code_logging_);
     if (!generate_bid_request.ok()) {
       if (VLOG_IS_ON(3)) {
         logger_.vlog(3, "Unable to build GenerateBidRequest: ",
@@ -513,6 +502,8 @@ void GenerateBidsReactor::Execute() {
     TextFormat::PrintToString(raw_request_, &original_request);
     logger_.vlog(1, "Execution request failed for batch: ", original_request,
                  status.ToString(absl::StatusToStringMode::kWithEverything));
+    LogIfError(
+        metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     EncryptResponseAndFinish(
         grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
@@ -534,14 +525,18 @@ void GenerateBidsReactor::GenerateBidsCallback(
     }
   }
   benchmarking_logger_->HandleResponseBegin();
+  int total_bid_count = static_cast<int>(output.size());
+  int zero_bid_count = 0;
+  LogIfError(metric_context_->AccumulateMetric<metric::kBiddingTotalBidsCount>(
+      total_bid_count));
   int failed_requests = 0;
   for (int i = 0; i < output.size(); i++) {
     auto& result = output.at(i);
+    bool is_bid_zero = true;
     if (result.ok()) {
       AdWithBid bid;
       absl::StatusOr<std::string> generate_bid_response =
-          ParseAndGetGenerateBidResponseJson(enable_buyer_code_wrapper_,
-                                             enable_adtech_code_logging_,
+          ParseAndGetGenerateBidResponseJson(enable_adtech_code_logging_,
                                              result->resp, logger_);
       if (!generate_bid_response.ok()) {
         logger_.vlog(0, "Failed to parse response from Roma ",
@@ -558,6 +553,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
         } else {
           bid.set_interest_group_name(interest_group_name);
           *raw_response_.add_bids() = bid;
+          is_bid_zero = false;
         }
       } else {
         logger_.vlog(
@@ -570,7 +566,14 @@ void GenerateBidsReactor::GenerateBidsCallback(
           1, "Invalid execution (possibly invalid input): ",
           result.status().ToString(absl::StatusToStringMode::kWithEverything));
     }
+    if (is_bid_zero) {
+      zero_bid_count += 1;
+      LogIfError(
+          metric_context_->AccumulateMetric<metric::kBiddingZeroBidCount>(1));
+    }
   }
+  LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
+      (static_cast<double>(zero_bid_count)) / total_bid_count));
 
   logger_.vlog(1, "\n\nFailed of total: ", failed_requests, "/", output.size());
   benchmarking_logger_->HandleResponseEnd();

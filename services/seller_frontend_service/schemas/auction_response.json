@@ -36,7 +36,7 @@
       "type": "string",
       "description": "The ad that will be rendered on the end user's device."
     },
-    "componentAds": {
+    "components": {
       "type": "array",
       "description": "List of render URLs for component ads to be displayed as part of this ad",
       "items": {

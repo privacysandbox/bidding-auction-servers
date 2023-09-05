@@ -135,6 +135,12 @@ ProtoFactory::CreateGenerateBidsRawRequest(
     generate_bids_raw_request->mutable_log_context()->set_generation_id(
         log_context.generation_id());
   }
+
+  // 7. Set consented debug config.
+  if (get_bids_raw_request.has_consented_debug_config()) {
+    *generate_bids_raw_request->mutable_consented_debug_config() =
+        get_bids_raw_request.consented_debug_config();
+  }
   return generate_bids_raw_request;
 }
 

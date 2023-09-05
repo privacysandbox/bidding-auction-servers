@@ -224,4 +224,21 @@ TEST_F(BaseTest, AccumulatePartition) {
   CHECK_OK(context_->AccumulateMetric<kIntUnSafePartitioned>(200, "buyer_2"));
 }
 
+TEST_F(MetricConfigTest, ConfigMetricList) {
+  TelemetryConfig config_proto;
+  config_proto.set_mode(TelemetryConfig::PROD);
+  config_proto.add_metric()->set_name("kIntExactCounter");
+  BuildDependentConfig metric_config(config_proto);
+  SetUpWithConfig(metric_config);
+
+  EXPECT_CALL(mock_metric_router_,
+              LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)),
+                      Eq(1), _, _))
+      .WillOnce(Return(absl::OkStatus()));
+  CHECK_OK(context_->LogUpDownCounter<kIntExactCounter>(1));
+
+  auto s = context_->LogUpDownCounter<kIntExactCounter2>(1);
+  EXPECT_TRUE(absl::IsNotFound(s));
+}
+
 }  // namespace privacy_sandbox::server_common::metric

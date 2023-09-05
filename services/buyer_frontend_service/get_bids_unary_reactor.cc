@@ -22,6 +22,7 @@
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 
@@ -73,16 +74,6 @@ bool GetBidsUnaryReactor::DecryptRequest() {
   return true;
 }
 
-void GetBidsUnaryReactor::LogInitiatedRequestMetrics(
-    int initiated_request_duration_ms) {
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<server_common::metric::kInitiatedRequestCount>(1));
-  LogIfError(metric_context_->AccumulateMetric<
-             server_common::metric::kInitiatedRequestTotalDuration>(
-      initiated_request_duration_ms));
-}
-
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   DCHECK(config_.encryption_enabled);
@@ -92,16 +83,33 @@ void GetBidsUnaryReactor::Execute() {
   }
   VLOG(5) << "Successfully decrypted the request";
 
+  GetProtectedAudienceBids();
+}
+
+void GetBidsUnaryReactor::GetProtectedAudienceBids() {
+  // Logger for consented debugging.
+  // TODO(b/279955398): Refactor ConsentedDebuggingLogger to create right next
+  // to ContextLogger, and use a common helper function.
+  if (config_.enable_otel_based_logging) {
+    if (absl::string_view token = config_.consented_debug_token;
+        !token.empty()) {
+      ConsentedDebuggingLogger debug_logger(GetLoggingContext(), token);
+      debug_logger.vlog(
+          0, absl::StrCat("GetBidsRawRequest: ", raw_request_.DebugString()));
+    }
+  }
+
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
-  absl::Time kv_request_start_time = absl::Now();
+  auto kv_request =
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get(), 0);
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
-      [this, kv_request_start_time](
-          absl::StatusOr<std::unique_ptr<BiddingSignals>> response) {
-        int kv_request_duration_ms =
-            (absl::Now() - kv_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(kv_request_duration_ms);
+      [this, kv_request = std::move(kv_request)](
+          absl::StatusOr<std::unique_ptr<BiddingSignals>> response) mutable {
+        {  // destruct kv_request, destructor measures request time
+          auto not_used = std::move(kv_request);
+        }
         if (!response.ok()) {
           LogIfError(metric_context_->AccumulateMetric<
                      server_common::metric::kInitiatedRequestErrorCount>(1));
@@ -115,14 +123,14 @@ void GetBidsUnaryReactor::Execute() {
         }
         // Final callback needs to check status of others and send bidding
         // request.
-        PrepareAndGenerateBid(std::move(response.value()));
+        PrepareAndGenerateProtectedAudienceBid(std::move(response.value()));
       },
       absl::Milliseconds(config_.bidding_signals_load_timeout_ms));
 }
 
 // Process Outputs from Actions to prepare bidding request.
 // All Preload actions must have completed before this is invoked.
-void GetBidsUnaryReactor::PrepareAndGenerateBid(
+void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
     std::unique_ptr<BiddingSignals> bidding_signals) {
   const auto& log_context = raw_request_.log_context();
   std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
@@ -131,16 +139,17 @@ void GetBidsUnaryReactor::PrepareAndGenerateBid(
           log_context);
 
   logger_.vlog(2, "GenerateBidsRequest:\n", raw_bidding_input->DebugString());
-  absl::Time bs_request_start_time = absl::Now();
+  auto bidding_request = metric::MakeInitiatedRequest(
+      metric::kBs, metric_context_.get(), raw_bidding_input->ByteSizeLong());
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
       std::move(raw_bidding_input), {},
-      [this, bs_request_start_time](
+      [this, bidding_request = std::move(bidding_request)](
           absl::StatusOr<
               std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
-              raw_response) {
-        int bs_request_duration_ms =
-            (absl::Now() - bs_request_start_time) / absl::Milliseconds(1);
-        LogInitiatedRequestMetrics(bs_request_duration_ms);
+              raw_response) mutable {
+        {  // destruct bidding_request, destructor measures request time
+          auto not_used = std::move(bidding_request);
+        }
         if (!raw_response.ok()) {
           LogIfError(metric_context_->AccumulateMetric<
                      server_common::metric::kInitiatedRequestErrorCount>(1));
@@ -200,8 +209,14 @@ bool GetBidsUnaryReactor::EncryptResponse() {
 
 ContextLogger::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
   const auto& log_context = raw_request_.log_context();
-  return {{kGenerationId, log_context.generation_id()},
-          {kBuyerDebugId, log_context.adtech_debug_id()}};
+  ContextLogger::ContextMap context_map = {
+      {kGenerationId, log_context.generation_id()},
+      {kBuyerDebugId, log_context.adtech_debug_id()}};
+  if (raw_request_.has_consented_debug_config()) {
+    MaybeAddConsentedDebugConfig(raw_request_.consented_debug_config(),
+                                 context_map);
+  }
+  return context_map;
 }
 
 GetBidsUnaryReactor::GetBidsUnaryReactor(
