@@ -1,0 +1,31 @@
+# Copyright Microsoft, 2023
+
+name: Build protected audience services for Azure
+
+on: [workflow_dispatch]
+
+env:
+  CONTAINER_REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
+  CONTAINER_REGISTRY_USERNAME: ${{ vars.CONTAINER_REGISTRY_USERNAME }}
+  CONTAINER_REGISTRY_ACCESS_TOKEN: $${{ secrets.CONTAINER_REGISTRY_ACCESS_TOKEN }}
+  PLATFORM: azure
+  BUILD_FLAVOUR: prod
+  
+jobs:
+  build_and_test_in_docker: 
+    runs-on: [self-hosted, linux, X64] 
+    steps:
+      - uses: AutoModality/action-clean@v1
+      - uses: actions/checkout@v3
+
+      - name: Setup Bazel
+        uses: abhinavsingh/setup-bazel@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY_ACCESS_TOKEN }}
+
+      - name: Build and deploy containers
+        run: ./production/packaging/build_and_test_all_in_docker --verbose --service-path bidding_service --service-path buyer_frontend_service --instance local --platform $(PLATFORM) --no-precommit --azure-image-tag $(BUILD_FLAVOR) --azure-image-repo $(CONTAINER_REGISTRY)  --build-flavor $(BUILD_FLAVOR)
