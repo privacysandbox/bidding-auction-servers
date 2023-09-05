@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
   }
   CHECK(input_format == kProtoFormat || input_format == kJsonFormat)
       << "Unexpected input format specified: " << input_format;
-  CHECK(target_service == kSfe || target_service == kBfe)
+  CHECK(target_service == kSfe || target_service == kBfe || target_service == kBidding)
       << "Unsupported target service: " << target_service;
   if (target_service == kSfe) {
     CHECK(input_format == kJsonFormat)
