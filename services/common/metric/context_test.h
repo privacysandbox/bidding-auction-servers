@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
@@ -34,6 +36,7 @@ using ::testing::Matcher;
 using ::testing::Pair;
 using ::testing::Ref;
 using ::testing::Return;
+using ::testing::ReturnRef;
 using ::testing::SizeIs;
 using ::testing::StartsWith;
 using ::testing::StrictMock;
@@ -114,18 +117,33 @@ class MockMetricRouter {
               ((const DefinitionHistogram&), int, absl::string_view));
   MOCK_METHOD(absl::Status, LogUnSafe,
               ((const DefinitionGauge&), int, absl::string_view));
+  MOCK_METHOD(const BuildDependentConfig&, metric_config, ());
 };
 
 class BaseTest : public ::testing::Test {
  protected:
-  void SetUp() override {
+  void InitConfig(TelemetryConfig::TelemetryMode mode) {
     TelemetryConfig config_proto;
-    config_proto.set_mode(TelemetryConfig::PROD);
-    static BuildDependentConfig metric_config(config_proto);
-    context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
-        &mock_metric_router_, metric_config);
+    config_proto.set_mode(mode);
+    metric_config_ = std::make_unique<BuildDependentConfig>(config_proto);
+    EXPECT_CALL(mock_metric_router_, metric_config())
+        .WillRepeatedly(ReturnRef(*metric_config_));
   }
 
+  void SetUp() override {
+    InitConfig(TelemetryConfig::PROD);
+    context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
+        &mock_metric_router_);
+  }
+
+  template <typename ValueT, typename MetricT>
+  std::vector<std::pair<std::string, ValueT>> BoundPartitionsContributed(
+      const absl::flat_hash_map<std::string, ValueT>& value,
+      const MetricT& definition) {
+    return context_->BoundPartitionsContributed(value, definition);
+  }
+
+  std::unique_ptr<BuildDependentConfig> metric_config_;
   StrictMock<MockMetricRouter> mock_metric_router_;
   std::unique_ptr<Context<metric_list_span, MockMetricRouter>> context_;
 };
@@ -149,6 +167,20 @@ class ContextTest : public BaseTest {
         .WillOnce(Return(absl::OkStatus()));
   }
 
+  void LogSafeOK() {
+    EXPECT_CALL(mock_metric_router_,
+                LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter)),
+                        Eq(1), _, _))
+        .WillOnce(Return(absl::OkStatus()));
+    CHECK_OK(context_->LogMetric<kIntExactCounter>(1));
+    CHECK_OK(context_->LogMetricDeferred<kIntExactCounter2>(
+        []() mutable { return 2; }));
+    EXPECT_CALL(mock_metric_router_,
+                LogSafe(Matcher<const DefinitionSafe&>(Ref(kIntExactCounter2)),
+                        Eq(2), _, _))
+        .WillOnce(Return(absl::OkStatus()));
+  }
+
   void ErrorLogSafeAfterDecrypt() {
     EXPECT_EQ(context_->LogMetric<kIntExactCounter>(1).code(),
               absl::StatusCode::kFailedPrecondition);
@@ -163,8 +195,10 @@ class ContextTest : public BaseTest {
 class MetricConfigTest : public ::testing::Test {
  protected:
   void SetUpWithConfig(const BuildDependentConfig& metric_config) {
+    EXPECT_CALL(mock_metric_router_, metric_config())
+        .WillRepeatedly(ReturnRef(metric_config));
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
-        &mock_metric_router_, metric_config);
+        &mock_metric_router_);
   }
 
   StrictMock<MockMetricRouter> mock_metric_router_;

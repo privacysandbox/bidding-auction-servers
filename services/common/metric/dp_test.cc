@@ -20,6 +20,7 @@
 #include "absl/log/check.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
 namespace privacy_sandbox::server_common::metric {
 
@@ -43,6 +44,7 @@ using ::testing::Eq;
 using ::testing::Matcher;
 using ::testing::Ref;
 using ::testing::Return;
+using ::testing::ReturnRef;
 using ::testing::StrictMock;
 
 using DefinitionUnSafe =
@@ -75,11 +77,22 @@ class MockMetricRouter {
               ((const DefinitionPartition&), int, absl::string_view));
   MOCK_METHOD(absl::Status, LogSafe,
               ((const DefinitionHistogram&), int, absl::string_view));
+  MOCK_METHOD(const BuildDependentConfig&, metric_config, ());
 };
 
 class NoNoiseTest : public ::testing::Test {
  protected:
-  void SetUp() override {}
+  void SetUp() override { InitConfig(60'000); }
+
+  void InitConfig(int dp_export_interval_ms) {
+    TelemetryConfig config_proto;
+    config_proto.set_dp_export_interval_ms(dp_export_interval_ms);
+    metric_config_ = std::make_unique<BuildDependentConfig>(config_proto);
+    EXPECT_CALL(mock_metric_router_, metric_config())
+        .WillRepeatedly(ReturnRef(*metric_config_));
+  }
+
+  std::unique_ptr<BuildDependentConfig> metric_config_;
   virtual PrivacyBudget fraction() { return PrivacyBudget{1e10}; }
   StrictMock<MockMetricRouter> mock_metric_router_;
 };
@@ -274,7 +287,7 @@ TEST_F(NoiseTest, HistogramCounter) {
 }
 
 TEST_F(NoNoiseTest, DifferentiallyPrivate) {
-  DifferentiallyPrivate dp(&mock_metric_router_, fraction(), absl::Seconds(60));
+  DifferentiallyPrivate dp(&mock_metric_router_, fraction());
 
   CHECK_OK(dp.Aggregate(&kIntUnSafeCounter, 1, ""));
   CHECK_OK(dp.Aggregate(&kIntUnSafeCounter, 2, ""));
@@ -296,7 +309,10 @@ TEST_F(NoNoiseTest, DifferentiallyPrivate) {
       .WillRepeatedly(Return(absl::OkStatus()));
 }
 
-class ThreadTest : public NoNoiseTest {};
+class ThreadTest : public NoNoiseTest {
+ protected:
+  void SetUp() override { InitConfig(1); }
+};
 
 // multi thread log to same `DpAggregator`
 TEST_F(ThreadTest, DpAggregator) {
@@ -353,8 +369,8 @@ TEST_F(ThreadTest, DifferentiallyPrivate) {
   const DefinitionUnSafe* kMetricList[] = {&kIntUnSafeCounter, &kUnitCounter,
                                            &kUnitCounter2, &kUnitCounter3};
   absl::Span<const DefinitionUnSafe* const> metric_span = kMetricList;
-  DifferentiallyPrivate dp(&mock_metric_router_, fraction(),
-                           absl::Milliseconds(1));
+
+  DifferentiallyPrivate dp(&mock_metric_router_, fraction());
   std::vector<std::future<absl::Status>> f;
   absl::Notification start;
   constexpr int kRepeat = 50;

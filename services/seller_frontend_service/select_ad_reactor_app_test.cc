@@ -26,6 +26,7 @@
 
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
+#include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
@@ -46,6 +47,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+using ::google::protobuf::util::MessageDifferencer;
 using ::testing::_;
 using ::testing::Return;
 using EncodedBueryInputs = ::google::protobuf::Map<std::string, std::string>;
@@ -524,14 +526,8 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
             EXPECT_EQ(observed_bid_with_metadata.egress_features(),
                       expected_bid.egress_features());
             EXPECT_EQ(observed_bid_with_metadata.owner(), kSampleBuyer);
-            std::string observed_ad_json;
-            std::string expected_ad_json;
-            google::protobuf::util::MessageToJsonString(
-                observed_bid_with_metadata.ad(), &observed_ad_json);
-            google::protobuf::util::MessageToJsonString(
-                observed_bid_with_metadata.ad(), &expected_ad_json);
-            EXPECT_EQ(observed_ad_json, expected_ad_json);
-
+            EXPECT_TRUE(MessageDifferencer::Equals(
+                observed_bid_with_metadata.ad(), expected_bid.ad()));
             return absl::OkStatus();
           });
 

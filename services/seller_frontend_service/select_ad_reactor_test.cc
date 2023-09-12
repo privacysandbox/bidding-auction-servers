@@ -404,6 +404,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
                                bids.at(actual_ad_with_bid_for_test.render())));
             }
             EXPECT_EQ(diff_output, "");
+            EXPECT_EQ(request->seller(),
+                      select_ad_req.auction_config().seller());
             return absl::OkStatus();
           });
 

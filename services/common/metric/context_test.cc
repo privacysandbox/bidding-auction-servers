@@ -16,7 +16,7 @@
 
 namespace privacy_sandbox::server_common::metric {
 
-TEST(BoundPartitionsContributed, Bound) {
+TEST_F(BaseTest, BoundPartitionsContributed) {
   absl::flat_hash_map<std::string, int> m;
   for (int i = 1; i < 10; ++i) {
     m.emplace(absl::StrCat("buyer_", i), i);
@@ -27,7 +27,7 @@ TEST(BoundPartitionsContributed, Bound) {
   }
 }
 
-TEST(BoundPartitionsContributed, Filter) {
+TEST_F(BaseTest, FilterNotDefinedPartition) {
   absl::flat_hash_map<std::string, int> m = {{"private partition", 1}};
   EXPECT_THAT(BoundPartitionsContributed(m, kIntUnSafePartitioned), IsEmpty());
   EXPECT_THAT(BoundPartitionsContributed(m, kIntUnSafePrivatePartitioned),

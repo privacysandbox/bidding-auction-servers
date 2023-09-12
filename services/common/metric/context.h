@@ -65,9 +65,8 @@ template <const absl::Span<const DefinitionName* const>& L, typename U>
 class Context {
  public:
   // Constructed here only, `is_debug`=true will log everything as safe.
-  static std::unique_ptr<Context> GetContext(
-      U* metric_router, const BuildDependentConfig& config) {
-    return absl::WrapUnique(new Context(metric_router, config));
+  static std::unique_ptr<Context> GetContext(U* metric_router) {
+    return absl::WrapUnique(new Context(metric_router));
   }
 
   // Move only
@@ -204,23 +203,23 @@ class Context {
   }
 
  private:
+  friend class BaseTest;
   friend class ContextTest;
   friend class ContextTest_LogBeforeDecrypt_Test;
   friend class ContextTest_LogAfterDecrypt_Test;
   friend class ExperimentTest_LogAfterDecrypt_Test;
 
-  explicit Context(U* metric_router, const BuildDependentConfig& config)
-      : metric_router_(metric_router), metric_config_(config) {}
+  explicit Context(U* metric_router) : metric_router_(metric_router) {}
 
   template <Privacy privacy>
   absl::StatusOr<bool> ShouldLogSafe() {
-    if (!metric_config_.MetricAllowed()) {
+    if (!metric_router_->metric_config().MetricAllowed()) {
       return absl::PermissionDeniedError("metric is OFF");
     }
     if (decrypted_ && privacy == Privacy::kNonImpacting)
       return absl::FailedPreconditionError(
           "cannot log safe after request being decrypted");
-    if (metric_config_.IsDebug()) return true;
+    if (metric_router_->metric_config().IsDebug()) return true;
     return !decrypted_ && privacy == Privacy::kNonImpacting;
   }
 
@@ -231,7 +230,9 @@ class Context {
       return absl::AlreadyExistsError(
           absl::StrCat(definition.name_, " can only log once for a request."));
     }
-    return metric_config_.GetMetricConfig(definition.name_).status();
+    return metric_router_->metric_config()
+        .GetMetricConfig(definition.name_)
+        .status();
   }
 
   template <const auto& definition, typename T>
@@ -288,11 +289,16 @@ class Context {
     PS_ASSIGN_OR_RETURN(const bool log_safe, ShouldLogSafe<privacy>());
     if (log_safe) {
       PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
-      if (metric_config_.MetricMode() != TelemetryConfig::COMPARE) {
+      if (metric_router_->metric_config().MetricMode() !=
+          TelemetryConfig::COMPARE) {
         return absl::OkStatus();
       }
     }
-    return metric_router_->LogUnSafe(definition, value, partition);
+    if constexpr (privacy == Privacy::kImpacting) {
+      return metric_router_->LogUnSafe(definition, value, partition);
+    } else {
+      return absl::OkStatus();
+    }
   }
 
   // Same as `LogMetric`, instead providing a value, a callback is used to get
@@ -350,24 +356,68 @@ class Context {
         for (auto& [partition, value] : values) {
           PS_RETURN_IF_ERROR(LogSafe(definition, value, partition));
         }
-        if (metric_config_.MetricMode() != TelemetryConfig::COMPARE) {
+        if (metric_router_->metric_config().MetricMode() !=
+            TelemetryConfig::COMPARE) {
           return absl::OkStatus();
         }
       }
-      for (auto& [partition, value] :
-           BoundPartitionsContributed(values, definition)) {
-        PS_RETURN_IF_ERROR(
-            metric_router_->LogUnSafe(definition, value, partition));
+      if constexpr (privacy == Privacy::kImpacting) {
+        for (auto& [partition, value] :
+             BoundPartitionsContributed(values, definition)) {
+          PS_RETURN_IF_ERROR(
+              metric_router_->LogUnSafe(definition, value, partition));
+        }
       }
       return absl::OkStatus();
     });
     return absl::OkStatus();
   }
 
+  template <typename ValueT, typename MetricT>
+  std::vector<std::pair<std::string, ValueT>> BoundPartitionsContributed(
+      const absl::flat_hash_map<std::string, ValueT>& value,
+      const MetricT& definition) {
+    return BoundPartitionsContributed(value, definition, definition.name_);
+  }
+
+  // For Privacy kImpacting partitioned metrics, partitions must be in defined
+  // `public_partitions_`, the number of partitions contributed by each privacy
+  // unit is limited to `max_partitions_contributed_`; Returns the metric values
+  // with upto limited number of partitions.
+  template <typename T>
+  std::vector<std::pair<std::string, T>> BoundPartitionsContributed(
+      const absl::flat_hash_map<std::string, T>& value,
+      const internal::Partitioned& partitioned, absl::string_view name) {
+    std::vector<std::pair<std::string, T>> ret;
+    if (absl::Span<const absl::string_view> public_partitions =
+            metric_router_->metric_config().GetPartition(partitioned, name);
+        !public_partitions.empty()) {
+      for (auto& [partition, numeric] : value) {
+        if (absl::c_binary_search(public_partitions, partition)) {
+          ret.emplace_back(partition, numeric);
+        } else {
+          ABSL_LOG_EVERY_N_SEC(WARNING, 60)
+              << partition << " is not in public_partitions_ ["
+              << partitioned.partition_type_ << "] of metric:" << name;
+        }
+        if (ret.size() >= partitioned.max_partitions_contributed_) {
+          break;
+        }
+      }
+    } else {
+      ABSL_LOG_EVERY_N_SEC(WARNING, 600)
+          << "public_partitions_ not defined for metric : " << name;
+      ret.insert(ret.begin(), value.begin(), value.end());
+      if (ret.size() >= partitioned.max_partitions_contributed_) {
+        ret.resize(partitioned.max_partitions_contributed_);
+      }
+    }
+    return ret;
+  }
+
   U* metric_router_;
   bool decrypted_ = false;
   bool is_request_successful_ = false;
-  const BuildDependentConfig& metric_config_;
   absl::Mutex mutex_;
   std::vector<absl::AnyInvocable<absl::Status() &&>> callbacks_
       ABSL_GUARDED_BY(mutex_);
@@ -382,39 +432,6 @@ class Context {
   absl::flat_hash_map<const DefinitionName*, Accumulator> accumulated_metric_
       ABSL_GUARDED_BY(mutex_);
 };
-
-// For Privacy kImpacting partitioned metrics, partitions must be in defined
-// `public_partitions_`, the number of partitions contributed by each privacy
-// unit is limited to `max_partitions_contributed_`; Returns the metric values
-// with upto limited number of partitions.
-template <typename T>
-std::vector<std::pair<std::string, T>> BoundPartitionsContributed(
-    const absl::flat_hash_map<std::string, T>& value,
-    const internal::Partitioned& partitioned) {
-  std::vector<std::pair<std::string, T>> ret;
-  if (!partitioned.public_partitions_.empty()) {
-    for (auto& [partition, numeric] : value) {
-      if (absl::c_binary_search(partitioned.public_partitions_, partition)) {
-        ret.emplace_back(partition, numeric);
-      } else {
-        ABSL_LOG_EVERY_N_SEC(WARNING, 60)
-            << partition << " is not in public_partitions_ of "
-            << partitioned.partition_type_;
-      }
-      if (ret.size() >= partitioned.max_partitions_contributed_) {
-        break;
-      }
-    }
-  } else {
-    ABSL_LOG_EVERY_N_SEC(WARNING, 600)
-        << "public_partitions_ not defined, to be implemented";
-    ret.insert(ret.begin(), value.begin(), value.end());
-    if (ret.size() >= partitioned.max_partitions_contributed_) {
-      ret.resize(partitioned.max_partitions_contributed_);
-    }
-  }
-  return ret;
-}
 
 }  // namespace privacy_sandbox::server_common::metric
 

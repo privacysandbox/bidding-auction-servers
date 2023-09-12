@@ -33,6 +33,7 @@ cc_library(
         "generate_bids_reactor.cc",
     ],
     hdrs = [
+        "base_generate_bids_reactor.h",
         "generate_bids_reactor.h",
     ],
     visibility = ["//visibility:public"],
@@ -45,6 +46,7 @@ cc_library(
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/metric:server_definition",
+        "//services/common/util:consented_debugging_logger",
         "//services/common/util:context_logger",
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",

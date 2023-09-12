@@ -38,8 +38,10 @@ constexpr int kTestJoinCount = 1;
 constexpr float kTestRecency = 2.1;
 constexpr int kTestModelingSignals = 3;
 constexpr char kTestBuyerMetadata[] =
-    R"({"enableReportWinUrlGeneration":true,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3})";
+    R"({"enableReportWinUrlGeneration":true,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","interestGroupName":"testInterestGroupName","adCost":5.0})";
 constexpr char kTestBuyerSignals[] = "{\"testkey\":\"testvalue\"}";
+constexpr char kTestSeller[] = "http://seller.com";
+constexpr double kTestAdCost = 5.0;
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_TEST_CONSTANTS_H_

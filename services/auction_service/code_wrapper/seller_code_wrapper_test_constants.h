@@ -28,7 +28,24 @@ constexpr absl::string_view kBuyerBaseCode =
                               directFromSellerSignals){
         var test_render_url = buyerReportingSignals.renderUrl
         var test_render_url = buyerReportingSignals.renderURL
+        if(buyerReportingSignals.seller==null || buyerReportingSignals.seller == undefined || buyerReportingSignals.seller == ""){
+          console.error("Missing seller in input to reportWin")
+          return
+        }
+        if(buyerReportingSignals.interestGroupName == "" || buyerReportingSignals.interestGroupName == undefined
+            || buyerReportingSignals.interestGroupName == null){
+          console.error("Missing interestGroupName in input to reportWin")
+          return
+        }
+        if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
+            || buyerReportingSignals.adCost == undefined
+            || buyerReportingSignals.adCost == null){
+          console.error("Missing adCost in input to reportWin")
+          return
+        }
         console.log("Logging from ReportWin");
+        console.error("Logging error from ReportWin")
+        console.warn("Logging warning from ReportWin")
         sendReportTo("http://test1.com")
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
@@ -43,7 +60,9 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd");
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
       return {
         desirability: score,
         allow_component_auction: false
@@ -119,7 +138,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd");
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
       return {
         desirability: score,
         allow_component_auction: false
@@ -183,6 +204,8 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         buyerReportingSignals.recency = buyerReportingMetadata.recency
         buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
+        buyerReportingSignals.seller = buyerReportingMetadata.seller
+        buyerReportingSignals.adCost = buyerReportingMetadata.adCost
         var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
                               "directFromSellerSignals, enable_logging)"
         var reportWinResponse = eval(reportWinFunction)
@@ -192,7 +215,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           sellerErrors: ps_errors,
           sellerWarnings: ps_warns,
           reportWinResponse: reportWinResponse.response,
-          buyerLogs: reportWinResponse.logs
+          buyerLogs: reportWinResponse.buyerLogs,
+          buyerErrors: reportWinResponse.buyerErrors,
+          buyerWarnings: reportWinResponse.buyerWarnings,
       }
       }
       } catch(ex){
@@ -216,10 +241,18 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
+      var ps_buyer_logs = [];
+      var ps_buyer_error_logs = [];
+      var ps_buyer_warning_logs = [];
       if(enable_logging){
         console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
+          ps_buyer_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_buyer_error_logs.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_buyer_warning_logs.push(JSON.stringify(args))
         }
       }
       globalThis.sendReportTo = function sendReportTo(url){
@@ -236,15 +269,34 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         ps_report_win_response.interactionReportingUrls = eventUrlMap;
         ps_report_win_response.registerAdBeaconInvoked = true;
       }
-ps_report_win_code = reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+      {
+      reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
         var test_render_url = buyerReportingSignals.renderUrl
         var test_render_url = buyerReportingSignals.renderURL
+        if(buyerReportingSignals.seller==null || buyerReportingSignals.seller == undefined || buyerReportingSignals.seller == ""){
+          console.error("Missing seller in input to reportWin")
+          return
+        }
+        if(buyerReportingSignals.interestGroupName == "" || buyerReportingSignals.interestGroupName == undefined
+            || buyerReportingSignals.interestGroupName == null){
+          console.error("Missing interestGroupName in input to reportWin")
+          return
+        }
+        if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
+            || buyerReportingSignals.adCost == undefined
+            || buyerReportingSignals.adCost == null){
+          console.error("Missing adCost in input to reportWin")
+          return
+        }
         console.log("Logging from ReportWin");
+        console.error("Logging error from ReportWin")
+        console.warn("Logging warning from ReportWin")
         sendReportTo("http://test1.com")
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
 
+      }
       try{
       reportWin(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals)
@@ -253,7 +305,9 @@ ps_report_win_code = reportWin = function(auctionSignals, perBuyerSignals, signa
       }
       return {
         response: ps_report_win_response,
-        logs: ps_logs,
+        buyerLogs: ps_buyer_logs,
+        buyerErrors: ps_buyer_error_logs,
+        buyerWarnings: ps_buyer_warning_logs
       }
     }
 )JS_CODE";
@@ -320,7 +374,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd");
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
       return {
         desirability: score,
         allow_component_auction: false
@@ -384,6 +440,8 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         buyerReportingSignals.recency = buyerReportingMetadata.recency
         buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
+        buyerReportingSignals.seller = buyerReportingMetadata.seller
+        buyerReportingSignals.adCost = buyerReportingMetadata.adCost
         var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
                               "directFromSellerSignals, enable_logging)"
         var reportWinResponse = eval(reportWinFunction)
@@ -393,7 +451,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
           sellerErrors: ps_errors,
           sellerWarnings: ps_warns,
           reportWinResponse: reportWinResponse.response,
-          buyerLogs: reportWinResponse.logs
+          buyerLogs: reportWinResponse.buyerLogs,
+          buyerErrors: reportWinResponse.buyerErrors,
+          buyerWarnings: reportWinResponse.buyerWarnings,
       }
       }
       } catch(ex){
@@ -470,7 +530,9 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd");
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
       return {
         desirability: score,
         allow_component_auction: false

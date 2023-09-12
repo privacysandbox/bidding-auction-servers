@@ -27,6 +27,7 @@
 #include "absl/strings/str_format.h"
 #include "glog/logging.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/status_macros.h"
@@ -47,17 +48,10 @@ using TrustedBiddingSignalsByIg =
     absl::flat_hash_map<std::string,
                         absl::StatusOr<ParsedTrustedBiddingSignals>>;
 
-constexpr char kDispatchHandlerFunctionName[] = "generateBid";
-
-constexpr char kDispatchHandlerWrapperFunctionName[] = "generateBidWrapper";
 constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
     "generateBidEntryFunction";
 constexpr char kRomaTimeoutMs[] = "TimeoutMs";
-
-constexpr int kArgsSizeDefault = 5;
 constexpr int kArgsSizeWithWrapper = 6;
-constexpr char kDisableAdTechCodeLogging[] = "false";
-constexpr char kEnableAdTechCodeLogging[] = "true";
 
 std::string ProtoToJson(const google::protobuf::Message& proto) {
   auto options = google::protobuf::util::JsonPrintOptions();
@@ -423,16 +417,12 @@ GenerateBidsReactor::GenerateBidsReactor(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceRuntimeConfig& runtime_config)
-    : CodeDispatchReactor<
+    : BaseGenerateBidsReactor<
           GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>(
           dispatcher, request, response, key_fetcher_manager, crypto_client,
-          runtime_config.encryption_enabled),
-      benchmarking_logger_(std::move(benchmarking_logger)),
-      enable_buyer_debug_url_generation_(
-          runtime_config.enable_buyer_debug_url_generation),
-      enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
-      roma_timeout_ms_(runtime_config.roma_timeout_ms) {
+          runtime_config),
+      benchmarking_logger_(std::move(benchmarking_logger)) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
@@ -443,6 +433,20 @@ GenerateBidsReactor::GenerateBidsReactor(
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
   logger_ = ContextLogger(GetLoggingContext(raw_request_));
+  if (enable_otel_based_logging_) {
+    debug_logger_ = ConsentedDebuggingLogger(GetLoggingContext(raw_request_),
+                                             consented_debug_token_);
+  }
+
+  // Logger for consented debugging.
+  // The IsConsented() check here is for performance reasons, so we don't build
+  // the debug string if it is not going to be logged.
+  // TODO: Re-implement vlog() as a variadic function.
+  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+    debug_logger_->vlog(0, absl::StrCat("GenerateBidsRawRequest: ",
+                                        raw_request_.DebugString()));
+  }
+
   auto interest_groups = raw_request_.interest_group_for_bidding();
 
   // Parse trusted bidding signals
@@ -590,13 +594,6 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
     metric_context_->SetRequestSuccessful();
   }
   Finish(status);
-}
-
-ContextLogger::ContextMap GenerateBidsReactor::GetLoggingContext(
-    const GenerateBidsRequest::GenerateBidsRawRequest& generate_bids_request) {
-  const auto& logging_context = generate_bids_request.log_context();
-  return {{kGenerationId, logging_context.generation_id()},
-          {kAdtechDebugId, logging_context.adtech_debug_id()}};
 }
 
 void GenerateBidsReactor::OnDone() { delete this; }

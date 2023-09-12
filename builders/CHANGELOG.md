@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.44.0 (2023-09-11)
+
+
+### Features
+
+* Add coverage bazel config and collect-coverage tool
+
 ## 0.43.0 (2023-08-15)
 
 

@@ -540,7 +540,6 @@ ProtectedAuctionInput MakeARandomProtectedAuctionInput(
     default:
       break;
   }
-  GetEncodedBuyerInputMap(buyer_inputs);
   *input.mutable_buyer_input() = *std::move(encoded_buyer_input);
   input.set_enable_debug_reporting(true);
   return input;

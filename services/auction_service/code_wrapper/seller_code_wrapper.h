@@ -154,6 +154,8 @@ inline constexpr absl::string_view kReportingEntryFunction =
         buyerReportingSignals.recency = buyerReportingMetadata.recency
         buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
+        buyerReportingSignals.seller = buyerReportingMetadata.seller
+        buyerReportingSignals.adCost = buyerReportingMetadata.adCost
         var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
                               "directFromSellerSignals, enable_logging)"
         var reportWinResponse = eval(reportWinFunction)
@@ -163,7 +165,9 @@ inline constexpr absl::string_view kReportingEntryFunction =
           sellerErrors: ps_errors,
           sellerWarnings: ps_warns,
           reportWinResponse: reportWinResponse.response,
-          buyerLogs: reportWinResponse.logs
+          buyerLogs: reportWinResponse.buyerLogs,
+          buyerErrors: reportWinResponse.buyerErrors,
+          buyerWarnings: reportWinResponse.buyerWarnings,
       }
       }
       } catch(ex){
@@ -190,10 +194,18 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
+      var ps_buyer_logs = [];
+      var ps_buyer_error_logs = [];
+      var ps_buyer_warning_logs = [];
       if(enable_logging){
         console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
+          ps_buyer_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_buyer_error_logs.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_buyer_warning_logs.push(JSON.stringify(args))
         }
       }
       globalThis.sendReportTo = function sendReportTo(url){
@@ -210,7 +222,9 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
         ps_report_win_response.interactionReportingUrls = eventUrlMap;
         ps_report_win_response.registerAdBeaconInvoked = true;
       }
-ps_report_win_code = $reportWinCode
+      {
+      $reportWinCode
+      }
       try{
       reportWin(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals)
@@ -219,7 +233,9 @@ ps_report_win_code = $reportWinCode
       }
       return {
         response: ps_report_win_response,
-        logs: ps_logs,
+        buyerLogs: ps_buyer_logs,
+        buyerErrors: ps_buyer_error_logs,
+        buyerWarnings: ps_buyer_warning_logs
       }
     }
 )JSCODE";

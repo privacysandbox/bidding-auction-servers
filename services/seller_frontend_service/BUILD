@@ -59,7 +59,7 @@ cc_library(
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
-        "//services/common/util:bid_stats",
+        "//services/common/util:async_task_tracker",
         "//services/common/util:consented_debugging_logger",
         "//services/common/util:context_logger",
         "//services/common/util:error_accumulator",

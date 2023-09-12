@@ -55,4 +55,7 @@ message MetricConfig {
   // name should match `metric::Definition` in the list of server's metric
   // provided when creating `ContextMap`
   string name = 1;
+
+  // overwrite the public_partitions_ in metric definition if not empty
+  repeated string public_partitions = 2;
 }

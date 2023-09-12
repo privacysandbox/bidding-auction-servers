@@ -30,9 +30,13 @@ TEST(ConsentedDebuggingLoggerTest, FormatContextWithEmptyString) {
   EXPECT_EQ(FormatContext({}), "");
 }
 
+TEST(ConsentedDebuggingLoggerTest, FormatContext) {
+  EXPECT_EQ(FormatContext({{"generation_id", "test"}}),
+            " (generation_id: test) ");
+}
+
 TEST(ConsentedDebuggingLoggerTest, FormatContextWithConsentedDebugConfig) {
-  EXPECT_EQ(FormatContext({{"is_consented", "true"}, {"token", "xyz"}}),
-            " (is_consented: true, token: xyz) ");
+  EXPECT_EQ(FormatContext({{kToken, "test"}}), "");
 }
 
 TEST(ConsentedDebuggingLoggerTest, NotConsented_NoToken) {
@@ -61,6 +65,17 @@ TEST(ConsentedDebuggingLoggerTest, NotConsented_Mismatch) {
 TEST(ConsentedDebuggingLoggerTest, Consented) {
   EXPECT_TRUE(ConsentedDebuggingLogger({{kToken, kTestToken}}, kTestToken)
                   .IsConsented());
+}
+
+TEST(ConsentedDebuggingLoggerTest, SetContext) {
+  auto logger = ConsentedDebuggingLogger({{kToken, kTestToken}}, kTestToken);
+  EXPECT_TRUE(logger.IsConsented());
+  logger.SetContext({{}});
+  EXPECT_FALSE(logger.IsConsented());
+  logger.SetContext({{kToken, kTestToken}});
+  EXPECT_TRUE(logger.IsConsented());
+  logger.SetContext({{kToken, kMismatchedToken}});
+  EXPECT_FALSE(logger.IsConsented());
 }
 
 TEST(ConsentedDebuggingLoggerTest, SimpleLog) {

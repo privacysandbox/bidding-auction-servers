@@ -68,6 +68,13 @@ ABSL_FLAG(
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
+ABSL_FLAG(std::optional<std::string>, ad_retrieval_server_kv_server_addr, "",
+          "Ad Retrieval KV Server Address");
+ABSL_FLAG(std::optional<bool>, byos_ad_retrieval_server, false,
+          "Indicates whether or not the service is deployed in BYOS/dev "
+          "only mode");
+ABSL_FLAG(std::optional<int>, ad_retrieval_timeout_ms, std::nullopt,
+          "The time in milliseconds to wait for the ads retrieval to complete");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -121,6 +128,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_ad_retrieval_server_kv_server_addr,
+                        AD_RETRIEVAL_KV_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_byos_ad_retrieval_server,
+                        BYOS_AD_RETRIEVAL_SERVER);
+  config_client.SetFlag(FLAGS_ad_retrieval_timeout_ms, AD_RETRIEVAL_TIMEOUT_MS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -257,13 +269,36 @@ absl::Status RunServer() {
         return generate_bids_reactor.release();
       };
 
+  const bool is_protected_app_signals_enabled =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  std::string ad_retrieval_server_kv_server_addr = std::string(
+      config_client.GetStringParameter(AD_RETRIEVAL_KV_SERVER_ADDR));
+  if (is_protected_app_signals_enabled &&
+      ad_retrieval_server_kv_server_addr.empty()) {
+    return absl::InvalidArgumentError("Missing: Ad Retrieval server address");
+  }
+  const bool byos_ad_retrieval_server =
+      config_client.GetBooleanParameter(BYOS_AD_RETRIEVAL_SERVER);
+  if (is_protected_app_signals_enabled && !byos_ad_retrieval_server) {
+    return absl::InvalidArgumentError("Only BYOS mode is supported right now");
+  }
+
   const BiddingServiceRuntimeConfig runtime_config = {
+      .ad_retrieval_server_kv_server_addr =
+          std::move(ad_retrieval_server_kv_server_addr),
       .encryption_enabled =
           config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .enable_adtech_code_logging = enable_adtech_code_logging,
       .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
+      .enable_adtech_code_logging = enable_adtech_code_logging,
+      .enable_otel_based_logging =
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
+      .consented_debug_token =
+          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
+      .is_protected_app_signals_enabled = is_protected_app_signals_enabled,
+      .ad_retrieval_timeout_ms =
+          config_client.GetIntParameter(AD_RETRIEVAL_TIMEOUT_MS)};
 
   BiddingService bidding_service(std::move(generate_bids_reactor_factory),
                                  CreateKeyFetcherManager(config_client),

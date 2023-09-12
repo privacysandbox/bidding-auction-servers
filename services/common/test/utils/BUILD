@@ -63,3 +63,14 @@ cc_library(
         "@com_google_absl//absl/strings",
     ],
 )
+
+cc_library(
+    name = "test_utils",
+    testonly = True,
+    srcs = ["test_utils.cc"],
+    hdrs = ["test_utils.h"],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/test:random",
+    ],
+)

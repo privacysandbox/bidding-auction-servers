@@ -18,8 +18,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 using GetBidsRawRequest = GetBidsRequest::GetBidsRawRequest;
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
 using GenerateBidsRawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
+using GenerateProtectedAppSignalsBidsRawRequest =
+    GenerateProtectedAppSignalsBidsRequest::
+        GenerateProtectedAppSignalsBidsRawRequest;
 
-std::unique_ptr<GetBidsRawResponse> ProtoFactory::CreateGetBidsRawResponse(
+std::unique_ptr<GetBidsRawResponse> CreateGetBidsRawResponse(
     std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
         raw_response) {
   auto get_bids_raw_response = std::make_unique<GetBidsRawResponse>();
@@ -71,8 +74,7 @@ void CopyIGFromDeviceToIGForBidding(
   }
 }
 
-std::unique_ptr<GenerateBidsRawRequest>
-ProtoFactory::CreateGenerateBidsRawRequest(
+std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRawRequest& get_bids_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
@@ -141,6 +143,48 @@ ProtoFactory::CreateGenerateBidsRawRequest(
     *generate_bids_raw_request->mutable_consented_debug_config() =
         get_bids_raw_request.consented_debug_config();
   }
+
+  return generate_bids_raw_request;
+}
+
+std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
+CreateGenerateProtectedAppSignalsBidsRawRequest(
+    const GetBidsRawRequest& raw_request) {
+  auto generate_bids_raw_request =
+      std::make_unique<GenerateProtectedAppSignalsBidsRawRequest>();
+  generate_bids_raw_request->set_auction_signals(raw_request.auction_signals());
+
+  if (!raw_request.buyer_signals().empty()) {
+    generate_bids_raw_request->set_buyer_signals(raw_request.buyer_signals());
+  } else {
+    generate_bids_raw_request->set_buyer_signals("");
+  }
+
+  *generate_bids_raw_request->mutable_protected_app_signals() =
+      raw_request.protected_app_signals_buyer_input().protected_app_signals();
+
+  generate_bids_raw_request->set_seller(raw_request.seller());
+
+  generate_bids_raw_request->set_publisher_name(raw_request.publisher_name());
+
+  const auto& log_context = raw_request.log_context();
+  if (!log_context.adtech_debug_id().empty()) {
+    generate_bids_raw_request->mutable_log_context()->set_adtech_debug_id(
+        log_context.adtech_debug_id());
+  }
+  if (!log_context.generation_id().empty()) {
+    generate_bids_raw_request->mutable_log_context()->set_generation_id(
+        log_context.generation_id());
+  }
+
+  if (raw_request.has_consented_debug_config()) {
+    *generate_bids_raw_request->mutable_consented_debug_config() =
+        raw_request.consented_debug_config();
+  }
+
+  generate_bids_raw_request->set_enable_debug_reporting(
+      raw_request.enable_debug_reporting());
+
   return generate_bids_raw_request;
 }
 

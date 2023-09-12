@@ -79,8 +79,11 @@ class DpAggregator : public DpAggregatorBase {
       absl::Span<const absl::string_view> all_partitions = current_partition;
       if constexpr (instrument == Instrument::kPartitionedCounter) {
         max_partitions_contributed = definition_.max_partitions_contributed_;
-        if (!definition_.public_partitions_.empty()) {
-          all_partitions = definition_.public_partitions_;
+        if (absl::Span<const absl::string_view> partitions =
+                metric_router_->metric_config().template GetPartition(
+                    definition_);
+            !partitions.empty()) {
+          all_partitions = partitions;
         }
       } else {
         max_partitions_contributed = 1;
@@ -246,11 +249,11 @@ class DifferentiallyPrivate {
    `output_period` is the interval to output aggregated and noise result.
    */
   DifferentiallyPrivate(TMetricRouter* metric_router,
-                        PrivacyBudget privacy_budget_per_weight,
-                        absl::Duration output_period)
+                        PrivacyBudget privacy_budget_per_weight)
       : metric_router_(metric_router),
         privacy_budget_per_weight_(privacy_budget_per_weight),
-        output_period_(output_period),
+        output_period_(absl::Milliseconds(
+            metric_router_->metric_config().dp_export_interval_ms())),
         run_output_(std::thread([this]() { RunOutput(); })) {}
 
   // Aggregate value for the `definition`.

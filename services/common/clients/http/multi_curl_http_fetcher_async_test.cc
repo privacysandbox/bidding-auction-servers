@@ -169,5 +169,18 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
   done.Wait();
 }
 
+TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
+  std::string msg;
+  absl::BlockingCounter done(1);
+  auto done_cb = [&done](absl::StatusOr<std::string> result) {
+    EXPECT_TRUE(result.ok()) << result.status();
+    EXPECT_GT(result->length(), 0);
+    done.DecrementCount();
+  };
+  fetcher_->PutUrl({"httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
+
+  done.Wait();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

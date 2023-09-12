@@ -218,7 +218,9 @@ absl::Status RunServer() {
           .secure_client =
               config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
           .encryption_enabled =
-              config_client.GetBooleanParameter(ENABLE_ENCRYPTION)},
+              config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
+          .is_pas_enabled =
+              config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)},
       CreateKeyFetcherManager(config_client), CreateCryptoClient(),
       GetBidsConfig{
           config_client.GetIntParameter(GENERATE_BID_TIMEOUT_MS),

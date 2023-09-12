@@ -42,6 +42,7 @@ constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
 constexpr bool kEnableReportResultUrlGenerationFalse = false;
 constexpr bool kEnableReportResultWinGenerationFalse = false;
+constexpr char kTestSeller[] = "http://seller.com";
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -187,7 +188,8 @@ constexpr absl::string_view js_code_with_reject_reasons = R"JS_CODE(
 void BuildScoreAdsRequest(
     ScoreAdsRequest* request,
     absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
-    bool enable_debug_reporting = false, int desired_ad_count = 90) {
+    bool enable_debug_reporting = false, int desired_ad_count = 90,
+    const std::string& seller = kTestSeller) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
@@ -209,6 +211,7 @@ void BuildScoreAdsRequest(
   if (enable_debug_reporting) {
     raw_request.set_enable_debug_reporting(enable_debug_reporting);
   }
+  raw_request.set_seller(seller);
   *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
   request->set_key_id(kKeyId);
 }
@@ -549,6 +552,46 @@ TEST_F(AuctionServiceIntegrationTest,
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionReportingUrl);
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ReportingUrlsForBuyerEmptyWhenSellerInputIsMissing) {
+  bool enable_seller_debug_url_generation = false;
+  bool enable_debug_reporting = false;
+  bool enable_adtech_code_logging = true;
+  bool enable_report_result_url_generation = true;
+  bool enable_report_win_url_generation = true;
+  int desired_ad_count = 90;
+  ScoreAdsRequest request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting,
+                       desired_ad_count, "");
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
+      enable_debug_reporting, enable_adtech_code_logging,
+      enable_report_result_url_generation, enable_report_win_url_generation);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_GT(scoredAd.desirability(), 0);
+  EXPECT_EQ(scoredAd.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .reporting_url(),
+            kTestReportResultUrl);
+  EXPECT_EQ(scoredAd.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionReportingUrl);
+  EXPECT_TRUE(scoredAd.win_reporting_urls()
+                  .buyer_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_TRUE(scoredAd.win_reporting_urls()
+                  .buyer_reporting_urls()
+                  .interaction_reporting_urls()
+                  .empty());
 }
 
 TEST_F(AuctionServiceIntegrationTest,

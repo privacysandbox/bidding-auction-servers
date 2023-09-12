@@ -180,6 +180,10 @@ resource "google_compute_backend_service" "default" {
       capacity_scaler = 1.0
     }
   }
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
 
   depends_on = [var.mesh, google_network_services_grpc_route.default]
 }

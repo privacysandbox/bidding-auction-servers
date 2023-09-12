@@ -56,12 +56,22 @@ ConsentedDebuggingLogger::ConsentedDebuggingLogger(
     : context_(FormatContext(context_map)),
       logger_(opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger(
           "default")) {
+  if (server_debug_token.length() >= kTokenMinLength) {
+    server_debug_token_ = std::string(server_debug_token);
+  }
+  UpdateContext(context_map);
+}
+
+void ConsentedDebuggingLogger::SetContext(const ContextMap& context_map) {
+  context_ = FormatContext(context_map);
+  UpdateContext(context_map);
+}
+
+void ConsentedDebuggingLogger::UpdateContext(const ContextMap& context_map) {
+  client_debug_token_ = std::nullopt;
   if (auto iter = context_map.find(kToken);
       iter != context_map.end() && iter->second.length() >= kTokenMinLength) {
     client_debug_token_ = std::string(iter->second);
-  }
-  if (server_debug_token.length() >= kTokenMinLength) {
-    server_debug_token_ = std::string(server_debug_token);
   }
   is_consented_ = (client_debug_token_ != std::nullopt &&
                    client_debug_token_ == server_debug_token_);
@@ -75,7 +85,7 @@ void ConsentedDebuggingLogger::vlog(
   logger_->EmitLogRecord(
       // TODO(b/279955398): Support more than one severities.
       opentelemetry::logs::Severity::kInfo,
-      absl::StrCat(LogHeader(verbosity_with_source_loc), msg),
+      absl::StrCat(context_, LogHeader(verbosity_with_source_loc), msg),
       opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
 }
 

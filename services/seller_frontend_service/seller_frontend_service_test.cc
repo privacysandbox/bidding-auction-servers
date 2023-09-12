@@ -145,7 +145,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
   SelectAdRequest request;
   request.set_client_type(SelectAdRequest::ANDROID);
   // Set ciphertext to any non-null value for this test.
-  request.set_protected_audience_ciphertext("q");
+  request.set_protected_auction_ciphertext("q");
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -175,7 +175,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
 
   grpc::ClientContext context;
   SelectAdRequest request;
-  request.set_protected_audience_ciphertext("foo");
+  request.set_protected_auction_ciphertext("foo");
   request.set_client_type(SelectAdRequest::UNKNOWN);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
@@ -256,7 +256,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   protected_auction_input.set_publisher_name(kSamplePublisherName);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
   request.mutable_auction_config()->mutable_buyer_list()->Add("Test");
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
@@ -349,7 +349,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
           protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
 
   // Buyer Clients
@@ -476,7 +476,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   request.set_client_type(SelectAdRequest::BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
 
   // Buyer Clients
@@ -577,7 +577,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   request.set_client_type(SelectAdRequest::BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.
@@ -633,7 +633,7 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   request.set_client_type(SelectAdRequest::BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.
@@ -694,7 +694,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   request.set_client_type(SelectAdRequest::BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
-  *request.mutable_protected_audience_ciphertext() =
+  *request.mutable_protected_auction_ciphertext() =
       std::move(encrypted_protected_auction_input);
 
   // Setup buyer client that throws an error.

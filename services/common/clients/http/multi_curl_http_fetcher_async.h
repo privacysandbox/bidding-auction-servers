@@ -32,6 +32,14 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Maintains state about the data to upload
+struct DataToUpload {
+  // JSON string to upload.
+  std::string data;
+  // First offset in the data that has not yet been uploaded.
+  int offset = 0;
+};
+
 // MultiCurlHttpFetcherAsync provides a thread-safe libcurl wrapper to perform
 // asynchronous HTTP invocations with client caching(connection pooling), and
 // TLS session sharing. It uses a single curl multi handle to perform
@@ -80,6 +88,18 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
                 OnDoneFetchUrl done_callback) override
       ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
 
+  // PUTs data to the specified url.
+  //
+  // http_request: The URL, headers, body for the HTTP PUT request.
+  // timeout_ms: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. Please note that done_callback will run in a
+  // threadpool and is not guaranteed to be the FetchUrl client's thread.
+  // Clients can expect done_callback to be called exactly once.
+  void PutUrl(const HTTPRequest& http_request, int timeout_ms,
+              OnDoneFetchUrl done_callback) override
+      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+
   // Fetches provided urls with libcurl.
   //
   // requests: The URL and headers for the HTTP GET requests.
@@ -110,6 +130,10 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
     // The callback function for this request from FetchUrl.
     OnDoneFetchUrl done_callback;
 
+    // Pointer to the body of request. Relevant only for HTTP methods that
+    // upload data to server.
+    std::unique_ptr<DataToUpload> body;
+
     // The pointer that is used by the req_handle to write the request output.
     std::unique_ptr<std::string> output;
 
@@ -135,6 +159,16 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Only a single thread can execute this function at a time since it requires
   // the acquisition of the in_loop_mu_ mutex.
   void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
+      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+
+  // Creates and sets up a curl request with default options.
+  std::unique_ptr<CurlRequestData> CreateCurlRequest(
+      const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,
+      int64_t keepalive_interval_sec, OnDoneFetchUrl done_callback);
+
+  // Adds the request to curl multi request manager. If the addition fails, the
+  // executes the callback else stores the request handle in curl data map.
+  void ExecuteCurlRequest(std::unique_ptr<CurlRequestData> request)
       ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
 
   // The executor_ will receive tasks from PerformCurlUpdate. The tasks will

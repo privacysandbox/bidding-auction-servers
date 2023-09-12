@@ -38,8 +38,8 @@
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-constexpr char kSecret[] = "secret";
-constexpr char kKeyId[] = "keyid";
+constexpr char kTestSecret[] = "secret";
+constexpr char kTestKeyId[] = "keyid";
 
 using ::testing::AnyNumber;
 
@@ -77,8 +77,8 @@ void SetupMockCryptoClientWrapper(T request,
   // Mock the HpkeEncrypt() call on the crypto client.
   google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
       hpke_encrypt_response;
-  hpke_encrypt_response.set_secret(kSecret);
-  hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+  hpke_encrypt_response.set_secret(kTestSecret);
+  hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kTestKeyId);
   hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
       request.SerializeAsString());
   EXPECT_CALL(crypto_client, HpkeEncrypt)
@@ -89,7 +89,7 @@ void SetupMockCryptoClientWrapper(T request,
   google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
       hpke_decrypt_response;
   hpke_decrypt_response.set_payload(request.SerializeAsString());
-  hpke_decrypt_response.set_secret(kSecret);
+  hpke_decrypt_response.set_secret(kTestSecret);
   EXPECT_CALL(crypto_client, HpkeDecrypt)
       .Times(AnyNumber())
       .WillRepeatedly(testing::Return(hpke_decrypt_response));

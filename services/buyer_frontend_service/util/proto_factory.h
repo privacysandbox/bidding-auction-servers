@@ -28,22 +28,23 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Creates Proto Objects on heap required for use by BuyerFrontEnd Service.
 // TODO(b/248609427): Benchmark allocations on Arena instead of heap
-class ProtoFactory {
- public:
-  static std::unique_ptr<GetBidsResponse::GetBidsRawResponse>
-  CreateGetBidsRawResponse(
-      std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
-          raw_response);
+std::unique_ptr<GetBidsResponse::GetBidsRawResponse> CreateGetBidsRawResponse(
+    std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
+        raw_response);
 
-  // Creates Bidding Request from GetBidsRawRequest, Bidding Signals.
-  // TODO(b/239242947): Set key id and cipher text instead of raw request.
-  static std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
-  CreateGenerateBidsRawRequest(
-      const GetBidsRequest::GetBidsRawRequest& get_bid_raw_request,
-      const BuyerInput& buyer_input,
-      std::unique_ptr<BiddingSignals> bidding_signals,
-      const LogContext& log_context);
-};
+// Creates Bidding Request from GetBidsRawRequest, Bidding Signals.
+std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+CreateGenerateBidsRawRequest(
+    const GetBidsRequest::GetBidsRawRequest& get_bid_raw_request,
+    const BuyerInput& buyer_input,
+    std::unique_ptr<BiddingSignals> bidding_signals,
+    const LogContext& log_context);
+
+// Creates a request to generate bid for protected app signals.
+std::unique_ptr<GenerateProtectedAppSignalsBidsRequest::
+                    GenerateProtectedAppSignalsBidsRawRequest>
+CreateGenerateProtectedAppSignalsBidsRawRequest(
+    const GetBidsRequest::GetBidsRawRequest& raw_request);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

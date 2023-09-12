@@ -51,6 +51,9 @@ module "buyer" {
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
     BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    AD_RETRIEVAL_KV_SERVER_ADDR                   = "" # Example: "xds:///ad_retrieval_server"
+    AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
+    BYOS_AD_RETRIEVAL_SERVER                      = "" # Example: "true"
     GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
     PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"

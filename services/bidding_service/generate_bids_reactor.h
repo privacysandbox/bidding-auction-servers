@@ -24,6 +24,7 @@
 
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
@@ -38,7 +39,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 //  response is finished being served, GenerateBidsReactor cleans up all
 //  necessary state and grpc releases the reactor from memory.
 class GenerateBidsReactor
-    : public CodeDispatchReactor<
+    : public BaseGenerateBidsReactor<
           GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
@@ -68,20 +69,11 @@ class GenerateBidsReactor
   void GenerateBidsCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& output);
 
-  // Gets logging context as key/value pair that is useful for tracking a
-  // request through the B&A services.
-  ContextLogger::ContextMap GetLoggingContext(
-      const GenerateBidsRequest::GenerateBidsRawRequest& generate_bids_request);
-
   // Encrypts the response before the GRPC call is finished with the provided
   // status.
   void EncryptResponseAndFinish(grpc::Status status);
 
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_;
-  bool enable_buyer_debug_url_generation_;
-  std::string roma_timeout_ms_;
-  ContextLogger logger_;
-  bool enable_adtech_code_logging_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;

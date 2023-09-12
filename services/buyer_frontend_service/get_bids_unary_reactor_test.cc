@@ -28,6 +28,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_utils.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -36,6 +37,7 @@ namespace {
 constexpr absl::string_view kSampleBuyerDebugId = "sample-buyer-debug-id";
 constexpr absl::string_view kSampleGenerationId = "sample-seller-debug-id";
 
+using ::google::protobuf::util::MessageDifferencer;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::An;
@@ -44,9 +46,35 @@ using ::testing::Eq;
 using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::Return;
+using GenerateProtectedAppSignalsBidsRawRequest =
+    GenerateProtectedAppSignalsBidsRequest::
+        GenerateProtectedAppSignalsBidsRawRequest;
+using GenerateProtectedAppSignalsBidsRawResponse =
+    GenerateProtectedAppSignalsBidsResponse::
+        GenerateProtectedAppSignalsBidsRawResponse;
 
-constexpr char kKeyId[] = "key_id";
-constexpr char kSecret[] = "secret";
+constexpr absl::Duration kTestProtectedAppSignalsGenerateBidTimeout =
+    absl::Milliseconds(1);
+constexpr char kTestInterestGroupName[] = "test_ig";
+constexpr int kTestBidValue1 = 10.0;
+constexpr int kTestAdCost1 = 2.0;
+constexpr int kTestModelingSignals1 = 54;
+constexpr char kTestEgressFeature[] = "test_egress_features";
+constexpr char kTestRender1[] = "https://test-render.com";
+constexpr char kAdRenderUrls1[] = "test_ad_render_urls";
+constexpr char kTestMetadataKey1[] = "test_metadata_key";
+constexpr char kTestAdComponent[] = "test_ad_component";
+constexpr char kTestCurrency1[] = "USD";
+constexpr int kTestMetadataValue1 = 12;
+
+constexpr int kTestBidValue2 = 20.0;
+constexpr int kTestAdCost2 = 4.0;
+constexpr int kTestModelingSignals2 = 3;
+constexpr char kTestRender2[] = "https://test-render-2.com";
+constexpr char kAdRenderUrls2[] = "test_ad_render_urls_2";
+constexpr char kTestMetadataKey2[] = "test_metadata_key_2";
+constexpr char kTestCurrency2[] = "RS";
+constexpr int kTestMetadataValue2 = 51;
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
@@ -56,8 +84,9 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
              const std::string& plaintext_payload) {
             google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
                 hpke_encrypt_response;
-            hpke_encrypt_response.set_secret(kSecret);
-            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+            hpke_encrypt_response.set_secret(kTestSecret);
+            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(
+                kTestKeyId);
             hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
                 plaintext_payload);
             return hpke_encrypt_response;
@@ -72,7 +101,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
         google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
             hpke_decrypt_response;
         *hpke_decrypt_response.mutable_payload() = ciphertext;
-        hpke_decrypt_response.set_secret(kSecret);
+        hpke_decrypt_response.set_secret(kTestSecret);
         return hpke_decrypt_response;
       });
 
@@ -101,6 +130,7 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
         ->Get(&request_);
     get_bids_config_.encryption_enabled = true;
+    get_bids_config_.is_protected_app_signals_enabled = false;
 
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
@@ -260,6 +290,283 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
       crypto_client_.get());
   get_bids_unary_reactor.Execute();
+}
+
+class GetProtectedAppSignalsTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    server_common::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
+        ->Get(&request_);
+
+    get_bids_config_.encryption_enabled = true;
+    get_bids_config_.is_protected_app_signals_enabled = true;
+
+    TrustedServersConfigClient config_client({});
+    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    key_fetcher_manager_ = CreateKeyFetcherManager(config_client);
+    SetupMockCryptoClientWrapper(*crypto_client_);
+  }
+
+  grpc::CallbackServerContext context_;
+  GetBidsRequest request_;
+  GetBidsResponse response_;
+  BiddingAsyncClientMock bidding_client_mock_;
+  ProtectedAppSignalsBiddingAsyncClientMock
+      protected_app_signals_bidding_client_mock_;
+  MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>
+      bidding_signals_provider_;
+  GetBidsConfig get_bids_config_;
+  std::unique_ptr<MockCryptoClientWrapper> crypto_client_ =
+      std::make_unique<MockCryptoClientWrapper>();
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+};
+
+auto EqProtectedAppSignals(const ProtectedAppSignals& expected) {
+  return AllOf(Property(&ProtectedAppSignals::app_install_signals,
+                        Eq(expected.app_install_signals())),
+               Property(&ProtectedAppSignals::encoding_version,
+                        Eq(expected.encoding_version())));
+}
+
+auto EqConsentedDebugConfig(const ConsentedDebugConfiguration& expected) {
+  return AllOf(Property(&ConsentedDebugConfiguration::token, expected.token()),
+               Property(&ConsentedDebugConfiguration::is_consented,
+                        expected.is_consented()));
+}
+
+auto EqGenerateProtectedAppSignalsBidsRawRequest(
+    const GenerateProtectedAppSignalsBidsRawRequest& expected) {
+  return AllOf(
+      Property(&GenerateProtectedAppSignalsBidsRawRequest::auction_signals,
+               Eq(expected.auction_signals())),
+      Property(&GenerateProtectedAppSignalsBidsRawRequest::buyer_signals,
+               Eq(expected.buyer_signals())),
+      Property(
+          &GenerateProtectedAppSignalsBidsRawRequest::protected_app_signals,
+          EqProtectedAppSignals(expected.protected_app_signals())),
+      Property(&GenerateProtectedAppSignalsBidsRawRequest::seller,
+               Eq(expected.seller())),
+      Property(&GenerateProtectedAppSignalsBidsRawRequest::publisher_name,
+               Eq(expected.publisher_name())),
+      Property(
+          &GenerateProtectedAppSignalsBidsRawRequest::enable_debug_reporting,
+          Eq(expected.enable_debug_reporting())),
+      Property(&GenerateProtectedAppSignalsBidsRawRequest::log_context,
+               EqLogContext(expected.log_context())),
+      Property(
+          &GenerateProtectedAppSignalsBidsRawRequest::consented_debug_config,
+          EqConsentedDebugConfig(expected.consented_debug_config())));
+}
+
+TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
+  request_ = CreateGetBidsRequest();
+
+  // Expected generate bid request to be sent to the bidding service.
+  GenerateProtectedAppSignalsBidsRawRequest expected_request;
+  expected_request.set_auction_signals(kTestAuctionSignals);
+  expected_request.set_buyer_signals(kTestBuyerSignals);
+  expected_request.mutable_protected_app_signals()->set_encoding_version(
+      kTestEncodingVersion);
+  expected_request.mutable_protected_app_signals()->set_app_install_signals(
+      kTestProtectedAppSignals);
+  expected_request.set_seller(kTestSeller);
+  expected_request.set_publisher_name(kTestPublisherName);
+  expected_request.set_enable_debug_reporting(true);
+  expected_request.mutable_log_context()->set_generation_id(kTestGenerationId);
+  expected_request.mutable_log_context()->set_adtech_debug_id(
+      kTestAdTechDebugId);
+  expected_request.mutable_consented_debug_config()->set_is_consented(true);
+  expected_request.mutable_consented_debug_config()->set_token(
+      kTestConsentedDebuggingToken);
+
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          Pointee(EqGenerateProtectedAppSignalsBidsRawRequest(
+              std::move(expected_request))),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(1);
+
+  // No protected audience buyer input and hence no outbound call to bidding
+  // service.
+  EXPECT_CALL(bidding_client_mock_, ExecuteInternal(_, _, _, _)).Times(0);
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+}
+
+TEST_F(GetProtectedAppSignalsTest, TimeoutIsRespected) {
+  request_ = CreateGetBidsRequest();
+
+  get_bids_config_.protected_app_signals_generate_bid_timeout_ms =
+      ToDoubleMilliseconds(kTestProtectedAppSignalsGenerateBidTimeout);
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          Eq(kTestProtectedAppSignalsGenerateBidTimeout)));
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+}
+
+TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
+  request_ = CreateGetBidsRequest();
+
+  get_bids_config_.is_protected_app_signals_enabled = false;
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(0);
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+}
+
+TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  absl::BlockingCounter bids_counter(2);
+
+  EXPECT_CALL(
+      bidding_signals_provider_,
+      Get(An<const BiddingSignalsRequest&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
+          An<absl::Duration>()))
+      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
+                   auto on_done, absl::Duration timeout) {
+        std::move(on_done)(std::make_unique<BiddingSignals>());
+      });
+
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .WillOnce([&bids_counter](
+                    std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+                        get_values_request,
+                    const RequestMetadata& metadata, auto on_done,
+                    absl::Duration timeout) {
+        auto raw_response =
+            std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>();
+        *raw_response->mutable_bids()->Add() = CreateAdWithBid();
+        std::move(on_done)(std::move(raw_response));
+        bids_counter.DecrementCount();
+        return absl::OkStatus();
+      });
+
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .WillOnce([&bids_counter](
+                    std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
+                        get_values_raw_request,
+                    const RequestMetadata& metadata, auto on_done,
+                    absl::Duration timeout) {
+        auto raw_response =
+            std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>();
+        *raw_response->mutable_bids()->Add() =
+            CreateProtectedAppSignalsAdWithBid();
+        std::move(on_done)(std::move(raw_response));
+        bids_counter.DecrementCount();
+        return absl::OkStatus();
+      });
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+  bids_counter.Wait();
+
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_EQ(raw_response.bids_size(), 1);
+  ASSERT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+
+  // Validate that the protected audience bid contents match.
+  const auto& protected_audience_ad_with_bid = raw_response.bids().at(0);
+  EXPECT_EQ(protected_audience_ad_with_bid.bid(), kTestBidValue1);
+  EXPECT_EQ(protected_audience_ad_with_bid.interest_group_name(),
+            kTestInterestGroupName);
+  EXPECT_EQ(protected_audience_ad_with_bid.render(), kTestRender1);
+  EXPECT_EQ(protected_audience_ad_with_bid.bid(), kTestBidValue1);
+  ASSERT_EQ(protected_audience_ad_with_bid.ad_components_size(), 1);
+  EXPECT_EQ(protected_audience_ad_with_bid.ad_components().at(0),
+            kTestAdComponent);
+  EXPECT_EQ(protected_audience_ad_with_bid.bid_currency(), kTestCurrency1);
+  EXPECT_EQ(protected_audience_ad_with_bid.ad_cost(), kTestAdCost1);
+  EXPECT_EQ(protected_audience_ad_with_bid.modeling_signals(),
+            kTestModelingSignals1);
+  AdWithBid expected_protected_audience_ad_with_bid;
+  expected_protected_audience_ad_with_bid.mutable_ad()
+      ->mutable_struct_value()
+      ->MergeFrom(
+          MakeAnAd(kTestRender1, kTestMetadataKey1, kTestMetadataValue1));
+  EXPECT_TRUE(
+      MessageDifferencer::Equals(protected_audience_ad_with_bid.ad(),
+                                 expected_protected_audience_ad_with_bid.ad()));
+
+  // Validate that the protected app signals bid contents match.
+  const auto& protected_app_signals_ad_with_bid =
+      raw_response.protected_app_signals_bids().at(0);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.render(), kTestRender2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.bid(), kTestBidValue2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.bid_currency(), kTestCurrency2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.ad_cost(), kTestAdCost2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.modeling_signals(),
+            kTestModelingSignals2);
+  ProtectedAppSignalsAdWithBid expected_protected_app_signals_ad_with_bid;
+  expected_protected_app_signals_ad_with_bid.mutable_ad()
+      ->mutable_struct_value()
+      ->MergeFrom(
+          MakeAnAd(kTestRender1, kTestMetadataKey1, kTestMetadataValue1));
+  EXPECT_TRUE(MessageDifferencer::Equals(
+      protected_audience_ad_with_bid.ad(),
+      expected_protected_app_signals_ad_with_bid.ad()));
 }
 
 }  // namespace

@@ -48,8 +48,8 @@ constexpr char kKeyId[] = "keyid";
 constexpr char kTestReportingResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
 constexpr char kTestReportingWinResponseJson[] =
-    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"],
-"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"]})";
+    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
+"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
 
 using ::google::protobuf::TextFormat;
 using ::testing::AnyNumber;
@@ -803,7 +803,7 @@ TEST_F(ScoreAdsReactorTest,
       "logs":[]
       }
 )",
-              current_score++, 1 + (std::rand() % (20 - 1 + 1)),
+              current_score++, 1 + (std::rand() % 20),
               (allowComponentAuction) ? "true" : "false"));
         }
         return FakeExecute(batch, std::move(done_callback),
@@ -856,7 +856,7 @@ TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
           score_logic.push_back(absl::StrCat(
               "{\"response\":"
               "{\"desirability\": ",
-              current_score++, ", \"bid\": ", 1 + (std::rand() % (20 - 1 + 1)),
+              current_score++, ", \"bid\": ", 1 + (std::rand() % 20),
               ", \"allowComponentAuction\": ",
               ((allowComponentAuction) ? "true" : "false"),
               ", \"debugReportUrls\": {",
@@ -915,7 +915,7 @@ TEST_F(ScoreAdsReactorTest, SuccessExecutesInRomaWithLogsEnabled) {
           score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
           score_logic.push_back(
               absl::StrCat("{\"response\":{\"desirability\": ", current_score++,
-                           ", \"bid\": ", 1 + (std::rand() % (20 - 1 + 1)),
+                           ", \"bid\": ", 1 + (std::rand() % 20),
                            ", \"allowComponentAuction\": ",
                            ((allowComponentAuction) ? "true" : "false"),
                            ", \"debugReportUrls\": {",
@@ -995,7 +995,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
               "logs":["test log"]
               }
               )JSON",
-                current_score++, 1 + (std::rand() % (20 - 1 + 1)),
+                current_score++, 1 + (std::rand() % 20),
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
@@ -1035,7 +1035,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
   MockCodeDispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
-  bool enable_adtech_code_logging = false;
+  bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_result_win_generation = true;
   bool enable_debug_reporting = false;
@@ -1087,7 +1087,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
               "logs":["test log"]
               }
               )JSON",
-                current_score++, 1 + (std::rand() % (20 - 1 + 1)),
+                current_score++, 1 + (std::rand() % 20),
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
@@ -1189,7 +1189,7 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
               "logs":["test log"]
               }
               )JSON",
-                current_score++, 1 + (std::rand() % (20 - 1 + 1)),
+                current_score++, 1 + (std::rand() % 20),
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
@@ -1232,8 +1232,7 @@ TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
         std::vector<std::string> score_logic;
-        score_logic.push_back(
-            absl::Substitute(R"(
+        score_logic.push_back(absl::Substitute(R"(
       {
       "response" : {
         "desirability" : 1,
@@ -1243,7 +1242,7 @@ TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
       "logs":[]
       }
 )",
-                             1 + (std::rand() % (20 - 1 + 1))));
+                                               1 + (std::rand() % 20)));
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), true);
       });
@@ -1264,8 +1263,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
         std::vector<std::string> score_logic;
-        score_logic.push_back(
-            absl::Substitute(R"(
+        score_logic.push_back(absl::Substitute(R"(
       {
       "response" : {
         "desirability" : 1,
@@ -1275,7 +1273,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
       "logs":[]
       }
 )",
-                             1 + (std::rand() % (20 - 1 + 1))));
+                                               1 + (std::rand() % 20)));
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), false);
       });
@@ -1372,7 +1370,7 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
       "logs":[]
       }
 )",
-              1, 1 + (std::rand() % (20 - 1 + 1)),
+              1, 1 + (std::rand() % 20),
               (allowComponentAuction) ? "true" : "false", rejection_reason));
         }
         return FakeExecute(batch, std::move(done_callback),
@@ -1394,6 +1392,38 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
             foo.interest_group_owner());
   EXPECT_EQ(ad_rejection_reason.rejection_reason(),
             SellerRejectionReason::INVALID_BID);
+}
+
+TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
+  MockCodeDispatchClient dispatcher;
+  RawRequest raw_request;
+  AdWithBidMetadata foo;
+  GetTestAdWithBidFoo(foo);
+  BuildRawRequest({foo}, testSellerSignals, testAuctionSignals,
+                  testScoringSignals, testPublisherHostname, raw_request, true);
+  RawRequest raw_request_copy = raw_request;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([](std::vector<DispatchRequest>& batch,
+                   BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> score_logic;
+        score_logic.push_back(absl::Substitute(R"(
+      {
+      "response" : 1.5
+      }
+)"));
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true};
+  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  auto scored_ad = raw_response.ad_score();
+  // Ad was parsed successfully.
+  EXPECT_DOUBLE_EQ(scored_ad.desirability(), 1.5);
+  EXPECT_FALSE(scored_ad.allow_component_auction());
 }
 
 }  // namespace
