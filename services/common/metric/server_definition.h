@@ -336,7 +336,7 @@ class InitiatedRequest {
     LogIfError(metric_context_.template AccumulateMetric<
                server_common::metric::kInitiatedRequestTotalDuration>(
         initiated_request_ms));
-    LogIfError(metric_context_.template LogHistogram<
+    LogIfError(metric_context_.template AccumulateMetric<
                server_common::metric::kInitiatedRequestByte>(request_size_));
 
     if (destination_ == metric::kKv) {

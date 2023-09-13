@@ -25,8 +25,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr char kKeyId[] = "key_id";
-constexpr char kSecret[] = "secret";
+constexpr char kTestKeyId[] = "key_id";
+constexpr char kTestSecret[] = "secret";
 using ::testing::AnyNumber;
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
@@ -37,8 +37,9 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
              const std::string& plaintext_payload) {
             google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
                 hpke_encrypt_response;
-            hpke_encrypt_response.set_secret(kSecret);
-            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(kKeyId);
+            hpke_encrypt_response.set_secret(kTestSecret);
+            hpke_encrypt_response.mutable_encrypted_data()->set_key_id(
+                kTestKeyId);
             hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
                 plaintext_payload);
             return hpke_encrypt_response;
@@ -53,7 +54,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
         google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
             hpke_decrypt_response;
         hpke_decrypt_response.set_payload(ciphertext);
-        hpke_decrypt_response.set_secret(kSecret);
+        hpke_decrypt_response.set_secret(kTestSecret);
         return hpke_decrypt_response;
       });
 

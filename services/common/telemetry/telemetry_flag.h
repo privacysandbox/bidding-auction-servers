@@ -19,6 +19,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
@@ -87,9 +88,28 @@ class BuildDependentConfig {
       const absl::Span<const metric::DefinitionName* const>& server_metrics)
       const;
 
+  // Override the public parition of a metric
+  void SetPartition(absl::string_view name,
+                    absl::Span<const absl::string_view> partitions);
+
+  // Return the public parition of a metric
+  template <typename MetricT>
+  absl::Span<const absl::string_view> GetPartition(
+      const MetricT& definition) const {
+    return GetPartition(definition, definition.name_);
+  }
+
+  // Return the public parition of a metric
+  absl::Span<const absl::string_view> GetPartition(
+      const metric::internal::Partitioned& definition,
+      const absl::string_view name) const;
+
  private:
   TelemetryConfig server_config_;
   absl::flat_hash_map<std::string, MetricConfig> metric_config_;
+  absl::flat_hash_map<std::string, MetricConfig> internal_config_;
+  absl::flat_hash_map<std::string, std::vector<absl::string_view>>
+      partition_config_view_;
 };
 
 }  // namespace privacy_sandbox::server_common

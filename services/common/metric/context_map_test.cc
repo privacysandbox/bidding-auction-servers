@@ -31,6 +31,8 @@ constexpr absl::Span<const DefinitionName* const> metric_list_span =
 
 class TestMetricRouter {
  public:
+  TestMetricRouter() : metric_config_(BuildDependentConfig(config_proto_)) {}
+
   template <typename T, Privacy privacy, Instrument instrument>
   absl::Status LogSafe(T value,
                        const Definition<T, privacy, instrument>& definition,
@@ -44,25 +46,21 @@ class TestMetricRouter {
                          absl::string_view partition) {
     return absl::OkStatus();
   }
+
+  const BuildDependentConfig& metric_config() const { return metric_config_; }
+
+  TelemetryConfig config_proto_;
+  BuildDependentConfig metric_config_;
 };
 
-class ContextMapTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    TelemetryConfig config_proto;
-    config_proto.set_mode(TelemetryConfig::PROD);
-    metric_config_ = std::make_unique<BuildDependentConfig>(config_proto);
-  }
-  std::unique_ptr<BuildDependentConfig> metric_config_;
-};
+class ContextMapTest : public ::testing::Test {};
 
 class Foo {};
 
 TEST_F(ContextMapTest, GetContext) {
   using TestContextMap = ContextMap<Foo, metric_list_span, TestMetricRouter>;
   Foo foo;
-  TestContextMap context_map(std::make_unique<TestMetricRouter>(),
-                             *metric_config_);
+  TestContextMap context_map(std::make_unique<TestMetricRouter>());
   EXPECT_FALSE(context_map.Get(&foo).is_decrypted());
 
   context_map.Get(&foo).SetDecrypted();
@@ -83,7 +81,7 @@ constexpr absl::Span<const DefinitionName* const> wrong_order_partitioned_span =
 
 TEST_F(ContextMapTest, CheckListOrderPartition) {
   EXPECT_DEATH((ContextMap<Foo, wrong_order_partitioned_span, TestMetricRouter>(
-                   std::make_unique<TestMetricRouter>(), *metric_config_)),
+                   std::make_unique<TestMetricRouter>())),
                HasSubstr("kPartitioned public partitions"));
 }
 
@@ -96,7 +94,7 @@ constexpr absl::Span<const DefinitionName* const> wrong_order_histogram_span =
 
 TEST_F(ContextMapTest, CheckListOrderHistogram) {
   EXPECT_DEATH((ContextMap<Foo, wrong_order_histogram_span, TestMetricRouter>(
-                   std::make_unique<TestMetricRouter>(), *metric_config_)),
+                   std::make_unique<TestMetricRouter>())),
                HasSubstr("kHistogram histogram"));
 }
 

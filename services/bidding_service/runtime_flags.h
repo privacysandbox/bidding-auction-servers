@@ -29,10 +29,19 @@ inline constexpr char ENABLE_BIDDING_SERVICE_BENCHMARK[] =
 inline constexpr char BUYER_CODE_FETCH_CONFIG[] = "BUYER_CODE_FETCH_CONFIG";
 inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
 inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
+inline constexpr char AD_RETRIEVAL_KV_SERVER_ADDR[] =
+    "AD_RETRIEVAL_KV_SERVER_ADDR";
+inline constexpr char BYOS_AD_RETRIEVAL_SERVER[] = "BYOS_AD_RETRIEVAL_SERVER";
+inline constexpr char AD_RETRIEVAL_TIMEOUT_MS[] = "AD_RETRIEVAL_TIMEOUT_MS";
 
-inline constexpr absl::string_view kFlags[] = {
-    PORT, ENABLE_BIDDING_SERVICE_BENCHMARK, BUYER_CODE_FETCH_CONFIG,
-    JS_NUM_WORKERS, JS_WORKER_QUEUE_LEN};
+inline constexpr absl::string_view kFlags[] = {PORT,
+                                               ENABLE_BIDDING_SERVICE_BENCHMARK,
+                                               BUYER_CODE_FETCH_CONFIG,
+                                               JS_NUM_WORKERS,
+                                               JS_WORKER_QUEUE_LEN,
+                                               AD_RETRIEVAL_KV_SERVER_ADDR,
+                                               BYOS_AD_RETRIEVAL_SERVER,
+                                               AD_RETRIEVAL_TIMEOUT_MS};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);

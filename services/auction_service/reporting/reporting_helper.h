@@ -40,7 +40,11 @@ inline constexpr char kRenderUrl[] = "renderUrl";
 inline constexpr char kDesirability[] = "desirability";
 inline constexpr char kHighestScoringOtherBid[] = "highestScoringOtherBid";
 inline constexpr char kSellerLogs[] = "sellerLogs";
+inline constexpr char kSellerErrors[] = "sellerErrors";
+inline constexpr char kSellerWarnings[] = "sellerWarnings";
 inline constexpr char kBuyerLogs[] = "buyerLogs";
+inline constexpr char kBuyerErrors[] = "buyerErrors";
+inline constexpr char kBuyerWarnings[] = "buyerWarnings";
 inline constexpr int kReportingArgSize = 5;
 inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
@@ -52,6 +56,8 @@ inline constexpr char kReportWinResponse[] = "reportWinResponse";
 inline constexpr char kReportWinUrl[] = "reportWinUrl";
 inline constexpr char kBuyerSignals[] = "perBuyerSignals";
 inline constexpr char kBuyerOrigin[] = "buyerOrigin";
+inline constexpr char kSeller[] = "seller";
+inline constexpr char kAdCost[] = "adCost";
 inline constexpr char kMadeHighestScoringOtherBid[] =
     "madeHighestScoringOtherBid";
 inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
@@ -71,11 +77,13 @@ inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
 
 struct BuyerReportingMetadata {
   bool enable_report_win_url_generation = false;
-  std::string interest_group_name;
   std::string buyer_signals;
   std::optional<int> join_count;
   std::optional<long> recency;
   std::optional<int> modeling_signals;
+  std::string seller;
+  std::string interest_group_name;
+  double ad_cost;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(

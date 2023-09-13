@@ -19,6 +19,7 @@
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -40,7 +41,7 @@ TEST(CreateGetBidsRawResponseTest, SetsAllBidsInGenerateBidsResponse) {
   input_raw_response.mutable_bids()->Add()->CopyFrom(ad_with_bid_low);
   input_raw_response.mutable_bids()->Add()->CopyFrom(ad_with_bid_high);
 
-  auto output = ProtoFactory::CreateGetBidsRawResponse(
+  auto output = CreateGetBidsRawResponse(
       std::make_unique<GenBidsRawResp>(input_raw_response));
 
   EXPECT_EQ(output->bids().size(), 2);
@@ -53,7 +54,7 @@ TEST(CreateGetBidsRawResponseTest, SetsAllBidsInGenerateBidsResponse) {
 TEST(CreateGetBidsRawResponseTest, ReturnsEmptyForNoAdsInGenerateBidsResponse) {
   auto input_raw_response = MakeARandomGenerateBidsRawResponse();
   input_raw_response.mutable_bids()->Clear();
-  auto output = ProtoFactory::CreateGetBidsRawResponse(
+  auto output = CreateGetBidsRawResponse(
       std::make_unique<GenBidsRawResp>(input_raw_response));
 
   EXPECT_TRUE(output->bids().empty());
@@ -61,8 +62,7 @@ TEST(CreateGetBidsRawResponseTest, ReturnsEmptyForNoAdsInGenerateBidsResponse) {
 
 TEST(CreateGetBidsRawResponseTest,
      ReturnsEmptyForMalformedGenerateBidsResponse) {
-  auto output = ProtoFactory::CreateGetBidsRawResponse(
-      std::make_unique<GenBidsRawResp>());
+  auto output = CreateGetBidsRawResponse(std::make_unique<GenBidsRawResp>());
 
   EXPECT_TRUE(output->bids().empty());
 }
@@ -135,7 +135,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
   bidding_signals->trusted_signals =
       std::make_unique<std::string>(expected_raw_output.bidding_signals());
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   std::string difference;
@@ -194,7 +194,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
   input.set_seller(expected_raw_output.seller());
   input.set_publisher_name(expected_raw_output.publisher_name());
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
@@ -235,7 +235,7 @@ TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForBrowserIG) {
   // Check that exactly 1 IG is in the input.
   ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::make_unique<BiddingSignals>(),
       LogContext{});
 
@@ -265,7 +265,7 @@ TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForAndroidIG) {
   // Check that exactly 1 IG is in the input.
   ASSERT_EQ(get_bids_raw_request.buyer_input().interest_groups().size(), 1);
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       get_bids_raw_request, get_bids_raw_request.buyer_input(),
       std::make_unique<BiddingSignals>(), LogContext{});
 
@@ -347,7 +347,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   input.set_seller(expected_raw_output.seller());
   input.set_publisher_name(expected_raw_output.publisher_name());
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
@@ -373,7 +373,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
     VLOG(0) << "\nExpected seller:\n" << expected_raw_output.seller();
     VLOG(0) << "\nActual seller:\n" << raw_output->seller();
 
-    VLOG(0) << "\Difference in comparison:\n" << difference;
+    VLOG(0) << "\nDifference in comparison:\n" << difference;
   }
 }
 
@@ -383,7 +383,7 @@ TEST(CreateGenerateBidsRequestTest,
 
   GetBidsRequest::GetBidsRawRequest input;
   LogContext log_context;
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   EXPECT_TRUE(raw_output->bidding_signals().empty());
@@ -394,7 +394,7 @@ TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
 
   GetBidsRequest::GetBidsRawRequest input;
   input.set_enable_debug_reporting(true);
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   EXPECT_TRUE(raw_output->enable_debug_reporting());
@@ -407,7 +407,7 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
   LogContext log_context;
   log_context.set_generation_id(kSampleGenerationId);
   log_context.set_adtech_debug_id(kSampleAdtechDebugId);
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), log_context);
 
   EXPECT_EQ(raw_output->log_context().generation_id(),
@@ -424,12 +424,34 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
   consented_debug_config->set_is_consented(kIsConsentedDebug);
   consented_debug_config->set_token(kConsentedDebugToken);
 
-  auto raw_output = ProtoFactory::CreateGenerateBidsRawRequest(
+  auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::move(bidding_signals), LogContext{});
 
   EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
             kIsConsentedDebug);
   EXPECT_EQ(raw_output->consented_debug_config().token(), kConsentedDebugToken);
+}
+
+TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
+     SetsAppropriateFields) {
+  auto get_bids_request = CreateGetBidsRawRequest();
+  auto request =
+      CreateGenerateProtectedAppSignalsBidsRawRequest(get_bids_request);
+
+  EXPECT_EQ(request->auction_signals(), kTestAuctionSignals);
+  EXPECT_EQ(request->buyer_signals(), kTestBuyerSignals);
+  EXPECT_EQ(request->protected_app_signals().encoding_version(),
+            kTestEncodingVersion);
+  EXPECT_EQ(request->protected_app_signals().app_install_signals(),
+            kTestProtectedAppSignals);
+  EXPECT_EQ(request->seller(), kTestSeller);
+  EXPECT_EQ(request->publisher_name(), kTestPublisherName);
+  EXPECT_EQ(request->enable_debug_reporting(), true);
+  EXPECT_EQ(request->log_context().generation_id(), kTestGenerationId);
+  EXPECT_EQ(request->log_context().adtech_debug_id(), kTestAdTechDebugId);
+  EXPECT_EQ(request->consented_debug_config().is_consented(), true);
+  EXPECT_EQ(request->consented_debug_config().token(),
+            kTestConsentedDebuggingToken);
 }
 
 }  // namespace

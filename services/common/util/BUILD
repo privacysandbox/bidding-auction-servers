@@ -220,6 +220,7 @@ cc_library(
     srcs = ["context_logger.cc"],
     hdrs = ["context_logger.h"],
     deps = [
+        ":request_response_constants",
         ":source_location",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
@@ -367,6 +368,7 @@ cc_test(
     ],
     deps = [
         ":consented_debugging_logger",
+        ":request_response_constants",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -380,9 +382,9 @@ cc_library(
 )
 
 cc_library(
-    name = "bid_stats",
-    srcs = ["bid_stats.cc"],
-    hdrs = ["bid_stats.h"],
+    name = "async_task_tracker",
+    srcs = ["async_task_tracker.cc"],
+    hdrs = ["async_task_tracker.h"],
     deps = [
         ":context_logger",
         ":source_location",
@@ -394,13 +396,13 @@ cc_library(
 )
 
 cc_test(
-    name = "bid_stats_test",
+    name = "async_task_tracker_test",
     size = "small",
     srcs = [
-        "bid_stats_test.cc",
+        "async_task_tracker_test.cc",
     ],
     deps = [
-        ":bid_stats",
+        ":async_task_tracker",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -80,9 +80,19 @@ class MetricRouterTest : public ::testing::Test {
                     kExportIntervalMillis / 2)}));
     return provider;
   }
+  BuildDependentConfig InitConfig(absl::Duration dp_export_interval) {
+    TelemetryConfig config_proto;
+    config_proto.set_dp_export_interval_ms(dp_export_interval /
+                                           absl::Milliseconds(1));
+    config_proto.set_metric_export_interval_ms(dp_export_interval /
+                                               absl::Milliseconds(1));
+    return BuildDependentConfig(config_proto);
+  }
+
   void SetUp() override {
     test_instance_ = std::make_unique<MetricRouter>(
-        init(), "not used name", "0.0.1", PrivacyBudget{0}, absl::Minutes(5));
+        init(), "not used name", "0.0.1", PrivacyBudget{0},
+        InitConfig(absl::Minutes(5)));
   }
 
   static std::stringstream& GetSs() {
@@ -197,9 +207,10 @@ class MetricRouterDpNoNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
     test_instance_ = std::make_unique<MetricRouter>(
-        init(), "not used name", "0.0.1", PrivacyBudget{1e10}, kDpInterval);
+        init(), "not used name", "0.0.1", PrivacyBudget{1e10},
+        InitConfig(kDpInterval));
   }
-  absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
+  absl::Duration kDpInterval = 5 * absl::Milliseconds(kExportIntervalMillis);
 };
 
 constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
@@ -245,10 +256,11 @@ TEST_F(MetricRouterDpNoNoiseTest, LogHistogram) {
 class MetricRouterDpNoiseTest : public MetricRouterTest {
  protected:
   void SetUp() override {
-    test_instance_ = std::make_unique<MetricRouter>(
-        init(), "not used name", "0.0.1", PrivacyBudget{1}, kDpInterval);
+    test_instance_ = std::make_unique<MetricRouter>(init(), "not used name",
+                                                    "0.0.1", PrivacyBudget{1},
+                                                    InitConfig(kDpInterval));
   }
-  absl::Duration kDpInterval = 2 * absl::Milliseconds(kExportIntervalMillis);
+  absl::Duration kDpInterval = 5 * absl::Milliseconds(kExportIntervalMillis);
 };
 
 TEST_F(MetricRouterDpNoiseTest, LogPartitioned) {

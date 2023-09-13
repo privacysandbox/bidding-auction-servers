@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "absl/strings/str_join.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -35,6 +36,10 @@ std::string FormatContext(const ContextLogger::ContextMap& context_map) {
 
   std::vector<std::string> pairs;
   for (const auto& [key, val] : context_map) {
+    if (key == kToken) {
+      // Do not print out consented debug token by default.
+      continue;
+    }
     if (!val.empty()) {
       pairs.emplace_back(absl::StrJoin({key, val}, ": "));
     }

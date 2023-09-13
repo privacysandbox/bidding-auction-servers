@@ -19,11 +19,9 @@ namespace privacy_sandbox::server_common::metric {
 class ExperimentTest : public ContextTest {
  protected:
   void SetUp() override {
-    TelemetryConfig config_proto;
-    config_proto.set_mode(TelemetryConfig::EXPERIMENT);
-    static BuildDependentConfig metric_config(config_proto);
+    InitConfig(TelemetryConfig::EXPERIMENT);
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
-        &mock_metric_router_, metric_config);
+        &mock_metric_router_);
   }
 
   void ExpectCallLogSafe() {
@@ -52,13 +50,13 @@ TEST_F(ExperimentTest, LogAfterDecrypt) {
 class CompareTest : public ExperimentTest {
  protected:
   void SetUp() override {
-    TelemetryConfig config_proto;
-    config_proto.set_mode(TelemetryConfig::COMPARE);
-    static BuildDependentConfig metric_config(config_proto);
+    InitConfig(TelemetryConfig::COMPARE);
     context_ = Context<metric_list_span, MockMetricRouter>::GetContext(
-        &mock_metric_router_, metric_config);
+        &mock_metric_router_);
   }
 };
+
+TEST_F(CompareTest, LogBeforeDecrypt) { LogSafeOK(); }
 
 TEST_F(CompareTest, LogAfterDecrypt) {
   context_->SetDecrypted();

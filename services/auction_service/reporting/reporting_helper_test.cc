@@ -98,28 +98,63 @@ rapidjson::Document GetReportResultJsonObj(const ReportingResponse& response) {
   return document;
 }
 
-absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response) {
+absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response,
+                                            bool set_logs = true) {
   rapidjson::Document outerDoc;
   outerDoc.SetObject();
   rapidjson::Document report_result_obj = GetReportResultJsonObj(response);
   rapidjson::Document report_win_obj = GetReportWinJsonObj(response);
-  rapidjson::Value seller_logs(rapidjson::kArrayType);
-  for (const std::string& log : response.seller_logs) {
-    rapidjson::Value value(log.c_str(), log.size(), outerDoc.GetAllocator());
-    seller_logs.PushBack(value, outerDoc.GetAllocator());
+  if (set_logs) {
+    rapidjson::Value seller_logs(rapidjson::kArrayType);
+    for (const std::string& log : response.seller_logs) {
+      rapidjson::Value value(log.c_str(), log.size(), outerDoc.GetAllocator());
+      seller_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    rapidjson::Value seller_warning_logs(rapidjson::kArrayType);
+    for (const std::string& seller_warning : response.seller_warning_logs) {
+      rapidjson::Value value(seller_warning.c_str(), seller_warning.size(),
+                             outerDoc.GetAllocator());
+      seller_warning_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    rapidjson::Value seller_error_logs(rapidjson::kArrayType);
+    for (const std::string& seller_error : response.seller_error_logs) {
+      rapidjson::Value value(seller_error.c_str(), seller_error.size(),
+                             outerDoc.GetAllocator());
+      seller_error_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    rapidjson::Value buyer_logs(rapidjson::kArrayType);
+    for (const std::string& buyer_log : response.buyer_logs) {
+      rapidjson::Value value(buyer_log.c_str(), buyer_log.size(),
+                             outerDoc.GetAllocator());
+      buyer_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    rapidjson::Value buyer_error_logs(rapidjson::kArrayType);
+    for (const std::string& buyer_error : response.buyer_error_logs) {
+      rapidjson::Value value(buyer_error.c_str(), buyer_error.size(),
+                             outerDoc.GetAllocator());
+      buyer_error_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    rapidjson::Value buyer_warning_logs(rapidjson::kArrayType);
+    for (const std::string& buyer_warning : response.buyer_warning_logs) {
+      rapidjson::Value value(buyer_warning.c_str(), buyer_warning.size(),
+                             outerDoc.GetAllocator());
+      buyer_warning_logs.PushBack(value, outerDoc.GetAllocator());
+    }
+    outerDoc.AddMember(kSellerLogs, seller_logs, outerDoc.GetAllocator());
+    outerDoc.AddMember(kSellerErrors, seller_error_logs,
+                       outerDoc.GetAllocator());
+    outerDoc.AddMember(kSellerWarnings, seller_warning_logs,
+                       outerDoc.GetAllocator());
+    outerDoc.AddMember(kBuyerLogs, buyer_logs, outerDoc.GetAllocator());
+    outerDoc.AddMember(kBuyerErrors, buyer_error_logs, outerDoc.GetAllocator());
+    outerDoc.AddMember(kBuyerWarnings, buyer_warning_logs,
+                       outerDoc.GetAllocator());
+    outerDoc.AddMember(kBuyerLogs, buyer_logs, outerDoc.GetAllocator());
   }
-  rapidjson::Value buyer_logs(rapidjson::kArrayType);
-  for (const std::string& log : response.buyer_logs) {
-    rapidjson::Value value(log.c_str(), log.size(), outerDoc.GetAllocator());
-    buyer_logs.PushBack(value, outerDoc.GetAllocator());
-  }
-
   outerDoc.AddMember(kReportResultResponse, report_result_obj,
                      outerDoc.GetAllocator());
-  outerDoc.AddMember(kSellerLogs, seller_logs, outerDoc.GetAllocator());
   outerDoc.AddMember(kReportWinResponse, report_win_obj,
                      outerDoc.GetAllocator());
-  outerDoc.AddMember(kBuyerLogs, buyer_logs, outerDoc.GetAllocator());
   return SerializeJsonDoc(outerDoc);
 }
 
@@ -136,6 +171,15 @@ void TestResponse(const ReportingResponse& response,
             expected_response.report_result_response.interaction_reporting_urls
                 .size());
   EXPECT_EQ(response.seller_logs.size(), expected_response.seller_logs.size());
+  EXPECT_EQ(response.seller_error_logs.size(),
+            expected_response.seller_error_logs.size());
+  EXPECT_EQ(response.seller_warning_logs.size(),
+            expected_response.seller_warning_logs.size());
+  EXPECT_EQ(response.buyer_logs.size(), expected_response.buyer_logs.size());
+  EXPECT_EQ(response.buyer_error_logs.size(),
+            expected_response.buyer_error_logs.size());
+  EXPECT_EQ(response.buyer_warning_logs.size(),
+            expected_response.buyer_warning_logs.size());
 }
 
 void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
@@ -177,6 +221,11 @@ TEST(ParseAndGetReportingResponseJson, ParsesReportingResultSuccessfully) {
           .send_report_to_invoked = kSendReportToInvokedTrue,
           .register_ad_beacon_invoked = kRegisterAdBeaconInvokedTrue}};
   expected_response.seller_logs.emplace_back(kTestLog);
+  expected_response.seller_warning_logs.emplace_back(kTestLog);
+  expected_response.seller_error_logs.emplace_back(kTestLog);
+  expected_response.buyer_logs.emplace_back(kTestLog);
+  expected_response.buyer_error_logs.emplace_back(kTestLog);
+  expected_response.buyer_warning_logs.emplace_back(kTestLog);
   expected_response.report_result_response.interaction_reporting_urls
       .try_emplace(kTestInteractionEvent, kTestInteractionUrl);
   expected_response.report_win_response.interaction_reporting_urls.try_emplace(
@@ -190,13 +239,15 @@ TEST(ParseAndGetReportingResponseJson, ParsesReportingResultSuccessfully) {
 
 TEST(ParseAndGetReportingResponseJson, OnlyFewFieldsSetParsesSuccessfully) {
   bool enable_adtech_code_logging = true;
+  bool set_logs = false;
   ReportingResponse expected_response;
   expected_response.report_result_response.report_result_url = kReportResultUrl;
   expected_response.report_result_response.send_report_to_invoked =
       kSendReportToInvokedTrue;
   expected_response.report_result_response.register_ad_beacon_invoked =
       kRegisterAdBeaconInvokedTrue;
-  absl::StatusOr<std::string> json_string = BuildJsonObject(expected_response);
+  absl::StatusOr<std::string> json_string =
+      BuildJsonObject(expected_response, set_logs);
   ASSERT_TRUE(json_string.ok()) << json_string.status();
   absl::StatusOr<ReportingResponse> response = ParseAndGetReportingResponse(
       enable_adtech_code_logging, json_string.value());
@@ -286,7 +337,10 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
       .buyer_signals = kTestBuyerSignals,
       .join_count = kTestJoinCount,
       .recency = kTestRecency,
-      .modeling_signals = kTestModelingSignals};
+      .modeling_signals = kTestModelingSignals,
+      .seller = kTestSeller,
+      .interest_group_name = kTestInterestGroupName,
+      .ad_cost = kTestAdCost};
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
       auction_config, logger, buyer_reporting_metadata);

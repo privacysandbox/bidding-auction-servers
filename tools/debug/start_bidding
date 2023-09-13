@@ -47,4 +47,7 @@ export GRPC_DNS_RESOLVER=native
     }' \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \
---enable_protected_app_signals="false"
+--enable_protected_app_signals="false" \
+--ad_retrieval_server_kv_server_addr="localhost:50057" \
+--byos_ad_retrieval_server="false" \
+--ad_retrieval_timeout_ms="60000"

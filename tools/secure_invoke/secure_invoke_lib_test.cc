@@ -32,6 +32,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/service_utils.h"
 
+using ::testing::HasSubstr;
 constexpr char kSfe[] = "SFE";
 constexpr char kBfe[] = "BFE";
 constexpr char kClientIp[] = "104.133.126.32";
@@ -228,9 +229,10 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
   // Verifies that the encrypted request makes it to BFE and the response comes
   // back. Error is expected because test is not setting up the bidding service.
   auto status = SendRequestToBfe(std::move(stub));
-  EXPECT_FALSE(status.ok());
-  EXPECT_TRUE(absl::StrContains(status.message(),
-                                "Execution of GenerateBids request failed"));
+  EXPECT_FALSE(status.ok()) << status;
+  EXPECT_THAT(status.message(),
+              HasSubstr("Failed to create secure client channel"))
+      << status;
 }
 
 }  // namespace

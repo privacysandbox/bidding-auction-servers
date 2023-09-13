@@ -38,9 +38,8 @@ class ContextMap {
  public:
   using ContextT = Context<L, U>;
 
-  ContextMap(std::unique_ptr<U> metric_router, BuildDependentConfig config)
-      : metric_router_(std::move(metric_router)),
-        metric_config_(std::move(config)) {
+  explicit ContextMap(std::unique_ptr<U> metric_router)
+      : metric_router_(std::move(metric_router)) {
     CHECK_OK(CheckListOrder());
   }
   ~ContextMap() = default;
@@ -55,10 +54,8 @@ class ContextMap {
     absl::MutexLock mutex_lock(&mutex_);
     auto it = context_.find(t);
     if (it == context_.end()) {
-      it = context_
-               .emplace(t, ContextT::GetContext(metric_router_.get(),
-                                                metric_config_))
-               .first;
+      it =
+          context_.emplace(t, ContextT::GetContext(metric_router_.get())).first;
     }
     return *it->second;
   }
@@ -83,7 +80,9 @@ class ContextMap {
     return metric_router_->AddObserverable(definition, callback);
   }
 
-  const BuildDependentConfig& metric_config() const { return metric_config_; }
+  const BuildDependentConfig& metric_config() const {
+    return metric_router_->metric_config();
+  }
   const U* metric_router() const { return metric_router_.get(); }
 
   absl::Status CheckListOrder() {
@@ -104,7 +103,6 @@ class ContextMap {
 
  private:
   std::unique_ptr<U> metric_router_;
-  const BuildDependentConfig metric_config_;
   absl::Mutex mutex_;
   absl::flat_hash_map<T*, std::unique_ptr<ContextT>> context_
       ABSL_GUARDED_BY(mutex_);
@@ -120,7 +118,8 @@ inline auto* GetContextMap(
     std::unique_ptr<MetricRouter::MeterProvider> provider,
     absl::string_view service, absl::string_view version,
     PrivacyBudget budget) {
-  static auto* context_map = [&]() mutable {
+  static auto* context_map = [config, &provider, service, version,
+                              budget]() mutable {
     CHECK(config != std::nullopt) << "cannot be null at initialization";
     absl::Status config_status = config->CheckMetricConfig(L);
     ABSL_LOG_IF(WARNING, !config_status.ok()) << config_status;
@@ -131,11 +130,8 @@ inline auto* GetContextMap(
                               : 0;
         });
     budget.epsilon /= total_weight;
-    return new ContextMap<T, L, MetricRouter>(
-        std::make_unique<MetricRouter>(
-            std::move(provider), service, version, budget,
-            absl::Milliseconds(config->dp_export_interval_ms())),
-        *config);
+    return new ContextMap<T, L, MetricRouter>(std::make_unique<MetricRouter>(
+        std::move(provider), service, version, budget, *std::move(config)));
   }();
   CHECK(config == std::nullopt ||
         config->IsDebug() == context_map->metric_config().IsDebug())

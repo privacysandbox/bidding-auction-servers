@@ -42,15 +42,15 @@ inline RequestMetadata GrpcMetadataToRequestMetadata(
     const std::array<std::pair<std::string_view, std::string_view>, N>&
         source_target_key_map) {
   RequestMetadata mapped_metadata;
-  for (auto const& key_pair : source_target_key_map) {
+  for (auto const& [src, dst] : source_target_key_map) {
     // All GRPC metadata is automatically converted to lower case
     // https://github.com/grpc/grpc-go/blob/master/Documentation/grpc-metadata.md
-    std::string source_key = absl::AsciiStrToLower(key_pair.first);
-    if (auto const& found_metadata_itr = client_metadata.find(source_key);
+    std::string source_key = absl::AsciiStrToLower(src);
+    if (const auto& found_metadata_itr = client_metadata.find(source_key);
         found_metadata_itr != client_metadata.end()) {
-      mapped_metadata.insert({key_pair.second.data(),
-                              std::string(found_metadata_itr->second.begin(),
-                                          found_metadata_itr->second.end())});
+      mapped_metadata.insert(
+          {dst.data(), std::string(found_metadata_itr->second.begin(),
+                                   found_metadata_itr->second.end())});
     }
   }
   return mapped_metadata;

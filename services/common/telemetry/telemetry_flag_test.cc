@@ -117,5 +117,28 @@ TEST(BuildDependentConfig, CheckMetricConfigInList) {
               testing::ContainsRegex("c4 not defined;"));
 }
 
+constexpr absl::string_view kDefaultBuyers[] = {"buyer_1", "buyer_2"};
+constexpr metric::Definition<int, metric::Privacy::kNonImpacting,
+                             metric::Instrument::kPartitionedCounter>
+    partition_metric("partition_metric", "", "partition_type", kDefaultBuyers);
+
+TEST(BuildDependentConfig, Partition) {
+  TelemetryConfig config_proto;
+  BuildDependentConfig config(config_proto);
+
+  EXPECT_THAT(config.GetPartition(partition_metric),
+              testing::ElementsAreArray(kDefaultBuyers));
+
+  constexpr absl::string_view new_partitions[] = {"123", "789", "456"};
+  config.SetPartition("another_metric_def", new_partitions);
+  EXPECT_THAT(config.GetPartition(partition_metric),
+              testing::ElementsAreArray(kDefaultBuyers));
+
+  config.SetPartition(partition_metric.name_, new_partitions);
+  // result is sorted of `new_partitions`
+  EXPECT_THAT(config.GetPartition(partition_metric),
+              testing::ElementsAreArray({"123", "456", "789"}));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::server_common

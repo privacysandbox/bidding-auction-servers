@@ -14,6 +14,7 @@
 
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -27,6 +28,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
 
 namespace {
+
 // Parses curl message to result string or an error message for the callback.
 absl::StatusOr<std::string> GetResultFromMsg(CURLMsg* msg) {
   std::string* output;
@@ -158,6 +160,28 @@ static size_t WriteCallback(char* data, size_t size, size_t number_elements,
   return size * number_elements;
 }
 
+// The function declaration of ReadCallback is specified by libcurl.
+// Please do not modify the parameter types or ordering, although you
+// may modify the function name and body.
+// libcurl documentation: https://curl.se/libcurl/c/CURLOPT_READFUNCTION.html
+static size_t ReadCallback(char* data, size_t size, size_t num_items,
+                           void* userdata) {
+  auto* to_upload = static_cast<DataToUpload*>(userdata);
+  if (to_upload->offset >= to_upload->data.size()) {
+    // No more data to upload.
+    return 0;
+  }
+  size_t num_bytes_to_upload =
+      std::min(to_upload->data.size() - to_upload->offset, num_items * size);
+  memcpy(data, to_upload->data.c_str() + to_upload->offset,
+         num_bytes_to_upload);
+  VLOG(8) << "PUTing data (offset: " << to_upload->offset
+          << ", chunk size: " << num_bytes_to_upload
+          << "): " << to_upload->data;
+  to_upload->offset += num_bytes_to_upload;
+  return num_bytes_to_upload;
+}
+
 // FetchUrlsLifetime manages a single FetchUrls request and encapsulates
 // all of the data each individual FetchUrl callback will need.
 struct FetchUrlsLifetime {
@@ -199,10 +223,12 @@ void MultiCurlHttpFetcherAsync::FetchUrls(
   }
 }
 
-void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
-                                         int timeout_ms,
-                                         OnDoneFetchUrl done_callback)
-    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+std::unique_ptr<MultiCurlHttpFetcherAsync::CurlRequestData>
+MultiCurlHttpFetcherAsync::CreateCurlRequest(const HTTPRequest& request,
+                                             int timeout_ms,
+                                             int64_t keepalive_idle_sec,
+                                             int64_t keepalive_interval_sec,
+                                             OnDoneFetchUrl done_callback) {
   auto curl_request_data = std::make_unique<CurlRequestData>(
       request.headers, std::move(done_callback));
   CURL* req_handle = curl_request_data->req_handle;
@@ -217,9 +243,9 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
   // Enable TCP keep-alive to keep connection warm.
   curl_easy_setopt(req_handle, CURLOPT_TCP_KEEPALIVE, 1L);
   curl_easy_setopt(req_handle, CURLOPT_TCP_KEEPIDLE,
-                   static_cast<long>(keepalive_idle_sec_));
+                   static_cast<long>(keepalive_idle_sec));
   curl_easy_setopt(req_handle, CURLOPT_TCP_KEEPINTVL,
-                   static_cast<long>(keepalive_interval_sec_));
+                   static_cast<long>(keepalive_interval_sec));
   // Allow upto 1200 seconds idle time.
   curl_easy_setopt(req_handle, CURLOPT_MAXAGE_CONN, 1200L);
   // Set CURLOPT_ACCEPT_ENCODING to an empty string to pass all supported
@@ -231,9 +257,13 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
     curl_easy_setopt(req_handle, CURLOPT_HTTPHEADER,
                      curl_request_data->headers_list_ptr);
   }
+  return curl_request_data;
+}
 
+void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
+    std::unique_ptr<CurlRequestData> request) {
   // Check for errors from multi handle here and execute callback immediately.
-  CURLMcode mc = multi_curl_request_manager_.Add(req_handle);
+  CURLMcode mc = multi_curl_request_manager_.Add(request->req_handle);
   switch (mc) {
     case CURLM_BAD_HANDLE:
     case CURLM_BAD_EASY_HANDLE:
@@ -245,7 +275,7 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
     case CURLM_ABORTED_BY_CALLBACK:
     case CURLM_UNRECOVERABLE_POLL:
     case CURLM_UNKNOWN_OPTION:
-      std::move(curl_request_data->done_callback)(absl::InternalError(
+      std::move(request->done_callback)(absl::InternalError(
           absl::StrCat("Failed to invoke request via curl with error ",
                        curl_multi_strerror(mc))));
       return;
@@ -254,9 +284,38 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
     case CURLM_ADDED_ALREADY:
     case CURLM_RECURSIVE_API_CALL:
     case CURLM_LAST:
-      Add(req_handle, std::move(curl_request_data));
+      Add(request->req_handle, std::move(request));
       break;
   }
+}
+
+void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
+                                         int timeout_ms,
+                                         OnDoneFetchUrl done_callback)
+    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+  ExecuteCurlRequest(CreateCurlRequest(request, timeout_ms, keepalive_idle_sec_,
+                                       keepalive_interval_sec_,
+                                       std::move(done_callback)));
+}
+
+void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
+                                       int timeout_ms,
+                                       OnDoneFetchUrl done_callback)
+    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+  auto request =
+      CreateCurlRequest(http_request, timeout_ms, keepalive_idle_sec_,
+                        keepalive_interval_sec_, std::move(done_callback));
+
+  request->body = std::make_unique<DataToUpload>(
+      DataToUpload{std::move(http_request.body)});
+  curl_easy_setopt(request->req_handle, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(request->req_handle, CURLOPT_PUT, 1L);
+  curl_easy_setopt(request->req_handle, CURLOPT_POSTFIELDSIZE_LARGE,
+                   static_cast<curl_off_t>(http_request.body.size()));
+  curl_easy_setopt(request->req_handle, CURLOPT_READDATA, request->body.get());
+  curl_easy_setopt(request->req_handle, CURLOPT_READFUNCTION, ReadCallback);
+
+  ExecuteCurlRequest(std::move(request));
 }
 
 void MultiCurlHttpFetcherAsync::Add(

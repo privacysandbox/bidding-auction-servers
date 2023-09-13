@@ -31,6 +31,18 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Collects log of the provided type into the output vector.
+void ParseLogs(const rapidjson::Document& document, const std::string& log_type,
+               std::vector<std::string>& out) {
+  auto log_it = document.FindMember(log_type.c_str());
+  if (log_it == document.MemberEnd()) {
+    return;
+  }
+  for (const auto& log : log_it->value.GetArray()) {
+    out.emplace_back(log.GetString());
+  }
+}
+
 absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
     bool enable_adtech_code_logging, const std::string& response) {
   ReportingResponse reporting_response{};
@@ -56,12 +68,14 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
         .try_emplace(key.GetString(), value.GetString());
   }
   if (enable_adtech_code_logging) {
-    const rapidjson::Value& logs = document[kSellerLogs];
-    for (const auto& log : logs.GetArray()) {
-      reporting_response.seller_logs.emplace_back(log.GetString());
-    }
+    ParseLogs(document, kSellerLogs, reporting_response.seller_logs);
+    ParseLogs(document, kSellerErrors, reporting_response.seller_error_logs);
+    ParseLogs(document, kSellerWarnings,
+              reporting_response.seller_warning_logs);
+    ParseLogs(document, kBuyerLogs, reporting_response.buyer_logs);
+    ParseLogs(document, kBuyerErrors, reporting_response.buyer_error_logs);
+    ParseLogs(document, kBuyerWarnings, reporting_response.buyer_warning_logs);
   }
-
   if (!document.HasMember(kReportWinResponse)) {
     return reporting_response;
   }
@@ -170,6 +184,8 @@ std::string GetBuyerMetadataJson(
         buyer_reporting_signals_obj.GetAllocator());
   }
   if (buyer_reporting_metadata.recency.has_value()) {
+    logger.vlog(1, "BuyerReportingMetadata: Recency:",
+                buyer_reporting_metadata.recency.value());
     buyer_reporting_signals_obj.AddMember(
         kRecency, buyer_reporting_metadata.recency.value(),
         buyer_reporting_signals_obj.GetAllocator());
@@ -179,6 +195,24 @@ std::string GetBuyerMetadataJson(
         kModelingSignals, buyer_reporting_metadata.modeling_signals.value(),
         buyer_reporting_signals_obj.GetAllocator());
   }
+  rapidjson::Value seller;
+  if (!buyer_reporting_metadata.seller.empty()) {
+    seller.SetString(buyer_reporting_metadata.seller.c_str(),
+                     buyer_reporting_signals_obj.GetAllocator());
+    buyer_reporting_signals_obj.AddMember(
+        kSeller, seller, buyer_reporting_signals_obj.GetAllocator());
+  }
+  rapidjson::Value interest_group_name;
+  interest_group_name.SetString(
+      buyer_reporting_metadata.interest_group_name.c_str(),
+      buyer_reporting_signals_obj.GetAllocator());
+  buyer_reporting_signals_obj.AddMember(
+      kInterestGroupName, interest_group_name,
+      buyer_reporting_signals_obj.GetAllocator());
+  buyer_reporting_signals_obj.AddMember(
+      kAdCost, buyer_reporting_metadata.ad_cost,
+      buyer_reporting_signals_obj.GetAllocator());
+
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {

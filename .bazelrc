@@ -120,22 +120,5 @@ build:all-tests --compilation_mode=opt
 test:all-tests --build_tests_only
 test:all-tests --test_summary=detailed
 
-# clang_coverage -- the set of args to configure C++ code coverage in bazel with clang
-build:clang_coverage --compilation_mode=opt
-build:clang_coverage --combined_report=lcov
-build:clang_coverage --nocache_test_results
-build:clang_coverage --action_env=GCOV=/usr/bin/llvm-profdata
-build:clang_coverage --action_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
-build:clang_coverage --action_env=BAZEL_LLVM_COV=/usr/bin/llvm-cov
-build:clang_coverage --strategy=TestRunner=sandboxed,local
-build:clang_coverage --strategy=CoverageReport=sandboxed,local
-build:clang_coverage --experimental_scale_timeouts=1.5
-build:clang_coverage --coverage_support=@//tools/coverage:coverage_support
-build:clang_coverage --test_env=CC_CODE_COVERAGE_SCRIPT=tools/coverage/collect_cc_coverage.sh
-
-coverage --config=coverage
-coverage --build_tests_only
-build:coverage --config=clang_coverage
-build:coverage --action_env=PRIVACY_SANDBOX_SERVERS_BUILD_CONFIG_COVERAGE=1
-build:coverage --test_tag_filters=-nocoverage,small
-build:coverage --instrumentation_filter="/services[/:],/tools/secure_invoke/payload_generator[/:]"
+try-import %workspace%/builders/.coverage.bazelrc
+coverage --test_tag_filters=-nocoverage,small

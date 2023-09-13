@@ -41,7 +41,6 @@ class ConsentedDebuggingLogger {
  public:
   using ContextMap = ContextLogger::ContextMap;
 
-  // TODO(b/279955398): Allows to update `context_map` via a public method.
   // TODO(b/279955398): Support opentelemtry::trace::SpanContext when
   // OpenTelemtry tracing is properly set up.
   ConsentedDebuggingLogger(const ContextMap& context_map,
@@ -50,10 +49,14 @@ class ConsentedDebuggingLogger {
 
   bool IsConsented() const { return is_consented_; }
 
+  void SetContext(const ContextMap& context_map);
+
   void vlog(ParamWithSourceLoc<int> verbosity_with_source_loc,
             absl::string_view msg) const;
 
  private:
+  void UpdateContext(const ContextMap& context_map);
+
   std::string context_;
   opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger_;
   // Debug token given by a consented client request.

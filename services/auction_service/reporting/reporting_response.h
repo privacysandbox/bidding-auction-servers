@@ -39,8 +39,12 @@ struct ReportWinResponse {
 struct ReportingResponse {
   ReportResultResponse report_result_response;
   std::vector<std::string> seller_logs;
+  std::vector<std::string> seller_error_logs;
+  std::vector<std::string> seller_warning_logs;
   ReportWinResponse report_win_response;
   std::vector<std::string> buyer_logs;
+  std::vector<std::string> buyer_error_logs;
+  std::vector<std::string> buyer_warning_logs;
 };
 }  //  namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_RESPONSE_H_

@@ -27,6 +27,18 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// This a utility class that acts as a wrapper for the clients that are used
+// by BuyerFrontEndService.
+struct ClientRegistry {
+  std::unique_ptr<BiddingSignalsAsyncProvider> bidding_signals_async_provider;
+  std::unique_ptr<BiddingAsyncClient> bidding_async_client;
+  std::unique_ptr<ProtectedAppSignalsBiddingAsyncClient>
+      protected_app_signals_bidding_async_client;
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager;
+  std::unique_ptr<CryptoClientWrapperInterface> crypto_client;
+};
+
 // BuyerFrontEndService provides the async server implementation to be used
 // by Demand Side/Buyers to provide bids to the Seller Frontend Service
 // during an Ad auction. The server looks up realtime buyer's signals and calls
@@ -42,6 +54,11 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
           key_fetcher_manager,
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
       const GetBidsConfig config, bool enable_benchmarking = false);
+
+  explicit BuyerFrontEndService(ClientRegistry client_registry,
+                                GetBidsConfig config,
+                                bool enable_benchmarking = false);
+
   // Returns bid for the top eligible ad candidate.
   //
   // This is the API that can be used by the Seller Frontend Service.

@@ -52,6 +52,7 @@ cc_library(
     deps = [
         ":definition",
         ":dp",
+        "//services/common/telemetry:telemetry_flag",
         "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -185,6 +186,7 @@ cc_test(
     srcs = ["dp_test.cc"],
     deps = [
         ":dp",
+        "//services/common/telemetry:telemetry_flag",
         "@com_google_absl//absl/log:check",
         "@com_google_googletest//:gtest_main",
     ],

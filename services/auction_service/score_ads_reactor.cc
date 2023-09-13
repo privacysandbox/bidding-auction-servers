@@ -416,28 +416,34 @@ std::shared_ptr<std::string> BuildAuctionConfig(
       "}"));
 }
 
+void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
+                           const ContextLogger& logger,
+                           const std::string& log_type) {
+  auto logs_it = document.FindMember(log_type.c_str());
+  if (logs_it != document.MemberEnd()) {
+    for (const auto& log : logs_it->value.GetArray()) {
+      logger.vlog(1, log_type, ": ", log.GetString());
+    }
+  }
+}
+
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     bool enable_adtech_code_logging, const std::string& response,
     const ContextLogger& logger) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   if (enable_adtech_code_logging) {
-    const rapidjson::Value& logs = document["logs"];
-    for (const auto& log : logs.GetArray()) {
-      logger.vlog(1, "Logs: ", log.GetString());
-    }
-    const rapidjson::Value& warnings = document["warnings"];
-    for (const auto& warning : warnings.GetArray()) {
-      logger.vlog(1, "Warnings: ", warning.GetString());
-    }
-    const rapidjson::Value& errors = document["errors"];
-    for (const auto& error : errors.GetArray()) {
-      logger.vlog(1, "Errors: ", error.GetString());
-    }
+    MayVlogAdTechCodeLogs(document, logger, "logs");
+    MayVlogAdTechCodeLogs(document, logger, "warnings");
+    MayVlogAdTechCodeLogs(document, logger, "errors");
   }
   rapidjson::Document response_obj;
   auto iterator = document.FindMember("response");
-  if (iterator != document.MemberEnd() && iterator->value.IsObject()) {
-    response_obj.CopyFrom(iterator->value, response_obj.GetAllocator());
+  if (iterator != document.MemberEnd()) {
+    if (iterator->value.IsObject()) {
+      response_obj.CopyFrom(iterator->value, response_obj.GetAllocator());
+    } else if (iterator->value.IsNumber()) {
+      response_obj.SetDouble(iterator->value.GetDouble());
+    }
   }
   return response_obj;
 }
@@ -550,6 +556,12 @@ void ScoreAdsReactor::Execute() {
 ScoreAdsResponse::AdScore ParseScoreAdResponse(
     const rapidjson::Document& score_ad_resp) {
   ScoreAdsResponse::AdScore score_ads_response;
+  if (score_ad_resp.IsNumber()) {
+    score_ads_response.set_desirability(score_ad_resp.GetDouble());
+    score_ads_response.set_allow_component_auction(false);
+    return score_ads_response;
+  }
+
   auto desirability_itr =
       score_ad_resp.FindMember(kDesirabilityPropertyForScoreAd);
   if (desirability_itr == score_ad_resp.MemberEnd() ||
@@ -640,7 +652,10 @@ void ScoreAdsReactor::PerformReporting(
       .join_count = ad_data_.at(winning_ad_score.render()).get()->join_count(),
       .recency = ad_data_.at(winning_ad_score.render()).get()->recency(),
       .modeling_signals =
-          ad_data_.at(winning_ad_score.render()).get()->modeling_signals()};
+          ad_data_.at(winning_ad_score.render()).get()->modeling_signals(),
+      .seller = raw_request_.seller(),
+      .interest_group_name = winning_ad_score.interest_group_name(),
+      .ad_cost = ad_data_.at(winning_ad_score.render()).get()->ad_cost()};
   dispatch_request = GetReportingDispatchRequest(
       winning_ad_score, raw_request_.publisher_hostname(),
       enable_adtech_code_logging_, auction_config, logger_,
@@ -721,25 +736,28 @@ void ScoreAdsReactor::ScoreAdsCallback(
         // desirability is float.min_val, it is still selected.
         if (score_ads_response.desirability() >=
             desirability_of_most_desirable_ad) {
-          winning_ad = std::make_optional(score_ads_response);
+          winning_ad = score_ads_response;
           index_of_most_desirable_ad = index;
           desirability_of_most_desirable_ad = score_ads_response.desirability();
         }
         score_ad_map[score_ads_response.desirability()].push_back(index);
         ad_scores_.push_back(
             std::make_unique<ScoreAdsResponse::AdScore>(score_ads_response));
-        // Parse Ad rejection reason and store only if it has value.
-        const auto& ad_rejection_reason =
-            ParseAdRejectionReason(*response_json, ad->interest_group_owner(),
-                                   ad->interest_group_name(), logger_);
-        if (ad_rejection_reason.has_value()) {
-          ad_rejection_reasons.push_back(ad_rejection_reason.value());
-          seller_rejected_bid_count += 1;
-          LogIfError(
-              metric_context_
-                  ->AccumulateMetric<metric::kAuctionBidRejectedCount>(
-                      1, ToSellerRejectionReasonString(
-                             ad_rejection_reason.value().rejection_reason())));
+        if (!response_json->IsNumber()) {
+          // Parse Ad rejection reason and store only if it has value.
+          const auto& ad_rejection_reason =
+              ParseAdRejectionReason(*response_json, ad->interest_group_owner(),
+                                     ad->interest_group_name(), logger_);
+          if (ad_rejection_reason.has_value()) {
+            ad_rejection_reasons.push_back(ad_rejection_reason.value());
+            seller_rejected_bid_count += 1;
+            LogIfError(
+                metric_context_
+                    ->AccumulateMetric<metric::kAuctionBidRejectedCount>(
+                        1,
+                        ToSellerRejectionReasonString(
+                            ad_rejection_reason.value().rejection_reason())));
+          }
         }
       } else {
         logger_.warn(
@@ -838,6 +856,27 @@ void ScoreAdsReactor::ReportingCallback(
                      reporting_response.status().ToString(
                          absl::StatusToStringMode::kWithEverything));
         continue;
+      }
+      if (VLOG_IS_ON(1) && enable_adtech_code_logging_) {
+        for (std::string& log : reporting_response.value().seller_logs) {
+          logger_.vlog(1, "Log from Seller's execution script:", log);
+        }
+        for (std::string& log : reporting_response.value().seller_error_logs) {
+          logger_.vlog(1, "Error Log from Seller's execution script:", log);
+        }
+        for (std::string& log :
+             reporting_response.value().seller_warning_logs) {
+          logger_.vlog(1, "Warning Log from Seller's execution script:", log);
+        }
+        for (std::string& log : reporting_response.value().buyer_logs) {
+          logger_.vlog(1, "Log from Buyer's execution script:", log);
+        }
+        for (std::string& log : reporting_response.value().buyer_error_logs) {
+          logger_.vlog(1, "Error Log from Buyer's execution script:", log);
+        }
+        for (std::string& log : reporting_response.value().buyer_warning_logs) {
+          logger_.vlog(1, "Warning Log from Buyer's execution script:", log);
+        }
       }
       raw_response_.mutable_ad_score()
           ->mutable_win_reporting_urls()

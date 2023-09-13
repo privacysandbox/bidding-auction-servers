@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.0.0 (2023-09-12)
+
+
+### Features
+
+* Add C++ code coverage support
+* Add PUT support in HTTP client
+* Add SetContext() in ConsentedDebuggingLogger
+* Change secure_invoke output to be easily parsable by automated scripts
+* Log plaintext GenerateBidsRawRequest in Bidding
+* override metric's default public partition
+* PAS support for BFE
+* turn on external load balancer logging by default
+
+
+### Bug Fixes
+
+* Change generate_bid_code_version from int to string in API
+* [logging] Check for log fields in the response json from reporting scripts
+* [logging] VLOG the logs, errors and warnings exported from Roma for reporting.
+* [reporting] Add ad_cost and interest_group_name inputs to the reportWin function input
+* Add copyright line in license block
+* Add missing adCost to buyer's browser signals in the code wrapper
+* Allow ScoreAd to return a number
+* Check rapidjson property presence before access
+* Fix invalidCode error when buyer's script is not a correct expression
+* Fixes a comment in proto
+* revert documentation update until the build_and_test_all_in_docker script is updated
+* safe metric should not LogUnsafe
+* Set the log context in BFE
+* Updates the client types comments
+
+
+### cleanup
+
+* Change generate_bid_code_version from int to string in API
+
 ## 1.2.0 (2023-09-01)
 
 

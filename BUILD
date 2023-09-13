@@ -106,6 +106,17 @@ EOF""",
     message = "copy bazel build and test logs",
 )
 
+genrule(
+    name = "collect-coverage",
+    outs = ["collect_coverage.bin"],
+    cmd_bash = """cat << EOF > '$@'
+builders/tools/collect-coverage "\\$$@"
+EOF""",
+    executable = True,
+    local = True,
+    message = "generate coverage report",
+)
+
 string_flag(
     name = "build_flavor",
     build_setting_default = "prod",

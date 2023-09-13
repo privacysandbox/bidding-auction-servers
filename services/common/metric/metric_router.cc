@@ -29,9 +29,10 @@ namespace sdk = ::opentelemetry::sdk::metrics;
 
 MetricRouter::MetricRouter(std::unique_ptr<MeterProvider> provider,
                            absl::string_view service, absl::string_view version,
-                           PrivacyBudget fraction,
-                           absl::Duration dp_output_period)
-    : provider_(std::move(provider)), dp_(this, fraction, dp_output_period) {
+                           PrivacyBudget fraction, BuildDependentConfig config)
+    : provider_(std::move(provider)),
+      metric_config_(std::move(config)),
+      dp_(this, fraction) {
   if (!provider_) {
     ABSL_LOG(WARNING)
         << "MeterProvider is null at initializing, init with default";

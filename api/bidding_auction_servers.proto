@@ -329,7 +329,7 @@ message SelectAdRequest {
       // A buyer can pass this information to the Seller in RTB response.
       // If a version is not specified, the default version
       // (specified in the service startup config) will be used.
-      int32 generate_bid_code_version = 3;
+      string generate_bid_code_version = 3;
 
       // Optional.
       // A debug id passed by the buyer that will be logged with VLOG, if
@@ -417,10 +417,11 @@ message SelectAdRequest {
     UNKNOWN = 0;
 
     // An Android device with Google Mobile Services (GMS).
-    // Note: This covers apps on Android and browsers on Android.
+    // Note: This covers apps on Android.
     ANDROID = 1;
 
     // Any browser.
+    // Note: This covers browsers on Android and desktop.
     BROWSER = 2;
   }
 
@@ -540,7 +541,7 @@ message GetBidsResponse {
     // Represents a JSON object.
     repeated AdWithBid bids = 1;
 
-    // Includes ad_render_url and corresponding bid value pairs for each IG.
+    // Includes ad_render_url and corresponding bid value pairs.
     // Represents a JSON object.
     repeated ProtectedAppSignalsAdWithBid protected_app_signals_bids = 2;
   }
@@ -989,6 +990,9 @@ message ScoreAdsRequest {
 
     // Ad with bid for protected app signals.
     repeated ProtectedAppSignalsAdWithBidMetadata protected_app_signals_ad_bids = 10;
+
+    // Seller origin/domain
+    string seller = 11;
   }
 
   // Encrypted ScoreAdsRawRequest.

@@ -32,6 +32,7 @@
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "services/common/metric/definition.h"
 #include "services/common/metric/dp.h"
+#include "services/common/telemetry/telemetry_flag.h"
 
 namespace privacy_sandbox::server_common::metric {
 
@@ -45,7 +46,7 @@ class MetricRouter {
 
   MetricRouter(std::unique_ptr<MeterProvider> provider,
                absl::string_view service, absl::string_view version,
-               PrivacyBudget fraction, absl::Duration dp_output_period);
+               PrivacyBudget fraction, BuildDependentConfig config);
 
   ~MetricRouter() = default;
 
@@ -82,6 +83,8 @@ class MetricRouter {
       const Definition<T, privacy, instrument>& definition,
       absl::flat_hash_map<std::string, double> (*callback)());
 
+  const BuildDependentConfig& metric_config() const { return metric_config_; }
+
  private:
   friend class MetricRouterTest;
 
@@ -110,6 +113,7 @@ class MetricRouter {
       observerable_;
   std::unique_ptr<MeterProvider> provider_;
   Meter* meter_;
+  const BuildDependentConfig metric_config_;
   DifferentiallyPrivate<MetricRouter> dp_;
 };
 
@@ -202,6 +206,7 @@ template <typename T, Privacy privacy, Instrument instrument>
 absl::Status MetricRouter::LogUnSafe(
     const Definition<T, privacy, instrument>& definition, T value,
     absl::string_view partition) {
+  static_assert(privacy == Privacy::kImpacting);
   absl::string_view metric_name = definition.name_;
   if constexpr (instrument != Instrument::kUpDownCounter &&
                 instrument != Instrument::kPartitionedCounter &&
@@ -209,8 +214,7 @@ absl::Status MetricRouter::LogUnSafe(
     // ToDo(b/279955396): implement
     return absl::UnimplementedError("instrument type not done");
   }
-  dp_.Aggregate(&definition, value, partition);
-  return absl::OkStatus();
+  return dp_.Aggregate(&definition, value, partition);
 }
 
 inline void fetch(opentelemetry::metrics::ObserverResult observer_result,

@@ -35,7 +35,8 @@
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
 #include "services/common/metric/server_definition.h"
-#include "services/common/util/bid_stats.h"
+#include "services/common/util/async_task_tracker.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/context_logger.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/error_reporter.h"
@@ -335,7 +336,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Get Bid Results
   // Multiple threads can be writing buyer bid responses so this map
-  // gets locked when bid_stats_ updates the state of pending bids.
+  // gets locked when async_task_tracker_ updates the state of pending bids.
   // The map can be freely used without a lock after all the bids have
   // completed.
   BuyerBidsResponseMap shared_buyer_bids_map_;
@@ -348,6 +349,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Logger that logs enough context around a request so that it can be traced
   // through B&A services.
   ContextLogger logger_;
+  // Logger for consented debugging.
+  std::optional<ConsentedDebuggingLogger> debug_logger_;
 
   // Decompressed and decoded buyer inputs.
   absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>
@@ -377,7 +380,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Keeps track of how many buyer bids were expected initially and how many
   // were erroneous. If all bids ended up in an error state then that should be
   // flagged as an error eventually.
-  BidStats bid_stats_;
+  AsyncTaskTracker async_task_tracker_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

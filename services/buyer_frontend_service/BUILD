@@ -56,12 +56,14 @@ cc_library(
 cc_test(
     name = "buyer_frontend_utils_test",
     size = "small",
+    testonly = True,
     srcs = [
         "util/proto_factory_test.cc",
     ],
     deps = [
         "buyer_frontend_utils",
         "//services/common/test:random",
+        "//services/common/test/utils:test_utils",
         "@com_github_google_glog//:glog",
         "@com_google_googletest//:gtest_main",
     ],
@@ -120,6 +122,7 @@ cc_library(
         "//services/common/loggers:benchmarking_logger",
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/metric:server_definition",
+        "//services/common/util:async_task_tracker",
         "//services/common/util:consented_debugging_logger",
         "//services/common/util:context_logger",
         "//services/common/util:request_metadata",
@@ -173,6 +176,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_utils",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
@@ -211,5 +215,28 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
+    ],
+)
+
+cc_test(
+    name = "buyer_frontend_service_test",
+    size = "small",
+    srcs = [
+        "buyer_frontend_service_test.cc",
+    ],
+    deps = [
+        ":buyer_frontend_service",
+        "//services/common/encryption:crypto_client_factory",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "//services/common/test/utils:service_utils",
+        "//services/common/test/utils:test_utils",
+        "@com_google_absl//absl/base:log_severity",
+        "@com_google_absl//absl/log:scoped_mock_log",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

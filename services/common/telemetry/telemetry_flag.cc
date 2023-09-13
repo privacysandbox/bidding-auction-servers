@@ -125,4 +125,23 @@ absl::Status BuildDependentConfig::CheckMetricConfig(
   return ret.empty() ? absl::OkStatus() : absl::InvalidArgumentError(ret);
 }
 
+// Override the public parition of a metric
+void BuildDependentConfig::SetPartition(
+    absl::string_view name, absl::Span<const absl::string_view> partitions) {
+  auto& saved = *internal_config_[name].mutable_public_partitions();
+  saved.Assign(partitions.begin(), partitions.end());
+  absl::c_sort(saved);
+  partition_config_view_[name] = {saved.begin(), saved.end()};
+}
+
+absl::Span<const absl::string_view> BuildDependentConfig::GetPartition(
+    const metric::internal::Partitioned& definition,
+    const absl::string_view name) const {
+  auto it = partition_config_view_.find(name);
+  if (it == partition_config_view_.end()) {
+    return definition.public_partitions_;
+  }
+  return it->second;
+}
+
 }  // namespace privacy_sandbox::server_common

@@ -22,6 +22,10 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 struct BiddingServiceRuntimeConfig {
+  // Endpoint where the ad retrieval server is listening for protected app
+  // signals. Must be present iff running with protected app signals support.
+  std::string ad_retrieval_server_kv_server_addr = "";
+
   // Enables request decryption and response encryption.
   bool encryption_enabled = false;
 
@@ -35,6 +39,15 @@ struct BiddingServiceRuntimeConfig {
   bool enable_buyer_code_wrapper = false;
   // Enables exporting console.logs from Roma to Bidding Service
   bool enable_adtech_code_logging = false;
+  // Whether the OpenTelemetry Logs is enabled. It's used for consented
+  // debugging.
+  bool enable_otel_based_logging = false;
+  // The secret token for AdTech consented debugging.
+  std::string consented_debug_token = "";
+  // Indicates whether or not protected app signals support is enabled.
+  bool is_protected_app_signals_enabled = false;
+  // Time to wait for the ad retrieval request to complete.
+  int ad_retrieval_timeout_ms = 60000;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

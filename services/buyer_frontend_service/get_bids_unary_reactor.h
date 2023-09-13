@@ -17,6 +17,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,6 +36,8 @@
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/loggers/benchmarking_logger.h"
 #include "services/common/metric/server_definition.h"
+#include "services/common/util/async_task_tracker.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/context_logger.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
@@ -58,6 +61,18 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
       const BiddingAsyncClient& bidding_async_client,
       const GetBidsConfig& config,
+      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+      CryptoClientWrapperInterface* crypto_client,
+      bool enable_benchmarking = false);
+
+  explicit GetBidsUnaryReactor(
+      grpc::CallbackServerContext& context,
+      const GetBidsRequest& get_bids_request,
+      GetBidsResponse& get_bids_response,
+      const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
+      const BiddingAsyncClient& bidding_async_client,
+      const GetBidsConfig& config,
+      const ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       bool enable_benchmarking = false);
@@ -86,8 +101,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   bool DecryptRequest();
 
   // Encrypts `raw_response` and sets the result on the 'response_ciphertext'
-  // field in the response. Returns whether encryption was successful.
-  bool EncryptResponse();
+  // field in the response. Returns ok status if encryption succeeded.
+  absl::Status EncryptResponse();
 
   // Gets logging context (as a key/val pair) that can help debug/trace a
   // request through the BA services.
@@ -105,8 +120,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Should be released by gRPC after call is finished
   GetBidsResponse* get_bids_response_;
-  std::unique_ptr<GetBidsResponse::GetBidsRawResponse> get_bids_raw_response_ =
-      nullptr;
+  std::unique_ptr<GetBidsResponse::GetBidsRawResponse> get_bids_raw_response_;
 
   // Metadata to be sent to buyer KV server.
   RequestMetadata kv_metadata_;
@@ -115,18 +129,40 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // These are not owned by this class.
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
   const BiddingAsyncClient* bidding_async_client_;
+  // PAS bidding client should only be set by the caller if the feature is
+  // enabled.
+  const ProtectedAppSignalsBiddingAsyncClient*
+      protected_app_signals_bidding_async_client_;
   const GetBidsConfig& config_;
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
   std::string hpke_secret_;
   ContextLogger logger_;
+  std::optional<ConsentedDebuggingLogger> debug_logger_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;
 
+  // Keeps track of the pending bids and executes the registered callback once
+  // all the bids have been fetched.
+  AsyncTaskTracker async_task_tracker_;
+
+  // Maintains the errors observed during Protected Audience or Protected App
+  // Signals bid generation.
+  std::vector<std::string> bid_errors_;
+
+  // Logs GetBidsRawRequest if the consented debugging is enabled.
+  void MayLogRawRequest();
+
   // Gets Protected Audience Bids.
   void GetProtectedAudienceBids();
+
+  // Gets Protected App Signals bid from bidding if the feature is enabled.
+  void MayGetProtectedSignalsBids();
+
+  // Once all bids are fetched, this callback gets executed.
+  void OnAllBidsDone(bool any_successful_bids);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

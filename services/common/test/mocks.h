@@ -148,10 +148,22 @@ using BiddingAsyncClientMock =
                     GenerateBidsRequest::GenerateBidsRawRequest,
                     GenerateBidsResponse::GenerateBidsRawResponse>;
 
+using ProtectedAppSignalsBiddingAsyncClientMock =
+    AsyncClientMock<GenerateProtectedAppSignalsBidsRequest,
+                    GenerateProtectedAppSignalsBidsResponse,
+                    GenerateProtectedAppSignalsBidsRequest::
+                        GenerateProtectedAppSignalsBidsRawRequest,
+                    GenerateProtectedAppSignalsBidsResponse::
+                        GenerateProtectedAppSignalsBidsRawResponse>;
+
 // Utility class to be used by anything that relies on an HttpFetcherAsync.
 class MockHttpFetcherAsync : public HttpFetcherAsync {
  public:
   MOCK_METHOD(void, FetchUrl,
+              (const HTTPRequest& http_request, int timeout_ms,
+               OnDoneFetchUrl done_callback),
+              (override));
+  MOCK_METHOD(void, PutUrl,
               (const HTTPRequest& http_request, int timeout_ms,
                OnDoneFetchUrl done_callback),
               (override));

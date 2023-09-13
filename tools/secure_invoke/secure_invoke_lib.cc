@@ -224,9 +224,11 @@ absl::Status SendRequestToSfe(SelectAdRequest::ClientType client_type) {
           raw_select_ad_request_json, options, client_type,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
-              LOG(INFO) << *output;
+              // Standard output to compare response
+              // programatically by utilities.
+              std::cout << *output;
             } else {
-              LOG(ERROR) << output.status();
+              std::cerr << output.status();
             }
             notification.Notify();
           });
@@ -297,10 +299,12 @@ absl::Status SendRequestToBfe(
           get_bids_raw_request, request_options,
           [&status](absl::StatusOr<std::string> output) {
             if (output.ok()) {
-              LOG(INFO) << *output;
+              // Standard output to compare response
+              // programatically by utilities.
+              std::cout << *output;
             } else {
-              LOG(ERROR) << output.status();
               status = output.status();
+              std::cerr << output.status();
             }
           },
           std::move(stub));
