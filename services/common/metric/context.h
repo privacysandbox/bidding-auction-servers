@@ -275,11 +275,8 @@ class Context {
   template <typename T, Privacy privacy, Instrument instrument>
   absl::Status LogSafe(const Definition<T, privacy, instrument>& definition,
                        T value, absl::string_view partition) {
-    absl::flat_hash_map<std::string, std::string> attribute;
-    if constexpr (privacy == Privacy::kImpacting) {
-      attribute.emplace("Debugging", "Yes");
-    }
-    return metric_router_->LogSafe(definition, value, partition, attribute);
+    return metric_router_->LogSafe(definition, value, partition,
+                                   {{kNoiseAttribute.data(), "Raw"}});
   }
 
   template <typename T, Privacy privacy, Instrument instrument>
@@ -405,7 +402,12 @@ class Context {
         }
       }
     } else {
-      ABSL_LOG_EVERY_N_SEC(WARNING, 600)
+      // In this case, `public_partitions_` is not defined. if
+      // `max_partitions_contributed_` = 1, then it is not partitioned metric,
+      // just return the value; otherwise it is private parition metric that
+      // is not implemented yet, log a warning.
+      ABSL_LOG_IF_EVERY_N_SEC(WARNING,
+                              partitioned.max_partitions_contributed_ > 1, 600)
           << "public_partitions_ not defined for metric : " << name;
       ret.insert(ret.begin(), value.begin(), value.end());
       if (ret.size() >= partitioned.max_partitions_contributed_) {

@@ -42,20 +42,6 @@ struct GetBuyerValuesInput {
 };
 
 // Response from Buyer Key Value server as JSON string.
-struct GetBuyerValuesRawOutput {
-  std::string result;
-};
-
-// The data used to build the Buyer KV look url suffix
-struct GetBuyerValuesRawInput {
-  // [DSP] List of keys to query values for, under the namespace keys.
-  std::vector<std::string> keys;
-
-  // [DSP] The browser sets the hostname of the publisher page to be the value.
-  std::string hostname;
-};
-
-// Response from Buyer Key Value server as JSON string.
 struct GetBuyerValuesOutput {
   std::string result;
 };
@@ -63,8 +49,7 @@ struct GetBuyerValuesOutput {
 // This class fetches Key/Value pairs from a Buyer Key/Value Server instance
 // using a http client.
 class BuyerKeyValueAsyncHttpClient
-    : public AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput,
-                         GetBuyerValuesRawInput, GetBuyerValuesRawOutput> {
+    : public AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput> {
  public:
   // HttpFetcherAsync argument must outlive instance.
   // This class uses the http client to fetch KV values in real time.

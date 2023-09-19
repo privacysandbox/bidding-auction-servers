@@ -39,6 +39,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/bidding_service:bidding_constants",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
@@ -181,6 +182,7 @@ cc_binary(
         ":bidding_service",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/bidding_service:bidding_constants",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
@@ -191,6 +193,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:request_response_constants",
         "//services/common/util:signal_handler",
         "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
@@ -204,4 +207,9 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
     ],
+)
+
+cc_library(
+    name = "bidding_constants",
+    hdrs = ["constants.h"],
 )

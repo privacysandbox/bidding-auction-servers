@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.1.0 (2023-09-19)
+
+
+### Features
+
+* add boundary for unsafe histogram metric
+* Add docker-based sut using data from fledge sandbox
+* Add HTTP async client for ads retrieval
+* Add MultiLogger as an unified logging interface
+* add noise attribute to metric
+* Add secure_invoke rpc invoker for rpc diff testing
+* Allow clients to pass in a PublicKeyFetcher into KeyFetcherFactory.
+* Allow services to override the code blob versions
+* Deserialize ads retrieval response
+* Log plaintext responses in B&A servers
+* Log plaintext ScoreAdsRawRequest in Auction
+* Remove require-ascii pre-commit check on changelog
+* Skip call to Auction Service and return chaff when no scoring signals present
+* Take auction type in account in GenerateBid
+* Upgrade to functionaltest-system 0.9.0
+
+
+### Bug Fixes
+
+* Add a missing header file
+* Fix a broken test in MultiLogger
+* Revert the change in builders and testing/functionaltest-system
+
 ## 2.0.0 (2023-09-12)
 
 

@@ -147,7 +147,8 @@ class GenerateBidsReactorTest : public testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
-    key_fetcher_manager_ = CreateKeyFetcherManager(config_client);
+    key_fetcher_manager_ = CreateKeyFetcherManager(
+        config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
     request_.set_key_id(kKeyId);
     auto raw_request = MakeARandomGenerateBidsRawRequestForAndroid();

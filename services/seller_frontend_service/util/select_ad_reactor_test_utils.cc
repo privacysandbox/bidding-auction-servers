@@ -154,10 +154,11 @@ server_common::PrivateKey GetPrivateKey() {
 void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsResponseMap& expected_buyer_bids,
-    const std::optional<std::string>& ad_render_urls,
-    bool repeated_get_allowed) {
+    const std::optional<std::string>& scoring_signals_value,
+    bool repeated_get_allowed,
+    const std::optional<absl::Status>& server_error_to_return) {
   auto MockScoringSignalsProvider =
-      [&expected_buyer_bids, ad_render_urls](
+      [&expected_buyer_bids, scoring_signals_value, server_error_to_return](
           const ScoringSignalsRequest& scoring_signals_request,
           ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
         EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
@@ -174,11 +175,15 @@ void SetupScoringProviderMock(
                 return diff.Compare(*actual.second, *expected);
               }));
         }
-        auto scoring_signals = std::make_unique<ScoringSignals>();
-        if (ad_render_urls.has_value()) {
-          scoring_signals->scoring_signals =
-              std::make_unique<std::string>(ad_render_urls.value());
-          std::move(on_done)(std::move(scoring_signals));
+        if (server_error_to_return.has_value()) {
+          std::move(on_done)(std::move(server_error_to_return.value()));
+        } else {
+          auto scoring_signals = std::make_unique<ScoringSignals>();
+          if (scoring_signals_value.has_value()) {
+            scoring_signals->scoring_signals =
+                std::make_unique<std::string>(scoring_signals_value.value());
+            std::move(on_done)(std::move(scoring_signals));
+          }
         }
       };
   if (repeated_get_allowed) {

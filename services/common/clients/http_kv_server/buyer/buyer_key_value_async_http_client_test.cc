@@ -22,11 +22,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-using test_keys = std::unique_ptr<GetBuyerValuesInput>;
-using test_on_done = absl::AnyInvocable<
-    void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>;
-using test_timeout = absl::Duration;
-
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
   const std::string hostname_ = "https://googleads.g.doubleclick.net/td/bts";

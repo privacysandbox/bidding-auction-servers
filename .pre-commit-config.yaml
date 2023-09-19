@@ -55,6 +55,7 @@ repos:
         )$'
   - id: script-must-have-extension
   - id: require-ascii
+    exclude: ^(CHANGELOG|.*RELEASE)\.md$
   - id: shellcheck
     files: ^$
 

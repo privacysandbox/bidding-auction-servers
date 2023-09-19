@@ -104,6 +104,28 @@ inline constexpr server_common::metric::Definition<
 
 inline constexpr server_common::metric::Definition<
     int, server_common::metric::Privacy::kNonImpacting,
+    server_common::metric::Instrument::kHistogram>
+    kInitiatedResponseKVSize(
+        "initiated_response.kv.size_bytes",
+        "Size of the Initiated Response by KV server in Bytes",
+        server_common::metric::kSizeHistogram);
+inline constexpr server_common::metric::Definition<
+    int, server_common::metric::Privacy::kNonImpacting,
+    server_common::metric::Instrument::kHistogram>
+    kInitiatedResponseBiddingSize(
+        "initiated_response.bidding.size_bytes",
+        "Size of the Initiated Response by Bidding server in Bytes",
+        server_common::metric::kSizeHistogram);
+inline constexpr server_common::metric::Definition<
+    int, server_common::metric::Privacy::kNonImpacting,
+    server_common::metric::Instrument::kHistogram>
+    kInitiatedResponseAuctionSize(
+        "initiated_response.auction.size_bytes",
+        "Size of the initiated Response by Auction server in Bytes",
+        server_common::metric::kSizeHistogram);
+
+inline constexpr server_common::metric::Definition<
+    int, server_common::metric::Privacy::kNonImpacting,
     server_common::metric::Instrument::kPartitionedCounter>
     kInitiatedRequestCountByServer(
         /*name*/ "initiated_request.count_by_server",
@@ -212,11 +234,14 @@ inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
         &server_common::metric::kInitiatedRequestErrorCount,
         &server_common::metric::kInitiatedRequestTotalDuration,
         &server_common::metric::kInitiatedRequestByte,
+        &server_common::metric::kInitiatedResponseByte,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestBiddingDuration,
         &kInitiatedRequestKVSize,
         &kInitiatedRequestBiddingSize,
+        &kInitiatedResponseKVSize,
+        &kInitiatedResponseBiddingSize,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
@@ -243,11 +268,14 @@ inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
         &server_common::metric::kInitiatedRequestErrorCount,
         &server_common::metric::kInitiatedRequestTotalDuration,
         &server_common::metric::kInitiatedRequestByte,
+        &server_common::metric::kInitiatedResponseByte,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestAuctionDuration,
         &kInitiatedRequestKVSize,
         &kInitiatedRequestAuctionSize,
+        &kInitiatedResponseKVSize,
+        &kInitiatedResponseAuctionSize,
 };
 inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
@@ -309,21 +337,20 @@ template <typename ContextT>
 class InitiatedRequest {
  public:
   static std::unique_ptr<InitiatedRequest<ContextT>> Get(
-      absl::string_view request_destination, ContextT* context,
-      int request_size) {
-    return absl::WrapUnique(
-        new InitiatedRequest(request_destination, context, request_size));
+      absl::string_view request_destination, ContextT* context) {
+    return absl::WrapUnique(new InitiatedRequest(request_destination, context));
   }
+  void SetRequestSize(int request_size) { request_size_ = request_size; }
+
+  void SetResponseSize(int response_size) { response_size_ = response_size; }
 
   ~InitiatedRequest() { LogMetrics(); }
 
  private:
-  InitiatedRequest(absl::string_view request_destination, ContextT* context,
-                   int request_size)
+  InitiatedRequest(absl::string_view request_destination, ContextT* context)
       : destination_(request_destination),
         start_(absl::Now()),
-        metric_context_(*context),
-        request_size_(request_size) {}
+        metric_context_(*context) {}
 
   void LogMetrics() {
     int initiated_request_ms = (absl::Now() - start_) / absl::Milliseconds(1);
@@ -338,48 +365,55 @@ class InitiatedRequest {
         initiated_request_ms));
     LogIfError(metric_context_.template AccumulateMetric<
                server_common::metric::kInitiatedRequestByte>(request_size_));
+    LogIfError(metric_context_.template AccumulateMetric<
+               server_common::metric::kInitiatedResponseByte>(response_size_));
 
     if (destination_ == metric::kKv) {
       if constexpr (std::is_same_v<ContextT, SfeContext> ||
                     std::is_same_v<ContextT, BfeContext>) {
         LogOneServer<metric::kInitiatedRequestKVDuration,
-                     metric::kInitiatedRequestKVSize>(initiated_request_ms);
+                     metric::kInitiatedRequestKVSize,
+                     metric::kInitiatedResponseKVSize>(initiated_request_ms);
       }
     } else if (destination_ == metric::kBs) {
       if constexpr (std::is_same_v<ContextT, BfeContext>) {
         LogOneServer<metric::kInitiatedRequestBiddingDuration,
-                     metric::kInitiatedRequestBiddingSize>(
+                     metric::kInitiatedRequestBiddingSize,
+                     metric::kInitiatedResponseBiddingSize>(
             initiated_request_ms);
       }
     } else if (destination_ == metric::kAs) {
       if constexpr (std::is_same_v<ContextT, SfeContext>) {
         LogOneServer<metric::kInitiatedRequestAuctionDuration,
-                     metric::kInitiatedRequestAuctionSize>(
+                     metric::kInitiatedRequestAuctionSize,
+                     metric::kInitiatedResponseAuctionSize>(
             initiated_request_ms);
       }
     }
   }
 
-  template <const auto& DurationMetric, const auto& SizeMetric>
+  template <const auto& DurationMetric, const auto& RequestSizeMetric,
+            const auto& ResponseSizeMetric>
   void LogOneServer(int initiated_request_ms) {
     LogIfError(metric_context_.template LogHistogram<DurationMetric>(
         initiated_request_ms));
-    LogIfError(
-        metric_context_.template LogHistogram<SizeMetric>(request_size_));
+    LogIfError(metric_context_.template LogHistogram<RequestSizeMetric>(
+        request_size_));
+    LogIfError(metric_context_.template LogHistogram<ResponseSizeMetric>(
+        response_size_));
   }
 
   std::string destination_;
   absl::Time start_;
   ContextT& metric_context_;
   int request_size_;
+  int response_size_;
 };
 
 template <typename ContextT>
 std::unique_ptr<InitiatedRequest<ContextT>> MakeInitiatedRequest(
-    absl::string_view request_destination, ContextT* context,
-    int request_size) {
-  return InitiatedRequest<ContextT>::Get(request_destination, context,
-                                         request_size);
+    absl::string_view request_destination, ContextT* context) {
+  return InitiatedRequest<ContextT>::Get(request_destination, context);
 }
 
 }  // namespace metric

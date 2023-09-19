@@ -21,36 +21,40 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "rapidjson/document.h"
+#include "services/common/util/json_util.h"
+#include "services/common/util/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
-  absl::flat_hash_map<std::string, std::string> ig_owner_to_bfe_domain_map;
-  rapidjson::Document ig_owner_to_bfe_domain_json_value;
   if (ig_owner_to_bfe_domain.empty()) {
     return absl::InvalidArgumentError(
         "Empty string for IG Owner to BFE domain map");
   }
 
+  absl::flat_hash_map<std::string, BuyerServiceEndpoint>
+      ig_owner_to_bfe_endpoint_map;
+  rapidjson::Document ig_owner_to_bfe_endpoint_json_value;
   rapidjson::ParseResult parse_result =
-      ig_owner_to_bfe_domain_json_value
+      ig_owner_to_bfe_endpoint_json_value
           .Parse<rapidjson::kParseFullPrecisionFlag>(
               ig_owner_to_bfe_domain.data());
   if (parse_result.IsError()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Malformed IG Owner to BFE domain map, error: ",
+        absl::StrCat("Malformed IG Owner to BFE endpoint map, error: ",
                      rapidjson::GetParseError_En(parse_result.Code())));
   }
 
-  if (ig_owner_to_bfe_domain_json_value.MemberCount() < 1) {
-    return absl::InvalidArgumentError("Empty IG Owner to BFE domain map");
+  if (ig_owner_to_bfe_endpoint_json_value.MemberCount() < 1) {
+    return absl::InvalidArgumentError("Empty IG Owner to BFE endpoint map");
   }
 
   for (rapidjson::Value::MemberIterator itr =
-           ig_owner_to_bfe_domain_json_value.MemberBegin();
-       itr != ig_owner_to_bfe_domain_json_value.MemberEnd(); ++itr) {
+           ig_owner_to_bfe_endpoint_json_value.MemberBegin();
+       itr != ig_owner_to_bfe_endpoint_json_value.MemberEnd(); ++itr) {
     if (!itr->name.IsString()) {
       return absl::InvalidArgumentError(
           "Encountered IG Owner that was not string.");
@@ -61,19 +65,36 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
       return absl::InvalidArgumentError("Encountered empty IG Owner.");
     }
 
-    if (!itr->value.IsString()) {
+    if (!itr->value.IsObject()) {
       return absl::InvalidArgumentError(
-          "Encountered BFE Domain address that was not string.");
+          "Encountered BFE endpoint that was not an object.");
     }
 
-    const std::string& bfe_host_addr = itr->value.GetString();
-    if (bfe_host_addr.empty()) {
-      return absl::InvalidArgumentError(
-          "Encountered empty BFE domain address.");
+    rapidjson::Value buyer_service_endpoint_value = itr->value.GetObject();
+    if (buyer_service_endpoint_value.IsNull()) {
+      return absl::InvalidArgumentError("Encountered empty BFE endpoint.");
+    }
+
+    BuyerServiceEndpoint bfe_endpoint;
+    PS_ASSIGN_OR_RETURN(bfe_endpoint.endpoint,
+                        GetString(buyer_service_endpoint_value, "url"));
+
+    PS_ASSIGN_OR_RETURN(
+        std::string cloud_platform,
+        GetString(buyer_service_endpoint_value, "cloudPlatform"));
+    if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::GCP;
+    } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::AWS;
+    } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::LOCAL;
+    } else {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Invalid value for BFE endpoint cloud platform: ", cloud_platform));
     }
 
     auto [it_2, inserted] =
-        ig_owner_to_bfe_domain_map.try_emplace(ig_owner, bfe_host_addr);
+        ig_owner_to_bfe_endpoint_map.try_emplace(ig_owner, bfe_endpoint);
     if (!inserted) {
       return absl::InvalidArgumentError(
           "Entry not inserted into IG_owner->BFE map, check for "
@@ -81,11 +102,11 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
     }
   }
 
-  if (ig_owner_to_bfe_domain_map.empty()) {
+  if (ig_owner_to_bfe_endpoint_map.empty()) {
     return absl::InvalidArgumentError(
         "Zero valid entries for IG Owner to BFE domain map.");
   }
-  return ig_owner_to_bfe_domain_map;
+  return ig_owner_to_bfe_endpoint_map;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

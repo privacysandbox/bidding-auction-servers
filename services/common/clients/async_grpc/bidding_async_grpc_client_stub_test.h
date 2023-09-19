@@ -150,7 +150,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, /* public_key_fetcher= */ nullptr);
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -206,7 +207,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, /* public_key_fetcher= */ nullptr);
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -257,7 +259,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, CreatePublicKeyFetcher(this->config_client_));
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -317,7 +320,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, CreatePublicKeyFetcher(this->config_client_));
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -365,7 +369,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, CreatePublicKeyFetcher(this->config_client_));
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -414,7 +419,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientError(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, CreatePublicKeyFetcher(this->config_client_));
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));
@@ -464,7 +470,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(this->config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      this->config_client_, CreatePublicKeyFetcher(this->config_client_));
   auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
                                                  client_config.compression,
                                                  client_config.secure_client));

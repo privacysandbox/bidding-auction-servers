@@ -139,6 +139,10 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     logger_.vlog(2, "Accumulated Raw response:\n",
                  get_bids_raw_response_->DebugString());
   }
+  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+    debug_logger_->vlog(1, absl::StrCat("GetBidsRawResponse: ",
+                                        get_bids_raw_response_->DebugString()));
+  }
 
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     logger_.vlog(1, "Failed to encrypt the response");
@@ -316,14 +320,17 @@ void GetBidsUnaryReactor::MayLogRawRequest() {
 void GetBidsUnaryReactor::GetProtectedAudienceBids() {
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
   auto kv_request =
-      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get(), 0);
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
 
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
       [this, kv_request = std::move(kv_request)](
           absl::StatusOr<std::unique_ptr<BiddingSignals>> response) mutable {
-        {  // destruct kv_request, destructor measures request time
+        {
+          kv_request->SetRequestSize(0);
+          kv_request->SetResponseSize(0);
+          // destruct kv_request, destructor measures request time
           auto not_used = std::move(kv_request);
         }
         if (!response.ok()) {
@@ -356,18 +363,22 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
                                        std::move(bidding_signals), log_context);
 
   logger_.vlog(2, "GenerateBidsRequest:\n", raw_bidding_input->DebugString());
-  auto bidding_request = metric::MakeInitiatedRequest(
-      metric::kBs, metric_context_.get(), raw_bidding_input->ByteSizeLong());
+  auto bidding_request =
+      metric::MakeInitiatedRequest(metric::kBs, metric_context_.get());
+  bidding_request->SetRequestSize((int)raw_bidding_input->ByteSizeLong());
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
       std::move(raw_bidding_input), {},
       [this, bidding_request = std::move(bidding_request)](
           absl::StatusOr<
               std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
               raw_response) mutable {
-        {  // destruct bidding_request, destructor measures request time
+        {
+          int response_size =
+              raw_response.ok() ? (int)raw_response->get()->ByteSizeLong() : 0;
+          bidding_request->SetResponseSize(response_size);
+          // destruct bidding_request, destructor measures request time
           auto not_used = std::move(bidding_request);
         }
-
         HandleSingleBidCompletion<
             GenerateBidsResponse::GenerateBidsRawResponse>(
             std::move(raw_response),

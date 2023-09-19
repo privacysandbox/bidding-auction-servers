@@ -19,6 +19,11 @@
 #include <utility>
 #include <vector>
 
+#include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
+#include <rapidjson/error/error.h>
+#include <rapidjson/reader.h>
+
 #include "glog/logging.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
@@ -29,6 +34,10 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using PlatformToPublicKeyServiceEndpointMap = absl::flat_hash_map<
+    server_common::CloudPlatform,
+    std::vector<google::scp::cpio::PublicKeyVendingServiceEndpoint>>;
+
 using ::privacy_sandbox::server_common::KeyFetcherManagerFactory;
 using ::privacy_sandbox::server_common::KeyFetcherManagerInterface;
 using ::privacy_sandbox::server_common::PrivateKeyFetcherFactory;
@@ -36,18 +45,46 @@ using ::privacy_sandbox::server_common::PrivateKeyFetcherInterface;
 using ::privacy_sandbox::server_common::PublicKeyFetcherFactory;
 using ::privacy_sandbox::server_common::PublicKeyFetcherInterface;
 
-std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
+namespace {
+
+bool IsEncryptionDisabled(
     bidding_auction_servers::TrustedServersConfigClient& config_client) {
-  if (config_client.GetBooleanParameter(TEST_MODE) ||
-      !config_client.GetBooleanParameter(ENABLE_ENCRYPTION)) {
-    return std::make_unique<server_common::FakeKeyFetcherManager>();
+  return (config_client.GetBooleanParameter(TEST_MODE) ||
+          !config_client.GetBooleanParameter(ENABLE_ENCRYPTION));
+}
+
+}  // namespace
+
+std::unique_ptr<server_common::PublicKeyFetcherInterface>
+CreatePublicKeyFetcher(TrustedServersConfigClient& config_client) {
+  if (IsEncryptionDisabled(config_client)) {
+    return nullptr;
   }
 
   absl::string_view public_key_endpoint =
       config_client.GetStringParameter(PUBLIC_KEY_ENDPOINT);
   std::vector<std::string> endpoints = {public_key_endpoint.data()};
-  std::unique_ptr<PublicKeyFetcherInterface> public_key_fetcher =
-      PublicKeyFetcherFactory::Create(endpoints);
+
+  server_common::CloudPlatform cloud_platform =
+      server_common::CloudPlatform::LOCAL;
+#if defined(CLOUD_PLATFORM_AWS)
+  cloud_platform = server_common::CloudPlatform::AWS;
+#elif defined(CLOUD_PLATFORM_GCP)
+  cloud_platform = server_common::CloudPlatform::GCP;
+#endif
+
+  PlatformToPublicKeyServiceEndpointMap per_platform_endpoints = {
+      {cloud_platform, endpoints}};
+  return PublicKeyFetcherFactory::Create(per_platform_endpoints);
+}
+
+std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
+    bidding_auction_servers::TrustedServersConfigClient& config_client,
+    std::unique_ptr<server_common::PublicKeyFetcherInterface>
+        public_key_fetcher) {
+  if (IsEncryptionDisabled(config_client)) {
+    return std::make_unique<server_common::FakeKeyFetcherManager>();
+  }
 
   google::scp::cpio::PrivateKeyVendingEndpoint primary, secondary;
   primary.account_identity =

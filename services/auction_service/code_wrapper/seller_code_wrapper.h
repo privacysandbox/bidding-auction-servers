@@ -39,18 +39,6 @@ inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
 // This wrapper supports the features below:
 //- Exporting logs to Auction Service using console.log
 constexpr absl::string_view kEntryFunction = R"JS_CODE(
-    const forDebuggingOnly = {}
-    forDebuggingOnly.auction_win_url = undefined;
-    forDebuggingOnly.auction_loss_url = undefined;
-
-    forDebuggingOnly.reportAdAuctionLoss = (url) => {
-      forDebuggingOnly.auction_loss_url = url;
-    }
-
-    forDebuggingOnly.reportAdAuctionWin = (url) => {
-      forDebuggingOnly.auction_win_url = url;
-    }
-
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
       var ps_logs = [];
@@ -68,6 +56,17 @@ constexpr absl::string_view kEntryFunction = R"JS_CODE(
         }
       }
 
+      var forDebuggingOnly_auction_loss_url = undefined;
+      var forDebuggingOnly_auction_win_url = undefined;
+      const forDebuggingOnly = {};
+      forDebuggingOnly.reportAdAuctionLoss = function(url){
+        forDebuggingOnly_auction_loss_url = url;
+      }
+      forDebuggingOnly.reportAdAuctionWin = function(url){
+        forDebuggingOnly_auction_win_url = url;
+      }
+      globalThis.forDebuggingOnly = forDebuggingOnly;
+
       var scoreAdResponse = {};
       try {
         scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
@@ -76,11 +75,11 @@ constexpr absl::string_view kEntryFunction = R"JS_CODE(
           console.error("[Error: " + error + "; Message: " + message + "]");
       } finally {
         if( featureFlags.enable_debug_url_generation &&
-              (forDebuggingOnly.auction_win_url
-                  || forDebuggingOnly.auction_loss_url)) {
+              (forDebuggingOnly_auction_loss_url
+                  || forDebuggingOnly_auction_win_url)) {
           scoreAdResponse.debugReportUrls = {
-            auctionDebugLossUrl: forDebuggingOnly.auction_loss_url,
-            auctionDebugWinUrl: forDebuggingOnly.auction_win_url
+            auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
+            auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }

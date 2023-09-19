@@ -67,6 +67,7 @@ cc_library(
         "//services/common/clients:async_client",
         "//services/common/clients:client_factory_template",
         "//services/common/concurrent:local_cache",
+        "//services/seller_frontend_service/util:startup_param_parser",
         "@com_google_absl//absl/container:flat_hash_map",
     ],
 )

@@ -25,21 +25,26 @@ namespace {
 constexpr double hb[] = {1, 2};
 constexpr absl::string_view pv[] = {"buyer_1", "buyer_2"};
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kUpDownCounter>
-    c2("c2", "c21");
+    c2(/*name*/ "c2", /*description*/ "c21");
 constexpr Definition<int, Privacy::kImpacting, Instrument::kUpDownCounter> c3(
-    "c3", "c31", 123, 234);
+    /*name*/ "c3", /*description*/ "c31", /*upper_bound*/ 123,
+    /*lower_bound*/ 234);
 constexpr Definition<int, Privacy::kNonImpacting,
                      Instrument::kPartitionedCounter>
-    c4("c4", "c41", "buyer_name", pv);
+    c4(/*name*/ "c4", /*description*/ "c41", /*partition_type*/ "buyer_name",
+       pv);
 constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
-    c5("c5", "c51", "buyer_name", 2, pv, 123, 111);
+    c5(/*name*/ "c5", /*description*/ "c51", /*partition_type*/ "buyer_name",
+       /*max_partitions_contributed*/ 2, /*public_partitions*/ pv,
+       /*upper_bound*/ 123, /*lower_bound*/ 111);
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram> c6(
-    "c6", "c61", hb);
-constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram> c7("c7",
-                                                                          "c71",
-                                                                          hb);
+    /*name*/ "c6", /*description*/ "c61", /*histogram_boundaries*/ hb);
+constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram> c7(
+    /*name*/ "c7", /*description*/ "c71", /*histogram_boundaries*/ hb,
+    /*upper_bound*/ 1,
+    /*lower_bound*/ 0);
 constexpr Definition<int, Privacy::kNonImpacting, Instrument::kGauge> c8(
-    "c8 gauge", "c81");
+    /*name*/ "c8 gauge", /*description*/ "c81");
 
 inline constexpr const DefinitionName* kList[] = {&c2, &c3, &c4, &c5,
                                                   &c6, &c7, &c8};

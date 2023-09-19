@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "glog/logging.h"
 #include "services/common/compression/gzip.h"
@@ -117,6 +118,11 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     auction_result.set_ad_type(high_score->ad_type());
   } else {
     auction_result.set_is_chaff(true);
+  }
+
+  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+    debug_logger_->vlog(
+        1, absl::StrCat("AuctionResult: ", auction_result.DebugString()));
   }
 
   // Serialized the data to bytes array.

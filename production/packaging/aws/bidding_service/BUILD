@@ -48,7 +48,17 @@ pkg_files(
     prefix = "/",
 )
 
+pkg_files(
+    name = "kmstool_enclave_executable",
+    srcs = [
+        "@kmstool_enclave_cli//file",
+    ],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/",
+)
+
 server_binaries = [
+    ":kmstool_enclave_executable",
     ":server_bin_libs",
     ":server_executables",
 ]

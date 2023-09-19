@@ -222,7 +222,8 @@ constexpr Definition<int, Privacy::kImpacting, Instrument::kPartitionedCounter>
                        /*lower_bound*/ 0);
 
 constexpr Definition<int, Privacy::kImpacting, Instrument::kHistogram>
-    kUnSafeHistogram("unsafe_histogram", "description", histogram_boundaries);
+    kUnSafeHistogram("unsafe_histogram", "description", histogram_boundaries,
+                     10000, 0);
 
 TEST_F(MetricRouterDpNoNoiseTest, LogPartitioned) {
   for (int i = 0; i < 100; ++i) {

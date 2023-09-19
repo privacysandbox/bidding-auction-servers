@@ -19,6 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -34,8 +35,9 @@ constexpr char kFeatureEnabled[] = "true";
 // - Generation of event level debug reporting
 // - Exporting console.logs from the AdTech execution.
 // - wasmHelper added to device_signals
-std::string GetBuyerWrappedCode(absl::string_view adtech_js,
-                                absl::string_view adtech_wasm);
+std::string GetBuyerWrappedCode(
+    absl::string_view adtech_js, absl::string_view adtech_wasm = "",
+    AuctionType auction_type = AuctionType::kProtectedAudience);
 
 // Returns a JSON string for feature flags to be used by the wrapper script.
 std::string GetFeatureFlagJson(bool enable_logging,
@@ -46,24 +48,7 @@ std::string GetFeatureFlagJson(bool enable_logging,
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
-    const forDebuggingOnly = {}
-    forDebuggingOnly.auction_win_url = undefined;
-    forDebuggingOnly.auction_loss_url = undefined;
-
-    forDebuggingOnly.reportAdAuctionLoss = (url) => {
-      forDebuggingOnly.auction_loss_url = url;
-    }
-
-    forDebuggingOnly.reportAdAuctionWin = (url) => {
-      forDebuggingOnly.auction_win_url = url;
-    }
-
-    function generateBidEntryFunction(interest_group,
-                                auction_signals,
-                                buyer_signals,
-                                trusted_bidding_signals,
-                                device_signals,
-                                featureFlags){
+    function generateBidEntryFunction(%s, featureFlags){
       device_signals.wasmHelper = globalWasmHelper;
       var ps_logs = [];
       var ps_errors = [];
@@ -79,19 +64,30 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
           ps_warns.push(JSON.stringify(args))
         }
       }
+
+      var forDebuggingOnly_auction_loss_url = undefined;
+      var forDebuggingOnly_auction_win_url = undefined;
+      const forDebuggingOnly = {};
+      forDebuggingOnly.reportAdAuctionLoss = function(url){
+        forDebuggingOnly_auction_loss_url = url;
+      }
+      forDebuggingOnly.reportAdAuctionWin = function(url){
+        forDebuggingOnly_auction_win_url = url;
+      }
+      globalThis.forDebuggingOnly = forDebuggingOnly;
+
       var generateBidResponse = {};
       try {
-        generateBidResponse = generateBid(interest_group, auction_signals,
-          buyer_signals, trusted_bidding_signals, device_signals);
+        generateBidResponse = generateBid(%s);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
       } finally {
         if( featureFlags.enable_debug_url_generation &&
-            (forDebuggingOnly.auction_win_url
-                || forDebuggingOnly.auction_loss_url)) {
+             (forDebuggingOnly_auction_loss_url
+                  || forDebuggingOnly_auction_win_url)) {
           generateBidResponse.debug_report_urls = {
-            auction_debug_loss_url: forDebuggingOnly.auction_loss_url,
-            auction_debug_win_url: forDebuggingOnly.auction_win_url
+            auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
+            auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
         }
       }

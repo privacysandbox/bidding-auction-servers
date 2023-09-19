@@ -48,7 +48,25 @@ class DefaultAsyncGrpcClient
       : AsyncClient<Request, Response, RawRequest, RawResponse>(),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
-        encryption_enabled_(encryption_enabled) {}
+        encryption_enabled_(encryption_enabled) {
+#if defined(CLOUD_PLATFORM_AWS)
+    cloud_platform_ = server_common::CloudPlatform::AWS;
+#elif defined(CLOUD_PLATFORM_GCP)
+    cloud_platform_ = server_common::CloudPlatform::GCP;
+#else
+    cloud_platform_ = server_common::CloudPlatform::LOCAL;
+#endif
+  }
+
+  DefaultAsyncGrpcClient(
+      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+      CryptoClientWrapperInterface* crypto_client, bool encryption_enabled,
+      server_common::CloudPlatform cloud_platform)
+      : AsyncClient<Request, Response, RawRequest, RawResponse>(),
+        key_fetcher_manager_(key_fetcher_manager),
+        crypto_client_(crypto_client),
+        encryption_enabled_(encryption_enabled),
+        cloud_platform_(cloud_platform) {}
 
   DefaultAsyncGrpcClient(const DefaultAsyncGrpcClient&) = delete;
   DefaultAsyncGrpcClient& operator=(const DefaultAsyncGrpcClient&) = delete;
@@ -64,7 +82,8 @@ class DefaultAsyncGrpcClient
     }
     VLOG(5) << "Encrypting request ...";
     auto secret_request = EncryptRequestWithHpke<RawRequest, Request>(
-        std::move(raw_request), *crypto_client_, *key_fetcher_manager_);
+        std::move(raw_request), *crypto_client_, *key_fetcher_manager_,
+        cloud_platform_);
     if (!secret_request.ok()) {
       VLOG(1) << "Failed to encrypt the request: " << secret_request.status();
       auto error_status = absl::InternalError(kEncryptionFailed);
@@ -130,6 +149,8 @@ class DefaultAsyncGrpcClient
 
   // Whether HPKE encryption is enabled for intra-server communication.
   bool encryption_enabled_;
+
+  server_common::CloudPlatform cloud_platform_;
 };
 
 // Creates a shared grpc channel from a given server URL. This channel

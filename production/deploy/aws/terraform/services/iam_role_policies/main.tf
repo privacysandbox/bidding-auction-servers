@@ -76,6 +76,12 @@ data "aws_iam_policy_document" "instance_policy_doc" {
     effect    = "Allow"
     resources = ["*"]
   }
+  statement {
+    sid       = "AllowInstancesToAssumeRole"
+    actions   = ["sts:AssumeRole"]
+    effect    = "Allow"
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "instance_policy" {

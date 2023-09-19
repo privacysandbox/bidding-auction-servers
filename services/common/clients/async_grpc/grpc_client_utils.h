@@ -33,8 +33,9 @@ absl::StatusOr<std::pair<std::string, std::unique_ptr<Request>>>
 EncryptRequestWithHpke(
     std::unique_ptr<RawRequest> raw_request,
     CryptoClientWrapperInterface& crypto_client,
-    server_common::KeyFetcherManagerInterface& key_fetcher_manager) {
-  auto key = key_fetcher_manager.GetPublicKey();
+    server_common::KeyFetcherManagerInterface& key_fetcher_manager,
+    server_common::CloudPlatform cloud_platform) {
+  auto key = key_fetcher_manager.GetPublicKey(cloud_platform);
   if (!key.ok()) {
     const std::string error =
         absl::StrCat("Could not get public key to use for HPKE encryption: ",

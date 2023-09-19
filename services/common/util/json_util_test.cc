@@ -25,14 +25,14 @@ namespace {
 TEST(ParseJsonString, WorksForValidJsonString) {
   auto test_str = MakeARandomStructJsonString(4);
   absl::StatusOr<rapidjson::Document> output = ParseJsonString(*test_str);
-  EXPECT_TRUE(output.ok());
+  ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_TRUE(output.value().IsObject());
 }
 
 TEST(ParseJsonString, ReturnsInvalidArgumentForInvalidJsonString) {
   std::string test_str = "{" + MakeARandomString();
   absl::StatusOr<rapidjson::Document> output = ParseJsonString(test_str);
-  EXPECT_FALSE(output.ok());
+  ASSERT_FALSE(output.ok());
   EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
 }
 
@@ -51,7 +51,7 @@ TEST(SerializeJsonDoc, WorksForValidDocWithSize) {
 
   absl::StatusOr<std::shared_ptr<std::string>> output =
       SerializeJsonDoc(document, 20);
-  EXPECT_TRUE(output.ok());
+  ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_STREQ(output.value()->c_str(), expected_output.c_str());
 }
 
@@ -69,8 +69,27 @@ TEST(SerializeJsonDoc, WorksForValidDoc) {
   document.AddMember(key_v, val_v, document.GetAllocator());
 
   absl::StatusOr<std::string> output = SerializeJsonDoc(document);
-  EXPECT_TRUE(output.ok());
+  ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_STREQ(output.value().c_str(), expected_output.c_str());
+}
+
+TEST(SerializeJsonDoc, GetString_WorksForStringInDocument) {
+  std::string json_str = R"json({"key": "value"})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetString(*document, "key");
+  ASSERT_TRUE(actual_value.ok()) << actual_value.status();
+  EXPECT_EQ(*actual_value, "value");
+}
+
+TEST(SerializeJsonDoc, GetString_FailOnEmptyString) {
+  std::string json_str = R"json({"key": ""})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetString(*document, "key");
+  EXPECT_FALSE(actual_value.ok());
 }
 
 }  // namespace

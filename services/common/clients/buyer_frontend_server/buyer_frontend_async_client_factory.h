@@ -23,6 +23,7 @@
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/client_factory.h"
 #include "services/common/concurrent/local_cache.h"
+#include "services/seller_frontend_service/util/config_param_parser.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -38,7 +39,7 @@ class BuyerFrontEndAsyncClientFactory
   // requests to BuyerFrontEnd Server. Compression is disabled by default.
   // TLS is enabled by default.
   explicit BuyerFrontEndAsyncClientFactory(
-      const absl::flat_hash_map<std::string, std::string>&
+      const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
           buyer_ig_owner_to_bfe_addr_map,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,

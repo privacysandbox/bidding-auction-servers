@@ -30,8 +30,8 @@ using RequestMetadata = absl::flat_hash_map<std::string, std::string>;
 
 // Classes implementing this template and interface are able to execute
 // asynchronous requests.
-template <typename Request, typename Response, typename RawRequest,
-          typename RawResponse>
+template <typename Request, typename Response, typename RawRequest = Request,
+          typename RawResponse = Response>
 class AsyncClient {
  public:
   // Polymorphic class => virtual destructor

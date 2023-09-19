@@ -32,9 +32,7 @@ class HttpBiddingSignalsAsyncProvider final
     : public BiddingSignalsAsyncProvider {
  public:
   explicit HttpBiddingSignalsAsyncProvider(
-      std::unique_ptr<
-          AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput,
-                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>
+      std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>
           http_buyer_kv_async_client);
 
   // HttpBiddingSignalsAsyncProvider is neither copyable nor movable.
@@ -54,8 +52,7 @@ class HttpBiddingSignalsAsyncProvider final
            absl::Duration timeout) const override;
 
  private:
-  std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput,
-                              GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>
+  std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>
       http_buyer_kv_async_client_;
 };
 

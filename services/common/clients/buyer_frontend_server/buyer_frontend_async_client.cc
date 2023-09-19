@@ -27,7 +27,8 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
     BuyerServiceClientConfig client_config,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub)
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled),
+                             client_config.encryption_enabled,
+                             client_config.cloud_platform),
       stub_(std::move(stub)) {
   if (!stub_) {
     stub_ = BuyerFrontEnd::NewStub(CreateChannel(client_config.server_addr,

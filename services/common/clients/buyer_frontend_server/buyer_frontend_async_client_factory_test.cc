@@ -28,9 +28,11 @@ using ::testing::Return;
 TEST(BuyerFrontEndAsyncClientFactoryTest, GetCachesClientObjects) {
   std::string ig_owner = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
+  BuyerServiceEndpoint endpoint = {bfe_lb_url,
+                                   server_common::CloudPlatform::GCP};
 
-  absl::flat_hash_map<std::string, std::string> host_addr_map;
-  host_addr_map.emplace(ig_owner, bfe_lb_url);
+  absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
+  host_addr_map.emplace(ig_owner, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
       host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
 
@@ -41,9 +43,11 @@ TEST(BuyerFrontEndAsyncClientFactoryTest, GetCachesClientObjects) {
 TEST(BuyerFrontEndAsyncClientFactoryTest, GetReturnsNonNullClient) {
   std::string ig_owner = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
+  BuyerServiceEndpoint endpoint = {bfe_lb_url,
+                                   server_common::CloudPlatform::GCP};
 
-  absl::flat_hash_map<std::string, std::string> host_addr_map;
-  host_addr_map.emplace(ig_owner, bfe_lb_url);
+  absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
+  host_addr_map.emplace(ig_owner, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
       host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
 
@@ -57,10 +61,12 @@ TEST(BuyerFrontEndAsyncClientFactoryTest,
   std::string ig_owner_1 = MakeARandomString();
   std::string ig_owner_2 = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
+  BuyerServiceEndpoint endpoint = {bfe_lb_url,
+                                   server_common::CloudPlatform::GCP};
 
-  absl::flat_hash_map<std::string, std::string> host_addr_map;
-  host_addr_map.emplace(ig_owner_1, bfe_lb_url);
-  host_addr_map.emplace(ig_owner_2, bfe_lb_url);
+  absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
+  host_addr_map.emplace(ig_owner_1, endpoint);
+  host_addr_map.emplace(ig_owner_2, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
       host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
 

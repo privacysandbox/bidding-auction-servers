@@ -126,7 +126,8 @@ ClientRegistry CreateClientRegistry(
           .bidding_async_client = std::move(bidding_async_client),
           .protected_app_signals_bidding_async_client =
               std::move(protected_app_signals_bidding_async_client),
-          .key_fetcher_manager = CreateKeyFetcherManager(config_client),
+          .key_fetcher_manager = CreateKeyFetcherManager(
+              config_client, CreatePublicKeyFetcher(config_client)),
           .crypto_client = CreateCryptoClient()};
 }
 

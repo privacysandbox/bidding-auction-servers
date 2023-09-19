@@ -14,7 +14,10 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//services/seller_frontend_service:__pkg__"])
+package(default_visibility = [
+    "//services/common/clients/buyer_frontend_server:__pkg__",
+    "//services/seller_frontend_service:__pkg__",
+])
 
 cc_library(
     name = "startup_param_parser",
@@ -25,10 +28,13 @@ cc_library(
         "config_param_parser.h",
     ],
     deps = [
+        "//services/common/util:json_util",
+        "//services/common/util:status_macros",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:public_key_fetcher_interface",
         "@rapidjson",
     ],
 )
@@ -143,5 +149,34 @@ cc_library(
     deps = [
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/numeric:bits",
+    ],
+)
+
+cc_library(
+    name = "key_fetcher_utils",
+    srcs = ["key_fetcher_utils.cc"],
+    hdrs = ["key_fetcher_utils.h"],
+    deps = [
+        "//services/common/clients/config:config_client",
+        "//services/common/constants:common_service_flags",
+        "//services/common/util:json_util",
+        "//services/seller_frontend_service:runtime_flags",
+        "@com_github_google_glog//:glog",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:private_key_fetcher",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:public_key_fetcher",
+    ],
+)
+
+cc_test(
+    name = "key_fetcher_utils_test",
+    srcs = [
+        "key_fetcher_utils_test.cc",
+    ],
+    deps = [
+        ":key_fetcher_utils",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

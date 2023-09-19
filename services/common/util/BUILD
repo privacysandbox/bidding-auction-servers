@@ -286,6 +286,7 @@ cc_library(
     name = "post_auction_signals",
     hdrs = ["post_auction_signals.h"],
     deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -300,10 +301,15 @@ cc_library(
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
+        "//services/common/util:context_logger",
+        "//services/common/util:json_util",
+        "//services/common/util:status_macros",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@rapidjson",
     ],
 )
 
@@ -403,6 +409,33 @@ cc_test(
     ],
     deps = [
         ":async_task_tracker",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "multi_logger",
+    hdrs = ["multi_logger.h"],
+    deps = [
+        ":consented_debugging_logger",
+        ":context_logger",
+        ":source_location",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "multi_logger_test",
+    size = "small",
+    srcs = [
+        "multi_logger_test.cc",
+    ],
+    deps = [
+        ":consented_debugging_logger",
+        ":context_logger",
+        ":multi_logger",
+        ":request_response_constants",
         "@com_google_googletest//:gtest_main",
     ],
 )

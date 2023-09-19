@@ -361,7 +361,8 @@ class ScoreAdsReactorTest : public ::testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
-    auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+    auto key_fetcher_manager = CreateKeyFetcherManager(
+        config_client, /* public_key_fetcher= */ nullptr);
     runtime_config.encryption_enabled = true;
     request_.set_key_id(kKeyId);
     // The last parameter is a flag for whether to parse the Trusted Scoring

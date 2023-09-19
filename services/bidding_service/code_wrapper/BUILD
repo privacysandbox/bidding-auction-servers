@@ -27,6 +27,7 @@ cc_library(
         "//services/bidding_service:runtime_flags",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
     ],
 )

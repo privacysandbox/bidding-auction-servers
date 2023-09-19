@@ -154,3 +154,45 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "ads_retrieval_async_http_client",
+    srcs = [
+        "http_kv_server/buyer/ads_retrieval_async_http_client.cc",
+    ],
+    hdrs = [
+        "http_kv_server/buyer/ad_retrieval_constants.h",
+        "http_kv_server/buyer/ads_retrieval_async_http_client.h",
+    ],
+    deps = [
+        "client_params_template",
+        ":async_client",
+        ":http_kv_server_gen_url_utils",
+        "//services/common/clients/http:http_fetcher_async",
+        "//services/common/util:json_util",
+        "//services/common/util:request_metadata",
+        "//services/common/util:request_response_constants",
+        "//services/common/util:status_macros",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "ads_retrieval_async_http_client_test",
+    size = "small",
+    srcs = [
+        "http_kv_server/buyer/ads_retrieval_async_http_client_test.cc",
+    ],
+    deps = [
+        ":ads_retrieval_async_http_client",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

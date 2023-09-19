@@ -121,8 +121,8 @@ class DpAggregator : public DpAggregatorBase {
     for (auto& [partition, bounded_sum] : bounded_sums_) {
       PS_ASSIGN_OR_RETURN(*it, bounded_sum->PartialResult());
       PS_RETURN_IF_ERROR((metric_router_->LogSafe(
-          definition_, differential_privacy::GetValue<TValue>(*it),
-          partition)));
+          definition_, differential_privacy::GetValue<TValue>(*it), partition,
+          {{kNoiseAttribute.data(), "Noised"}})));
       ++it;
       bounded_sum->Reset();
     }
@@ -188,8 +188,11 @@ class DpAggregator<TMetricRouter, TValue, privacy, Instrument::kHistogram>
       ABSL_LOCKS_EXCLUDED(mutex_) {
     absl::MutexLock mutex_lock(&mutex_);
     absl::Span<const double> boundaries = definition_.histogram_boundaries_;
-    int index = std::lower_bound(boundaries.begin(), boundaries.end(), value) -
-                boundaries.begin();
+    TValue bounded_value = std::min(std::max(value, definition_.lower_bound_),
+                                    definition_.upper_bound_);
+    int index =
+        std::lower_bound(boundaries.begin(), boundaries.end(), bounded_value) -
+        boundaries.begin();
     bounded_sums_[index]->AddEntry(1);
     return absl::OkStatus();
   }
@@ -203,7 +206,14 @@ class DpAggregator<TMetricRouter, TValue, privacy, Instrument::kHistogram>
     absl::MutexLock mutex_lock(&mutex_);
     std::vector<differential_privacy::Output> ret(bounded_sums_.size());
     auto it = ret.begin();
-    for (int j = 0; j < bounded_sums_.size(); ++j) {
+    absl::Span<const double> boundaries = definition_.histogram_boundaries_;
+    int j = std::lower_bound(boundaries.begin(), boundaries.end(),
+                             definition_.lower_bound_) -
+            boundaries.begin();
+    int upper = std::lower_bound(boundaries.begin(), boundaries.end(),
+                                 definition_.upper_bound_) -
+                boundaries.begin();
+    for (; j <= upper; ++j) {
       auto& bounded_sum = bounded_sums_[j];
       PS_ASSIGN_OR_RETURN(*it, bounded_sum->PartialResult());
       auto bucket_mean =
@@ -211,7 +221,8 @@ class DpAggregator<TMetricRouter, TValue, privacy, Instrument::kHistogram>
       for (int i = 0, count = differential_privacy::GetValue<int>(*it++);
            i < count; ++i) {
         PS_RETURN_IF_ERROR(
-            (metric_router_->LogSafe(definition_, bucket_mean, "")));
+            (metric_router_->LogSafe(definition_, bucket_mean, "",
+                                     {{kNoiseAttribute.data(), "Noised"}})));
       }
       bounded_sum->Reset();
     }

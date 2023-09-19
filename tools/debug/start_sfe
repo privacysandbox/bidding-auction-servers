@@ -31,7 +31,12 @@ export GRPC_DNS_RESOLVER=native
 --auction_server_host="localhost:50061" \
 --key_value_signals_host="https://pubads.g.doubleclick.net/td/sts" \
 --seller_origin_domain="https://securepubads.g.doubleclick.net" \
---buyer_server_hosts="{\"https://td.doubleclick.net\": \"localhost:50051\"}" \
+--buyer_server_hosts='{
+  "https://td.doubleclick.net": {
+    "url": "localhost:50051",
+    "cloudPlatform": "LOCAL"
+  }
+}' \
 --enable_seller_frontend_benchmarking="true" \
 --score_ads_rpc_timeout_ms=60000 \
 --get_bid_rpc_timeout_ms=60000 --key_value_signals_fetch_rpc_timeout_ms 60000 \
