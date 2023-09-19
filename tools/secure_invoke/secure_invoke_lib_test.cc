@@ -122,7 +122,8 @@ class SecureInvokeLib : public testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
-    key_fetcher_manager_ = CreateKeyFetcherManager(config_client);
+    key_fetcher_manager_ = CreateKeyFetcherManager(
+        config_client, CreatePublicKeyFetcher(config_client));
 
     EXPECT_CALL(*bidding_signals_provider_, Get(_, _, _))
         .Times(AnyNumber())

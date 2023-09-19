@@ -17,6 +17,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,6 +34,7 @@
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/context_logger.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
@@ -101,6 +103,7 @@ class ScoreAdsReactor
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
   ContextLogger logger_;
+  std::optional<ConsentedDebuggingLogger> consented_logger_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
@@ -114,6 +117,8 @@ class ScoreAdsReactor
   bool enable_report_result_url_generation_;
   bool enable_report_win_url_generation_;
   std::string seller_origin_;
+  bool enable_otel_based_logging_;
+  std::string consented_debug_token_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

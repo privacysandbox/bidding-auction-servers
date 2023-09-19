@@ -36,6 +36,7 @@
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
+#include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/bidding_service/runtime_flags.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
@@ -47,6 +48,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/request_response_constants.h"
 #include "services/common/util/signal_handler.h"
 #include "services/common/util/status_macros.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
@@ -197,7 +199,8 @@ absl::Status RunServer() {
       return GetBuyerWrappedCode(adtech_code_blobs.at(0) /* js */,
                                  adtech_code_blobs.size() == 2
                                      ? adtech_code_blobs.at(1)
-                                     : "" /* wasm */);
+                                     : "" /* wasm */,
+                                 AuctionType::kProtectedAudience);
     };
 
     std::vector<std::string> endpoints = {js_url};
@@ -208,7 +211,8 @@ absl::Status RunServer() {
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
         endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
         std::move(http_fetcher), dispatcher, executor.get(),
-        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()), wrap_code);
+        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()), wrap_code,
+        kProtectedAudienceGenerateBidBlobVersion);
 
     code_fetcher->Start();
   } else if (!code_fetch_proto.bidding_js_path().empty()) {
@@ -300,10 +304,10 @@ absl::Status RunServer() {
       .ad_retrieval_timeout_ms =
           config_client.GetIntParameter(AD_RETRIEVAL_TIMEOUT_MS)};
 
-  BiddingService bidding_service(std::move(generate_bids_reactor_factory),
-                                 CreateKeyFetcherManager(config_client),
-                                 CreateCryptoClient(),
-                                 std::move(runtime_config));
+  BiddingService bidding_service(
+      std::move(generate_bids_reactor_factory),
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),
+      CreateCryptoClient(), std::move(runtime_config));
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

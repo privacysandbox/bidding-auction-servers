@@ -28,12 +28,12 @@ class ExperimentTest : public ContextTest {
     EXPECT_CALL(
         mock_metric_router_,
         LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntApproximateCounter)),
-                Eq(1), _, ElementsAre(Pair("Debugging", "Yes"))))
+                Eq(1), _, ElementsAre(Pair(kNoiseAttribute, "Raw"))))
         .WillOnce(Return(absl::OkStatus()));
     EXPECT_CALL(
         mock_metric_router_,
         LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntApproximateCounter2)),
-                Eq(2), _, ElementsAre(Pair("Debugging", "Yes"))))
+                Eq(2), _, ElementsAre(Pair(kNoiseAttribute, "Raw"))))
         .WillOnce(Return(absl::OkStatus()));
   }
 };

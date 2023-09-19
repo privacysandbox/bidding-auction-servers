@@ -160,7 +160,8 @@ TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
   TrustedServersConfigClient config_client({});
   config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestDefaultAsyncGrpcClient client(key_fetcher_manager.get(),
                                     crypto_client.get(), true, notification,
                                     req, timeout_ms);

@@ -42,6 +42,7 @@
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/config_param_parser.h"
+#include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
@@ -84,6 +85,9 @@ ABSL_FLAG(std::optional<bool>, auction_egress_tls, std::nullopt,
           "If true, auction service gRPC client uses TLS.");
 ABSL_FLAG(std::optional<bool>, buyer_egress_tls, std::nullopt,
           "If true, buyer frontend service gRPC clients uses TLS.");
+ABSL_FLAG(std::optional<std::string>, sfe_public_keys_endpoints, std::nullopt,
+          "Endpoints serving set of public keys used for encryption across the "
+          "supported cloud platforms");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -119,6 +123,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
   config_client.SetFlag(FLAGS_test_mode, TEST_MODE);
   config_client.SetFlag(FLAGS_public_key_endpoint, PUBLIC_KEY_ENDPOINT);
+  config_client.SetFlag(FLAGS_sfe_public_keys_endpoints,
+                        SFE_PUBLIC_KEYS_ENDPOINTS);
   config_client.SetFlag(FLAGS_primary_coordinator_private_key_endpoint,
                         PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT);
   config_client.SetFlag(FLAGS_secondary_coordinator_private_key_endpoint,
@@ -195,8 +201,12 @@ absl::Status RunServer() {
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
   server_common::GrpcInit gprc_init;
 
+  PS_ASSIGN_OR_RETURN(std::unique_ptr<server_common::PublicKeyFetcherInterface>
+                          public_key_fetcher,
+                      CreateSfePublicKeyFetcher(config_client));
   SellerFrontEndService seller_frontend_service(
-      &config_client, CreateKeyFetcherManager(config_client),
+      &config_client,
+      CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),
       CreateCryptoClient());
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

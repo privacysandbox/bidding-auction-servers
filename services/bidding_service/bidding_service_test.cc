@@ -68,8 +68,8 @@ TEST(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
         init_pending.DecrementCount();
         return mock;
       },
-      CreateKeyFetcherManager(config), std::move(crypto_client),
-      bidding_service_runtime_config);
+      CreateKeyFetcherManager(config, /* public_key_fetcher= */ nullptr),
+      std::move(crypto_client), bidding_service_runtime_config);
   grpc::CallbackServerContext context;
   auto mock = service.GenerateBids(&context, &request, &response);
   init_pending.Wait();
@@ -112,8 +112,8 @@ TEST_F(BiddingServer, EncryptsResponseEvenOnException) {
         init_pending.DecrementCount();
         return generate_bids_reactor.release();
       },
-      CreateKeyFetcherManager(config_), std::move(crypto_client_),
-      runtime_config_);
+      CreateKeyFetcherManager(config_, /* public_key_fetcher= */ nullptr),
+      std::move(crypto_client_), runtime_config_);
   LocalServiceStartResult start_service_result =
       StartLocalService(&bidding_service);
   std::unique_ptr<Bidding::StubInterface> stub =

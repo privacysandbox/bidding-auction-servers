@@ -89,7 +89,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 .encryption_enabled =
                     config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)})),
         buyer_factory_([this]() {
-          absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+          absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
               ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(
                   config_client_.GetStringParameter(BUYER_SERVER_HOSTS));
           CHECK_OK(ig_owner_to_bfe_domain_map);

@@ -372,7 +372,8 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
-    key_fetcher_manager_ = CreateKeyFetcherManager(config_client);
+    key_fetcher_manager_ = CreateKeyFetcherManager(
+        config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
   }
 
@@ -833,7 +834,8 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   SetupMockCryptoClientWrapper(*crypto_client);
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
-      key_fetcher_manager = CreateKeyFetcherManager(config_client);
+      key_fetcher_manager = CreateKeyFetcherManager(
+          config_client, /* public_key_fetcher= */ nullptr);
 
   const BiddingServiceRuntimeConfig& runtime_config = {
       .encryption_enabled = true,

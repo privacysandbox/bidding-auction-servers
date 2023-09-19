@@ -113,8 +113,8 @@ class MockExecutor : public server_common::Executor {
   MOCK_METHOD(bool, Cancel, (server_common::TaskId task_id), (override));
 };
 
-template <typename Request, typename Response, typename RawRequest,
-          typename RawResponse>
+template <typename Request, typename Response, typename RawRequest = Request,
+          typename RawResponse = Response>
 class AsyncClientMock
     : public AsyncClient<Request, Response, RawRequest, RawResponse> {
  public:

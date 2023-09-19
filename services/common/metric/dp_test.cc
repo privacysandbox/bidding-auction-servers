@@ -40,8 +40,10 @@ using ::testing::A;
 using ::testing::AtLeast;
 using ::testing::Between;
 using ::testing::DoubleNear;
+using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::Matcher;
+using ::testing::Pair;
 using ::testing::Ref;
 using ::testing::Return;
 using ::testing::ReturnRef;
@@ -67,16 +69,21 @@ constexpr DefinitionPartition kUnitPartionCounter(
 
 constexpr double kHistogram[] = {50, 100, 250};
 constexpr DefinitionHistogram kHistogramCounter("kHistogramCounter", "",
-                                                kHistogram);
+                                                kHistogram, 10000, 0);
+constexpr DefinitionHistogram kHistogramBounded("kHistogramBounded", "",
+                                                kHistogram, 100, 250);
 
 class MockMetricRouter {
  public:
   MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionUnSafe&), int, absl::string_view));
+              ((const DefinitionUnSafe&), int, absl::string_view,
+               (absl::flat_hash_map<std::string, std::string>)));
   MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionPartition&), int, absl::string_view));
+              ((const DefinitionPartition&), int, absl::string_view,
+               (absl::flat_hash_map<std::string, std::string>)));
   MOCK_METHOD(absl::Status, LogSafe,
-              ((const DefinitionHistogram&), int, absl::string_view));
+              ((const DefinitionHistogram&), int, absl::string_view,
+               (absl::flat_hash_map<std::string, std::string>)));
   MOCK_METHOD(const BuildDependentConfig&, metric_config, ());
 };
 
@@ -105,20 +112,20 @@ TEST_F(NoNoiseTest, DPCounterReset) {
   }
   EXPECT_CALL(mock_metric_router_,
               LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)),
-                      Eq(10), _))
+                      Eq(10), _, _))
       .WillOnce(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(auto output, d.OutputNoised());
 
   EXPECT_CALL(mock_metric_router_,
               LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)),
-                      Eq(0), _))
+                      Eq(0), _, _))
       .WillOnce(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(output, d.OutputNoised());
 
   CHECK_OK(d.Aggregate(1, ""));
   EXPECT_CALL(mock_metric_router_,
               LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)),
-                      Eq(1), _))
+                      Eq(1), _, _))
       .WillOnce(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(output, d.OutputNoised());
 }
@@ -132,7 +139,7 @@ TEST_F(NoNoiseTest, DPCounterBound) {
     EXPECT_CALL(
         mock_metric_router_,
         LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)), Eq(4),
-                _))
+                _, _))
         .WillOnce(Return(absl::OkStatus()));
     PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
   }
@@ -144,7 +151,7 @@ TEST_F(NoNoiseTest, DPCounterBound) {
     EXPECT_CALL(
         mock_metric_router_,
         LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)), Eq(2),
-                _))
+                _, _))
         .WillOnce(Return(absl::OkStatus()));
     PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
   }
@@ -162,17 +169,17 @@ TEST_F(NoNoiseTest, PartitionedCounter) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kUnitPartionCounter)),
-              Eq(10), Eq("buyer_1")))
+              Eq(10), Eq("buyer_1"), _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kUnitPartionCounter)),
-              Eq(20), Eq("buyer_2")))
+              Eq(20), Eq("buyer_2"), _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kUnitPartionCounter)),
-              Eq(0), Eq("buyer_no_data")))
+              Eq(0), Eq("buyer_no_data"), _))
       .WillOnce(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
 }
@@ -186,23 +193,45 @@ TEST_F(NoNoiseTest, HistogramCounter) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(25), Eq("")))
+              Eq(25), Eq(""), _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(75), Eq("")))
+              Eq(75), Eq(""), _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(175), Eq("")))
+              Eq(175), Eq(""), _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(251), Eq("")))
+              Eq(251), Eq(""), _))
       .Times(2)
+      .WillRepeatedly(Return(absl::OkStatus()));
+
+  PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
+}
+
+TEST_F(NoNoiseTest, HistogramBounded) {
+  internal::DpAggregator d(&mock_metric_router_, &kHistogramBounded,
+                           fraction());
+  for (int i = 0; i < 5; ++i) {
+    CHECK_OK(d.Aggregate(i * 100, ""));
+  }
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramBounded)),
+              Eq(75), Eq(""), _))
+      .Times(2)
+      .WillRepeatedly(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      mock_metric_router_,
+      LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramBounded)),
+              Eq(175), Eq(""), _))
+      .Times(3)
       .WillRepeatedly(Return(absl::OkStatus()));
 
   PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
@@ -220,7 +249,8 @@ TEST_F(NoiseTest, DPCounterNoise) {
   }
   EXPECT_CALL(
       mock_metric_router_,
-      LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kUnitCounter)), A<int>(), _))
+      LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kUnitCounter)), A<int>(), _,
+              ElementsAre(Pair(kNoiseAttribute, "Noised"))))
       .WillOnce(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(std::vector<differential_privacy::Output> s,
                           d.OutputNoised());
@@ -240,7 +270,7 @@ TEST_F(NoiseTest, DPPartitionCounterNoise) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionPartition&>(Ref(kUnitPartionCounter)),
-              A<int>(), _))
+              A<int>(), _, ElementsAre(Pair(kNoiseAttribute, "Noised"))))
       .WillRepeatedly(Return(absl::OkStatus()));
   PS_ASSERT_OK_AND_ASSIGN(std::vector<differential_privacy::Output> s,
                           d.OutputNoised());
@@ -259,24 +289,24 @@ TEST_F(NoiseTest, HistogramCounter) {
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(75), Eq("")))
+              Eq(75), Eq(""), ElementsAre(Pair(kNoiseAttribute, "Noised"))))
       .Times(AtLeast(50))
       .WillRepeatedly(Return(absl::OkStatus()));
 
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(25), Eq("")))
+              Eq(25), Eq(""), _))
       .WillRepeatedly(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(175), Eq("")))
+              Eq(175), Eq(""), _))
       .WillRepeatedly(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
       LogSafe(Matcher<const DefinitionHistogram&>(Ref(kHistogramCounter)),
-              Eq(251), Eq("")))
+              Eq(251), Eq(""), _))
       .WillRepeatedly(Return(absl::OkStatus()));
 
   PS_ASSERT_OK_AND_ASSIGN(auto s, d.OutputNoised());
@@ -295,17 +325,17 @@ TEST_F(NoNoiseTest, DifferentiallyPrivate) {
   CHECK_OK(dp.Aggregate(&kUnitCounter, 2, ""));
   EXPECT_CALL(mock_metric_router_,
               LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)),
-                      Eq(3), _))
+                      Eq(3), _, _))
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(
       mock_metric_router_,
-      LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kUnitCounter)), Eq(2), _))
+      LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kUnitCounter)), Eq(2), _, _))
       .WillOnce(Return(absl::OkStatus()));
 
   PS_ASSERT_OK_AND_ASSIGN(auto s, dp.OutputNoised());
 
   EXPECT_CALL(mock_metric_router_,
-              LogSafe(A<const DefinitionUnSafe&>(), Eq(0), _))
+              LogSafe(A<const DefinitionUnSafe&>(), Eq(0), _, _))
       .WillRepeatedly(Return(absl::OkStatus()));
 }
 
@@ -350,7 +380,7 @@ TEST_F(ThreadTest, DpAggregator) {
 
   EXPECT_CALL(mock_metric_router_,
               LogSafe(Matcher<const DefinitionUnSafe&>(Ref(kIntUnSafeCounter)),
-                      A<int>(), _))
+                      A<int>(), _, _))
       .WillRepeatedly(Return(absl::OkStatus()));
   start.Notify();
   for (int i = 0; i < f.size(); ++i) {
@@ -387,7 +417,7 @@ TEST_F(ThreadTest, DifferentiallyPrivate) {
   }
 
   EXPECT_CALL(mock_metric_router_,
-              LogSafe(A<const DefinitionUnSafe&>(), A<int>(), _))
+              LogSafe(A<const DefinitionUnSafe&>(), A<int>(), _, _))
       .WillRepeatedly(Return(absl::OkStatus()));
   start.Notify();
   for (int i = 0; i < f.size(); ++i) {

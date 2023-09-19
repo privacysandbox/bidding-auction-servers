@@ -17,12 +17,19 @@
 #include <string>
 #include <vector>
 
+#include <glog/logging.h>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
+constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
+    "interest_group, auction_signals, buyer_signals, trusted_bidding_signals, "
+    "device_signals";
+
 void AppendFeatureFlagValue(std::string& feature_flags,
                             absl::string_view feature_name,
                             bool is_feature_enabled) {
@@ -46,12 +53,25 @@ std::string WasmBytesToJavascript(absl::string_view wasm_bytes) {
 
   return absl::StrFormat(kWasmModuleTemplate, hex_array);
 }
+
+absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
+  switch (auction_type) {
+    case AuctionType::kProtectedAudience:
+      return kProtectedAudienceGenerateBidsArgs;
+    default:
+      VLOG(1) << "Unsupported auction type: " << absl::StrCat(auction_type);
+      return "";
+  }
+}
+
 }  // namespace
 
 std::string GetBuyerWrappedCode(absl::string_view adtech_js,
-                                absl::string_view adtech_wasm = "") {
-  return absl::StrCat(WasmBytesToJavascript(adtech_wasm), kEntryFunction,
-                      adtech_js);
+                                absl::string_view adtech_wasm,
+                                AuctionType auction_type) {
+  absl::string_view args = GetGenerateBidArgs(auction_type);
+  return absl::StrCat(WasmBytesToJavascript(adtech_wasm),
+                      absl::StrFormat(kEntryFunction, args, args), adtech_js);
 }
 
 std::string GetFeatureFlagJson(bool enable_logging,

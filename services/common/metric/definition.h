@@ -41,6 +41,7 @@ enum class Instrument {
 inline constexpr std::array<double, 0> kEmptyHistogramBoundaries = {};
 inline constexpr std::array<absl::string_view, 0> kEmptyPublicPartition = {};
 inline constexpr absl::string_view kEmptyPartitionType;
+inline constexpr absl::string_view kNoiseAttribute = "Noise";
 
 struct DefinitionName {
   constexpr explicit DefinitionName(absl::string_view name,
@@ -239,11 +240,13 @@ struct Definition : DefinitionName,
   template <Privacy impact = privacy, Instrument histogram = instrument>
   constexpr explicit Definition(
       absl::string_view name, absl::string_view description,
-      absl::Span<const double> histogram_boundaries,
+      absl::Span<const double> histogram_boundaries, T upper_bound,
+      T lower_bound,
       std::enable_if_t<impact == Privacy::kImpacting&& histogram ==
                        Instrument::kHistogram>* = nullptr)
       : DefinitionName(name, description),
-        internal::Histogram(histogram_boundaries) {
+        internal::Histogram(histogram_boundaries),
+        internal::DifferentialPrivacy<T>(upper_bound, lower_bound) {
     histogram_boundaries_copy_ = histogram_boundaries_;
     privacy_budget_weight_copy_ = privacy_budget_weight_;
   }
@@ -314,6 +317,11 @@ inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
     kInitiatedRequestByte("initiated_request.total_size_bytes",
                           "Size of all the initiated requests by a server",
                           kSizeHistogram);
+inline constexpr Definition<int, Privacy::kNonImpacting, Instrument::kHistogram>
+    kInitiatedResponseByte(
+        "initiated_response.total_size_bytes",
+        "Size of all the initiated responses received by a server",
+        kSizeHistogram);
 inline constexpr Definition<int, Privacy::kNonImpacting,
                             Instrument::kUpDownCounter>
     kInitiatedRequestErrorCount("initiated_request.errors_count",

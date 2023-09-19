@@ -145,7 +145,8 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
@@ -173,7 +174,8 @@ TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
@@ -206,7 +208,8 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
@@ -243,7 +246,8 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client_);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(

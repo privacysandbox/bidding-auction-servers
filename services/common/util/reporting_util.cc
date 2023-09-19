@@ -18,10 +18,32 @@
 #include <string>
 #include <utility>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
+#include "services/common/util/json_util.h"
+#include "services/common/util/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+namespace {
+
+inline constexpr char kLogs[] = "logs";
+inline constexpr char kWarnings[] = "warnings";
+inline constexpr char kErrors[] = "errors";
+
+void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
+                           const ContextLogger& logger,
+                           const std::string& log_type) {
+  auto logs_it = document.FindMember(log_type.c_str());
+  if (logs_it != document.MemberEnd()) {
+    for (const auto& log : logs_it->value.GetArray()) {
+      logger.vlog(1, log_type, ": ", log.GetString());
+    }
+  }
+}
+
+}  // namespace
 
 PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
@@ -181,4 +203,25 @@ absl::string_view ToSellerRejectionReasonString(
       return kRejectionReasonNotAvailable;
   }
 }
+
+void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
+                           const rapidjson::Document& document,
+                           const ContextLogger& logger) {
+  if (!enable_ad_tech_code_logging) {
+    return;
+  }
+
+  MayVlogAdTechCodeLogs(document, logger, kLogs);
+  MayVlogAdTechCodeLogs(document, logger, kWarnings);
+  MayVlogAdTechCodeLogs(document, logger, kErrors);
+}
+
+absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
+    bool enable_ad_tech_code_logging, const std::string& response,
+    const ContextLogger& logger) {
+  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
+  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, logger);
+  return SerializeJsonDoc(document["response"]);
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

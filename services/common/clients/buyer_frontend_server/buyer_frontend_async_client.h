@@ -38,6 +38,7 @@ struct BuyerServiceClientConfig {
   bool compression = false;
   bool secure_client = true;
   bool encryption_enabled = false;
+  server_common::CloudPlatform cloud_platform;
 };
 
 // This class is an async grpc client for Fledge Buyer FrontEnd Service.

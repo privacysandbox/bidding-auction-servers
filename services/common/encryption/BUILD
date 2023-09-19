@@ -29,6 +29,21 @@ cc_library(
     hdrs = [
         "key_fetcher_factory.h",
     ],
+    copts =
+        select(
+            {
+                "@google_privacysandbox_servers_common//:aws_instance": [
+                    "-DCLOUD_PLATFORM_AWS=1",
+                ],
+                "@google_privacysandbox_servers_common//:gcp_instance": [
+                    "-DCLOUD_PLATFORM_GCP=1",
+                ],
+                "@google_privacysandbox_servers_common//:local_instance": [
+                    "-DCLOUD_PLATFORM_LOCAL=1",
+                ],
+            },
+            no_match_error = "Please build for GCP, AWS, or local.",
+        ),
     visibility = ["//visibility:public"],
     deps = [
         "//services/common/clients/config:config_client",
@@ -56,6 +71,7 @@ cc_library(
         "@control_plane_shared//cc/public/cpio/interface/crypto_client",
         "@control_plane_shared//cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:public_key_fetcher_interface",
     ],
 )
 

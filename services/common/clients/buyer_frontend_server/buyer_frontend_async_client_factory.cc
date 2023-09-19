@@ -26,7 +26,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
-    const absl::flat_hash_map<std::string, std::string>&
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
         buyer_ig_owner_to_bfe_addr_map,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
@@ -36,23 +36,24 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
       bfe_addr_client_map;
   auto static_client_map = std::make_unique<absl::flat_hash_map<
       std::string, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
-  for (const auto& [ig_owner, bfe_host_addr] : buyer_ig_owner_to_bfe_addr_map) {
+  for (const auto& [ig_owner, bfe_endpoint] : buyer_ig_owner_to_bfe_addr_map) {
     // Can perform additional validations here.
-    if (ig_owner.empty() || bfe_host_addr.empty()) {
+    if (ig_owner.empty() || bfe_endpoint.endpoint.empty()) {
       continue;
     }
 
-    if (auto it = bfe_addr_client_map.find(bfe_host_addr);
+    if (auto it = bfe_addr_client_map.find(bfe_endpoint.endpoint);
         it != bfe_addr_client_map.end()) {
       static_client_map->try_emplace(ig_owner, it->second);
     } else {
       BuyerServiceClientConfig client_config_copy = client_config;
-      client_config_copy.server_addr = bfe_host_addr;
+      client_config_copy.server_addr = bfe_endpoint.endpoint;
+      client_config_copy.cloud_platform = bfe_endpoint.cloud_platform;
       auto bfe_client_ptr =
           std::make_shared<const BuyerFrontEndAsyncGrpcClient>(
               key_fetcher_manager, crypto_client,
               std::move(client_config_copy));
-      bfe_addr_client_map.insert({bfe_host_addr, bfe_client_ptr});
+      bfe_addr_client_map.insert({bfe_endpoint.endpoint, bfe_client_ptr});
       static_client_map->try_emplace(ig_owner, bfe_client_ptr);
     }
   }

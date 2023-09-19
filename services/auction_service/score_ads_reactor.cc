@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <limits>
 #include <list>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,6 +39,7 @@
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -416,26 +418,11 @@ std::shared_ptr<std::string> BuildAuctionConfig(
       "}"));
 }
 
-void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
-                           const ContextLogger& logger,
-                           const std::string& log_type) {
-  auto logs_it = document.FindMember(log_type.c_str());
-  if (logs_it != document.MemberEnd()) {
-    for (const auto& log : logs_it->value.GetArray()) {
-      logger.vlog(1, log_type, ": ", log.GetString());
-    }
-  }
-}
-
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
-    bool enable_adtech_code_logging, const std::string& response,
+    bool enable_ad_tech_code_logging, const std::string& response,
     const ContextLogger& logger) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  if (enable_adtech_code_logging) {
-    MayVlogAdTechCodeLogs(document, logger, "logs");
-    MayVlogAdTechCodeLogs(document, logger, "warnings");
-    MayVlogAdTechCodeLogs(document, logger, "errors");
-  }
+  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, logger);
   rapidjson::Document response_obj;
   auto iterator = document.FindMember("response");
   if (iterator != document.MemberEnd()) {
@@ -472,7 +459,9 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.enable_report_result_url_generation),
       enable_report_win_url_generation_(
           runtime_config.enable_report_win_url_generation),
-      roma_timeout_ms_(runtime_config.roma_timeout_ms) {
+      roma_timeout_ms_(runtime_config.roma_timeout_ms),
+      enable_otel_based_logging_(runtime_config.enable_otel_based_logging),
+      consented_debug_token_(runtime_config.consented_debug_token) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
@@ -483,15 +472,29 @@ ScoreAdsReactor::ScoreAdsReactor(
 ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
     const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request) {
   const auto& log_context = score_ads_request.log_context();
-  return {
+  ContextLogger::ContextMap context_map = {
       {kGenerationId, log_context.generation_id()},
-      {kSellerDebugId, log_context.adtech_debug_id()},
-  };
+      {kSellerDebugId, log_context.adtech_debug_id()}};
+  if (score_ads_request.has_consented_debug_config()) {
+    MaybeAddConsentedDebugConfig(score_ads_request.consented_debug_config(),
+                                 context_map);
+  }
+  return context_map;
 }
 
 void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
   logger_ = ContextLogger(GetLoggingContext(raw_request_));
+  if (enable_otel_based_logging_) {
+    consented_logger_ = ConsentedDebuggingLogger(
+        GetLoggingContext(raw_request_), consented_debug_token_);
+  }
+
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(
+        1, absl::StrCat("ScoreAdsRawRequest: ", raw_request_.DebugString()));
+  }
+
   auto ads = raw_request_.ad_bids();
   if (ads.empty()) {
     Finish(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kNoAdsToScore));
@@ -956,6 +959,10 @@ void ScoreAdsReactor::PerformDebugReporting(
 }
 
 void ScoreAdsReactor::FinishWithOkStatus() {
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(
+        1, absl::StrCat("ScoreAdsRawResponse: ", raw_response_.DebugString()));
+  }
   metric_context_->SetRequestSuccessful();
   Finish(grpc::Status::OK);
 }

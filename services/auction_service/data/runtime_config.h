@@ -41,6 +41,12 @@ struct AuctionServiceRuntimeConfig {
   bool enable_report_win_url_generation = false;
   // Seller's domain required as input for reporting url generation.
   std::string seller_origin = "";
+
+  // Whether the OpenTelemetry Logs is enabled. It's used for consented
+  // debugging.
+  bool enable_otel_based_logging = false;
+  // The secret token for AdTech consented debugging.
+  std::string consented_debug_token = "";
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

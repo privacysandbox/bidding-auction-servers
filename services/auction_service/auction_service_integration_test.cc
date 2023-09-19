@@ -296,7 +296,8 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   TrustedServersConfigClient config_client({});
   config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
@@ -382,7 +383,8 @@ void SellerCodeWrappingTestHelper(
   TrustedServersConfigClient config_client({});
   config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config = {
       .encryption_enabled = true,
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,

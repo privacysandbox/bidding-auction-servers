@@ -143,7 +143,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
@@ -198,7 +199,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
@@ -248,7 +250,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
@@ -307,7 +310,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   class_under_test.ExecuteInternal(
@@ -354,7 +358,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
@@ -402,7 +407,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientError(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
@@ -451,7 +457,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;

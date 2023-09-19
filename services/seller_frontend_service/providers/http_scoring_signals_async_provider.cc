@@ -20,9 +20,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 HttpScoringSignalsAsyncProvider::HttpScoringSignalsAsyncProvider(
-    std::unique_ptr<
-        AsyncClient<GetSellerValuesInput, GetSellerValuesOutput,
-                    GetSellerValuesRawInput, GetSellerValuesRawOutput>>
+    std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
         http_seller_kv_async_client)
     : http_seller_kv_async_client_(std::move(http_seller_kv_async_client)) {}
 

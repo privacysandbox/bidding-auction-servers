@@ -351,6 +351,7 @@ void SelectAdReactor::Execute() {
   logger_.vlog(1, "No client / Adtech server errors found");
 
   // Logger for consented debugging.
+  // TODO(b/279955398): Add logs for AuctionConfig & ClientType.
   if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
     std::visit(
         [this](const auto& protected_auction_input) {
@@ -456,13 +457,19 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
     auto get_bids_request =
         CreateGetBidsRequest(seller, buyer_ig_owner, buyer_input);
     auto bfe_request =
-        metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get(), 0);
+        metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get());
+    bfe_request->SetRequestSize((int)get_bids_request->ByteSizeLong());
     absl::Status execute_result = buyer_client->ExecuteInternal(
         std::move(get_bids_request), buyer_metadata_,
         [buyer_ig_owner, this, bfe_request = std::move(bfe_request)](
             absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
                 response) mutable {
-          {  // destruct bfe_request, destructor measures request time
+          {
+            int response_size =
+                response.ok() ? (int)response->get()->ByteSizeLong() : 0;
+            bfe_request->SetResponseSize(response_size);
+
+            // destruct bfe_request, destructor measures request time
             auto not_used = std::move(bfe_request);
           }
           VLOG(6) << "Received a bid response from a BFE";
@@ -538,12 +545,15 @@ void SelectAdReactor::FetchScoringSignals() {
   ScoringSignalsRequest scoring_signals_request(shared_buyer_bids_map_,
                                                 buyer_metadata_);
   auto kv_request =
-      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get(), 0);
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
   clients_.scoring_signals_async_provider.Get(
       scoring_signals_request,
       [this, kv_request = std::move(kv_request)](
           absl::StatusOr<std::unique_ptr<ScoringSignals>> result) mutable {
-        {  // destruct kv_request, destructor measures request time
+        {
+          kv_request->SetRequestSize(0);
+          kv_request->SetResponseSize(0);
+          // destruct kv_request, destructor measures request time
           auto not_used = std::move(kv_request);
         }
         OnFetchScoringSignalsDone(std::move(result));
@@ -554,14 +564,24 @@ void SelectAdReactor::FetchScoringSignals() {
 
 void SelectAdReactor::OnFetchScoringSignalsDone(
     absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
-  if (result.ok()) {
-    scoring_signals_ = std::move(result.value());
-  } else {
+  if (!result.ok()) {
     LogIfError(metric_context_->AccumulateMetric<
                server_common::metric::kInitiatedRequestErrorCount>(1));
-    // TODO(b/245982466): Handle early abort and errors.
     logger_.vlog(1, "Scoring signals fetch from key-value server failed: ",
                  result.status());
+    ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInternalError,
+                ErrorCode::SERVER_SIDE);
+    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    return;
+  }
+  scoring_signals_ = std::move(result).value();
+  // If signals are empty, return chaff.
+  if (scoring_signals_->scoring_signals->empty()) {
+    logger_.vlog(2,
+                 "Scoring signals fetch from key-value server succeeded but "
+                 "were empty.");
+    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    return;
   }
   ScoreAds();
 }
@@ -614,13 +634,18 @@ SelectAdReactor::CreateScoreAdsRequest() {
 void SelectAdReactor::ScoreAds() {
   auto raw_request = CreateScoreAdsRequest();
   logger_.vlog(2, "\nScoreAdsRawRequest:\n", raw_request->DebugString());
-  auto auction_request = metric::MakeInitiatedRequest(
-      metric::kAs, metric_context_.get(), raw_request->ByteSizeLong());
+  auto auction_request =
+      metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
+  auction_request->SetRequestSize((int)raw_request->ByteSizeLong());
   auto on_scoring_done =
       [this, auction_request = std::move(auction_request)](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
               result) mutable {
-        {  // destruct auction_request, destructor measures request time
+        {
+          int response_size =
+              result.ok() ? (int)result->get()->ByteSizeLong() : 0;
+          auction_request->SetResponseSize(response_size);
+          // destruct auction_request, destructor measures request time
           auto not_used = std::move(auction_request);
         }
         OnScoreAdsDone(std::move(result));
@@ -697,9 +722,11 @@ std::string SelectAdReactor::GetAccumulatedErrorString(
 void SelectAdReactor::OnScoreAdsDone(
     absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
         response) {
+  std::optional<AdScore> high_score;
   if (HaveAdServerVisibleErrors()) {
     logger_.vlog(
         3, "Finishing the SelectAdRequest RPC with ad server visible error");
+    PerformDebugReporting(high_score);
     Finish(grpc::Status(
         grpc::StatusCode::INVALID_ARGUMENT,
         GetAccumulatedErrorString(ErrorVisibility::AD_SERVER_VISIBLE)));
@@ -710,13 +737,13 @@ void SelectAdReactor::OnScoreAdsDone(
   if (!response.ok()) {
     LogIfError(metric_context_->AccumulateMetric<
                server_common::metric::kInitiatedRequestErrorCount>(1));
+    PerformDebugReporting(high_score);
     benchmarking_logger_->End();
     Finish(grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
                         std::string(response.status().message())));
     return;
   }
 
-  std::optional<AdScore> high_score;
   const auto& found_response = *response;
   if (found_response->has_ad_score() &&
       found_response->ad_score().buyer_bid() > 0) {
@@ -735,8 +762,7 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
-  std::string plaintext_response = std::move(*non_encrypted_response);
-  if (!EncryptResponse(std::move(plaintext_response))) {
+  if (!EncryptResponse(*std::move(non_encrypted_response))) {
     return;
   }
 
@@ -790,15 +816,15 @@ void SelectAdReactor::PerformDebugReporting(
       AdWithBid adWithBid = get_bid_response->bids().at(i);
       std::string ig_name = adWithBid.interest_group_name();
       if (adWithBid.has_debug_report_urls()) {
-        auto done_cb = [&logger_ = logger_, ig_owner,
+        auto done_cb = [&logger = logger_, ig_owner,
                         ig_name](absl::StatusOr<absl::string_view> result) {
           if (result.ok()) {
-            logger_.vlog(2, "Performed debug reporting for:", ig_owner,
-                         ", interest_group: ", ig_name);
+            VLOG(2) << "Performed debug reporting for:" << ig_owner
+                    << ", interest_group: " << ig_name;
           } else {
-            logger_.vlog(
-                1, "Error while performing debug reporting for: ", ig_owner,
-                ",  interest_group: ", ig_name, " ,status:", result.status());
+            VLOG(1) << "Error while performing debug reporting for:" << ig_owner
+                    << ", interest_group: " << ig_name
+                    << " ,status:" << result.status();
           }
         };
         std::string debug_url;

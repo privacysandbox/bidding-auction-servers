@@ -57,6 +57,26 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
   return Decode<T>(payload, error_accumulator, fail_fast);
 }
 
+// TODO(b/279955398): Consider using `cbor_describe`.
+void LogResponse(const std::optional<ScoreAdsResponse::AdScore>& high_score,
+                 const BiddingGroupsMap& bidding_group_map,
+                 const std::optional<AuctionResult::Error>& error,
+                 const ConsentedDebuggingLogger& consented_logger) {
+  if (error.has_value()) {
+    consented_logger.vlog(
+        1, absl::StrCat("AuctionResult::Error: ", error->DebugString()));
+  } else if (high_score.has_value()) {
+    consented_logger.vlog(1,
+                          absl::StrCat("AdScore: ", high_score->DebugString()));
+    for (const auto& [buyer, ig] : bidding_group_map) {
+      consented_logger.vlog(
+          1, absl::StrCat("bidding_group[", buyer, "]: ", ig.DebugString()));
+    }
+  } else {
+    consented_logger.vlog(1, "AuctionResult: is_chaff: true");
+  }
+}
+
 }  // namespace
 
 SelectAdReactorForWeb::SelectAdReactorForWeb(
@@ -70,6 +90,10 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
+  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+    LogResponse(high_score, bidding_group_map, error, debug_logger_.value());
+  }
+
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithInternalError, this);
   PS_ASSIGN_OR_RETURN(auto encoded_data, Encode(high_score, bidding_group_map,

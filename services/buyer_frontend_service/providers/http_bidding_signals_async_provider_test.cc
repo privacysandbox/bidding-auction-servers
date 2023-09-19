@@ -38,8 +38,7 @@ GetBidsRequest::GetBidsRawRequest GetRequest() {
 
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
-                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
   auto request = GetRequest();
   absl::Notification notification;
 
@@ -96,8 +95,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
 
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
-                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
   auto request = GetRequest();
   absl::Notification notification;
 
@@ -135,8 +133,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
 TEST(HttpBiddingSignalsAsyncProviderTest,
      MapsBuyerValuesAsyncClientResponseToBiddingSignals) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput,
-                      GetBuyerValuesRawInput, GetBuyerValuesRawOutput>>();
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
   auto request = GetRequest();
   request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
       MakeARandomInterestGroupFromBrowser().release());

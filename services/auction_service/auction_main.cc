@@ -293,11 +293,15 @@ absl::Status RunServer() {
           enable_report_result_url_generation,
       .enable_report_win_url_generation = enable_report_win_url_generation,
       .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data()};
-  AuctionService auction_service(std::move(score_ads_reactor_factory),
-                                 CreateKeyFetcherManager(config_client),
-                                 CreateCryptoClient(),
-                                 std::move(runtime_config));
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
+      .enable_otel_based_logging =
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
+      .consented_debug_token =
+          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN))};
+  AuctionService auction_service(
+      std::move(score_ads_reactor_factory),
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),
+      CreateCryptoClient(), std::move(runtime_config));
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

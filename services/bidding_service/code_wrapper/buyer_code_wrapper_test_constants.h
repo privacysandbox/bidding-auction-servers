@@ -44,24 +44,7 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
-    const forDebuggingOnly = {}
-    forDebuggingOnly.auction_win_url = undefined;
-    forDebuggingOnly.auction_loss_url = undefined;
-
-    forDebuggingOnly.reportAdAuctionLoss = (url) => {
-      forDebuggingOnly.auction_loss_url = url;
-    }
-
-    forDebuggingOnly.reportAdAuctionWin = (url) => {
-      forDebuggingOnly.auction_win_url = url;
-    }
-
-    function generateBidEntryFunction(interest_group,
-                                auction_signals,
-                                buyer_signals,
-                                trusted_bidding_signals,
-                                device_signals,
-                                featureFlags){
+    function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, featureFlags){
       device_signals.wasmHelper = globalWasmHelper;
       var ps_logs = [];
       var ps_errors = [];
@@ -77,19 +60,30 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
           ps_warns.push(JSON.stringify(args))
         }
       }
+
+      var forDebuggingOnly_auction_loss_url = undefined;
+      var forDebuggingOnly_auction_win_url = undefined;
+      const forDebuggingOnly = {};
+      forDebuggingOnly.reportAdAuctionLoss = function(url){
+        forDebuggingOnly_auction_loss_url = url;
+      }
+      forDebuggingOnly.reportAdAuctionWin = function(url){
+        forDebuggingOnly_auction_win_url = url;
+      }
+      globalThis.forDebuggingOnly = forDebuggingOnly;
+
       var generateBidResponse = {};
       try {
-        generateBidResponse = generateBid(interest_group, auction_signals,
-          buyer_signals, trusted_bidding_signals, device_signals);
+        generateBidResponse = generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
       } finally {
         if( featureFlags.enable_debug_url_generation &&
-            (forDebuggingOnly.auction_win_url
-                || forDebuggingOnly.auction_loss_url)) {
+             (forDebuggingOnly_auction_loss_url
+                  || forDebuggingOnly_auction_win_url)) {
           generateBidResponse.debug_report_urls = {
-            auction_debug_loss_url: forDebuggingOnly.auction_loss_url,
-            auction_debug_win_url: forDebuggingOnly.auction_win_url
+            auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
+            auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
         }
       }

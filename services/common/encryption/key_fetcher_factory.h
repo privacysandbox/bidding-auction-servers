@@ -24,11 +24,16 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+std::unique_ptr<server_common::PublicKeyFetcherInterface>
+CreatePublicKeyFetcher(TrustedServersConfigClient& config_client);
+
 // Constructs a KeyFetcherManager instance by using TrustedServersConfigClient
 // to fetch the required runtime config.
 std::unique_ptr<server_common::KeyFetcherManagerInterface>
 CreateKeyFetcherManager(
-    bidding_auction_servers::TrustedServersConfigClient& config_client);
+    TrustedServersConfigClient& config_client,
+    std::unique_ptr<server_common::PublicKeyFetcherInterface>
+        public_key_fetcher);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

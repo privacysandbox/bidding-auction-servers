@@ -167,7 +167,8 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
   // Revisit if we have to test against non-test deployments.
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client, CreatePublicKeyFetcher(config_client));
   auto crypto_client = CreateCryptoClient();
   BuyerFrontEndAsyncGrpcClient bfe_client(
       key_fetcher_manager.get(), crypto_client.get(), service_client_config,
@@ -267,13 +268,15 @@ std::string PackagePlainTextGetBidsRequestToJson() {
   TrustedServersConfigClient config_client({});
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  auto key_fetcher_manager = CreateKeyFetcherManager(config_client);
+  auto key_fetcher_manager = CreateKeyFetcherManager(
+      config_client, CreatePublicKeyFetcher(config_client));
   auto crypto_client = CreateCryptoClient();
   auto secret_request =
       EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
           std::make_unique<GetBidsRequest::GetBidsRawRequest>(
               get_bids_raw_request),
-          *crypto_client, *key_fetcher_manager);
+          *crypto_client, *key_fetcher_manager,
+          server_common::CloudPlatform::GCP);
   CHECK(secret_request.ok()) << secret_request.status();
   std::string get_bids_request_json;
   auto get_bids_request_json_status =

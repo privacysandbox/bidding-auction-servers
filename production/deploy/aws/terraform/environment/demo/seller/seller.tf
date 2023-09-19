@@ -105,7 +105,12 @@ module "seller" {
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
-    PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
+    PUBLIC_KEY_ENDPOINT       = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
+    SFE_PUBLIC_KEYS_ENDPOINTS = "" # Example:
+    # "{
+    #     "GCP": "https://sample-public-key-service-0.cloudfront.net/v1alpha/publicKeys"
+    #     "AWS": "https://sample-public-key-service-1.cloudfront.net/v1alpha/publicKeys"
+    # }"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
     SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
     PRIMARY_COORDINATOR_ACCOUNT_IDENTITY       = "" # Example: "arn:aws:iam::574738241422:role/mp-prim-ba_574738241422_coordinator_assume_role"

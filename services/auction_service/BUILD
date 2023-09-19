@@ -96,6 +96,7 @@ cc_library(
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
+        "//services/common/util:consented_debugging_logger",
         "//services/common/util:context_logger",
         "//services/common/util:json_util",
         "//services/common/util:reporting_util",

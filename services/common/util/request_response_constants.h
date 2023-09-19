@@ -128,6 +128,9 @@ inline constexpr std::array<absl::string_view, kNumWinReportingUrlsKeys>
                          kTopLevelSellerReportingUrls};
 inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
     kReportingKeys = {kReportingUrl, kInteractionReportingUrls};
+
+enum class AuctionType : int { kProtectedAudience };
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_REQUEST_RESPONSE_CONSTANTS_H_

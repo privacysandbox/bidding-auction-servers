@@ -421,6 +421,56 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
 
+TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
+  this->SetupRequestWithTwoBuyers();
+  absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  absl::flat_hash_map<AdUrl, AdWithBid> bids;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    AdUrl url = buyer_to_ad_url.at(buyer);
+    GetBidsResponse::GetBidsRawResponse response =
+        BuildGetBidsResponseWithSingleAd(url);
+    bids.insert_or_assign(url, response.bids().at(0));
+    SetupBuyerClientMock(buyer, buyer_clients, response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
+  }
+
+  // Scoring signals provider
+  std::string scoring_signals_value = "";
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                           scoring_signals_value);
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  // Scoring client should NOT be called when scoring signals are empty.
+  EXPECT_CALL(scoring_client, ExecuteInternal).Times(0);
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Client Registry
+  ClientRegistry clients{scoring_signals_provider, scoring_client,
+                         buyer_clients, this->key_fetcher_manager_,
+                         std::move(async_reporter)};
+  Response response =
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  // Decrypt to examine whether the result really is chaff.
+  AuctionResult auction_result = DecryptBrowserAuctionResult(
+      response.auction_result_ciphertext(), *this->context_);
+  // Empty signals should mean no call to auction and a chaff response.
+  EXPECT_TRUE(auction_result.is_chaff());
+}
+
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   std::string decision_logic = "function scoreAds(){}";
 
@@ -453,9 +503,11 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  std::string ad_render_urls;
+  // Scoring signals must be nonzero for scoring to be attempted.
+  std::string scoring_signals_value =
+      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           ad_render_urls);
+                           scoring_signals_value);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -706,9 +758,11 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  std::string ad_render_urls;
+  // Scoring signals must be nonzero for scoring to be attempted.
+  std::string scoring_signals_value =
+      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
   SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           ad_render_urls);
+                           scoring_signals_value);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;

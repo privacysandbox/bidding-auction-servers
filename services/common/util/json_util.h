@@ -109,6 +109,24 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
   return absl::InternalError("Unknown JSON to string serialization error");
 }
 
+// Returns the value for a corresponding field from a rapidjson::Value.
+// Note: This method returns an error if the value is empty.
+inline absl::StatusOr<std::string> GetString(rapidjson::Value& value,
+                                             absl::string_view field_name) {
+  auto itr = value.FindMember(field_name.data());
+  if (itr == value.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Field not found in document: ", field_name));
+  }
+
+  if (*value[field_name.data()].GetString() == 0) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Empty value for field in document: ", field_name));
+  }
+
+  return value[field_name.data()].GetString();
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_JSON_UTIL_H_

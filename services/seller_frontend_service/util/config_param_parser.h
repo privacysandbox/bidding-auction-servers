@@ -20,7 +20,14 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
+#include "src/cpp/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
+
+struct BuyerServiceEndpoint {
+  std::string endpoint;
+  server_common::CloudPlatform cloud_platform;
+};
 
 // Parses a JSON string containing a map of IG Owner to BFE Domain address
 // into an absl::flat_hash_map, which is what the
@@ -28,7 +35,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // startup config parameter in seller_frontend_main. Parsing may fail, in which
 // case the server should not start, hence the StatusOr. If the input to Factory
 // constructor changes, so should ths function.
-absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

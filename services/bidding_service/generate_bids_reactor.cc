@@ -27,6 +27,7 @@
 #include "absl/strings/str_format.h"
 #include "glog/logging.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
+#include "services/bidding_service/constants.h"
 #include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -292,12 +293,12 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation, const ContextLogger& logger,
-    const bool enable_adtech_code_logging) {
+    const bool enable_adtech_code_logging, uint64_t version_number) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
   // TODO(b/258790164) Update after code is fetched periodically.
-  generate_bid_request.version_num = 1;
+  generate_bid_request.version_num = version_number;
   // Copy base input and amend with custom interest_group
   generate_bid_request.input = base_input;
 
@@ -384,30 +385,6 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   return generate_bid_request;
 }
 
-absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
-    bool enable_adtech_code_logging, const std::string& response,
-    const ContextLogger& logger) {
-  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  rapidjson::Value& response_obj = document["response"];
-  std::string response_json;
-  PS_ASSIGN_OR_RETURN(response_json, SerializeJsonDoc(response_obj));
-  if (enable_adtech_code_logging) {
-    const rapidjson::Value& logs = document["logs"];
-    for (const auto& log : logs.GetArray()) {
-      logger.vlog(1, "Logs: ", log.GetString());
-    }
-    const rapidjson::Value& warnings = document["warnings"];
-    for (const auto& warning : warnings.GetArray()) {
-      logger.vlog(1, "Warnings: ", warning.GetString());
-    }
-    const rapidjson::Value& errors = document["errors"];
-    for (const auto& error : errors.GetArray()) {
-      logger.vlog(1, "Errors: ", error.GetString());
-    }
-  }
-  return response_json;
-}
-
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
@@ -468,7 +445,8 @@ void GenerateBidsReactor::Execute() {
         BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
                                 ig_trusted_signals_map.value(),
                                 enable_buyer_debug_url_generation_, logger_,
-                                enable_adtech_code_logging_);
+                                enable_adtech_code_logging_,
+                                kProtectedAudienceGenerateBidBlobVersion);
     if (!generate_bid_request.ok()) {
       if (VLOG_IS_ON(3)) {
         logger_.vlog(3, "Unable to build GenerateBidRequest: ",
@@ -585,6 +563,11 @@ void GenerateBidsReactor::GenerateBidsCallback(
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
+  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+    debug_logger_->vlog(1, absl::StrCat("GenerateBidsRawResponse: ",
+                                        raw_response_.DebugString()));
+  }
+
   DCHECK(encryption_enabled_);
   if (!EncryptResponse()) {
     logger_.vlog(1, "Failed to encrypt the generate bids response.");

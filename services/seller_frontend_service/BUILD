@@ -147,6 +147,7 @@ cc_binary(
         "//services/common/telemetry:configure_telemetry",
         "//services/common/util:signal_handler",
         "//services/common/util:status_macros",
+        "//services/seller_frontend_service/util:key_fetcher_utils",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli

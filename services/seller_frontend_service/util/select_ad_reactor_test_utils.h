@@ -101,7 +101,8 @@ void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsResponseMap& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
-    bool repeated_get_allowed = false);
+    bool repeated_get_allowed = false,
+    const std::optional<absl::Status>& server_error_to_return = std::nullopt);
 
 TrustedServersConfigClient CreateConfig();
 

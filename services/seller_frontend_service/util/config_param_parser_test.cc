@@ -25,20 +25,58 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+using ::privacy_sandbox::server_common::CloudPlatform;
 using ::testing::Return;
 
-// Leave these escaped; Raw formatting not available in Terraform .tf files.
 constexpr absl::string_view kBuyerHostMapForSingleBuyer =
-    "{\"https://bid1.com\": \"dns:///bfe-dev.bidding1.com:443\"}";
+    R"json(
+    {
+      "https://bid1.com": {
+        "url": "dns:///bfe-dev.bidding1.com:443",
+        "cloudPlatform": "GCP"
+      }
+    }
+    )json";
+
 constexpr absl::string_view kBuyerHostMapForMultipleBuyers =
-    "{\"https://bid2.com\": \"dns:///bfe-dev.buyer2-frontend.com:443\", "
-    "\"https://bid3.com\": \"dns:///bfe-dev.buyer3-frontend.com:443\", "
-    "\"https://bid4.com\": \"dns:///bfe-dev.buyer4-frontend.com:443\", "
-    "\"https://bid6.com\": \"dns:///bfe-dev.buyer6-frontend.com:443\", "
-    "\"https://bid7.com\": \"dns:///bfe-dev.buyer7-frontend.com:443\"}";
+    R"json(
+    {
+      "https://bid2.com": {
+        "url": "dns:///bfe-dev.buyer2-frontend.com:443",
+        "cloudPlatform": "GCP"
+      },
+      "https://bid3.com": {
+        "url": "dns:///bfe-dev.buyer3-frontend.com:443",
+        "cloudPlatform": "AWS"
+      },
+      "https://bid4.com": {
+        "url": "dns:///bfe-dev.buyer4-frontend.com:443",
+        "cloudPlatform": "GCP"
+      },
+      "https://bid5.com": {
+        "url": "dns:///bfe-dev.buyer5-frontend.com:443",
+        "cloudPlatform": "AWS"
+      },
+      "https://bid6.com": {
+        "url": "dns:///bfe-dev.buyer6-frontend.com:443",
+        "cloudPlatform": "GCP"
+      },
+      "https://bid7.com": {
+        "url": "dns:///bfe-dev.buyer7-frontend.com:443",
+        "cloudPlatform": "AWS"
+      }
+    }
+    )json";
 
 constexpr absl::string_view kBuyerHostMapForLocalhostBuyer =
-    "{\"https://bid1.com\": \"localhost:50051\"}";
+    R"json(
+    {
+      "https://bid1.com": {
+        "url": "localhost:50051",
+        "cloudPlatform": "LOCAL"
+      }
+    }
+    )json";
 
 TEST(StartupParamParserTest, ParseEmptyMap) {
   absl::string_view empty_buyer_host_map = R"json()json";
@@ -93,7 +131,8 @@ TEST(StartupParamParserTest, ParseSingleBuyerMap) {
   auto it = output.value().find("https://bid1.com");
   EXPECT_NE(it, output.value().end());
   if (it != output.value().end()) {
-    EXPECT_EQ(it->second, "dns:///bfe-dev.bidding1.com:443");
+    EXPECT_EQ(it->second.endpoint, "dns:///bfe-dev.bidding1.com:443");
+    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::GCP);
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
@@ -110,7 +149,8 @@ TEST(StartupParamParserTest, ParseSingleLocalhostBuyerMap) {
   auto it = output.value().find("https://bid1.com");
   EXPECT_NE(it, output.value().end());
   if (it != output.value().end()) {
-    EXPECT_EQ(it->second, "localhost:50051");
+    EXPECT_EQ(it->second.endpoint, "localhost:50051");
+    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::LOCAL);
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
@@ -136,14 +176,33 @@ TEST(StartupParamParserTest, ParseMultiBuyerMap) {
       auto it = output.value().find(current_ig_owner);
       EXPECT_NE(it, output.value().end());
       if (it != output.value().end()) {
-        EXPECT_EQ(it->second, absl::StrCat("dns:///bfe-dev.buyer",
-                                           std::to_string(buyer_number),
-                                           "-frontend.com:443"));
+        std::string url =
+            absl::StrCat("dns:///bfe-dev.buyer", std::to_string(buyer_number),
+                         "-frontend.com:443");
+        CloudPlatform platform =
+            (buyer_number % 2 == 0) ? CloudPlatform::GCP : CloudPlatform::AWS;
+        EXPECT_EQ(it->second.endpoint, url);
+        EXPECT_EQ(it->second.cloud_platform, platform);
         actual_buyer_async_client = class_under_test.Get(current_ig_owner);
         EXPECT_NE(actual_buyer_async_client.get(), nullptr);
       }
     }
   }
+}
+
+TEST(StartupParamParserTest, InvalidCloudPlatform) {
+  absl::string_view buyer_host_map = R"json(
+  {
+    "https://bid1.com": {
+      "url": "localhost:50051",
+      "cloudPlatform": "foo"
+    }
+  }
+  )json";
+
+  auto output = ParseIgOwnerToBfeDomainMap(buyer_host_map);
+  ASSERT_FALSE(output.ok());
+  EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
 }
 
 }  // namespace

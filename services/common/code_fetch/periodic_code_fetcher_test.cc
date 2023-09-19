@@ -181,5 +181,43 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
   code_fetcher.End();
 }
 
+TEST(PeriodicCodeFetcherTest, LoadsCodeWithTheCorrectVersion) {
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  MockV8Dispatcher dispatcher;
+  auto executor = std::make_unique<MockExecutor>();
+  auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
+    return "test";
+  };
+
+  absl::BlockingCounter done(1);
+  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
+      .WillOnce([](const std::vector<HTTPRequest>& requests,
+                   absl::Duration timeout,
+                   absl::AnyInvocable<
+                       void(std::vector<absl::StatusOr<std::string>>) &&>
+                       done_callback) { std::move(done_callback)({""}); });
+
+  EXPECT_CALL(*executor, Run)
+      .Times(1)
+      .WillOnce([&](absl::AnyInvocable<void()> closure) { closure(); });
+
+  constexpr uint64_t kTestVersion = 10;
+  EXPECT_CALL(dispatcher, LoadSync)
+      .WillOnce(
+          [&done, kTestVersion](int observed_version, absl::string_view js) {
+            EXPECT_EQ(observed_version, kTestVersion);
+            done.DecrementCount();
+            return absl::OkStatus();
+          });
+
+  PeriodicCodeFetcher code_fetcher({"code.com"}, absl::Milliseconds(1000),
+                                   std::move(curl_http_fetcher), dispatcher,
+                                   executor.get(), absl::Milliseconds(100),
+                                   wrap_code, kTestVersion);
+  code_fetcher.Start();
+  done.Wait();
+  code_fetcher.End();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

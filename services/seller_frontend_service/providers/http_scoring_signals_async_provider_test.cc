@@ -31,8 +31,7 @@ using ::testing::An;
 
 TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
-                      GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
+      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
   std::vector<std::string> ad_render_urls;
   std::vector<std::string> ad_component_render_urls;
@@ -105,8 +104,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
 
 TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
-                      GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
+      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
   absl::Notification notification;
 
@@ -146,8 +144,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
 
 TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
   auto mock_client = std::make_unique<
-      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput,
-                      GetSellerValuesRawInput, GetSellerValuesRawOutput>>();
+      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
   absl::Notification notification;
   std::string expected_output = MakeARandomString();
