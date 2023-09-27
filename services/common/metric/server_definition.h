@@ -319,9 +319,9 @@ using AuctionContext = server_common::metric::ServerContext<kAuctionMetricSpan>;
 
 }  // namespace metric
 
-inline void LogIfError(const absl::Status& s,
-                       absl::string_view message = "when logging metric",
-                       SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG) {
+inline void LogIfError(
+    const absl::Status& s, absl::string_view message = "when logging metric",
+    server_common::SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG) {
   if (s.ok()) return;
   ABSL_LOG_EVERY_N_SEC(WARNING, 60)
           .AtLocation(location.file_name(), location.line())

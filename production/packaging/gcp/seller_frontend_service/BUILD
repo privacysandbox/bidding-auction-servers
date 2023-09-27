@@ -130,10 +130,11 @@ container_image(
         ":envoy_distroless_layer",
         ":envoy_config_layer",
     ],
-    # Envoy and SFE ports, respectively:
+    # Envoy, SFE, and SFE Non-TLS Healthcheck ports, respectively:
     ports = [
         "51052",
         "50051",
+        "50050",
     ],
 )
 

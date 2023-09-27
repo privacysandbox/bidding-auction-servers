@@ -172,10 +172,10 @@ cc_library(
         "//services/common/util:json_util",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",
-        "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )

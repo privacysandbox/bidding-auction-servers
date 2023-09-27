@@ -41,13 +41,16 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/signal_handler.h"
-#include "services/common/util/status_macros.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
+ABSL_FLAG(std::optional<uint16_t>, healthcheck_port, std::nullopt,
+          "Non-TLS port dedicated to healthchecks. Must differ from --port.");
+
 ABSL_FLAG(std::optional<std::string>, bidding_server_addr, std::nullopt,
           "Bidding Server Address");
 ABSL_FLAG(std::optional<std::string>, buyer_kv_server_addr, std::nullopt,
@@ -92,6 +95,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     std::string config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
+  config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_bidding_server_addr, BIDDING_SERVER_ADDR);
   config_client.SetFlag(FLAGS_buyer_kv_server_addr, BUYER_KV_SERVER_ADDR);
   config_client.SetFlag(FLAGS_generate_bid_timeout_ms, GENERATE_BID_TIMEOUT_MS);
@@ -262,6 +266,17 @@ absl::Status RunServer() {
     // deployed behind an HTTPS load balancer that terminates TLS.
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
   }
+
+  if (config_client.HasParameter(HEALTHCHECK_PORT)) {
+    CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
+          config_client.GetStringParameter(PORT))
+        << "Healthcheck port must be unique.";
+    builder.AddListeningPort(
+        absl::StrCat("0.0.0.0:",
+                     config_client.GetStringParameter(HEALTHCHECK_PORT)),
+        grpc::InsecureServerCredentials());
+  }
+
   builder.RegisterService(&buyer_frontend_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());

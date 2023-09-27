@@ -75,7 +75,11 @@ container_image(
     layers = [
         ":server_binary_layer",
     ],
-    ports = ["50051"],
+    # BFE and BFE Non-TLS Healthcheck ports, respectively:
+    ports = [
+        "50051",
+        "50050",
+    ],
 )
 
 container_test(

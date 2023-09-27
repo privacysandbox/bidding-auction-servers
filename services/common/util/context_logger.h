@@ -26,16 +26,17 @@
 #include "absl/strings/string_view.h"
 #include "glog/logging.h"
 #include "glog/vlog_is_on.h"
-#include "services/common/util/source_location.h"
+#include "src/cpp/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 template <class T>
 struct ParamWithSourceLoc {
   T mandatory_param;
-  SourceLocation location;
+  server_common::SourceLocation location;
   template <class U>
-  ParamWithSourceLoc(U param, SourceLocation loc_in PS_LOC_CURRENT_DEFAULT_ARG)
+  ParamWithSourceLoc(
+      U param, server_common::SourceLocation loc_in PS_LOC_CURRENT_DEFAULT_ARG)
       : mandatory_param(std::forward<U>(param)), location(loc_in) {}
 };
 
@@ -52,14 +53,16 @@ class ContextLogger {
   template <class... T>
   void vlog(ParamWithSourceLoc<int> verbosity_with_source_loc,
             T&&... msg) const {
-    const SourceLocation& location = verbosity_with_source_loc.location;
+    const server_common::SourceLocation& location =
+        verbosity_with_source_loc.location;
     int verbosity = verbosity_with_source_loc.mandatory_param;
     vlog(location, verbosity, std::forward<T>(msg)...);
   }
 
   // Sometimes we will have wrappers around the logger and vlog.
   template <class... T>
-  void vlog(const SourceLocation& location, int verbosity, T&&... msg) const {
+  void vlog(const server_common::SourceLocation& location, int verbosity,
+            T&&... msg) const {
     if (VLOG_IS_ON(verbosity)) {
       ((google::LogMessage(location.file_name(), location.line(),
                            google::GLOG_INFO)
@@ -98,7 +101,7 @@ class ContextLogger {
       google::LogSeverity log_severity,
       const ParamWithSourceLoc<absl::string_view>& first_msg_with_loc,
       T&&... msg) const {
-    const SourceLocation& location = first_msg_with_loc.location;
+    const server_common::SourceLocation& location = first_msg_with_loc.location;
     ((google::LogMessage(location.file_name(), location.line(), log_severity)
           .stream()
       << context_ << first_msg_with_loc.mandatory_param)

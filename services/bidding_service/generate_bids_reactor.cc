@@ -31,8 +31,8 @@
 #include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/status_macros.h"
-#include "services/common/util/status_util.h"
+#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -405,23 +405,25 @@ GenerateBidsReactor::GenerateBidsReactor(
                         metric::BiddingContextMap()->Remove(request_));
     return absl::OkStatus();
   }()) << "BiddingContextMap()->Get(request) should have been called";
+
+  ContextLogger::ContextMap context_map = GetLoggingContext(raw_request_);
+  logger_ = ContextLogger(context_map);
+  if (enable_otel_based_logging_) {
+    consented_logger_ =
+        ConsentedDebuggingLogger(context_map, consented_debug_token_);
+  }
 }
 
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
-  logger_ = ContextLogger(GetLoggingContext(raw_request_));
-  if (enable_otel_based_logging_) {
-    debug_logger_ = ConsentedDebuggingLogger(GetLoggingContext(raw_request_),
-                                             consented_debug_token_);
-  }
 
   // Logger for consented debugging.
   // The IsConsented() check here is for performance reasons, so we don't build
   // the debug string if it is not going to be logged.
   // TODO: Re-implement vlog() as a variadic function.
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    debug_logger_->vlog(0, absl::StrCat("GenerateBidsRawRequest: ",
-                                        raw_request_.DebugString()));
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(1, absl::StrCat("GenerateBidsRawRequest: ",
+                                            raw_request_.DebugString()));
   }
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
@@ -433,7 +435,8 @@ void GenerateBidsReactor::Execute() {
     logger_.vlog(0, "Request failed while parsing bidding signals: ",
                  ig_trusted_signals_map.status().ToString(
                      absl::StatusToStringMode::kWithEverything));
-    EncryptResponseAndFinish(FromAbslStatus(ig_trusted_signals_map.status()));
+    EncryptResponseAndFinish(
+        server_common::FromAbslStatus(ig_trusted_signals_map.status()));
     return;
   }
 
@@ -563,9 +566,9 @@ void GenerateBidsReactor::GenerateBidsCallback(
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    debug_logger_->vlog(1, absl::StrCat("GenerateBidsRawResponse: ",
-                                        raw_response_.DebugString()));
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(1, absl::StrCat("GenerateBidsRawResponse: ",
+                                            raw_response_.DebugString()));
   }
 
   DCHECK(encryption_enabled_);

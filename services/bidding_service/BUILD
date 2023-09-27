@@ -51,12 +51,12 @@ cc_library(
         "//services/common/util:context_logger",
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
-        "//services/common/util:status_macros",
-        "//services/common/util:status_util",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
     ],
 )
@@ -195,7 +195,6 @@ cc_binary(
         "//services/common/telemetry:configure_telemetry",
         "//services/common/util:request_response_constants",
         "//services/common/util:signal_handler",
-        "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli
@@ -206,6 +205,7 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 

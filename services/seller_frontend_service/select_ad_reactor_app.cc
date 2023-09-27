@@ -20,9 +20,9 @@
 #include "absl/strings/str_format.h"
 #include "glog/logging.h"
 #include "services/common/compression/gzip.h"
-#include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -120,8 +120,8 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     auction_result.set_is_chaff(true);
   }
 
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    debug_logger_->vlog(
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(
         1, absl::StrCat("AuctionResult: ", auction_result.DebugString()));
   }
 

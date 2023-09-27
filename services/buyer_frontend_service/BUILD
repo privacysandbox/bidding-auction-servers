@@ -203,7 +203,6 @@ cc_binary(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
         "//services/common/util:signal_handler",
-        "//services/common/util:status_macros",
         "@aws_sdk_cpp//:core",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
@@ -215,6 +214,7 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 

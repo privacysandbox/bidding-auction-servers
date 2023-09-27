@@ -34,7 +34,7 @@
 #include "absl/synchronization/mutex.h"
 #include "services/common/metric/definition.h"
 #include "services/common/telemetry/telemetry_flag.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::server_common::metric {
 

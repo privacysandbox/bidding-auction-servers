@@ -53,9 +53,9 @@ variable "frontend_domain_ssl_certificate_id" {
   type        = string
 }
 
-variable "frontend_instance_groups" {
-  description = "Frontend instance group URLs created by instance group managers."
-  type        = set(string)
+variable "frontend_instance_group_managers" {
+  description = "Frontend instance group managers."
+  type        = set(any)
 }
 
 variable "frontend_service_name" {
@@ -66,9 +66,15 @@ variable "frontend_service_port" {
   description = "The grpc port that receives traffic destined for the frontend service."
   type        = number
 }
-variable "backend_instance_groups" {
-  description = "Backend instance group URsL created by instance group managers."
-  type        = set(string)
+
+variable "frontend_service_healthcheck_port" {
+  description = "The Non-TLS grpc port that receives healthcheck traffic."
+  type        = number
+}
+
+variable "backend_instance_group_managers" {
+  description = "Backend instance group managers."
+  type        = set(any)
 }
 
 variable "backend_address" {
@@ -90,9 +96,9 @@ variable "collector_ip_address" {
   type        = string
 }
 
-variable "collector_instance_groups" {
-  description = "OpenTelemetry collector instance group URLs created by instance group managers."
-  type        = set(string)
+variable "collector_instance_group_managers" {
+  description = "OpenTelemetry collector instance group managers."
+  type        = set(any)
 }
 
 variable "collector_service_name" {
@@ -102,4 +108,31 @@ variable "collector_service_name" {
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
   type        = number
+}
+
+variable "region_config" {
+  description = "Map of region configs. Each key should be a region name. The value is the autoscaling configuration for the region."
+  type = map(object({
+    collector = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    backend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    frontend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+  }))
 }

@@ -33,7 +33,8 @@ void OnRpcDone(
     std::function<absl::StatusOr<std::unique_ptr<RawResponse>>(Response*)>
         decrypt_response) {
   if (!status.ok()) {
-    VLOG(1) << "SendRPC completion status not ok: " << ToAbslStatus(status);
+    VLOG(1) << "SendRPC completion status not ok: "
+            << server_common::ToAbslStatus(status);
     params->OnDone(status);
     return;
   }

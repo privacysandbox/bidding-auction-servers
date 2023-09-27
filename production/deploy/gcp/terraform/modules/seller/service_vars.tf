@@ -28,9 +28,31 @@ variable "operator" {
   type        = string
 }
 
-variable "regions" {
-  description = "Regions to deploy to."
-  type        = set(string)
+variable "region_config" {
+  description = "Map of region configs. Each key should be a region name. The value is the autoscaling configuration for the region."
+  type = map(object({
+    collector = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    backend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    frontend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+  }))
 }
 
 variable "gcp_project_id" {
@@ -66,16 +88,6 @@ variable "frontend_dns_zone" {
 variable "frontend_domain_ssl_certificate_id" {
   description = "A GCP ssl certificate id. Example: projects/bas-dev-383721/global/sslCertificates/dev"
   type        = string
-}
-
-variable "min_replicas_per_service_region" {
-  description = "Minimum amount of replicas per each service region (a single managed instance group)."
-  type        = number
-}
-
-variable "max_replicas_per_service_region" {
-  description = "Maximum amount of replicas per each service region (a single managed instance group)."
-  type        = number
 }
 
 variable "vm_startup_delay_seconds" {
@@ -114,21 +126,6 @@ variable "tee_impersonate_service_accounts" {
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
   type        = number
-}
-
-variable "sfe_machine_type" {
-  description = "Machine type for the Seller Frontend Service. Must be compatible with confidential compute."
-  type        = string
-}
-
-variable "auction_machine_type" {
-  description = "Machine type for the Auction Service. Must be compatible with confidential compute."
-  type        = string
-}
-
-variable "collector_machine_type" {
-  description = "Machine type for the collector service."
-  type        = string
 }
 
 variable "instance_template_waits_for_instances" {

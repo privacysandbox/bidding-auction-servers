@@ -30,12 +30,12 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/test/utils:ohttp_test_utils",
-        "//services/common/util:status_macros",
         "//services/seller_frontend_service/util:framing_utils",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 

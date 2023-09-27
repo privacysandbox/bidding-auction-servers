@@ -350,7 +350,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // through B&A services.
   ContextLogger logger_;
   // Logger for consented debugging.
-  std::optional<ConsentedDebuggingLogger> debug_logger_;
+  std::optional<ConsentedDebuggingLogger> consented_logger_;
 
   // Decompressed and decoded buyer inputs.
   absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>

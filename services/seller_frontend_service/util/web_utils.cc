@@ -28,7 +28,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "services/common/compression/gzip.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 #include "cbor.h"
 
@@ -522,7 +522,8 @@ EncodedBuyerInputs DecodeBuyerInputKeys(
 bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
                  const cbor_item_t* item, absl::string_view field_name,
                  absl::string_view expected_type,
-                 ErrorAccumulator& error_accumulator, SourceLocation location) {
+                 ErrorAccumulator& error_accumulator,
+                 server_common::SourceLocation location) {
   if (!is_valid_type(item)) {
     absl::string_view actual_type = kUnknownDataType;
     if (item->type < kCborDataTypesLookup.size()) {

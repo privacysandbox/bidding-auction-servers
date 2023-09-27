@@ -41,13 +41,14 @@ module "buyer" {
   buyer_frontend_image = "${local.image_repo}/buyer_frontend_service:${local.environment}" # Image built and uploaded by production/packaging/build_and_test_all_in_docker
 
   runtime_flags = {
-    BIDDING_PORT        = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_PORT = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_SERVER_ADDR = "xds:///bidding" # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS     = "true"           # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_EGRESS_TLS  = "false"          # Do not change unless you are modifying the default GCP architecture.
-    ENABLE_ENCRYPTION   = "true"           # Do not change unless you are testing without encryption.
-    TEST_MODE           = "false"          # Do not change unless you are testing without key fetching.
+    BIDDING_PORT                    = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_FRONTEND_PORT             = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_FRONTEND_HEALTHCHECK_PORT = "50050"          # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_SERVER_ADDR             = "xds:///bidding" # Do not change unless you are modifying the default GCP architecture.
+    BFE_INGRESS_TLS                 = "true"           # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_EGRESS_TLS              = "false"          # Do not change unless you are modifying the default GCP architecture.
+    ENABLE_ENCRYPTION               = "true"           # Do not change unless you are testing without encryption.
+    TEST_MODE                       = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
     BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
@@ -70,10 +71,13 @@ module "buyer" {
     #    "biddingJsUrl": "https://example.com/generateBid.js",
     #    "protectedAppSignalsBiddingJsUrl": "placeholder",
     #    "biddingWasmHelperUrl": "",
+    #    "protectedAppSignalsBiddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
     #    "enableBuyerDebugUrlGeneration": false,
     #    "enableAdtechCodeLogging": false,
+    #    "prepareDataForAdsRetrievalJsUrl": "",
+    #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
     JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
     JS_WORKER_QUEUE_LEN       = "" # Example: "200".
@@ -110,16 +114,36 @@ module "buyer" {
   frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/bfe-${local.environment}"
 
   operator                           = ""    # Example: "buyer-1"
-  regions                            = []    # Example: ["us-central1", "us-west1"]
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
-  bfe_machine_type                   = ""    # Example: "n2d-standard-64"
-  bidding_machine_type               = ""    # Example: "n2d-standard-64"
-  collector_machine_type             = ""    # Example: "e2-micro"
-  min_replicas_per_service_region    = 1     # Example: 1
-  max_replicas_per_service_region    = 5     # Example: 5
   vm_startup_delay_seconds           = 200   # Example: 200
   cpu_utilization_percent            = 0.6   # Example: 0.6
   use_confidential_space_debug_image = false # Example: false
   tee_impersonate_service_accounts   = "staging-a-opallowedusr@coordinator1.iam.gserviceaccount.com,staging-b-opallowedusr@coordinator2.iam.gserviceaccount.com"
   collector_service_port             = 4317
+  region_config = {
+    # Example config provided for us-central1 and you may add your own regions.
+    "us-central1" = {
+      collector = {
+        machine_type          = "e2-micro"
+        min_replicas          = 1
+        max_replicas          = 1
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+      backend = {
+        machine_type          = "n2d-standard-64"
+        min_replicas          = 1
+        max_replicas          = 5
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+      frontend = {
+        machine_type          = "n2d-standard-64"
+        min_replicas          = 1
+        max_replicas          = 2
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+    }
+  }
 }

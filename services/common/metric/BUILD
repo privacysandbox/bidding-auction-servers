@@ -53,7 +53,6 @@ cc_library(
         ":definition",
         ":dp",
         "//services/common/telemetry:telemetry_flag",
-        "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:absl_log",
@@ -61,6 +60,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@io_opentelemetry_cpp//sdk/src/metrics",
     ],
 )
@@ -89,13 +89,13 @@ cc_library(
     deps = [
         ":definition",
         "//services/common/telemetry:telemetry_flag",
-        "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 
@@ -169,7 +169,6 @@ cc_library(
     ],
     deps = [
         ":definition",
-        "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",
@@ -177,6 +176,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_cc_differential_privacy//algorithms:bounded-sum",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 

@@ -48,7 +48,7 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
         DCHECK(encryption_enabled_);
         if (!status.ok()) {
           VLOG(1) << "SendRPC completion status not ok: "
-                  << ToAbslStatus(status);
+                  << server_common::ToAbslStatus(status);
           params->OnDone(status);
           return;
         }

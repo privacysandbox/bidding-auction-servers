@@ -82,6 +82,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       // TODO(b/278039901): Add integration test for metadata forwarding.
       kv_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
                                                  kBuyerKVMetadata)),
+      bidding_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
+                                                      kBiddingKVMetadata)),
       bidding_signals_async_provider_(&bidding_signals_async_provider),
       bidding_async_client_(&bidding_async_client),
       config_(config),
@@ -139,9 +141,10 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     logger_.vlog(2, "Accumulated Raw response:\n",
                  get_bids_raw_response_->DebugString());
   }
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    debug_logger_->vlog(1, absl::StrCat("GetBidsRawResponse: ",
-                                        get_bids_raw_response_->DebugString()));
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(
+        1, absl::StrCat("GetBidsRawResponse: ",
+                        get_bids_raw_response_->DebugString()));
   }
 
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
@@ -228,8 +231,8 @@ void GetBidsUnaryReactor::Execute() {
   // TODO(b/299366050): Refactor ContextLogger & ConsentedDebuggingLogger to
   // move initialization to the constructor if possible.
   if (config_.enable_otel_based_logging) {
-    debug_logger_ = ConsentedDebuggingLogger(GetLoggingContext(),
-                                             config_.consented_debug_token);
+    consented_logger_ = ConsentedDebuggingLogger(GetLoggingContext(),
+                                                 config_.consented_debug_token);
   }
 
   MayLogRawRequest();
@@ -258,7 +261,7 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 
   absl::Status execute_result =
       protected_app_signals_bidding_async_client_->ExecuteInternal(
-          std::move(protected_app_signals_bid_request), kv_metadata_,
+          std::move(protected_app_signals_bid_request), bidding_metadata_,
           [this](absl::StatusOr<
                  std::unique_ptr<GenerateProtectedAppSignalsBidsRawResponse>>
                      raw_response) {
@@ -311,9 +314,9 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 
 void GetBidsUnaryReactor::MayLogRawRequest() {
   // Logger for consented debugging.
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    debug_logger_->vlog(
-        0, absl::StrCat("GetBidsRawRequest: ", raw_request_.DebugString()));
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    consented_logger_->vlog(
+        1, absl::StrCat("GetBidsRawRequest: ", raw_request_.DebugString()));
   }
 }
 

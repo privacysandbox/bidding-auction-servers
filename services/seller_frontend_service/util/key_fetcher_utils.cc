@@ -23,10 +23,10 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/util/json_util.h"
-#include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 #include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -40,10 +40,13 @@ export GRPC_DNS_RESOLVER=native
       "biddingJsUrl": "https://td.doubleclick.net/td/bjs",
       "protectedAppSignalsBiddingJsUrl": "https://td.doubleclick.net/td/bjs",
       "biddingWasmHelperUrl": "",
+      "protectedAppSignalsBiddingWasmHelperUrl": "",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
       "enableBuyerDebugUrlGeneration": true,
-      "enableAdtechCodeLogging": false
+      "enableAdtechCodeLogging": false,
+      "prepareDataForAdsRetrievalJsUrl": "",
+      "prepareDataForAdsRetrievalWasmHelperUrl": ""
     }' \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \

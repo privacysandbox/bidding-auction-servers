@@ -223,7 +223,7 @@ inline void fetch(opentelemetry::metrics::ObserverResult observer_result,
   for (auto& [label, value] : m) {
     opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
         opentelemetry::metrics::ObserverResultT<double>>>(observer_result)
-        ->Observe(value, {{"label", label}});
+        ->Observe(value, {{"label", label}, {kNoiseAttribute.data(), "Raw"}});
   }
 }
 

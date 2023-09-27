@@ -25,7 +25,7 @@
 #include "glog/logging.h"
 #include "proto/hpke.pb.h"
 #include "proto/tink.pb.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

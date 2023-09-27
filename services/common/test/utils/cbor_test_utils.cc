@@ -32,8 +32,8 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
-#include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/util/web_utils.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 #include "cbor.h"
 

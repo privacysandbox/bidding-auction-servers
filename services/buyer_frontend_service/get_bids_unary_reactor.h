@@ -48,6 +48,11 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
                          {"x-user-agent", "User-Agent"},
                          {"x-bna-client-ip", "X-BnA-Client-IP"}}};
 
+inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
+    kBiddingKVMetadata = {{{"x-accept-language", "x-accept-language"},
+                           {"x-user-agent", "x-user-agent"},
+                           {"x-bna-client-ip", "x-bna-client-ip"}}};
+
 // This is a gRPC server reactor that serves a single GetBidsRequest.
 // It stores state relevant to the request and after the
 // response is finished being served, it cleans up all
@@ -125,6 +130,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Metadata to be sent to buyer KV server.
   RequestMetadata kv_metadata_;
 
+  // Metadata to be sent to bidding service.
+  RequestMetadata bidding_metadata_;
+
   // Helper classes for performing preload actions.
   // These are not owned by this class.
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
@@ -139,7 +147,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
   std::string hpke_secret_;
   ContextLogger logger_;
-  std::optional<ConsentedDebuggingLogger> debug_logger_;
+  std::optional<ConsentedDebuggingLogger> consented_logger_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;

@@ -21,7 +21,10 @@ constexpr char kBuyerOrigin[] = "http://buyer1.com";
 constexpr char kTestReportResultUrl[] = "http://test.com";
 constexpr char kTestInteractionEvent[] = "clickEvent";
 constexpr char kTestInteractionReportingUrl[] = "http://click.com";
-constexpr char kTestReportWinUrl[] = "http://test1.com";
+constexpr char kTestReportWinUrl[] =
+    "http://test.com?seller=http://"
+    "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
+    "modelingSignals=4&recency=3&joinCount=5";
 
 constexpr absl::string_view kBuyerBaseCode =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
@@ -43,10 +46,18 @@ constexpr absl::string_view kBuyerBaseCode =
           console.error("Missing adCost in input to reportWin")
           return
         }
+        var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
+                    "&interestGroupName="+buyerReportingSignals.interestGroupName+
+                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
+                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
-        sendReportTo("http://test1.com")
+        sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
 )JS_CODE";
@@ -288,10 +299,18 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           console.error("Missing adCost in input to reportWin")
           return
         }
+        var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
+                    "&interestGroupName="+buyerReportingSignals.interestGroupName+
+                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
+                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
-        sendReportTo("http://test1.com")
+        sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
 

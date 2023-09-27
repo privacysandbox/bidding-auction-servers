@@ -263,7 +263,8 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(const HTTPRequest& request,
 void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
     std::unique_ptr<CurlRequestData> request) {
   // Check for errors from multi handle here and execute callback immediately.
-  CURLMcode mc = multi_curl_request_manager_.Add(request->req_handle);
+  auto* req_handle = request->req_handle;
+  CURLMcode mc = multi_curl_request_manager_.Add(req_handle);
   switch (mc) {
     case CURLM_BAD_HANDLE:
     case CURLM_BAD_EASY_HANDLE:
@@ -284,7 +285,7 @@ void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
     case CURLM_ADDED_ALREADY:
     case CURLM_RECURSIVE_API_CALL:
     case CURLM_LAST:
-      Add(request->req_handle, std::move(request));
+      Add(req_handle, std::move(request));
       break;
   }
 }

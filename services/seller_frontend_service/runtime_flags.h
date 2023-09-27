@@ -24,6 +24,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
 inline constexpr char PORT[] = "SELLER_FRONTEND_PORT";
+inline constexpr char HEALTHCHECK_PORT[] = "SELLER_FRONTEND_HEALTHCHECK_PORT";
 inline constexpr char GET_BID_RPC_TIMEOUT_MS[] = "GET_BID_RPC_TIMEOUT_MS";
 inline constexpr char KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS[] =
     "KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS";
@@ -47,6 +48,7 @@ inline constexpr char SFE_PUBLIC_KEYS_ENDPOINTS[] = "SFE_PUBLIC_KEYS_ENDPOINTS";
 
 inline constexpr absl::string_view kFlags[] = {
     PORT,
+    HEALTHCHECK_PORT,
     GET_BID_RPC_TIMEOUT_MS,
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS,
     SCORE_ADS_RPC_TIMEOUT_MS,

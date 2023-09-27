@@ -45,9 +45,17 @@ declare VERBOSE_ARG=
 declare -i PRECOMMIT_ONLY=0
 declare -i SKIP_PRECOMMIT=0
 declare -i NO_TESTS=0
+declare -i NO_PLATFORM_BUILD=0
 declare -a AMI_REGIONS
 declare GCP_IMAGE_TAG
 declare GCP_IMAGE_REPO
+declare -a BUILD_TARGETS=(
+  "//tools/secure_invoke/..."
+)
+declare -a TEST_TARGETS+=(
+  "//services/common/..."
+  "//tools/secure_invoke/..."
+)
 
 function usage() {
   local -i -r exitval=${1-1}
@@ -63,6 +71,7 @@ usage:
     --precommit-only             Run precommit then exit
     --no-precommit               Skip precommit checks
     --no-tests                   Skip tests
+    --no-platform-build          Skip platform-specific building and testing
     --with-ami                   AMI region in which to build and store AWS AMIs.
                                    Use multiple times to specify more than one region.
                                    If empty or not specified, none will be built.
@@ -89,6 +98,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-tests)
       NO_TESTS=1
+      shift
+      ;;
+    --no-platform-build)
+      NO_PLATFORM_BUILD=1
       shift
       ;;
     --no-precommit)
@@ -154,11 +167,6 @@ if [[ ${PLATFORM} = gcp ]]; then
     usage
   fi
 fi
-
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-# shellcheck source=builders/tools/builder.sh
-source "${SCRIPT_DIR}"/../../builders/tools/builder.sh
-
 if [[ -n ${AMI_REGIONS[0]} ]]; then
   if [[ ${PLATFORM} != "aws" ]]; then
     printf "Cannot use AMI regions if platform != aws\n"
@@ -169,8 +177,15 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
     exit 1
   fi
 fi
+
 BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --//:build_flavor=${BUILD_FLAVOR}"
 CBUILD_ARGS="${CBUILD_ARGS} --seccomp-unconfined"
+declare -r DIST="${WORKSPACE}"/dist
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+readonly SCRIPT_DIR
+
+# shellcheck source=builders/tools/builder.sh
+source "${SCRIPT_DIR}"/../../builders/tools/builder.sh
 
 if [[ ${VERBOSE} -eq 1 ]]; then
   set -o xtrace
@@ -185,52 +200,41 @@ if [[ ${PRECOMMIT_ONLY} -eq 1 ]]; then
   exit 0
 fi
 
-printf "==== build and test specified platform=%s, instance=%s build_flavor=%s targets using bazel-debian for: %s ====\n" "${PLATFORM}" "${INSTANCE}" "${BUILD_FLAVOR}" "${SERVICES[*]}"
-
-declare -a BUILD_TARGETS
-declare -a TEST_TARGETS
-for SERVICE in "${SERVICES[@]}"; do
+for svc in "${SERVICES[@]}"; do
   BUILD_TARGETS+=(
-    "//production/packaging/${PLATFORM}/${SERVICE}/..."
+    "//production/packaging/${PLATFORM}/${svc}/..."
   )
   TEST_TARGETS+=(
-    "//services/${SERVICE}/..."
-    "//production/packaging/${PLATFORM}/${SERVICE}/..."
+    "//services/${svc}/..."
+    "//production/packaging/${PLATFORM}/${svc}/..."
   )
 done
 
-TEST_TARGETS+=(
-  "//services/common/..."
-  "//tools/secure_invoke/..."
-)
+printf "==== build and test specified platform=%s, instance=%s build_flavor=%s targets using bazel-debian for: %s ====\n" "${PLATFORM}" "${INSTANCE}" "${BUILD_FLAVOR}" "${SERVICES[*]}"
 
-BUILD_TARGETS+=(
-  "//tools/secure_invoke/..."
-)
+function invoke_targets() {
+  declare -r build_targets="${BUILD_TARGETS[*]}"
+  declare -r test_targets="${TEST_TARGETS[*]}"
 
-declare -r _BUILD_TARGETS="${BUILD_TARGETS[*]}"
-declare -r _TEST_TARGETS="${TEST_TARGETS[*]}"
+  builder::cbuild_debian "
+  trap _collect_logs EXIT
+  function _collect_logs() {
+    local -r -i STATUS=\$?
+    printf 'Collecting bazel logs... (status: %d)\n' \${STATUS} &>/dev/stderr
+    bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //:collect-logs
+    exit \${STATUS}
+  }
+  set -o errexit
 
-builder::cbuild_debian "
-trap _collect_logs EXIT
-function _collect_logs() {
-  local -r -i STATUS=\$?
-  printf 'Collecting bazel logs... (status: %d)\n' \${STATUS} &>/dev/stderr
-  bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //:collect-logs
-  exit \${STATUS}
+  if [[ ${NO_TESTS} -eq 0 ]]; then
+    bazel ${BAZEL_STARTUP_ARGS} test ${BAZEL_EXTRA_ARGS} --build_tests_only --config=coretests ${test_targets}
+  fi
+  bazel ${BAZEL_STARTUP_ARGS} build ${BAZEL_EXTRA_ARGS} ${build_targets}
+  for svc in ${SERVICES[*]}; do
+    bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //production/packaging/${PLATFORM}/\${svc}:copy_to_dist
+  done
+  "
 }
-set -o errexit
-
-if [[ ${NO_TESTS} -eq 0 ]]; then
-  bazel ${BAZEL_STARTUP_ARGS} test ${BAZEL_EXTRA_ARGS} --build_tests_only --config=coretests ${_TEST_TARGETS}
-fi
-bazel ${BAZEL_STARTUP_ARGS} build ${BAZEL_EXTRA_ARGS} ${_BUILD_TARGETS}
-for svc in ${SERVICES[*]}; do
-  bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //production/packaging/${PLATFORM}/\${svc}:copy_to_dist
-done
-"
-
-readonly DIST="${WORKSPACE}"/dist
 
 function build_service_for_aws() {
   declare -r service="$1"
@@ -265,28 +269,49 @@ function build_service_for_gcp() {
   --gcp-image-repo "${GCP_IMAGE_REPO}"
 }
 
+function load_service_image() {
+  declare -r service="$1"
+  declare -r docker_image=dist/debian/${service}_image.tar
+  if ! [[ -s ${WORKSPACE}/${docker_image} ]]; then
+    printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
+    exit 1
+  fi
 
-case "${PLATFORM}" in
-  aws)
-    declare -a EXTRA_ARGS
-    for region in "${AMI_REGIONS[@]}"; do
-      EXTRA_ARGS+=(--with-ami "${region}")
-    done
-    if [[ ${VERBOSE} -eq 1 ]]; then
-      EXTRA_ARGS+=("--verbose")
-    fi
+  docker load -i ${WORKSPACE}/${docker_image}
+}
 
-    for svc in "${SERVICES[@]}"; do
-      build_service_for_aws "${svc}" EXTRA_ARGS
-    done
-    ;;
+invoke_targets
 
+if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
+  case "${PLATFORM}" in
+    aws)
+      declare -a EXTRA_ARGS
+      for region in "${AMI_REGIONS[@]}"; do
+        EXTRA_ARGS+=(--with-ami "${region}")
+      done
+      if [[ ${VERBOSE} -eq 1 ]]; then
+        EXTRA_ARGS+=("--verbose")
+      fi
+
+      for svc in "${SERVICES[@]}"; do
+        build_service_for_aws "${svc}" EXTRA_ARGS
+      done
+      ;;
     gcp)
       for svc in "${SERVICES[@]}"; do
         build_service_for_gcp "${svc}"
       done
     ;;
-esac
+    *)
+      printf "Unsupported platform: %s\n" "${PLATFORM}" >/dev/stderr
+      exit 1
+      ;;
+  esac
+else
+  for svc in "${SERVICES[@]}"; do
+    load_service_image "${svc}"
+  done
+fi
 
 if [[ -d ${DIST} ]]; then
   printf "build artifacts:\n"

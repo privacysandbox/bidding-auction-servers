@@ -27,10 +27,10 @@ void ErrorAccumulator::ReportError(
               error_visibility_with_loc.mandatory_param, msg, error_code);
 }
 
-void ErrorAccumulator::ReportError(const SourceLocation& location,
-                                   ErrorVisibility error_visibility,
-                                   absl::string_view msg,
-                                   ErrorCode error_code) {
+void ErrorAccumulator::ReportError(
+    const server_common::SourceLocation& location,
+    ErrorVisibility error_visibility, absl::string_view msg,
+    ErrorCode error_code) {
   dst_error_map_[error_visibility][error_code].emplace(msg);
   if (logger_) {
     logger_->vlog(location, 2, msg);

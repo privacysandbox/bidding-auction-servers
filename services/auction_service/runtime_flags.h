@@ -24,15 +24,19 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
 inline constexpr char PORT[] = "AUCTION_PORT";
+inline constexpr char HEALTHCHECK_PORT[] = "AUCTION_HEALTHCHECK_PORT";
 inline constexpr char ENABLE_AUCTION_SERVICE_BENCHMARK[] =
     "ENABLE_AUCTION_SERVICE_BENCHMARK";
 inline constexpr char SELLER_CODE_FETCH_CONFIG[] = "SELLER_CODE_FETCH_CONFIG";
 inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
 inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
 
-inline constexpr absl::string_view kFlags[] = {
-    PORT, ENABLE_AUCTION_SERVICE_BENCHMARK, SELLER_CODE_FETCH_CONFIG,
-    JS_NUM_WORKERS, JS_WORKER_QUEUE_LEN};
+inline constexpr absl::string_view kFlags[] = {PORT,
+                                               HEALTHCHECK_PORT,
+                                               ENABLE_AUCTION_SERVICE_BENCHMARK,
+                                               SELLER_CODE_FETCH_CONFIG,
+                                               JS_NUM_WORKERS,
+                                               JS_WORKER_QUEUE_LEN};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   int size = sizeof(kFlags) / sizeof(kFlags[0]);

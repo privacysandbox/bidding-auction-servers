@@ -19,7 +19,7 @@ module "networking" {
   frontend_service       = "sfe"
   operator               = var.operator
   environment            = var.environment
-  regions                = var.regions
+  regions                = keys(var.region_config)
   collector_service_name = "collector"
 }
 
@@ -46,14 +46,11 @@ module "autoscaling" {
   backend_service_name                  = "auction"
   frontend_tee_image                    = var.seller_frontend_image
   frontend_service_port                 = var.envoy_port
+  frontend_service_healthcheck_port     = tonumber(var.runtime_flags["SELLER_FRONTEND_HEALTHCHECK_PORT"])
   frontend_service_name                 = "sfe"
   collector_service_name                = "collector"
   collector_service_port                = var.collector_service_port
-  frontend_machine_type                 = var.sfe_machine_type
-  backend_machine_type                  = var.auction_machine_type
-  collector_machine_type                = var.collector_machine_type
-  min_replicas_per_service_region       = var.min_replicas_per_service_region
-  max_replicas_per_service_region       = var.max_replicas_per_service_region
+  region_config                         = var.region_config
   vm_startup_delay_seconds              = var.vm_startup_delay_seconds
   use_confidential_space_debug_image    = var.use_confidential_space_debug_image
   tee_impersonate_service_accounts      = var.tee_impersonate_service_accounts
@@ -71,17 +68,19 @@ module "load_balancing" {
   frontend_domain_name               = var.frontend_domain_name
   frontend_dns_zone                  = var.frontend_dns_zone
   frontend_domain_ssl_certificate_id = var.frontend_domain_ssl_certificate_id
-  frontend_instance_groups           = module.autoscaling.frontend_instance_groups
+  frontend_instance_group_managers   = module.autoscaling.frontend_instance_group_managers
   frontend_service_name              = "sfe"
   frontend_service_port              = var.envoy_port
-  backend_instance_groups            = module.autoscaling.backend_instance_groups
+  frontend_service_healthcheck_port  = tonumber(var.runtime_flags["SELLER_FRONTEND_HEALTHCHECK_PORT"])
+  backend_instance_group_managers    = module.autoscaling.backend_instance_group_managers
   backend_address                    = var.runtime_flags["AUCTION_SERVER_HOST"]
   backend_service_name               = "auction"
   backend_service_port               = tonumber(var.runtime_flags["AUCTION_PORT"])
   collector_ip_address               = module.networking.collector_address
-  collector_instance_groups          = module.autoscaling.collector_instance_groups
+  collector_instance_group_managers  = module.autoscaling.collector_instance_group_managers
   collector_service_name             = "collector"
   collector_service_port             = var.collector_service_port
+  region_config                      = var.region_config
 }
 
 module "seller_dashboard" {

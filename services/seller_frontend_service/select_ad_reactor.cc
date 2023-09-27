@@ -312,7 +312,7 @@ void SelectAdReactor::Execute() {
   }
   logger_.Configure(GetLoggingContext());
   if (config_client_.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING)) {
-    debug_logger_ = ConsentedDebuggingLogger(
+    consented_logger_ = ConsentedDebuggingLogger(
         GetLoggingContext(),
         config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN));
   }
@@ -352,25 +352,25 @@ void SelectAdReactor::Execute() {
 
   // Logger for consented debugging.
   // TODO(b/279955398): Add logs for AuctionConfig & ClientType.
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
     std::visit(
         [this](const auto& protected_auction_input) {
-          debug_logger_->vlog(
-              0, absl::StrCat("ProtectedAudienceInput: ",
+          consented_logger_->vlog(
+              1, absl::StrCat("ProtectedAudienceInput: ",
                               protected_auction_input.DebugString()));
         },
         protected_auction_input_);
 
     if (!buyer_inputs_.ok()) {
-      debug_logger_->vlog(
-          0, absl::StrCat("Failed to decode buyer inputs. Reason: ",
+      consented_logger_->vlog(
+          1, absl::StrCat("Failed to decode buyer inputs. Reason: ",
                           buyer_inputs_.status().ToString()));
     } else if (buyer_inputs_->empty()) {
-      debug_logger_->vlog(0, "buyer inputs are missing.");
+      consented_logger_->vlog(1, "buyer inputs are missing.");
     } else {
       for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
-        debug_logger_->vlog(0, absl::StrCat("buyer_input[", buyer,
-                                            "]: ", buyer_input.DebugString()));
+        consented_logger_->vlog(1, absl::StrCat("buyer_input[", buyer, "]: ",
+                                                buyer_input.DebugString()));
       }
     }
   }

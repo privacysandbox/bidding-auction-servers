@@ -23,7 +23,7 @@
 #include "glog/vlog_is_on.h"
 #include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/context_logger.h"
-#include "services/common/util/source_location.h"
+#include "src/cpp/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -49,7 +49,8 @@ class MultiLogger {
   template <class... T>
   void vlog(ParamWithSourceLoc<int> verbosity_with_source_loc,
             T&&... msg) const {
-    const SourceLocation& location = verbosity_with_source_loc.location;
+    const server_common::SourceLocation& location =
+        verbosity_with_source_loc.location;
     int verbosity = verbosity_with_source_loc.mandatory_param;
 
     context_logger_.vlog(location, verbosity, std::forward<T>(msg)...);

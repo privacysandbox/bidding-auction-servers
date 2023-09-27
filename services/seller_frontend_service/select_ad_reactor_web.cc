@@ -23,10 +23,10 @@
 #include "glog/logging.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -90,8 +90,9 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
-  if (debug_logger_.has_value() && debug_logger_->IsConsented()) {
-    LogResponse(high_score, bidding_group_map, error, debug_logger_.value());
+  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
+    LogResponse(high_score, bidding_group_map, error,
+                consented_logger_.value());
   }
 
   auto error_handler =

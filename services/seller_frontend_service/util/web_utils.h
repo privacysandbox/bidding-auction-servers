@@ -146,11 +146,11 @@ int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
 }
 
 // Helper to validate the type of a CBOR object.
-bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
-                 const cbor_item_t* item, absl::string_view field_name,
-                 absl::string_view expected_type,
-                 ErrorAccumulator& error_accumulator,
-                 SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG);
+bool IsTypeValid(
+    absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
+    const cbor_item_t* item, absl::string_view field_name,
+    absl::string_view expected_type, ErrorAccumulator& error_accumulator,
+    server_common::SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG);
 
 // Reads a cbor item into a string. Caller must verify that the item is a string
 // before calling this method.
