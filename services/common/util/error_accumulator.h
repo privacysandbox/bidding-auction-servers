@@ -26,7 +26,7 @@
 #include "absl/strings/string_view.h"
 #include "services/common/util/context_logger.h"
 #include "services/common/util/error_reporter.h"
-#include "services/common/util/source_location.h"
+#include "src/cpp/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -52,7 +52,7 @@ class ErrorAccumulator : public ErrorReporter {
       absl::string_view msg,
       ErrorCode error_code = ErrorCode::CLIENT_SIDE) override;
 
-  void ReportError(const SourceLocation& location,
+  void ReportError(const server_common::SourceLocation& location,
                    ErrorVisibility error_visibility, absl::string_view msg,
                    ErrorCode error_code = ErrorCode::CLIENT_SIDE) override;
 

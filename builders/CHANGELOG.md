@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.45.0 (2023-09-19)
+
+
+### Features
+
+* Invoke normalize-bazel-symlinks at cbuild exit
+
 ## 0.44.0 (2023-09-11)
 
 

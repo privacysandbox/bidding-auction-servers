@@ -22,15 +22,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "services/common/util/examine_stack.h"
+#include "src/cpp/util/status_macro/examine_stack.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline void SignalHandler(int sig) {
   fprintf(stderr, "Error: signal %d:\n", sig);
-  fprintf(
-      stderr, " %s\n\n",
-      privacy_sandbox::bidding_auction_servers::CurrentStackTrace().c_str());
+  fprintf(stderr, " %s\n\n",
+          privacy_sandbox::server_common::CurrentStackTrace().c_str());
   // more details but it's not async signal safe (it uses malloc() internally)
   fprintf(stderr, "stack trace with more details : \n");
   constexpr size_t kMaxStack = 128;

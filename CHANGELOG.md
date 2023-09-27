@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.2.0 (2023-09-27)
+
+
+### Features
+
+* Add more buyer flags
+* add support for a dedicated non-tls healthcheck port
+* add utilization in cpu metric
+* allow granular GCP per-region machine config
+* change GCP sfe and bfe health checks to use grpc
+* simplify GCP SFE envoy config
+
+
+### Bug Fixes
+
+* Add Ad Retrieval flags for AWS
+* Disable use of secure_invoke for functional testing
+* Ensure the easy handle is copied
+* Fixes the metadata keys sent to bidding
+* Use the verbose level 1 for consented logs
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.45.0
+
 ## 2.1.0 (2023-09-19)
 
 

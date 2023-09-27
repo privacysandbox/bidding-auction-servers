@@ -32,7 +32,7 @@
 #include "absl/synchronization/notification.h"
 #include "algorithms/bounded-sum.h"
 #include "services/common/metric/definition.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::server_common::metric {
 

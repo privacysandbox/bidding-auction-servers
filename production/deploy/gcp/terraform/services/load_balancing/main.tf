@@ -46,12 +46,13 @@ resource "google_compute_backend_service" "mesh_backend" {
   health_checks         = [google_compute_health_check.backend.id]
 
   dynamic "backend" {
-    for_each = var.backend_instance_groups
+    for_each = var.backend_instance_group_managers
     content {
-      group           = backend.value
-      balancing_mode  = "UTILIZATION"
-      max_utilization = 0.80
-      capacity_scaler = 1.0
+      group                 = backend.value.instance_group
+      balancing_mode        = "UTILIZATION"
+      max_rate_per_instance = var.region_config[backend.value.region].backend.max_rate_per_instance
+      max_utilization       = 0.80
+      capacity_scaler       = 1.0
     }
   }
 }
@@ -60,14 +61,13 @@ resource "google_compute_backend_service" "mesh_backend" {
 resource "google_compute_health_check" "backend" {
   name = "${var.operator}-${var.environment}-${var.backend_service_name}-lb-hc"
   grpc_health_check {
-    port_name = "grpc"
-    port      = var.backend_service_port
+    port = var.backend_service_port
   }
 
-  timeout_sec         = 3
-  check_interval_sec  = 3
-  healthy_threshold   = 2
-  unhealthy_threshold = 4
+  timeout_sec         = 2
+  check_interval_sec  = 2
+  healthy_threshold   = 1
+  unhealthy_threshold = 2
 
   log_config {
     enable = true
@@ -93,11 +93,12 @@ resource "google_compute_backend_service" "mesh_collector" {
   health_checks         = [google_compute_health_check.collector.id]
 
   dynamic "backend" {
-    for_each = var.collector_instance_groups
+    for_each = var.collector_instance_group_managers
     content {
-      group           = backend.value
-      balancing_mode  = "UTILIZATION"
-      capacity_scaler = 1.0
+      group                 = backend.value.instance_group
+      balancing_mode        = "UTILIZATION"
+      max_rate_per_instance = var.region_config[backend.value.region].collector.max_rate_per_instance
+      capacity_scaler       = 1.0
     }
   }
   depends_on = [var.mesh, google_network_services_grpc_route.default]
@@ -172,12 +173,13 @@ resource "google_compute_backend_service" "default" {
   timeout_sec           = 10
   health_checks         = [google_compute_health_check.frontend.id]
   dynamic "backend" {
-    for_each = var.frontend_instance_groups
+    for_each = var.frontend_instance_group_managers
     content {
-      group           = backend.value
-      balancing_mode  = "UTILIZATION"
-      max_utilization = 0.80
-      capacity_scaler = 1.0
+      group                 = backend.value.instance_group
+      balancing_mode        = "UTILIZATION"
+      max_rate_per_instance = var.region_config[backend.value.region].frontend.max_rate_per_instance
+      max_utilization       = 0.80
+      capacity_scaler       = 1.0
     }
   }
   log_config {
@@ -231,18 +233,14 @@ resource "google_dns_record_set" "default" {
 
 resource "google_compute_health_check" "frontend" {
   name = "${var.operator}-${var.environment}-${var.frontend_service_name}-lb-hc"
-  # gpc_health_check does not support TLS
-  # Workaround: use tcp
-  # Details: https://cloud.google.com/load-balancing/docs/health-checks#optional-flags-hc-protocol-grpc
-  tcp_health_check {
-    port_name = "grpc"
-    port      = var.frontend_service_port
+  grpc_health_check {
+    port = var.frontend_service_healthcheck_port
   }
 
-  timeout_sec         = 3
-  check_interval_sec  = 3
-  healthy_threshold   = 2
-  unhealthy_threshold = 4
+  timeout_sec         = 2
+  check_interval_sec  = 2
+  healthy_threshold   = 1
+  unhealthy_threshold = 2
 
   log_config {
     enable = true

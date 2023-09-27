@@ -78,6 +78,11 @@ variable "frontend_service_port" {
   type        = number
 }
 
+variable "frontend_service_healthcheck_port" {
+  description = "The Non-TLS grpc port that receives healthcheck traffic."
+  type        = number
+}
+
 variable "collector_service_name" {
   description = "Name of the collector service."
   type        = string
@@ -91,22 +96,6 @@ variable "collector_service_port" {
 variable "mesh_name" {
   description = "Traffic Director name"
   type        = string
-}
-
-variable "min_replicas_per_service_region" {
-  description = "Minimum amount of replicas per each service region (a single managed instance group)."
-  type        = number
-}
-
-variable "max_replicas_per_service_region" {
-  description = "Maximum amount of replicas per each service region (a single managed instance group)."
-  type        = number
-}
-
-variable "max_collectors_per_region" {
-  description = "Maximum amount of Collectors per each service region (a single managed instance group)."
-  type        = number
-  default     = 2
 }
 
 variable "vm_startup_delay_seconds" {
@@ -131,19 +120,31 @@ variable "tee_impersonate_service_accounts" {
   default     = ""
 }
 
-variable "frontend_machine_type" {
-  description = "Machine type for the frontend service. Must be compatible with confidential compute."
-  type        = string
-}
-
-variable "backend_machine_type" {
-  description = "Machine type for the backend service. Must be compatible with confidential compute."
-  type        = string
-}
-
-variable "collector_machine_type" {
-  description = "Machine type for the collector service."
-  type        = string
+variable "region_config" {
+  description = "Map of region configs. Each key should be a region name. The value is the autoscaling configuration for the region."
+  type = map(object({
+    collector = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    backend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+    frontend = object({
+      machine_type          = string
+      min_replicas          = number
+      max_replicas          = number
+      zones                 = list(string) # Use null to signify 'all zones'.
+      max_rate_per_instance = number       # Use null to signify no max.
+    })
+  }))
 }
 
 variable "runtime_flags" {

@@ -266,7 +266,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptAppProtoAuctionResult(
       response.auction_result_ciphertext(), encryption_context);
   ASSERT_FALSE(auction_result.is_chaff());
@@ -311,7 +311,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       response.auction_result_ciphertext(), encryption_context);
   ASSERT_TRUE(auction_result.is_chaff());
@@ -394,7 +394,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       response.auction_result_ciphertext(), encryption_context);
   ASSERT_TRUE(auction_result.is_chaff());
@@ -542,7 +542,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
@@ -643,7 +643,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_FALSE(status.ok()) << ToAbslStatus(status);
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
 }
 
@@ -719,7 +719,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_FALSE(status.ok()) << ToAbslStatus(status);
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
   ASSERT_EQ(status.error_message(), kInternalServerError);
 }
@@ -780,7 +780,7 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  EXPECT_TRUE(status.ok()) << ToAbslStatus(status);
+  EXPECT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -887,7 +887,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   grpc::Status status = stub->SelectAd(&context, request, &response);
   scoring_done.Wait();
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       response.auction_result_ciphertext(), encryption_context);
   VLOG(1) << "Response: " << auction_result.DebugString();

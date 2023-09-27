@@ -256,7 +256,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);
@@ -299,7 +299,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -347,7 +347,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -397,7 +397,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);
@@ -444,7 +444,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -494,7 +494,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);
@@ -520,7 +520,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -546,7 +546,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -573,7 +573,7 @@ TEST_F(
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_FALSE(status.ok()) << ToAbslStatus(status);
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -620,7 +620,7 @@ TEST_F(BuyerFrontEndServiceTest,
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
-  ASSERT_TRUE(status.ok()) << ToAbslStatus(status);
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);

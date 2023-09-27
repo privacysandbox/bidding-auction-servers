@@ -23,7 +23,7 @@
 #include "opentelemetry/logs/severity.h"
 #include "services/common/util/context_logger.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/source_location.h"
+#include "src/cpp/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -34,7 +34,8 @@ const int kTokenMinLength = 1;
 std::string LogHeader(
     const ParamWithSourceLoc<int>& verbosity_with_source_loc) {
   // Example: 0 foo.cc:100]
-  const SourceLocation& location = verbosity_with_source_loc.location;
+  const server_common::SourceLocation& location =
+      verbosity_with_source_loc.location;
   const int verbosity = verbosity_with_source_loc.mandatory_param;
   return absl::StrCat(verbosity, " ", location.file_name(), ":",
                       location.line(), "] ");

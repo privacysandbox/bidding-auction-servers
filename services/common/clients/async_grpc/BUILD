@@ -45,8 +45,8 @@ cc_library(
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/util:error_categories",
-        "//services/common/util:status_macros",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 
@@ -135,9 +135,9 @@ cc_library(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/encryption:key_fetcher_factory",
-        "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )

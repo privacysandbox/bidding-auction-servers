@@ -30,7 +30,7 @@
 #include "cc/public/core/interface/execution_result.h"
 #include "cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
 #include "glog/logging.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterRequest;
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterResponse;

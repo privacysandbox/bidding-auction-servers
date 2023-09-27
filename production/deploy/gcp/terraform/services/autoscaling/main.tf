@@ -25,6 +25,10 @@ resource "null_resource" "runtime_flags" {
 # The frontend service uses HTTP/2 (gRPC) with TLS.
 ###############################################################
 
+locals {
+  max_possible_zones_per_region = 4
+}
+
 resource "google_compute_instance_template" "frontends" {
   for_each = var.subnets
 
@@ -78,7 +82,7 @@ resource "google_compute_instance_template" "frontends" {
     # }
   }
 
-  machine_type = var.frontend_machine_type
+  machine_type = var.region_config[each.value.region].frontend.machine_type
 
   service_account {
     email  = var.service_account_email
@@ -104,8 +108,9 @@ resource "google_compute_instance_template" "frontends" {
 resource "google_compute_region_instance_group_manager" "frontends" {
   for_each = google_compute_instance_template.frontends
 
-  region = each.value.region
-  name   = "${var.operator}-${var.environment}-${var.frontend_service_name}-${each.value.region}-mig"
+  region                    = each.value.region
+  name                      = "${var.operator}-${var.environment}-${var.frontend_service_name}-${each.value.region}-mig"
+  distribution_policy_zones = var.region_config[each.value.region].frontend.zones
   version {
     instance_template = each.value.id
     name              = "primary"
@@ -126,7 +131,7 @@ resource "google_compute_region_instance_group_manager" "frontends" {
   update_policy {
     minimal_action  = "REPLACE"
     type            = "PROACTIVE"
-    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+    max_surge_fixed = max(local.max_possible_zones_per_region, var.region_config[each.value.region].frontend.max_replicas)
   }
   wait_for_instances_status = "UPDATED"
   wait_for_instances        = var.instance_template_waits_for_instances
@@ -144,8 +149,8 @@ resource "google_compute_region_autoscaler" "frontends" {
   target   = each.value.id
 
   autoscaling_policy {
-    max_replicas    = var.max_replicas_per_service_region
-    min_replicas    = var.min_replicas_per_service_region
+    max_replicas    = var.region_config[each.value.region].frontend.max_replicas
+    min_replicas    = var.region_config[each.value.region].frontend.min_replicas
     cooldown_period = var.vm_startup_delay_seconds
 
     cpu_utilization {
@@ -156,18 +161,17 @@ resource "google_compute_region_autoscaler" "frontends" {
 
 resource "google_compute_health_check" "frontend" {
   name = "${var.operator}-${var.environment}-${var.frontend_service_name}-auto-heal-hc"
-  # gpc_health_check does not support TLS
-  # Workaround: use tcp
-  # Details: https://cloud.google.com/load-balancing/docs/health-checks#optional-flags-hc-protocol-grpc
-  tcp_health_check {
-    port_name = "grpc"
-    port      = var.frontend_service_port
+  grpc_health_check {
+    port = var.frontend_service_healthcheck_port
   }
 
-  timeout_sec         = 30
-  check_interval_sec  = 30
-  healthy_threshold   = 1
-  unhealthy_threshold = 2
+  timeout_sec        = 5
+  check_interval_sec = 10
+  healthy_threshold  = 1
+  # Allow time for the instance to attempt to recover.
+  # A more strict threshold will be used by the load balancer
+  # to direct traffic away from the instance while it recovers.
+  unhealthy_threshold = 10
 
   log_config {
     enable = true
@@ -234,7 +238,7 @@ resource "google_compute_instance_template" "backends" {
     # }
   }
 
-  machine_type = var.backend_machine_type
+  machine_type = var.region_config[each.value.region].backend.machine_type
 
   service_account {
     email  = var.service_account_email
@@ -257,8 +261,9 @@ resource "google_compute_instance_template" "backends" {
 resource "google_compute_region_instance_group_manager" "backends" {
   for_each = google_compute_instance_template.backends
 
-  region = each.value.region
-  name   = "${var.operator}-${var.environment}-${var.backend_service_name}-${each.value.region}-mig"
+  region                    = each.value.region
+  name                      = "${var.operator}-${var.environment}-${var.backend_service_name}-${each.value.region}-mig"
+  distribution_policy_zones = var.region_config[each.value.region].backend.zones
   version {
     instance_template = each.value.id
     name              = "primary"
@@ -279,7 +284,7 @@ resource "google_compute_region_instance_group_manager" "backends" {
   update_policy {
     minimal_action  = "REPLACE"
     type            = "PROACTIVE"
-    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+    max_surge_fixed = max(local.max_possible_zones_per_region, var.region_config[each.value.region].backend.max_replicas)
   }
   wait_for_instances_status = "UPDATED"
   wait_for_instances        = var.instance_template_waits_for_instances
@@ -297,8 +302,8 @@ resource "google_compute_region_autoscaler" "backends" {
   target   = each.value.id
 
   autoscaling_policy {
-    max_replicas    = var.max_replicas_per_service_region
-    min_replicas    = var.min_replicas_per_service_region
+    max_replicas    = var.region_config[each.value.region].backend.max_replicas
+    min_replicas    = var.region_config[each.value.region].backend.min_replicas
     cooldown_period = var.vm_startup_delay_seconds
 
     cpu_utilization {
@@ -310,9 +315,16 @@ resource "google_compute_region_autoscaler" "backends" {
 resource "google_compute_health_check" "backend" {
   name = "${var.operator}-${var.environment}-${var.backend_service_name}-auto-heal-hc"
   grpc_health_check {
-    port_name = "grpc"
-    port      = var.backend_service_port
+    port = var.backend_service_port
   }
+
+  timeout_sec        = 5
+  check_interval_sec = 10
+  healthy_threshold  = 1
+  # Allow time for the instance to attempt to recover.
+  # A more strict threshold will be used by the load balancer
+  # to direct traffic away from the instance while it recovers.
+  unhealthy_threshold = 10
 
   log_config {
     enable = true
@@ -362,7 +374,7 @@ resource "google_compute_instance_template" "collector" {
     # }
   }
 
-  machine_type = var.collector_machine_type
+  machine_type = var.region_config[each.value.region].collector.machine_type
 
   service_account {
     email  = var.service_account_email
@@ -384,8 +396,9 @@ resource "google_compute_instance_template" "collector" {
 resource "google_compute_region_instance_group_manager" "collector" {
   for_each = google_compute_instance_template.collector
 
-  region = each.value.region
-  name   = "${var.operator}-${var.environment}-collector-${each.value.region}-mig"
+  region                    = each.value.region
+  name                      = "${var.operator}-${var.environment}-collector-${each.value.region}-mig"
+  distribution_policy_zones = var.region_config[each.value.region].collector.zones
   version {
     instance_template = each.value.id
     name              = "primary"
@@ -406,7 +419,7 @@ resource "google_compute_region_instance_group_manager" "collector" {
   update_policy {
     minimal_action  = "REPLACE"
     type            = "PROACTIVE"
-    max_surge_fixed = max(10, var.max_replicas_per_service_region)
+    max_surge_fixed = max(local.max_possible_zones_per_region, var.region_config[each.value.region].collector.max_replicas)
   }
   wait_for_instances_status = "UPDATED"
   wait_for_instances        = var.instance_template_waits_for_instances
@@ -424,8 +437,8 @@ resource "google_compute_region_autoscaler" "collector" {
   target   = each.value.id
 
   autoscaling_policy {
-    max_replicas    = var.max_collectors_per_region
-    min_replicas    = 1
+    max_replicas    = var.region_config[each.value.region].collector.max_replicas
+    min_replicas    = var.region_config[each.value.region].collector.min_replicas
     cooldown_period = var.vm_startup_delay_seconds
 
     cpu_utilization {

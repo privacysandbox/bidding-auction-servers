@@ -43,6 +43,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -82,6 +83,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -117,6 +119,8 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"label\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -153,6 +157,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -189,6 +194,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -227,6 +233,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"label\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -263,6 +270,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -299,6 +307,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -336,6 +345,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -378,6 +388,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -419,6 +430,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -454,6 +466,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -496,6 +509,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -536,6 +550,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -576,6 +591,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -612,6 +628,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -654,6 +671,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"server_name\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -690,6 +708,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -727,6 +746,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -763,6 +783,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
                         "resource.label.\"task_id\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"

@@ -70,7 +70,7 @@ class BaseGenerateBidsReactor
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
   ContextLogger logger_;
-  std::optional<ConsentedDebuggingLogger> debug_logger_;
+  std::optional<ConsentedDebuggingLogger> consented_logger_;
   bool enable_adtech_code_logging_;
   bool enable_otel_based_logging_;
   std::string consented_debug_token_;

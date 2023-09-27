@@ -76,112 +76,6 @@ cc_test(
 )
 
 cc_library(
-    name = "status_util",
-    srcs = [
-        "status_util.cc",
-    ],
-    hdrs = [
-        "status_util.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/status",
-    ],
-)
-
-cc_test(
-    name = "status_util_test",
-    size = "small",
-    srcs = [
-        "status_util_test.cc",
-    ],
-    deps = [
-        ":status_util",
-        "@com_google_absl//absl/status",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "status_macros",
-    hdrs = ["status_macros.h"],
-    visibility = [
-        "//services:__subpackages__",
-        "//tools/secure_invoke:__subpackages__",
-    ],
-    deps = [
-        ":status_builder",
-        ":status_util",
-    ],
-)
-
-cc_test(
-    name = "status_macros_test",
-    size = "small",
-    srcs = [
-        "status_macros_test.cc",
-    ],
-    deps = [
-        ":status_macros",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "source_location",
-    hdrs = ["source_location.h"],
-)
-
-cc_library(
-    name = "examine_stack",
-    srcs = [
-        "examine_stack.cc",
-    ],
-    hdrs = [
-        "examine_stack.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/debugging:stacktrace",
-        "@com_google_absl//absl/debugging:symbolize",
-    ],
-)
-
-cc_library(
-    name = "status_builder",
-    srcs = ["status_builder.cc"],
-    hdrs = ["status_builder.h"],
-    deps = [
-        ":examine_stack",
-        ":source_location",
-        "@com_google_absl//absl/base:log_severity",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-    ],
-)
-
-cc_test(
-    name = "status_builder_test",
-    size = "small",
-    srcs = ["status_builder_test.cc"],
-    deps = [
-        ":status_builder",
-        "@com_google_absl//absl/base:log_severity",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log:scoped_mock_log",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
     name = "scoped_cbor",
     hdrs = [
         "scoped_cbor.h",
@@ -221,9 +115,9 @@ cc_library(
     hdrs = ["context_logger.h"],
     deps = [
         ":request_response_constants",
-        ":source_location",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
     ],
 )
 
@@ -249,8 +143,8 @@ cc_library(
     hdrs = ["error_reporter.h"],
     deps = [
         ":error_categories",
-        ":source_location",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
     ],
 )
 
@@ -262,9 +156,9 @@ cc_library(
         ":context_logger",
         ":error_categories",
         ":error_reporter",
-        ":source_location",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
     ],
 )
 
@@ -303,12 +197,12 @@ cc_library(
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:context_logger",
         "//services/common/util:json_util",
-        "//services/common/util:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -356,9 +250,9 @@ cc_library(
     deps = [
         ":context_logger",
         ":request_response_constants",
-        ":source_location",
         "//api:bidding_auction_servers_cc_proto",
         "@com_github_google_glog//:glog",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
         "@io_opentelemetry_cpp//api",
         "@io_opentelemetry_cpp//sdk:headers",
         "@io_opentelemetry_cpp//sdk/src/logs",
@@ -383,7 +277,7 @@ cc_library(
     name = "signal_handler",
     hdrs = ["signal_handler.h"],
     deps = [
-        ":examine_stack",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:examine_stack",
     ],
 )
 
@@ -393,11 +287,11 @@ cc_library(
     hdrs = ["async_task_tracker.h"],
     deps = [
         ":context_logger",
-        ":source_location",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
     ],
 )
 
@@ -419,9 +313,9 @@ cc_library(
     deps = [
         ":consented_debugging_logger",
         ":context_logger",
-        ":source_location",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
     ],
 )
 

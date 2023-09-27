@@ -57,6 +57,9 @@ module "buyer" {
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
     BIDDING_SERVER_ADDR                           = "" # Example: "dns:///bidding1.com:443"
     BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    AD_RETRIEVAL_KV_SERVER_ADDR                   = "xds:///ad_retrieval_server"
+    BYOS_AD_RETRIEVAL_SERVER                      = "true"
+    AD_RETRIEVAL_TIMEOUT_MS                       = "60000"
     GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
     ENABLE_BUYER_FRONTEND_BENCHMARKING            = "" # Example: "false"
@@ -73,10 +76,13 @@ module "buyer" {
     #    "biddingJsUrl": "https://example.com/generateBid.js",
     #    "protectedAppSignalsBiddingJsUrl": "placeholder",
     #    "biddingWasmHelperUrl": "",
+    #    "protectedAppSignalsBiddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
     #    "enableBuyerDebugUrlGeneration": false,
     #    "enableAdtechCodeLogging": false,
+    #    "prepareDataForAdsRetrievalJsUrl": "",
+    #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
     JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".

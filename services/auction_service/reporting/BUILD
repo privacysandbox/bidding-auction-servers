@@ -19,10 +19,10 @@ cc_library(
     hdrs = ["reporting_response.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "//services/common/util:status_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
     ],
 )
 
@@ -40,12 +40,12 @@ cc_library(
         "//services/common/util:post_auction_signals",
         "//services/common/util:reporting_util",
         "//services/common/util:request_response_constants",
-        "//services/common/util:status_macros",
-        "//services/common/util:status_util",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
     ],
 )
@@ -65,11 +65,11 @@ cc_test(
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
-        "//services/common/util:status_util",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
     ],
 )

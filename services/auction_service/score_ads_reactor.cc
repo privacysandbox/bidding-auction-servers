@@ -43,8 +43,8 @@
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/status_macros.h"
-#include "services/common/util/status_util.h"
+#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -467,6 +467,13 @@ ScoreAdsReactor::ScoreAdsReactor(
                         metric::AuctionContextMap()->Remove(request_));
     return absl::OkStatus();
   }()) << "AuctionContextMap()->Get(request) should have been called";
+
+  ContextLogger::ContextMap context_map = GetLoggingContext(raw_request_);
+  logger_ = ContextLogger(context_map);
+  if (enable_otel_based_logging_) {
+    consented_logger_ =
+        ConsentedDebuggingLogger(context_map, consented_debug_token_);
+  }
 }
 
 ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
@@ -484,11 +491,6 @@ ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
 
 void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
-  logger_ = ContextLogger(GetLoggingContext(raw_request_));
-  if (enable_otel_based_logging_) {
-    consented_logger_ = ConsentedDebuggingLogger(
-        GetLoggingContext(raw_request_), consented_debug_token_);
-  }
 
   if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
     consented_logger_->vlog(
@@ -505,7 +507,7 @@ void ScoreAdsReactor::Execute() {
       scoring_signals = BuildTrustedScoringSignals(raw_request_, logger_);
 
   if (!scoring_signals.ok()) {
-    Finish(FromAbslStatus(scoring_signals.status()));
+    Finish(server_common::FromAbslStatus(scoring_signals.status()));
     return;
   }
 

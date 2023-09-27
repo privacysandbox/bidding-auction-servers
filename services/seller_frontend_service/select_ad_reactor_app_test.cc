@@ -35,7 +35,6 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/status_macros.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
@@ -43,6 +42,7 @@
 #include "src/cpp/communication/encoding_utils.h"
 #include "src/cpp/communication/ohttp_utils.h"
 #include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

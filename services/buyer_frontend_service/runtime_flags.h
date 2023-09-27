@@ -24,6 +24,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
 inline constexpr char PORT[] = "BUYER_FRONTEND_PORT";
+inline constexpr char HEALTHCHECK_PORT[] = "BUYER_FRONTEND_HEALTHCHECK_PORT";
 inline constexpr char BIDDING_SERVER_ADDR[] = "BIDDING_SERVER_ADDR";
 inline constexpr char BUYER_KV_SERVER_ADDR[] = "BUYER_KV_SERVER_ADDR";
 inline constexpr char GENERATE_BID_TIMEOUT_MS[] = "GENERATE_BID_TIMEOUT_MS";
@@ -43,6 +44,7 @@ inline constexpr char BIDDING_EGRESS_TLS[] = "BIDDING_EGRESS_TLS";
 
 inline constexpr absl::string_view kFlags[] = {
     PORT,
+    HEALTHCHECK_PORT,
     BIDDING_SERVER_ADDR,
     BUYER_KV_SERVER_ADDR,
     GENERATE_BID_TIMEOUT_MS,

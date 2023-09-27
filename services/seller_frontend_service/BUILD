@@ -146,7 +146,6 @@ cc_binary(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
         "//services/common/util:signal_handler",
-        "//services/common/util:status_macros",
         "//services/seller_frontend_service/util:key_fetcher_utils",
         "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
@@ -157,6 +156,7 @@ cc_binary(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )

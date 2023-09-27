@@ -86,12 +86,12 @@ cc_library(
     ],
     deps = [
         ":crypto_client_wrapper_interface",
-        "//services/common/util:status_macros",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/status:statusor",
         "@control_plane_shared//cc/public/cpio/interface/crypto_client",
         "@control_plane_shared//cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 

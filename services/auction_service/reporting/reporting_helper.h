@@ -26,7 +26,7 @@
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/util/context_logger.h"
-#include "services/common/util/status_util.h"
+#include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

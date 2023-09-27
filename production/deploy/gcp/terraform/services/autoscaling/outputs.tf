@@ -16,14 +16,14 @@
 
 
 
-output "frontend_instance_groups" {
-  value = toset([for manager in google_compute_region_instance_group_manager.frontends : manager.instance_group])
+output "frontend_instance_group_managers" {
+  value = toset([for manager in google_compute_region_instance_group_manager.frontends : manager])
 }
 
-output "backend_instance_groups" {
-  value = toset([for manager in google_compute_region_instance_group_manager.backends : manager.instance_group])
+output "backend_instance_group_managers" {
+  value = toset([for manager in google_compute_region_instance_group_manager.backends : manager])
 }
 
-output "collector_instance_groups" {
-  value = toset([for manager in google_compute_region_instance_group_manager.collector : manager.instance_group])
+output "collector_instance_group_managers" {
+  value = toset([for manager in google_compute_region_instance_group_manager.collector : manager])
 }

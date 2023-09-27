@@ -62,7 +62,7 @@ module "seller" {
     SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://securepubads.g.doubleclick.net"
     AUCTION_SERVER_HOST                    = "" # Example: "dns:///auction.seller-frontend.com:443"
     KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
-    BUYER_SERVER_HOSTS                     = "" # Example: "{\"https://bid1.com\": \"dns:///bidding1.com:443\"}"
+    BUYER_SERVER_HOSTS                     = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"

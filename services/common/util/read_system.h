@@ -15,6 +15,7 @@
  */
 
 #include <string>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 
@@ -25,5 +26,17 @@ absl::flat_hash_map<std::string, double> GetCpu();
 
 // Read system Memory metric, , return map of attribute and value.
 absl::flat_hash_map<std::string, double> GetMemory();
+
+namespace internal {
+struct Utilization {
+  double total;
+  double self;
+};
+
+// Use system cpu time from /proc/stat (`cpu_times`) /proc/self/stat
+// (`self_stat_fields`) to calculate utilization
+Utilization ReadCpuTime(const std::vector<size_t>& cpu_times,
+                        const std::vector<std::string>& fields);
+}  // namespace internal
 
 }  // namespace privacy_sandbox::server_common

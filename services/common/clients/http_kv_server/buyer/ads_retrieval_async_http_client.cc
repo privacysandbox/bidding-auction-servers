@@ -20,7 +20,7 @@
 #include "services/common/clients/http_kv_server/buyer/ad_retrieval_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/status_macros.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

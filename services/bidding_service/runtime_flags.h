@@ -24,6 +24,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
 inline constexpr char PORT[] = "BIDDING_PORT";
+inline constexpr char HEALTHCHECK_PORT[] = "BIDDING_HEALTHCHECK_PORT";
 inline constexpr char ENABLE_BIDDING_SERVICE_BENCHMARK[] =
     "ENABLE_BIDDING_SERVICE_BENCHMARK";
 inline constexpr char BUYER_CODE_FETCH_CONFIG[] = "BUYER_CODE_FETCH_CONFIG";
@@ -35,6 +36,7 @@ inline constexpr char BYOS_AD_RETRIEVAL_SERVER[] = "BYOS_AD_RETRIEVAL_SERVER";
 inline constexpr char AD_RETRIEVAL_TIMEOUT_MS[] = "AD_RETRIEVAL_TIMEOUT_MS";
 
 inline constexpr absl::string_view kFlags[] = {PORT,
+                                               HEALTHCHECK_PORT,
                                                ENABLE_BIDDING_SERVICE_BENCHMARK,
                                                BUYER_CODE_FETCH_CONFIG,
                                                JS_NUM_WORKERS,

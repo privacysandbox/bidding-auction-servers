@@ -26,8 +26,8 @@ message BuyerCodeFetchConfig {
    // URL endpoint for fetching AdTech code blob, js file.
    string bidding_js_url = 2;
 
-   // URL endpoint to the wasm file. AdTechs can choose to include wasm file which will be combined
-   // with the js file before loading into Roma.
+   // URL endpoint to the wasm file. AdTechs can choose to include wasm file
+   // which will be combined with the js file before loading into Roma.
    string bidding_wasm_helper_url = 3;
 
    // Period of how often to fetch AdTech code blob from the URL endpoint.
@@ -45,4 +45,15 @@ message BuyerCodeFetchConfig {
    // URL endpoint for fetching AdTech code blob, js file for protected app
    // signals.
    string protected_app_signals_bidding_js_url = 9;
+
+   // URL endpoint to the wasm file. AdTechs can choose to include wasm file
+   // which will be combined with the js file before loading into Roma.
+   string protected_app_signals_bidding_wasm_helper_url = 10;
+
+   // URL endpoint for fetching AdTech code blob, js file.
+   string prepare_data_for_ads_retrieval_js_url = 11;
+
+   // URL endpoint to the wasm file. AdTechs can choose to include wasm file
+   // which will be combined with the js file before loading into Roma.
+   string prepare_data_for_ads_retrieval_wasm_helper_url = 12;
 }
