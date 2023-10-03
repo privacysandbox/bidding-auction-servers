@@ -96,7 +96,7 @@ resource "google_secret_manager_secret" "runtime_flag_secrets" {
 
   secret_id = "${var.operator}-${var.environment}-${each.key}"
   replication {
-    automatic = true
+    auto {}
   }
 }
 
