@@ -25,7 +25,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-#include "services/common/util/context_logger.h"
+#include "services/common/loggers/request_context_impl.h"
 #include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -104,14 +104,14 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
 std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
-    std::shared_ptr<std::string> auction_config, const ContextLogger& logger,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata);
 
 // Creates the DispatchRequest for calling reportingEntryFunction in Roma
 DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
-    std::shared_ptr<std::string> auction_config, const ContextLogger& logger,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

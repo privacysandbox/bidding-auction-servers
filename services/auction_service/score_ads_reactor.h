@@ -32,10 +32,9 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_context_impl.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
-#include "services/common/util/consented_debugging_logger.h"
-#include "services/common/util/context_logger.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -61,7 +60,7 @@ class ScoreAdsReactor
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      std::unique_ptr<AsyncReporter> async_reporter,
+      const AsyncReporter* async_reporter,
       const AuctionServiceRuntimeConfig& runtime_config);
 
   // Initiates the asynchronous execution of the ScoreAdsRequest.
@@ -77,7 +76,7 @@ class ScoreAdsReactor
   void ScoreAdsCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& output);
 
-  ContextLogger::ContextMap GetLoggingContext(
+  log::ContextImpl::ContextMap GetLoggingContext(
       const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request);
 
   // Performs debug reporting for all scored ads by the seller.
@@ -99,11 +98,10 @@ class ScoreAdsReactor
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>>
       ad_data_;
   std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger_;
-  std::unique_ptr<AsyncReporter> async_reporter_;
+  const AsyncReporter& async_reporter_;
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
-  ContextLogger logger_;
-  std::optional<ConsentedDebuggingLogger> consented_logger_;
+  log::ContextImpl log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
@@ -117,8 +115,6 @@ class ScoreAdsReactor
   bool enable_report_result_url_generation_;
   bool enable_report_win_url_generation_;
   std::string seller_origin_;
-  bool enable_otel_based_logging_;
-  std::string consented_debug_token_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

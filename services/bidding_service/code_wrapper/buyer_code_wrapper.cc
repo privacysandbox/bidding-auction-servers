@@ -17,18 +17,14 @@
 #include <string>
 #include <vector>
 
-#include <glog/logging.h>
-
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "services/bidding_service/constants.h"
+#include "services/common/loggers/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
-constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
-    "interest_group, auction_signals, buyer_signals, trusted_bidding_signals, "
-    "device_signals";
 
 void AppendFeatureFlagValue(std::string& feature_flags,
                             absl::string_view feature_name,
@@ -58,20 +54,36 @@ absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
   switch (auction_type) {
     case AuctionType::kProtectedAudience:
       return kProtectedAudienceGenerateBidsArgs;
+    case AuctionType::kProtectedAppSignals:
+      return kProtectedAppSignalsGenerateBidsArgs;
     default:
-      VLOG(1) << "Unsupported auction type: " << absl::StrCat(auction_type);
+      PS_VLOG_NO_CONTEXT(1)
+          << "Unsupported auction type: " << absl::StrCat(auction_type);
       return "";
   }
 }
 
 }  // namespace
 
-std::string GetBuyerWrappedCode(absl::string_view adtech_js,
-                                absl::string_view adtech_wasm,
-                                AuctionType auction_type) {
+std::string GetBuyerWrappedCode(absl::string_view ad_tech_js,
+                                absl::string_view ad_tech_wasm,
+                                AuctionType auction_type,
+                                absl::string_view auction_specific_setup) {
   absl::string_view args = GetGenerateBidArgs(auction_type);
-  return absl::StrCat(WasmBytesToJavascript(adtech_wasm),
-                      absl::StrFormat(kEntryFunction, args, args), adtech_js);
+  return absl::StrCat(
+      WasmBytesToJavascript(ad_tech_wasm),
+      absl::Substitute(kEntryFunction, args, auction_specific_setup),
+      ad_tech_js);
+}
+
+std::string GetGenericBuyerWrappedCode(absl::string_view ad_tech_js,
+                                       absl::string_view ad_tech_wasm,
+                                       absl::string_view function_name,
+                                       absl::string_view args) {
+  return absl::StrCat(
+      WasmBytesToJavascript(ad_tech_wasm),
+      absl::Substitute(kGenericBuyerEntryFunction, function_name, args),
+      ad_tech_js);
 }
 
 std::string GetFeatureFlagJson(bool enable_logging,

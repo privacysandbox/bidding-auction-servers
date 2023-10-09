@@ -21,6 +21,7 @@
 #include "absl/synchronization/notification.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
+#include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -75,6 +76,8 @@ constexpr char kAdRenderUrls2[] = "test_ad_render_urls_2";
 constexpr char kTestMetadataKey2[] = "test_metadata_key_2";
 constexpr char kTestCurrency2[] = "RS";
 constexpr int kTestMetadataValue2 = 51;
+constexpr char bidding_signals_to_be_returned[] =
+    R"JSON({"keys":{"ig_name":[123,456]}})JSON";
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
@@ -125,9 +128,10 @@ class GetBidUnaryReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::BfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
     get_bids_config_.encryption_enabled = true;
     get_bids_config_.is_protected_app_signals_enabled = false;
@@ -156,16 +160,11 @@ class GetBidUnaryReactorTest : public ::testing::Test {
 };
 
 TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
-  EXPECT_CALL(
-      bidding_signals_provider_,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
-      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                   auto on_done, absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<BiddingSignals>());
-      });
+  SetupBiddingProviderMock(
+      /*provider=*/bidding_signals_provider_,
+      /*bidding_signals_value=*/bidding_signals_to_be_returned,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
 
   absl::Notification notification;
   EXPECT_CALL(
@@ -199,16 +198,11 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
 
 TEST_F(GetBidUnaryReactorTest,
        LoadsBiddingSignalsAndCallsBiddingServer_EncryptionEnabled) {
-  EXPECT_CALL(
-      bidding_signals_provider_,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
-      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                   auto on_done, absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<BiddingSignals>());
-      });
+  SetupBiddingProviderMock(
+      /*provider=*/bidding_signals_provider_,
+      /*bidding_signals_value=*/bidding_signals_to_be_returned,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
 
   absl::Notification notification;
   EXPECT_CALL(
@@ -264,16 +258,11 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
   log_context->set_generation_id(kSampleGenerationId);
   *request_.mutable_request_ciphertext() = raw_request_.SerializeAsString();
 
-  EXPECT_CALL(
-      bidding_signals_provider_,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
-      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                   auto on_done, absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<BiddingSignals>());
-      });
+  SetupBiddingProviderMock(
+      /*provider=*/bidding_signals_provider_,
+      /*bidding_signals_value=*/bidding_signals_to_be_returned,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
 
   GenerateBidsRequest::GenerateBidsRawRequest
       expected_generate_bids_raw_request;
@@ -296,9 +285,10 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
 class GetProtectedAppSignalsTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::BfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
     get_bids_config_.encryption_enabled = true;
@@ -460,16 +450,11 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
                                   /*add_protected_audience_input=*/true);
   absl::BlockingCounter bids_counter(2);
 
-  EXPECT_CALL(
-      bidding_signals_provider_,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
-      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                   auto on_done, absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<BiddingSignals>());
-      });
+  SetupBiddingProviderMock(
+      /*provider=*/bidding_signals_provider_,
+      /*bidding_signals_value=*/bidding_signals_to_be_returned,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
 
   EXPECT_CALL(
       bidding_client_mock_,

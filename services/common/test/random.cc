@@ -522,8 +522,7 @@ BuyerInput MakeARandomBuyerInput() {
   return buyer_input;
 }
 
-ProtectedAuctionInput MakeARandomProtectedAuctionInput(
-    SelectAdRequest::ClientType client_type) {
+ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type) {
   ProtectedAuctionInput input;
   input.set_publisher_name(MakeARandomString());
   input.set_generation_id(MakeARandomString());
@@ -531,10 +530,10 @@ ProtectedAuctionInput MakeARandomProtectedAuctionInput(
   buyer_inputs.emplace(MakeARandomString(), MakeARandomBuyerInput());
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input;
   switch (client_type) {
-    case SelectAdRequest::BROWSER:
+    case CLIENT_TYPE_BROWSER:
       encoded_buyer_input = GetEncodedBuyerInputMap(buyer_inputs);
       break;
-    case SelectAdRequest::ANDROID:
+    case CLIENT_TYPE_ANDROID:
       encoded_buyer_input = GetProtoEncodedBuyerInputs(buyer_inputs);
       break;
     default:

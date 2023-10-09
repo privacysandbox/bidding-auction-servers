@@ -27,12 +27,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
 PackagePayload(const ProtectedAuctionInput& protected_auction_input,
-               SelectAdRequest::ClientType client_type,
-               absl::string_view public_key) {
+               ClientType client_type, absl::string_view public_key) {
   // Encode request.
   std::string encoded_request;
   switch (client_type) {
-    case SelectAdRequest::BROWSER: {
+    case CLIENT_TYPE_BROWSER: {
       PS_ASSIGN_OR_RETURN(
           auto serialized_request,
           CborEncodeProtectedAuctionProto(protected_auction_input));
@@ -42,7 +41,7 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
               server_common::CompressionType::kGzip, serialized_request,
               GetEncodedDataSize(serialized_request.size())));
     } break;
-    case SelectAdRequest::ANDROID: {
+    case CLIENT_TYPE_ANDROID: {
       // Serialize the protected audience input and frame it.
       std::string serialized_request =
           protected_auction_input.SerializeAsString();
@@ -80,8 +79,7 @@ PackageBuyerInputsForBrowser(
 }
 
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
-    absl::string_view auction_result_ciphertext,
-    SelectAdRequest::ClientType client_type,
+    absl::string_view auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context,
     absl::string_view public_key) {
   // Decrypt Response.
@@ -90,7 +88,7 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
                                                   context, public_key));
 
   switch (client_type) {
-    case SelectAdRequest::BROWSER: {
+    case CLIENT_TYPE_BROWSER: {
       // Decompress the encoded response.
       PS_ASSIGN_OR_RETURN((std::string decompressed_response),
                           UnframeAndDecompressAuctionResult(
@@ -99,7 +97,7 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
       // Decode the response.
       return CborDecodeAuctionResultToProto(decompressed_response);
     }
-    case SelectAdRequest::ANDROID: {
+    case CLIENT_TYPE_ANDROID: {
       absl::StatusOr<server_common::DecodedRequest> decoded_response;
       PS_ASSIGN_OR_RETURN((std::string decompressed_response),
                           UnframeAndDecompressAuctionResult(
@@ -108,7 +106,7 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
       if (!auction_result.ParseFromArray(decompressed_response.data(),
                                          decompressed_response.size())) {
         return absl::InternalError(
-            "Unable to decode the response (ANDROID) from server");
+            "Unable to decode the response (CLIENT_TYPE_ANDROID) from server");
       }
       return auction_result;
     } break;

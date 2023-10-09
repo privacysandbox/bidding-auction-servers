@@ -28,7 +28,7 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "cc/core/interface/type_def.h"
-#include "services/common/telemetry/telemetry_flag.h"
+#include "src/cpp/telemetry/flag/telemetry_flag.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -111,9 +111,10 @@ class TrustedServersConfigClient {
   }
   template <>
   void SetFlag(
-      const absl::Flag<std::optional<server_common::TelemetryFlag>>& flag,
+      const absl::Flag<std::optional<server_common::telemetry::TelemetryFlag>>&
+          flag,
       absl::string_view config_name) {
-    std::optional<server_common::TelemetryFlag> flag_value =
+    std::optional<server_common::telemetry::TelemetryFlag> flag_value =
         absl::GetFlag(flag);
     if (flag_value.has_value()) {
       config_entries_map_[config_name] = AbslUnparseFlag(*flag_value);

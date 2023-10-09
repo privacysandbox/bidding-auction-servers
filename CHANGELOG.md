@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.3.0 (2023-10-09)
+
+
+### Features
+
+* Add GLOG env vars to local functional testing auction service container
+* Add PAS support in bidding service
+* add ps_verbosity flag to bidding, auction
+* pass a client_type url param to KV services only when
+* run otel collector inside a docker image on Container Optimized OS
+* Skip call to Bidding Server when no Trusted Bidding Signals present
+* update the service local start scripts to use docker
+
+
+### Bug Fixes
+
+* Fixes crash in SFE/BFE due to curl handle lookup failure
+* update functional test with new client type enum
+
 ## 2.2.0 (2023-09-27)
 
 

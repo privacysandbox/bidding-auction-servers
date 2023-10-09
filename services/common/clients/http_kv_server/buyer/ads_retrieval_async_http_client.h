@@ -29,9 +29,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// Request/response schema for ad retrieval service is defined here:
-// http://go/tee-ad-retrieval-server-api
-
 // Metadata sent by the client.
 struct DeviceMetadata {
   std::string client_ip;
@@ -39,7 +36,7 @@ struct DeviceMetadata {
   std::string accept_language;
 };
 
-// Data used to build the ad retrieval lookup url suffix
+// Data used to build the body of the ad retrieval lookup request.
 struct AdRetrievalInput {
   std::string protected_signals;
   std::string contextual_signals;

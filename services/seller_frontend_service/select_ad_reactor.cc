@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -107,7 +108,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   for (const auto& interest_group : buyer_input.interest_groups()) {
     if (std::strcmp(interest_group.name().c_str(),
                     result.interest_group_name().c_str())) {
-      if (request_->client_type() == SelectAdRequest::BROWSER) {
+      if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
         logger_.vlog(1, "BrowserSignal: Recency:",
                      interest_group.browser_signals().recency());
@@ -282,7 +283,7 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
     }
   }
 
-  if (request_->client_type() == SelectAdRequest::UNKNOWN) {
+  if (request_->client_type() == CLIENT_TYPE_UNKNOWN) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kUnknownClientType,
                 ErrorCode::CLIENT_SIDE);
   }
@@ -304,7 +305,9 @@ void SelectAdReactor::Execute() {
   auto scope = opentelemetry::trace::Scope(span);
 
   if (!config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)) {
-    LOG(DFATAL) << "Expected encryption to be enabled";
+    // This find absl_log.h first instead of glog.
+    // change back to `DFATAL` once it is in absl release (already in HEAD)
+    LOG(ERROR) << "Expected encryption to be enabled";
   }
   if (!DecryptRequest()) {
     VLOG(1) << "SelectAdRequest decryption failed";
@@ -404,6 +407,7 @@ SelectAdReactor::CreateGetBidsRequest(absl::string_view seller,
   auto get_bids_request = std::make_unique<GetBidsRequest::GetBidsRawRequest>();
   get_bids_request->set_is_chaff(false);
   get_bids_request->set_seller(seller);
+  get_bids_request->set_client_type(request_->client_type());
   get_bids_request->set_auction_signals(
       request_->auction_config().auction_signals());
   std::string buyer_debug_id;
@@ -472,7 +476,7 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
             // destruct bfe_request, destructor measures request time
             auto not_used = std::move(bfe_request);
           }
-          VLOG(6) << "Received a bid response from a BFE";
+          VLOG(6) << "Received a response from a BFE";
           OnFetchBidsDone(std::move(response), buyer_ig_owner);
         },
         timeout);
@@ -511,7 +515,7 @@ void SelectAdReactor::OnFetchBidsDone(
     }
   } else {
     LogIfError(metric_context_->AccumulateMetric<
-               server_common::metric::kInitiatedRequestErrorCount>(1));
+               server_common::metrics::kInitiatedRequestErrorCount>(1));
     logger_.vlog(1, "GetBidsRequest failed for buyer ", buyer_ig_owner,
                  "\nresponse status: ", response.status());
     async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
@@ -542,8 +546,8 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 }
 
 void SelectAdReactor::FetchScoringSignals() {
-  ScoringSignalsRequest scoring_signals_request(shared_buyer_bids_map_,
-                                                buyer_metadata_);
+  ScoringSignalsRequest scoring_signals_request(
+      shared_buyer_bids_map_, buyer_metadata_, request_->client_type());
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
   clients_.scoring_signals_async_provider.Get(
@@ -566,7 +570,7 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
     absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
   if (!result.ok()) {
     LogIfError(metric_context_->AccumulateMetric<
-               server_common::metric::kInitiatedRequestErrorCount>(1));
+               server_common::metrics::kInitiatedRequestErrorCount>(1));
     logger_.vlog(1, "Scoring signals fetch from key-value server failed: ",
                  result.status());
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInternalError,
@@ -736,7 +740,7 @@ void SelectAdReactor::OnScoreAdsDone(
   logger_.vlog(2, "ScoreAdsResponse status:", response.status());
   if (!response.ok()) {
     LogIfError(metric_context_->AccumulateMetric<
-               server_common::metric::kInitiatedRequestErrorCount>(1));
+               server_common::metrics::kInitiatedRequestErrorCount>(1));
     PerformDebugReporting(high_score);
     benchmarking_logger_->End();
     Finish(grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
@@ -816,7 +820,7 @@ void SelectAdReactor::PerformDebugReporting(
       AdWithBid adWithBid = get_bid_response->bids().at(i);
       std::string ig_name = adWithBid.interest_group_name();
       if (adWithBid.has_debug_report_urls()) {
-        auto done_cb = [&logger = logger_, ig_owner,
+        auto done_cb = [ig_owner,
                         ig_name](absl::StatusOr<absl::string_view> result) {
           if (result.ok()) {
             VLOG(2) << "Performed debug reporting for:" << ig_owner
@@ -828,16 +832,20 @@ void SelectAdReactor::PerformDebugReporting(
           }
         };
         std::string debug_url;
+        bool is_win_debug_url = false;
         if (post_auction_signals.winning_ig_owner == buyer &&
             adWithBid.interest_group_name() ==
                 post_auction_signals.winning_ig_name) {
           debug_url = adWithBid.debug_report_urls().auction_debug_win_url();
+          is_win_debug_url = true;
         } else {
           debug_url = adWithBid.debug_report_urls().auction_debug_loss_url();
         }
         HTTPRequest http_request = CreateDebugReportingHttpRequest(
-            debug_url, GetPlaceholderDataForInterestGroup(
-                           ig_owner, ig_name, post_auction_signals));
+            debug_url,
+            GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                               post_auction_signals),
+            is_win_debug_url);
         clients_.reporting->DoReport(http_request, done_cb);
       }
     }

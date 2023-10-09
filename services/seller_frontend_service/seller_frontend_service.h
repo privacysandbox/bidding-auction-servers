@@ -71,11 +71,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 : grpc_event_engine::experimental::GetDefaultEventEngine())),
         scoring_signals_async_provider_(
             std::make_unique<HttpScoringSignalsAsyncProvider>(
-                std::make_unique<SellerKeyValueAsyncHttpClient>(
-                    config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
-                    std::make_unique<MultiCurlHttpFetcherAsync>(
-                        executor_.get()),
-                    true))),
+                CreateKVClient())),
         scoring_(std::make_unique<ScoringAsyncGrpcClient>(
             key_fetcher_manager_.get(), crypto_client_.get(),
             AuctionServiceClientConfig{
@@ -114,6 +110,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   SellerFrontEndService(const TrustedServersConfigClient* config_client,
                         ClientRegistry clients)
       : config_client_(*config_client), clients_(std::move(clients)) {}
+
+  std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
+  CreateKVClient();
 
   // Selects a winning ad by running an ad auction.
   //

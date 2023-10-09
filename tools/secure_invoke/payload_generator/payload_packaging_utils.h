@@ -57,7 +57,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // response.
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
 PackagePayload(const ProtectedAuctionInput& protected_auction_input,
-               SelectAdRequest::ClientType client_type,
+               ClientType client_type,
                absl::string_view public_key = kDefaultPublicKey);
 
 // Returns 1. CBOR Encoded and 2. GZIP Compressed (in that order)
@@ -80,8 +80,7 @@ PackageBuyerInputsForApp(
 // The encryption context from PackagePayload needs
 // to be provided for decrypting the response.
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
-    absl::string_view auction_result_ciphertext,
-    SelectAdRequest::ClientType client_type,
+    absl::string_view auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
     absl::string_view public_key = kDefaultPublicKey);
 

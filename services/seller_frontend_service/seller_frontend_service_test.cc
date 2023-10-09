@@ -70,9 +70,10 @@ class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::SfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
     config_.SetFlagForTest(kEmptyValue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kEmptyValue, SELLER_ORIGIN_DOMAIN);
@@ -111,7 +112,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
 
   grpc::ClientContext context;
   SelectAdRequest request;
-  request.set_client_type(SelectAdRequest::ANDROID);
+  request.set_client_type(CLIENT_TYPE_ANDROID);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -143,7 +144,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
 
   grpc::ClientContext context;
   SelectAdRequest request;
-  request.set_client_type(SelectAdRequest::ANDROID);
+  request.set_client_type(CLIENT_TYPE_ANDROID);
   // Set ciphertext to any non-null value for this test.
   request.set_protected_auction_ciphertext("q");
   SelectAdResponse response;
@@ -176,7 +177,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
   grpc::ClientContext context;
   SelectAdRequest request;
   request.set_protected_auction_ciphertext("foo");
-  request.set_client_type(SelectAdRequest::UNKNOWN);
+  request.set_client_type(CLIENT_TYPE_UNKNOWN);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -210,7 +211,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
 
   grpc::ClientContext context;
   auto [protected_auction_input, request, encryption_context] =
-      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::ANDROID,
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
   request.mutable_auction_config()->clear_buyer_list();
   SelectAdResponse response;
@@ -262,7 +263,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals("Test");
   request.mutable_auction_config()->set_auction_signals("Test");
-  request.set_client_type(SelectAdRequest::ANDROID);
+  request.set_client_type(CLIENT_TYPE_ANDROID);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -306,7 +307,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
 
   grpc::ClientContext context;
   auto [protected_auction_input, request, encryption_context] =
-      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_BROWSER,
                                           kSampleSellerDomain);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
@@ -345,7 +346,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   request.mutable_auction_config()->set_seller(kSampleSellerDomain);
   request.mutable_auction_config()->set_seller_signals(kSampleSellerSignals);
   request.mutable_auction_config()->set_auction_signals(kSampleAuctionSignals);
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
           protected_auction_input);
@@ -473,7 +474,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
         local_buyer;
   }
   protected_auction_input.set_publisher_name(MakeARandomString());
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_auction_ciphertext() =
@@ -573,7 +574,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
         local_buyer;
   }
   protected_auction_input.set_publisher_name(MakeARandomString());
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_auction_ciphertext() =
@@ -676,7 +677,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
         local_buyer;
   }
   protected_auction_input.set_publisher_name(MakeARandomString());
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_auction_ciphertext() =
@@ -732,7 +733,7 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
   SelectAdRequest request =
       MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_auction_ciphertext() =
@@ -793,7 +794,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
       MakeARandomProtectedAuctionInput<TypeParam>();
   SelectAdRequest request =
       MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   auto [encrypted_protected_auction_input, encryption_context] =
       GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
   *request.mutable_protected_auction_ciphertext() =

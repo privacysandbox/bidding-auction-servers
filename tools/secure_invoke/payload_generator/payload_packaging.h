@@ -67,19 +67,18 @@ namespace privacy_sandbox::bidding_auction_servers {
 // the input JSON to a SelectAdRequest object.
 // 7. Convert the SelectAdRequest object to a JSON string.
 // The protected_audience_ciphertext is encoded, encrypted and compressed in the
-// same format as expected in the ciphertext from a BROWSER.
-// This will extended in the future to support ANDROID as well.
+// same format as expected in the ciphertext from a CLIENT_TYPE_BROWSER.
+// This will extended in the future to support CLIENT_TYPE_ANDROID as well.
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
-PackagePlainTextSelectAdRequest(
-    absl::string_view input_json_str,
-    SelectAdRequest::ClientType client_type = SelectAdRequest::BROWSER);
+PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
+                                ClientType client_type = CLIENT_TYPE_BROWSER);
 
 // This method returns a SelectAdRequest json for testing B&A servers in
 // "test_mode" using the PackagePlainTextSelectAdRequest method.
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str,
-    SelectAdRequest::ClientType client_type = SelectAdRequest::BROWSER);
+    ClientType client_type = CLIENT_TYPE_BROWSER);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // TOOLS_PAYLOAD_GENERATOR_PAYLOAD_PACKAGING_H_

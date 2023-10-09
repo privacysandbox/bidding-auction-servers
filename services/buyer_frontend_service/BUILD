@@ -82,11 +82,33 @@ cc_library(
         ":buyer_frontend_data",
         "//services/common/clients:buyer_key_value_async_http_client",
         "//services/common/clients:client_factory_template",
+        "//services/common/clients:fake_buyer_key_value_async_http_client",
         "//services/common/providers:async_provider",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_library(
+    name = "buyer_frontend_test_utils",
+    testonly = True,
+    srcs = ["util/buyer_frontend_test_utils.cc"],
+    hdrs = ["util/buyer_frontend_test_utils.h"],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
+    deps = [
+        ":bidding_signals_providers",
+        ":buyer_frontend_data",
+        "//services/common/test:mocks",
+        "//services/common/test/utils:test_utils",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -173,6 +195,7 @@ cc_test(
     ],
     deps = [
         ":buyer_frontend_service",
+        ":buyer_frontend_test_utils",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
@@ -226,6 +249,7 @@ cc_test(
     ],
     deps = [
         ":buyer_frontend_service",
+        ":buyer_frontend_test_utils",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

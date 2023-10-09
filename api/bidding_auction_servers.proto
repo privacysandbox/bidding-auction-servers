@@ -185,6 +185,21 @@ enum AdType {
   AD_TYPE_PROTECTED_APP_SIGNALS_AD = 2;
 }
 
+// Specifies the client type that originated the request.
+// This is used for message structuring and also passed
+// to the Buyer and Seller Key/Value services.
+enum ClientType {
+  CLIENT_TYPE_UNKNOWN = 0;
+
+  // An Android device with Google Mobile Services (GMS).
+  // Note: This covers apps on Android.
+  CLIENT_TYPE_ANDROID = 1;
+
+  // Any browser.
+  // Note: This covers browsers on Android and desktop.
+  CLIENT_TYPE_BROWSER = 2;
+}
+
 // Protected Audience auction result returned from SellerFrontEnd to the client
 // through the Seller service. It is encrypted by the SellerFrontEnd, passed
 // through the untrusted Seller service and decrypted by the client. Note that
@@ -413,20 +428,8 @@ message SelectAdRequest {
   // Plaintext. Passed by the untrusted Seller service.
   AuctionConfig auction_config = 2;
 
-  enum ClientType {
-    UNKNOWN = 0;
-
-    // An Android device with Google Mobile Services (GMS).
-    // Note: This covers apps on Android.
-    ANDROID = 1;
-
-    // Any browser.
-    // Note: This covers browsers on Android and desktop.
-    BROWSER = 2;
-  }
-
   // Type of end user's device / client, that would help in validating the
-  // client integrity.
+  // client integrity. Also passed to the key/value services.
   // Note: Not all types of clients can be attested.
   ClientType client_type = 3;
 
@@ -522,6 +525,9 @@ message GetBidsRequest {
 
     // Protected App signals buyer input.
     ProtectedAppSignalsBuyerInput protected_app_signals_buyer_input = 10;
+
+    // Client device type. Passed to the key/value services.
+    ClientType client_type = 11;
   }
 
   // Encrypted GetBidsRawRequest.

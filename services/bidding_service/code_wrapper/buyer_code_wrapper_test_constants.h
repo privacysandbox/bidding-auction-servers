@@ -112,6 +112,56 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       };
     }
 )JS_CODE";
+constexpr absl::string_view kExpectedGenericWrapperCode_template = R"JS_CODE(
+  const globalWasmHex = [];
+  const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
+
+    function testFunctionNameEntryFunction(testArg, featureFlags){
+      var ps_logs = [];
+      var ps_errors = [];
+      var ps_warns = [];
+      if (featureFlags.enable_logging) {
+        console.log = function(...args) {
+          ps_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_errors.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_warns.push(JSON.stringify(args))
+        }
+      }
+      var response = {};
+      try {
+        response = testFunctionName(testArg);
+      } catch({error, message}) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
+      }
+      return {
+        response: response,
+        logs: ps_logs,
+        errors: ps_errors,
+        warnings: ps_warns
+      }
+    }
+
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+    function generateBid(interest_group, auction_signals,buyer_signals,
+                          trusted_bidding_signals,
+                          device_signals){
+    const bid = fibonacci(Math.floor(Math.random() * 30 + 1));
+    console.log("Logging from generateBid");
+    return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+)JS_CODE";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // FLEDGE_SERVICES_BUYER_CODE_WRAPPER_TEST_CONSTANTS_H_

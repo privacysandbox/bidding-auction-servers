@@ -77,11 +77,11 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
 
     BuyerServiceEndpoint bfe_endpoint;
     PS_ASSIGN_OR_RETURN(bfe_endpoint.endpoint,
-                        GetString(buyer_service_endpoint_value, "url"));
+                        GetStringMember(buyer_service_endpoint_value, "url"));
 
     PS_ASSIGN_OR_RETURN(
         std::string cloud_platform,
-        GetString(buyer_service_endpoint_value, "cloudPlatform"));
+        GetStringMember(buyer_service_endpoint_value, "cloudPlatform"));
     if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
       bfe_endpoint.cloud_platform = server_common::CloudPlatform::GCP;
     } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {

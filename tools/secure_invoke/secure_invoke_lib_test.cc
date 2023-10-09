@@ -25,6 +25,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
 #include "services/buyer_frontend_service/buyer_frontend_service.h"
+#include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -108,15 +109,19 @@ ABSL_FLAG(std::string, target_service, kSfe,
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr char valid_bidding_signals[] =
+    R"JSON({"keys":{"keyA":["member1","member2"]}})JSON";
+
 using ::testing::_;
 using ::testing::AnyNumber;
 
 class SecureInvokeLib : public testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::BfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
@@ -125,12 +130,12 @@ class SecureInvokeLib : public testing::Test {
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, CreatePublicKeyFetcher(config_client));
 
-    EXPECT_CALL(*bidding_signals_provider_, Get(_, _, _))
-        .Times(AnyNumber())
-        .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                     auto on_done, absl::Duration timeout) {
-          std::move(on_done)(std::make_unique<BiddingSignals>());
-        });
+    SetupBiddingProviderMock(
+        /*provider=*/*bidding_signals_provider_,
+        /*bidding_signals_value=*/valid_bidding_signals,
+        /*repeated_get_allowed=*/false,
+        /*server_error_to_return=*/std::nullopt,
+        /*match_any_params_any_times=*/true);
 
     GTEST_FLAG_SET(death_test_style, "threadsafe");
   }

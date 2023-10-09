@@ -62,6 +62,7 @@ module "buyer" {
     CREATE_NEW_EVENT_ENGINE                       = "" # Example: "false"
     ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
+    PS_VERBOSITY                                  = "" # Example: "10"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.

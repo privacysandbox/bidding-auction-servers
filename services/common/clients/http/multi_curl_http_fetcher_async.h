@@ -23,7 +23,7 @@
 #include <curl/multi.h>
 #include <grpc/event_engine/event_engine.h>
 
-#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/notification.h"
 #include "services/common/clients/http/http_fetcher_async.h"
@@ -68,7 +68,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // destructed when they can ensure that the instance will no longer be invoked
   // from any threads.
   ~MultiCurlHttpFetcherAsync() override
-      ABSL_LOCKS_EXCLUDED(in_loop_mu_, curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(in_loop_mu_, curl_handle_set_lock_);
 
   // Not copyable or movable.
   MultiCurlHttpFetcherAsync(const MultiCurlHttpFetcherAsync&) = delete;
@@ -86,7 +86,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // to be the FetchUrl client's thread.
   void FetchUrl(const HTTPRequest& request, int timeout_ms,
                 OnDoneFetchUrl done_callback) override
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // PUTs data to the specified url.
   //
@@ -98,7 +98,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Clients can expect done_callback to be called exactly once.
   void PutUrl(const HTTPRequest& http_request, int timeout_ms,
               OnDoneFetchUrl done_callback) override
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // Fetches provided urls with libcurl.
   //
@@ -112,7 +112,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // to be the FetchUrl client's thread.
   void FetchUrls(const std::vector<HTTPRequest>& requests,
                  absl::Duration timeout, OnDoneFetchUrls done_callback) override
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
  private:
   // This struct maintains the data related to a Curl request, some of which
@@ -141,11 +141,18 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
                     OnDoneFetchUrl on_done);
     ~CurlRequestData();
   };
-  // This method adds the curl handle and callback to the callback_map.
+
+  // This method adds the curl handle to a set to keep track of pending handles.
+  // Must be called after the handle has been initialized.
   // Only a single thread can execute this function at a time since it requires
-  // the acquisition of the callback_map_lock_ mutex.
-  void Add(CURL* handle, std::unique_ptr<CurlRequestData> done_callback)
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+  // the acquisition of the curl_handle_set_lock_ mutex.
+  void Add(CURL* handle) ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
+  // This method removes the curl handle if the call has finished or abandoned.
+  // Must be called before the handle has been cleaned up.
+  // Only a single thread can execute this function at a time since it requires
+  // the acquisition of the curl_handle_set_lock_ mutex.
+  void Remove(CURL* handle) ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // This method executes PerformCurlUpdate on a loop in the executor_. It
   // will schedule itself as a new task to perform curl check again.
@@ -159,7 +166,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Only a single thread can execute this function at a time since it requires
   // the acquisition of the in_loop_mu_ mutex.
   void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(
@@ -169,7 +176,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Adds the request to curl multi request manager. If the addition fails, the
   // executes the callback else stores the request handle in curl data map.
   void ExecuteCurlRequest(std::unique_ptr<CurlRequestData> request)
-      ABSL_LOCKS_EXCLUDED(curl_data_map_lock_);
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // The executor_ will receive tasks from PerformCurlUpdate. The tasks will
   // schedule future ExecuteLoop calls and schedule executions for
@@ -194,9 +201,9 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   absl::Notification shutdown_complete_;
 
   // A map of curl easy handles to curl data for easy tracking.
-  absl::Mutex curl_data_map_lock_;
-  absl::flat_hash_map<CURL*, std::unique_ptr<CurlRequestData>> curl_data_map_
-      ABSL_GUARDED_BY(curl_data_map_lock_);
+  absl::Mutex curl_handle_set_lock_;
+  absl::flat_hash_set<CURL*> curl_handle_set_
+      ABSL_GUARDED_BY(curl_handle_set_lock_);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

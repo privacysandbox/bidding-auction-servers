@@ -53,8 +53,7 @@ namespace {
 constexpr char kJsonFormat[] = "JSON";
 
 absl::StatusOr<std::string> ParseSelectAdResponse(
-    std::unique_ptr<SelectAdResponse> resp,
-    SelectAdRequest::ClientType client_type,
+    std::unique_ptr<SelectAdResponse> resp, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context) {
   absl::StatusOr<AuctionResult> res = UnpackageAuctionResult(
       resp->auction_result_ciphertext(), client_type, context);
@@ -74,8 +73,7 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
 
 absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
-    const RequestOptions& request_options,
-    SelectAdRequest::ClientType client_type,
+    const RequestOptions& request_options, ClientType client_type,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -208,7 +206,7 @@ std::string LoadFile(absl::string_view file_path) {
                      (std::istreambuf_iterator<char>()));
 }
 
-absl::Status SendRequestToSfe(SelectAdRequest::ClientType client_type) {
+absl::Status SendRequestToSfe(ClientType client_type) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));

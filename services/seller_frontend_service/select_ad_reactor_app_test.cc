@@ -74,9 +74,10 @@ class SelectAdReactorForAppTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::SfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
@@ -101,7 +102,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::ANDROID, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -186,7 +187,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -238,7 +239,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::ANDROID, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
   auto& protected_auction_input = request_with_context.protected_auction_input;
@@ -303,9 +304,10 @@ class SelectAdReactorPASTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::SfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
@@ -365,7 +367,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
     request.mutable_auction_config()->set_auction_signals(
         absl::StrCat("{\"auction_signal\": \"", MakeARandomString(), "\"}"));
     request.mutable_auction_config()->set_seller(seller_origin_domain);
-    request.set_client_type(SelectAdRequest::ANDROID);
+    request.set_client_type(CLIENT_TYPE_ANDROID);
     for (const auto& [local_buyer, unused] :
          protected_auction_input.buyer_input()) {
       *request.mutable_auction_config()->mutable_buyer_list()->Add() =

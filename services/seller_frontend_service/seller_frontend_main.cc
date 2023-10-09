@@ -176,9 +176,10 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
-  server_common::BuildDependentConfig telemetry_config(
+  server_common::telemetry::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+              TELEMETRY_CONFIG)
           .server_config);
 
   std::string collector_endpoint =
@@ -193,7 +194,7 @@ absl::Status RunServer() {
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::SfeContextMap(
-      std::move(telemetry_config),
+      telemetry_config,
       server_common::ConfigurePrivateMetrics(
           CreateSharedAttributes(&config_util),
           CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),

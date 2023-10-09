@@ -27,7 +27,6 @@
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
-#include "glog/logging.h"
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
@@ -127,15 +126,19 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
+
+  // Set verbosity
+  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
-
-  VLOG(1) << "Protected App Signals support enabled on the service: "
-          << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  VLOG(1) << "Successfully constructed the config client.";
+  PS_VLOG_NO_CONTEXT(1)
+      << "Protected App Signals support enabled on the service: "
+      << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  PS_VLOG_NO_CONTEXT(1) << "Successfully constructed the config client.";
   return config_client;
 }
 
@@ -241,9 +244,10 @@ absl::Status RunServer() {
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
 
-  server_common::BuildDependentConfig telemetry_config(
+  server_common::telemetry::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+              TELEMETRY_CONFIG)
           .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
@@ -257,16 +261,17 @@ absl::Status RunServer() {
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::AuctionContextMap(
-      std::move(telemetry_config),
+      telemetry_config,
       server_common::ConfigurePrivateMetrics(
           CreateSharedAttributes(&config_util),
           CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
           collector_endpoint),
       config_util.GetService(), kOpenTelemetryVersion.data()));
-  auto executer = std::make_unique<server_common::EventEngineExecutor>(
-      grpc_event_engine::experimental::CreateEventEngine());
+  std::unique_ptr<AsyncReporter> async_reporter =
+      std::make_unique<AsyncReporter>(
+          std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
   auto score_ads_reactor_factory =
-      [&client, &executer, enable_auction_service_benchmark](
+      [&client, &async_reporter, enable_auction_service_benchmark](
           const ScoreAdsRequest* request, ScoreAdsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
@@ -278,12 +283,9 @@ absl::Status RunServer() {
         } else {
           benchmarkingLogger = std::make_unique<ScoreAdsNoOpLogger>();
         }
-        std::unique_ptr<AsyncReporter> async_reporter =
-            std::make_unique<AsyncReporter>(
-                std::make_unique<MultiCurlHttpFetcherAsync>(executer.get()));
         return std::make_unique<ScoreAdsReactor>(
             client, request, response, std::move(benchmarkingLogger),
-            key_fetcher_manager, crypto_client, std::move(async_reporter),
+            key_fetcher_manager, crypto_client, async_reporter.get(),
             runtime_config);
       };
 
@@ -332,7 +334,7 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  VLOG(1) << "Server listening on " << server_address;
+  PS_VLOG_NO_CONTEXT(1) << "Server listening on " << server_address;
   server->Wait();
   // Ends periodic code blob fetching from an arbitrary url.
   if (code_fetcher) {

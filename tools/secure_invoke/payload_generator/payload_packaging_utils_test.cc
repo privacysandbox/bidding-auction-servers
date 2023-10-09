@@ -51,9 +51,9 @@ server_common::PrivateKey GetPrivateKey(absl::string_view private_key_hex) {
 // SelectAdReactor.
 TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
   ProtectedAuctionInput expected =
-      MakeARandomProtectedAuctionInput(SelectAdRequest::BROWSER);
+      MakeARandomProtectedAuctionInput(CLIENT_TYPE_BROWSER);
   auto output =
-      PackagePayload(expected, SelectAdRequest::BROWSER, kDefaultPublicKey);
+      PackagePayload(expected, CLIENT_TYPE_BROWSER, kDefaultPublicKey);
   ASSERT_TRUE(output.ok()) << output.status();
 
   // Decrypt.
@@ -143,8 +143,8 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
 
   // Encrypt.
   auto input_ctxt_pair =
-      PackagePayload(MakeARandomProtectedAuctionInput(SelectAdRequest::BROWSER),
-                     SelectAdRequest::BROWSER, kDefaultPublicKey);
+      PackagePayload(MakeARandomProtectedAuctionInput(CLIENT_TYPE_BROWSER),
+                     CLIENT_TYPE_BROWSER, kDefaultPublicKey);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
@@ -153,7 +153,7 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
   absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(
-      *encrypted_response, SelectAdRequest::BROWSER, input_ctxt_pair->second);
+      *encrypted_response, CLIENT_TYPE_BROWSER, input_ctxt_pair->second);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;
@@ -164,10 +164,9 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
 
 TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
   ProtectedAuctionInput expected =
-      MakeARandomProtectedAuctionInput(SelectAdRequest::ANDROID);
+      MakeARandomProtectedAuctionInput(CLIENT_TYPE_ANDROID);
   absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
-      output =
-          PackagePayload(expected, SelectAdRequest::ANDROID, kDefaultPublicKey);
+      output = PackagePayload(expected, CLIENT_TYPE_ANDROID, kDefaultPublicKey);
   ASSERT_TRUE(output.ok()) << output.status();
 
   // Decrypt.
@@ -234,8 +233,8 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
 
   // Encrypt.
   auto input_ctxt_pair =
-      PackagePayload(MakeARandomProtectedAuctionInput(SelectAdRequest::ANDROID),
-                     SelectAdRequest::ANDROID, kDefaultPublicKey);
+      PackagePayload(MakeARandomProtectedAuctionInput(CLIENT_TYPE_ANDROID),
+                     CLIENT_TYPE_ANDROID, kDefaultPublicKey);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
@@ -244,7 +243,7 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
   absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(
-      *encrypted_response, SelectAdRequest::ANDROID, input_ctxt_pair->second);
+      *encrypted_response, CLIENT_TYPE_ANDROID, input_ctxt_pair->second);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;

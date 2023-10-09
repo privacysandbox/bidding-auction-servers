@@ -36,6 +36,8 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/clients/http_kv_server/buyer/buyer_key_value_async_http_client.h"
+#include "services/common/clients/http_kv_server/buyer/fake_buyer_key_value_async_http_client.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/metric/server_definition.h"
@@ -185,14 +187,21 @@ absl::Status RunServer() {
       config_client.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
           ? grpc_event_engine::experimental::CreateEventEngine()
           : grpc_event_engine::experimental::GetDefaultEventEngine());
-  std::unique_ptr<BuyerKeyValueAsyncHttpClient> buyer_kv_async_http_client;
-  buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
-      buyer_kv_server_addr,
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
-
-  server_common::BuildDependentConfig telemetry_config(
+  std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>
+      buyer_kv_async_http_client;
+  if (buyer_kv_server_addr == "E2E_TEST_MODE") {
+    buyer_kv_async_http_client =
+        std::make_unique<FakeBuyerKeyValueAsyncHttpClient>(
+            buyer_kv_server_addr);
+  } else {
+    buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
+        buyer_kv_server_addr,
+        std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
+  }
+  server_common::telemetry::BuildDependentConfig telemetry_config(
       config_client
-          .GetCustomParameter<server_common::TelemetryFlag>(TELEMETRY_CONFIG)
+          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+              TELEMETRY_CONFIG)
           .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
@@ -206,7 +215,7 @@ absl::Status RunServer() {
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
   AddSystemMetric(metric::BfeContextMap(
-      std::move(telemetry_config),
+      telemetry_config,
       server_common::ConfigurePrivateMetrics(
           CreateSharedAttributes(&config_util),
           CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),

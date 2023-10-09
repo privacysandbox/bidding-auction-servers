@@ -53,7 +53,11 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         encryption_enabled_(encryption_enabled) {
     DCHECK(encryption_enabled);
     VLOG(5) << "Encryption is enabled, decrypting request now";
-    DecryptRequest();
+    if (DecryptRequest()) {
+      VLOG(3) << "Decrypted request: " << raw_request_.DebugString();
+    } else {
+      VLOG(1) << "Failed to decrypt the request";
+    }
   }
 
   // Polymorphic class => virtual destructor

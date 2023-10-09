@@ -170,8 +170,8 @@ GetProtoEncodedEncryptedInputAndOhttpContext(const T& protected_auction_input) {
 
 template <typename T>
 EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
-    SelectAdRequest::ClientType client_type,
-    absl::string_view seller_origin_domain, bool is_consented_debug = false) {
+    ClientType client_type, absl::string_view seller_origin_domain,
+    bool is_consented_debug = false) {
   BuyerInput buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
@@ -181,10 +181,10 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   decoded_buyer_inputs.emplace(kSampleBuyer, buyer_input);
   google::protobuf::Map<std::string, std::string> encoded_buyer_inputs;
   switch (client_type) {
-    case SelectAdRequest::BROWSER:
+    case CLIENT_TYPE_BROWSER:
       encoded_buyer_inputs = *GetEncodedBuyerInputMap(decoded_buyer_inputs);
       break;
-    case SelectAdRequest::ANDROID:
+    case CLIENT_TYPE_ANDROID:
       encoded_buyer_inputs = GetProtoEncodedBuyerInputs(decoded_buyer_inputs);
       break;
     default:
@@ -224,7 +224,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
       descriptor->name() == kProtectedAuctionInput;
 
   switch (client_type) {
-    case SelectAdRequest::ANDROID: {
+    case CLIENT_TYPE_ANDROID: {
       auto [encrypted_request, context] =
           GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
       if (is_protected_auction_input) {
@@ -237,7 +237,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
-    case SelectAdRequest::BROWSER: {
+    case CLIENT_TYPE_BROWSER: {
       auto [encrypted_request, context] =
           GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
       if (is_protected_auction_input) {
@@ -258,7 +258,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
 template <typename T>
 std::pair<EncryptedSelectAdRequestWithContext<T>, ClientRegistry>
 GetSelectAdRequestAndClientRegistryForTest(
-    SelectAdRequest::ClientType client_type, std::optional<float> buyer_bid,
+    ClientType client_type, std::optional<float> buyer_bid,
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
         scoring_signals_provider,
     const ScoringAsyncClientMock& scoring_client,
@@ -322,7 +322,7 @@ GetSelectAdRequestAndClientRegistryForTest(
                   ->mutable_buyer_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(kTestEvent, kTestInteractionUrl);
-              if (client_type == SelectAdRequest::ANDROID) {
+              if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }
               std::move(on_done)(std::move(response));

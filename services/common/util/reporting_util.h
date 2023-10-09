@@ -23,7 +23,7 @@
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/util/context_logger.h"
+#include "services/common/loggers/request_context_impl.h"
 #include "services/common/util/post_auction_signals.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -98,7 +98,8 @@ PostAuctionSignals GeneratePostAuctionSignals(
 // data in the url.
 HTTPRequest CreateDebugReportingHttpRequest(
     absl::string_view url,
-    std::unique_ptr<DebugReportingPlaceholder> placeholder_data);
+    std::unique_ptr<DebugReportingPlaceholder> placeholder_data,
+    bool is_win_debug_url);
 
 // Returns a unique pointer to debug reporting placeholder for the interest
 // group.
@@ -122,13 +123,13 @@ absl::string_view ToSellerRejectionReasonString(
 // `enable_ad_tech_code_logging` is enabled.
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-                           const ContextLogger& logger);
+                           log::ContextImpl& log_context);
 
 // Parses the JSON string, conditionally prints the logs from the response and
 // returns a serialized response string retrieved from the underlying UDF.
-absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
+absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    const ContextLogger& logger);
+    log::ContextImpl& log_context);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

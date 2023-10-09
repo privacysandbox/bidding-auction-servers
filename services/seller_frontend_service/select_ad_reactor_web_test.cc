@@ -61,9 +61,10 @@ class SelectAdReactorForWebTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto));
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::SfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
@@ -110,7 +111,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -178,7 +179,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -312,7 +313,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   // Set log context that should be propagated to the downstream services.
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_BROWSER,
                                           kSellerOriginDomain);
   request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
   auto& buyer_config = (*request.mutable_auction_config()
@@ -336,7 +337,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -422,7 +423,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -484,7 +485,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
-          SelectAdRequest::BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
 
@@ -646,7 +647,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   // Set consented debug config that should be propagated to the downstream
   // services.
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(SelectAdRequest::BROWSER,
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_BROWSER,
                                           kSellerOriginDomain,
                                           /*is_consented_debug=*/true);
 

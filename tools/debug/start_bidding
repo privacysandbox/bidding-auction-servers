@@ -12,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Check if bazel build folder is provided for docker builds.
-if [ $# -eq 0 ]; then
-    # No directory provided, use default value
-    SERVER_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../bazel-bin"
-else
-    # Use provided directory
-    SERVER_DIR="$1"/execroot/__main__/bazel-out/k8-opt/bin
-fi
+export PROJECT_ROOT=$(git rev-parse --show-toplevel)
 
-export GLOG_v=2
-export GLOG_logtostderr=1
-export GLOG_stderrthreshold=0
-export GRPC_DNS_RESOLVER=native
+source $(dirname "$0")/common
+declare -a -r DOCKER_RUN_ARGS=(
+  "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server"
+  "--name=bidding"
+)
+export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
-"$SERVER_DIR"/services/bidding_service/server \
+echo $EXTRA_DOCKER_RUN_ARGS
+
+export SERVER_START_CMD=$(cat << END
+/server \
 --enable_bidding_service_benchmark="true" \
 --init_config_client="false" --port=50057 \
 --js_num_workers=4 \
@@ -52,5 +50,16 @@ export GRPC_DNS_RESOLVER=native
 --consented_debug_token="" \
 --enable_protected_app_signals="false" \
 --ad_retrieval_server_kv_server_addr="localhost:50057" \
---byos_ad_retrieval_server="false" \
---ad_retrieval_timeout_ms="60000"
+--byos_ad_retrieval_server="true" \
+--ps_verbosity=2 \
+--ad_retrieval_timeout_ms="60000" && exit
+END
+)
+
+if [[ $1 == "--gdb" ]]; then
+  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
+  --docker-network host --image build-debian \
+  --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
+else
+  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined  --docker-network host --image build-debian --cmd  "${SERVER_START_CMD}"
+fi

@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_cat.h"
@@ -33,12 +34,13 @@ inline constexpr char kWarnings[] = "warnings";
 inline constexpr char kErrors[] = "errors";
 
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
-                           const ContextLogger& logger,
-                           const std::string& log_type) {
+
+                           const std::string& log_type,
+                           log::ContextImpl& log_context) {
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
-      logger.vlog(1, log_type, ": ", log.GetString());
+      PS_VLOG(1, log_context) << log_type << ": " << log.GetString();
     }
   }
 }
@@ -114,18 +116,35 @@ PostAuctionSignals GeneratePostAuctionSignals(
 
 HTTPRequest CreateDebugReportingHttpRequest(
     absl::string_view url,
-    std::unique_ptr<DebugReportingPlaceholder> placeholder_data) {
-  std::string formatted_url = absl::StrReplaceAll(
-      url,
-      {{kWinningBidPlaceholder, absl::StrCat(placeholder_data->winning_bid)},
-       {kMadeWinningBidPlaceholder,
-        placeholder_data->made_winning_bid ? "true" : "false"},
-       {kHighestScoringOtherBidPlaceholder,
-        absl::StrCat(placeholder_data->highest_scoring_other_bid)},
-       {kMadeHighestScoringOtherBidPlaceholder,
-        placeholder_data->made_highest_scoring_other_bid ? "true" : "false"},
-       {kRejectReasonPlaceholder,
-        ToSellerRejectionReasonString(placeholder_data->rejection_reason)}});
+    std::unique_ptr<DebugReportingPlaceholder> placeholder_data,
+    bool is_win_debug_url) {
+  std::vector<std::pair<const absl::string_view, std::string>> replacements;
+  replacements.push_back(
+      {kWinningBidPlaceholder,
+       absl::StrFormat("%.2f", placeholder_data->winning_bid)});
+  replacements.push_back(
+      {kMadeWinningBidPlaceholder,
+       absl::StrFormat("%v", placeholder_data->made_winning_bid)});
+  replacements.push_back(
+      {kRejectReasonPlaceholder, std::string(ToSellerRejectionReasonString(
+                                     placeholder_data->rejection_reason))});
+  replacements.push_back(
+      {kHighestScoringOtherBidPlaceholder,
+       absl::StrFormat("%.2f", kDefaultHighestScoringOtherBid)});
+  replacements.push_back(
+      {kMadeHighestScoringOtherBidPlaceholder,
+       absl::StrFormat("%v", kDefaultHasHighestScoringOtherBid)});
+  // Only pass the second highest scored bid information to the winner.
+  if (is_win_debug_url) {
+    replacements.push_back(
+        {kHighestScoringOtherBidPlaceholder,
+         absl::StrFormat("%.2f", placeholder_data->highest_scoring_other_bid)});
+    replacements.push_back(
+        {kMadeHighestScoringOtherBidPlaceholder,
+         absl::StrFormat("%v",
+                         placeholder_data->made_highest_scoring_other_bid)});
+  }
+  std::string formatted_url = absl::StrReplaceAll(url, replacements);
   HTTPRequest http_request;
   http_request.url = formatted_url;
   http_request.headers = {};
@@ -206,21 +225,21 @@ absl::string_view ToSellerRejectionReasonString(
 
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-                           const ContextLogger& logger) {
+                           log::ContextImpl& log_context) {
   if (!enable_ad_tech_code_logging) {
     return;
   }
 
-  MayVlogAdTechCodeLogs(document, logger, kLogs);
-  MayVlogAdTechCodeLogs(document, logger, kWarnings);
-  MayVlogAdTechCodeLogs(document, logger, kErrors);
+  MayVlogAdTechCodeLogs(document, kLogs, log_context);
+  MayVlogAdTechCodeLogs(document, kWarnings, log_context);
+  MayVlogAdTechCodeLogs(document, kErrors, log_context);
 }
 
-absl::StatusOr<std::string> ParseAndGetGenerateBidResponseJson(
+absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    const ContextLogger& logger) {
+    log::ContextImpl& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, logger);
+  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);
 }
 

@@ -97,7 +97,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // This is the URL we expect to see built from the input object.
   const std::string expectedUrl =
       hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
+      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
       "3D456,url4";
@@ -192,7 +193,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // This is the URL we expect to see built from the input object.
   const std::string expectedUrl =
       hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
+      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2&adComponentRenderUrls=url3,url4";
 
@@ -303,11 +305,90 @@ TEST_F(KeyValueAsyncHttpClientTest,
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
   const std::string expectedUrl =
       hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%"
+      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
       "url2,url3,url4";
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);
   CheckGetValuesFromKeysViaHttpClient(std::move(input3));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoClientType) {
+  const GetSellerValuesInput client_input = {
+      {"https://ams.creativecdn.com/"
+       "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
+       "rtbhfledge",
+       "url2", "url3", "url4"},
+      {}};
+  std::unique_ptr<GetSellerValuesInput> input =
+      std::make_unique<GetSellerValuesInput>(client_input);
+  const std::string expected_url =
+      hostname_ +
+      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
+      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
+      "url2,url3,url4";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeBrowser) {
+  const GetSellerValuesInput client_input = {
+      {"https://ams.creativecdn.com/"
+       "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
+       "rtbhfledge",
+       "url2", "url3", "url4"},
+      {},
+      ClientType::CLIENT_TYPE_BROWSER};
+  std::unique_ptr<GetSellerValuesInput> input =
+      std::make_unique<GetSellerValuesInput>(client_input);
+
+  // Note: if the client type is not CLIENT_TYPE_ANDROID, no client_type
+  // param is attached to the url. This behavior will change after beta
+  // testing to always include a client_type.
+  const std::string expected_url =
+      hostname_ +
+      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
+      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
+      "url2,url3,url4";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeAndroid) {
+  const GetSellerValuesInput client_input = {
+      {"https://ams.creativecdn.com/"
+       "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
+       "rtbhfledge",
+       "url2", "url3", "url4"},
+      {},
+      ClientType::CLIENT_TYPE_ANDROID};
+  std::unique_ptr<GetSellerValuesInput> input =
+      std::make_unique<GetSellerValuesInput>(client_input);
+  const std::string expected_url =
+      hostname_ +
+      "?client_type=1&renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "3Ffls%3Dtrue%"
+      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
+      "url2,url3,url4";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoRenderUrls) {
@@ -320,7 +401,8 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoRenderUrls) {
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
   const std::string expectedUrl =
       hostname_ +
-      "?adComponentRenderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+      "?adComponentRenderUrls=https%3A%2F%2Fams.creativecdn.com%"
+      "2Fcreatives%"
       "3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
       "3Drtbhfledge,url2,url3,url4";
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);

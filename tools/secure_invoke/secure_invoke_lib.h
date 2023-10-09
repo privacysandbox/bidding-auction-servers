@@ -37,7 +37,7 @@ struct RequestOptions {
 
 // Sends a request to SFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
-absl::Status SendRequestToSfe(SelectAdRequest::ClientType client_type);
+absl::Status SendRequestToSfe(ClientType client_type);
 
 // Sends a request to BFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.

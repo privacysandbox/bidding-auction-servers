@@ -15,19 +15,27 @@
 
 #include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
 
+#include "api/bidding_auction_servers.grpc.pb.h"
 #include "glog/logging.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
 #include "services/common/util/request_metadata.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-namespace {
 
 // Builds Seller KV Value lookup https request url.
-HTTPRequest BuildSellerKeyValueRequest(
+HTTPRequest SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
     absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
     std::unique_ptr<GetSellerValuesInput> client_input) {
   HTTPRequest request;
   ClearAndMakeStartOfUrl(kv_server_host_domain, &request.url);
+
+  // In the future, we will expose the client type param for
+  // all client types, but for now we will limit it to android for
+  // ease of Key/Value service interoperability with the on-device api.
+  if (client_input->client_type == CLIENT_TYPE_ANDROID) {
+    AddAmpersandIfNotFirstQueryParam(&request.url);
+    absl::StrAppend(&request.url, "client_type=", client_input->client_type);
+  }
 
   if (!client_input->render_urls.empty()) {
     AddListItemsAsQueryParamsToUrl(&request.url, "renderUrls",
@@ -41,7 +49,6 @@ HTTPRequest BuildSellerKeyValueRequest(
   request.headers = RequestMetadataToHttpHeaders(metadata);
   return request;
 }
-}  // namespace
 
 absl::Status SellerKeyValueAsyncHttpClient::Execute(
     std::unique_ptr<GetSellerValuesInput> keys, const RequestMetadata& metadata,

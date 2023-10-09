@@ -22,7 +22,6 @@ cc_library(
         "//services/common/loggers:benchmarking_logger",
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/loggers:timer",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
     ],
@@ -35,7 +34,6 @@ cc_library(
     deps = [
         ":score_ads_benchmarking_logger",
         "//services/common/loggers:timer",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
     ],

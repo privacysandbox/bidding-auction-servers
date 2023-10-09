@@ -32,6 +32,12 @@ class AsyncReporter {
     http_fetcher_async_ = std::move(http_fetcher_async);
   }
 
+  virtual ~AsyncReporter() = default;
+
+  // AsyncReporter is neither copyable nor movable.
+  AsyncReporter(const AsyncReporter&) = delete;
+  AsyncReporter& operator=(const AsyncReporter&) = delete;
+
   // Performs reporting by doing a get call on the URL.
   //
   // reporting_request: the request for reporting.
@@ -40,7 +46,7 @@ class AsyncReporter {
   virtual void DoReport(
       const HTTPRequest& reporting_request,
       absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
-          done_callback);
+          done_callback) const;
 
  private:
   std::unique_ptr<HttpFetcherAsync> http_fetcher_async_;

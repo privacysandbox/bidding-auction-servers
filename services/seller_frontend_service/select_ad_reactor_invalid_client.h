@@ -61,7 +61,7 @@ class SelectAdReactorInvalidClient : public SelectAdReactor {
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
 
-  SelectAdRequest::ClientType client_type_;
+  ClientType client_type_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

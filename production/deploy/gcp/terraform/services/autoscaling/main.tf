@@ -353,7 +353,7 @@ resource "google_compute_instance_template" "collector" {
     device_name  = "persistent-disk-0"
     disk_type    = "pd-standard"
     mode         = "READ_WRITE"
-    source_image = "debian-cloud/debian-11"
+    source_image = "projects/cos-cloud/global/images/family/cos-stable"
     type         = "PERSISTENT"
   }
 
@@ -382,8 +382,9 @@ resource "google_compute_instance_template" "collector" {
   }
   metadata = {
     operator = var.operator
-    startup-script = templatefile("${path.module}/collector_startup.sh", {
-      collector_port = var.collector_service_port,
+    user-data = templatefile("${path.module}/collector_startup.tftpl", {
+      collector_port           = var.collector_service_port,
+      otel_collector_image_uri = var.otel_collector_image_uri
     })
   }
 

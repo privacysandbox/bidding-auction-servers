@@ -38,8 +38,9 @@ ABSL_FLAG(std::optional<bool>, config_param_3, std::nullopt, "test flag 3");
 ABSL_FLAG(std::optional<int32_t>, config_param_4, std::nullopt, "test flag 4");
 ABSL_FLAG(std::optional<std::string>, config_param_5, "default value",
           "test flag with default val");
-ABSL_FLAG(std::optional<privacy_sandbox::server_common::TelemetryFlag>,
-          config_param_6, std::nullopt, "metric flag");
+ABSL_FLAG(
+    std::optional<privacy_sandbox::server_common::telemetry::TelemetryFlag>,
+    config_param_6, std::nullopt, "metric flag");
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -70,8 +71,9 @@ TEST(TrustedServerConfigClientTest, CanReadFlagsPassedThroughConstructor) {
   absl::SetFlag(&FLAGS_config_param_3, false);
   absl::SetFlag(&FLAGS_config_param_4, 100);
 
-  server_common::TelemetryFlag metric_flag;
-  metric_flag.server_config.set_mode(server_common::TelemetryConfig::PROD);
+  server_common::telemetry::TelemetryFlag metric_flag;
+  metric_flag.server_config.set_mode(
+      server_common::telemetry::TelemetryConfig::PROD);
   absl::SetFlag(&FLAGS_config_param_6, metric_flag);
 
   std::vector<std::future<void>> f;
@@ -118,11 +120,11 @@ TEST(TrustedServerConfigClientTest, CanReadFlagsPassedThroughConstructor) {
   EXPECT_EQ(config_client.GetBooleanParameter("config_param_2"), true);
   EXPECT_EQ(config_client.GetBooleanParameter("config_param_3"), false);
   EXPECT_EQ(config_client.GetIntParameter("config_param_4"), 100);
-  EXPECT_EQ(
-      config_client
-          .GetCustomParameter<server_common::TelemetryFlag>("config_param_6")
-          .server_config.mode(),
-      server_common::TelemetryConfig::PROD);
+  EXPECT_EQ(config_client
+                .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+                    "config_param_6")
+                .server_config.mode(),
+            server_common::telemetry::TelemetryConfig::PROD);
 }
 
 TEST(TrustedServerConfigClientTest, FetchesConfigValueFromConfigClient) {
@@ -172,11 +174,11 @@ TEST(TrustedServerConfigClientTest, FetchesConfigValueFromConfigClient) {
   EXPECT_EQ(config_client.GetBooleanParameter("config_param_2"), true);
   EXPECT_EQ(config_client.GetBooleanParameter("config_param_3"), false);
   EXPECT_EQ(config_client.GetIntParameter("config_param_4"), 4);
-  EXPECT_EQ(
-      config_client
-          .GetCustomParameter<server_common::TelemetryFlag>("config_param_6")
-          .server_config.mode(),
-      server_common::TelemetryConfig::PROD);
+  EXPECT_EQ(config_client
+                .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+                    "config_param_6")
+                .server_config.mode(),
+            server_common::telemetry::TelemetryConfig::PROD);
 }
 
 TEST(TrustedServerConfigClientTest, OverwritesConfigValueFromCloud) {

@@ -24,9 +24,11 @@ cc_library(
         "buyer_code_wrapper.h",
     ],
     deps = [
+        "//services/bidding_service:bidding_constants",
         "//services/bidding_service:runtime_flags",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
+        "//services/common/loggers:request_context_impl",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
     ],

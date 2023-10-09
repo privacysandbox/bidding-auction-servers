@@ -33,7 +33,7 @@ message BuyerCodeFetchConfig {
    // Period of how often to fetch AdTech code blob from the URL endpoint.
    int64 url_fetch_period_ms = 4;
 
-   // A time out limit for HttpsFetcherAsyc client to stop executing FetchUrl.
+   // A time out limit for HttpsFetcherAsync client to stop executing FetchUrl.
    int64 url_fetch_timeout_ms = 5;
 
    // Allow buyer debug URL generation.

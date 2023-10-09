@@ -15,6 +15,7 @@
 
 #include "services/common/clients/http_kv_server/buyer/buyer_key_value_async_http_client.h"
 
+#include "api/bidding_auction_servers.grpc.pb.h"
 #include "glog/logging.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
 #include "services/common/util/request_metadata.h"
@@ -24,12 +25,22 @@ namespace {
 
 constexpr auto kEnableEncodeParams = true;
 
-// Builds Buyer KV Value lookup Request.
-HTTPRequest BuildBuyerKeyValueRequest(
+}  // namespace
+
+HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
     absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
     std::unique_ptr<GetBuyerValuesInput> client_input) {
   HTTPRequest request;
   ClearAndMakeStartOfUrl(kv_server_host_domain, &request.url);
+
+  // In the future, we will expose the client type param for
+  // all client types, but for now we will limit it to android for
+  // ease of Key/Value service interoperability with the on-device api.
+  if (client_input->client_type == CLIENT_TYPE_ANDROID) {
+    AddAmpersandIfNotFirstQueryParam(&request.url);
+    absl::StrAppend(&request.url, "client_type=", client_input->client_type);
+  }
+
   if (!(client_input->hostname.empty())) {
     AddAmpersandIfNotFirstQueryParam(&request.url);
     absl::StrAppend(&request.url, "hostname=", client_input->hostname);
@@ -42,7 +53,6 @@ HTTPRequest BuildBuyerKeyValueRequest(
   request.headers = RequestMetadataToHttpHeaders(metadata, kMandatoryHeaders);
   return request;
 }
-}  // namespace
 
 absl::Status BuyerKeyValueAsyncHttpClient::Execute(
     std::unique_ptr<GetBuyerValuesInput> keys, const RequestMetadata& metadata,

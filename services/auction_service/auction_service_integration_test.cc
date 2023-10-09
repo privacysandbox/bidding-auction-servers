@@ -17,7 +17,6 @@
 #include "absl/random/random.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
-#include "glog/logging.h"
 #include "google/protobuf/text_format.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
@@ -103,6 +102,31 @@ constexpr absl::string_view js_code_with_debug_urls = R"JS_CODE(
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       forDebuggingOnly.reportAdAuctionLoss("https://example-ssp.com/debugLoss");
       forDebuggingOnly.reportAdAuctionWin("https://example-ssp.com/debugWin");
+      //Reshaped into AdScore
+      return {
+        "desirability": score,
+        "allowComponentAuction": false
+      };
+    }
+  )JS_CODE";
+
+constexpr absl::string_view js_code_with_global_this_debug_urls = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd( ad_metadata,
+                      bid,
+                      auction_config,
+                      scoring_signals,
+                      device_signals,
+                      direct_from_seller_signals
+    ) {
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      globalThis.forDebuggingOnly.reportAdAuctionLoss("https://example-ssp.com/debugLoss");
+      globalThis.forDebuggingOnly.reportAdAuctionWin("https://example-ssp.com/debugWin");
       //Reshaped into AdScore
       return {
         "desirability": score,
@@ -311,10 +335,10 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
 class AuctionServiceIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::AuctionContextMap(
-        server_common::BuildDependentConfig(config_proto));
+        server_common::telemetry::BuildDependentConfig(config_proto));
   }
 };
 
@@ -330,11 +354,15 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
                                    kEnableReportResultUrlGenerationFalse,
                                    kEnableReportResultWinGenerationFalse, {}))
                   .ok());
+  std::unique_ptr<MockAsyncReporter> async_reporter_ =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
   auto score_ads_reactor_factory =
-      [&client](const ScoreAdsRequest* request, ScoreAdsResponse* response,
-                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-                CryptoClientWrapperInterface* crypto_client,
-                const AuctionServiceRuntimeConfig& runtime_config) {
+      [&client, async_reporter_ = std::move(async_reporter_)](
+          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+          CryptoClientWrapperInterface* crypto_client,
+          const AuctionServiceRuntimeConfig& runtime_config) {
         // You can manually flip this flag to turn benchmarking logging on or
         // off
         bool enable_benchmarking = true;
@@ -345,12 +373,9 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
         } else {
           benchmarking_logger = std::make_unique<ScoreAdsNoOpLogger>();
         }
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
             client, request, response, std::move(benchmarking_logger),
-            key_fetcher_manager, crypto_client, std::move(async_reporter),
+            key_fetcher_manager, crypto_client, async_reporter_.get(),
             runtime_config);
       };
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
@@ -402,6 +427,9 @@ void SellerCodeWrappingTestHelper(
   CodeDispatchClient client(dispatcher);
   DispatchConfig config;
   ASSERT_TRUE(dispatcher.Init(config).ok());
+  std::unique_ptr<MockAsyncReporter> async_reporter_ =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
   absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   raw_request.ParseFromString(request->request_ciphertext());
@@ -417,10 +445,11 @@ void SellerCodeWrappingTestHelper(
   ASSERT_TRUE(dispatcher.LoadSync(1, wrapper_js_blob).ok());
 
   auto score_ads_reactor_factory =
-      [&client](const ScoreAdsRequest* request, ScoreAdsResponse* response,
-                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-                CryptoClientWrapperInterface* crypto_client,
-                const AuctionServiceRuntimeConfig& runtime_config) {
+      [&client, async_reporter_ = std::move(async_reporter_)](
+          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+          CryptoClientWrapperInterface* crypto_client,
+          const AuctionServiceRuntimeConfig& runtime_config) {
         // You can manually flip this flag to turn benchmarking logging on or
         // off
         bool enable_benchmarking = true;
@@ -431,12 +460,9 @@ void SellerCodeWrappingTestHelper(
         } else {
           benchmarking_logger = std::make_unique<ScoreAdsNoOpLogger>();
         }
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
             client, request, response, std::move(benchmarking_logger),
-            key_fetcher_manager, crypto_client, std::move(async_reporter),
+            key_fetcher_manager, crypto_client, async_reporter_.get(),
             runtime_config);
       };
 
@@ -475,6 +501,31 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
   SellerCodeWrappingTestHelper(&request, &response, js_code_with_debug_urls,
                                enable_seller_debug_url_generation,
                                enable_debug_reporting);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+
+  EXPECT_GT(scoredAd.desirability(), 0);
+  EXPECT_TRUE(scoredAd.has_debug_report_urls());
+  EXPECT_EQ(scoredAd.debug_report_urls().auction_debug_win_url(),
+            "https://example-ssp.com/debugWin");
+  EXPECT_EQ(scoredAd.debug_report_urls().auction_debug_loss_url(),
+            "https://example-ssp.com/debugLoss");
+  EXPECT_GT(scoredAd.ig_owner_highest_scoring_other_bids_map().size(), 0);
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ScoresAdsReturnsDebugUrlsForWinningAdFromGlobalThisMethodCalls) {
+  bool enable_seller_debug_url_generation = true;
+  bool enable_debug_reporting = true;
+  ScoreAdsRequest request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &request, &response, js_code_with_global_this_debug_urls,
+      enable_seller_debug_url_generation, enable_debug_reporting);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scoredAd = raw_response.ad_score();

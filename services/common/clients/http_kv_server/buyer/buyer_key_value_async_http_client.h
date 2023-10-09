@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/clients/http/http_fetcher_async.h"
@@ -39,6 +40,10 @@ struct GetBuyerValuesInput {
 
   // [DSP] The browser sets the hostname of the publisher page to be the value.
   std::string hostname;
+
+  // [DSP] The client type that originated the request. Passed to the key/value
+  // service.
+  ClientType client_type{CLIENT_TYPE_UNKNOWN};
 };
 
 // Response from Buyer Key Value server as JSON string.
@@ -51,6 +56,11 @@ struct GetBuyerValuesOutput {
 class BuyerKeyValueAsyncHttpClient
     : public AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput> {
  public:
+  // Builds Buyer KV Value lookup Request.
+  static HTTPRequest BuildBuyerKeyValueRequest(
+      absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
+      std::unique_ptr<GetBuyerValuesInput> client_input);
+
   // HttpFetcherAsync argument must outlive instance.
   // This class uses the http client to fetch KV values in real time.
   // If pre_warm is true, it will send an empty request to the

@@ -21,7 +21,7 @@ constexpr int kNormalTimeoutMs = 5000;
 void AsyncReporter::DoReport(
     const HTTPRequest& reporting_request,
     absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
-        done_callback) {
+        done_callback) const {
   http_fetcher_async_->FetchUrl(reporting_request, kNormalTimeoutMs,
                                 std::move(done_callback));
 }
