@@ -29,8 +29,6 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_replace.h"
-#include "glog/log_severity.h"
-#include "glog/logging.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/pointer.h"
@@ -39,7 +37,6 @@
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
-#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -129,7 +126,7 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
     const absl::string_view publisher_hostname,
     const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
         scoring_signals,
-    const ContextLogger& logger, bool enable_adtech_code_logging,
+    log::ContextImpl& log_context, bool enable_adtech_code_logging,
     bool enable_debug_reporting) {
   std::vector<std::shared_ptr<std::string>> input(
       kArgSizeWithWrapper);  // ScoreAdArgs size
@@ -161,19 +158,19 @@ std::vector<std::shared_ptr<std::string>> ScoreAdInput(
       std::make_shared<std::string>(GetFeatureFlagJson(
           enable_adtech_code_logging, enable_debug_reporting));
 
-  if (VLOG_IS_ON(2)) {
-    logger.vlog(2, "\n\nScore Ad Input Args:", "\nAdMetadata:\n",
-                *(input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]), "\nBid:\n",
-                *(input[ScoreArgIndex(ScoreAdArgs::kBid)]),
-                "\nAuction Config:\n",
-                *(input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)]),
-                "\nScoring Signals:\n",
-                *(input[ScoreArgIndex(ScoreAdArgs::kScoringSignals)]),
-                "\nDevice Signals:\n",
-                *(input[ScoreArgIndex(ScoreAdArgs::kDeviceSignals)]),
-                "\nDirectFromSellerSignals:\n",
-                (input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)]));
-  }
+  PS_VLOG(2, log_context)
+      << "\n\nScore Ad Input Args:"
+      << "\nAdMetadata:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]) << "\nBid:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kBid)]) << "\nAuction Config:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)])
+      << "\nScoring Signals:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kScoringSignals)])
+      << "\nDevice Signals:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kDeviceSignals)])
+      << "\nDirectFromSellerSignals:\n"
+      << (input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)]);
+
   return input;
 }
 
@@ -182,7 +179,7 @@ DispatchRequest BuildScoreAdRequest(
     const absl::string_view publisher_hostname,
     const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
         scoring_signals,
-    const bool enable_debug_reporting, const ContextLogger& logger,
+    const bool enable_debug_reporting, log::ContextImpl& log_context,
     const bool enable_adtech_code_logging) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest score_ad_request;
@@ -192,9 +189,9 @@ DispatchRequest BuildScoreAdRequest(
   score_ad_request.version_num = 1;
   score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
 
-  score_ad_request.input =
-      ScoreAdInput(ad, auction_config, publisher_hostname, scoring_signals,
-                   logger, enable_adtech_code_logging, enable_debug_reporting);
+  score_ad_request.input = ScoreAdInput(
+      ad, auction_config, publisher_hostname, scoring_signals, log_context,
+      enable_adtech_code_logging, enable_debug_reporting);
   return score_ad_request;
 }
 
@@ -317,7 +314,7 @@ absl::StatusOr<rapidjson::Document> AddComponentSignals(
 absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
 BuildTrustedScoringSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-    const ContextLogger& logger) {
+    log::ContextImpl& log_context) {
   rapidjson::Document trusted_scoring_signals_value;
   // TODO (b/285214424): De-nest, use a guard.
   if (!raw_request.scoring_signals().empty()) {
@@ -328,8 +325,9 @@ BuildTrustedScoringSignals(
             raw_request.scoring_signals().data());
     if (parse_result.IsError()) {
       // TODO (b/285215004): Print offset to ease debugging.
-      logger.vlog(2, "Trusted scoring signals JSON parse error: ",
-                  rapidjson::GetParseError_En(parse_result.Code()));
+      PS_VLOG(2, log_context)
+          << "Trusted scoring signals JSON parse error: "
+          << rapidjson::GetParseError_En(parse_result.Code());
       return absl::InvalidArgumentError("Malformed trusted scoring signals");
     }
     // Build a map of the signals for each render URL.
@@ -396,10 +394,11 @@ BuildTrustedScoringSignals(
       combined_formatted_ad_signals.try_emplace(render_url, std::move(buffer));
     }
 
-    logger.vlog(2, "\nTrusted Scoring Signals Deserialize Time: ",
-                ToInt64Microseconds((absl::Now() - start_parse_time)),
-                " microseconds for ", combined_formatted_ad_signals.size(),
-                " signals.");
+    PS_VLOG(2, log_context)
+        << "\nTrusted Scoring Signals Deserialize Time: "
+        << ToInt64Microseconds((absl::Now() - start_parse_time))
+        << " microseconds for " << combined_formatted_ad_signals.size()
+        << " signals.";
     return combined_formatted_ad_signals;
   } else {
     return absl::InvalidArgumentError(kNoTrustedScoringSignals);
@@ -420,9 +419,9 @@ std::shared_ptr<std::string> BuildAuctionConfig(
 
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    const ContextLogger& logger) {
+    log::ContextImpl& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, logger);
+  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   rapidjson::Document response_obj;
   auto iterator = document.FindMember("response");
   if (iterator != document.MemberEnd()) {
@@ -443,7 +442,7 @@ ScoreAdsReactor::ScoreAdsReactor(
     std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
-    std::unique_ptr<AsyncReporter> async_reporter,
+    const AsyncReporter* async_reporter,
     const AuctionServiceRuntimeConfig& runtime_config)
     : CodeDispatchReactor<ScoreAdsRequest, ScoreAdsRequest::ScoreAdsRawRequest,
                           ScoreAdsResponse,
@@ -451,35 +450,30 @@ ScoreAdsReactor::ScoreAdsReactor(
           dispatcher, request, response, key_fetcher_manager, crypto_client,
           runtime_config.encryption_enabled),
       benchmarking_logger_(std::move(benchmarking_logger)),
-      async_reporter_(std::move(async_reporter)),
+      async_reporter_(*async_reporter),
       enable_seller_debug_url_generation_(
           runtime_config.enable_seller_debug_url_generation),
+      roma_timeout_ms_(runtime_config.roma_timeout_ms),
+      log_context_(GetLoggingContext(raw_request_),
+                   runtime_config.enable_otel_based_logging
+                       ? runtime_config.consented_debug_token
+                       : ""),
       enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
       enable_report_result_url_generation_(
           runtime_config.enable_report_result_url_generation),
       enable_report_win_url_generation_(
-          runtime_config.enable_report_win_url_generation),
-      roma_timeout_ms_(runtime_config.roma_timeout_ms),
-      enable_otel_based_logging_(runtime_config.enable_otel_based_logging),
-      consented_debug_token_(runtime_config.consented_debug_token) {
+          runtime_config.enable_report_win_url_generation) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
     return absl::OkStatus();
   }()) << "AuctionContextMap()->Get(request) should have been called";
-
-  ContextLogger::ContextMap context_map = GetLoggingContext(raw_request_);
-  logger_ = ContextLogger(context_map);
-  if (enable_otel_based_logging_) {
-    consented_logger_ =
-        ConsentedDebuggingLogger(context_map, consented_debug_token_);
-  }
 }
 
-ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
+log::ContextImpl::ContextMap ScoreAdsReactor::GetLoggingContext(
     const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request) {
   const auto& log_context = score_ads_request.log_context();
-  ContextLogger::ContextMap context_map = {
+  log::ContextImpl::ContextMap context_map = {
       {kGenerationId, log_context.generation_id()},
       {kSellerDebugId, log_context.adtech_debug_id()}};
   if (score_ads_request.has_consented_debug_config()) {
@@ -492,10 +486,9 @@ ContextLogger::ContextMap ScoreAdsReactor::GetLoggingContext(
 void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
 
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(
-        1, absl::StrCat("ScoreAdsRawRequest: ", raw_request_.DebugString()));
-  }
+  PS_VLOG(2, log_context_) << "ScoreAdsRequest:\n" << request_->DebugString();
+  PS_VLOG(1, log_context_) << "ScoreAdsRawRequest:\n"
+                           << raw_request_.DebugString();
 
   auto ads = raw_request_.ad_bids();
   if (ads.empty()) {
@@ -504,7 +497,7 @@ void ScoreAdsReactor::Execute() {
   }
 
   absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
-      scoring_signals = BuildTrustedScoringSignals(raw_request_, logger_);
+      scoring_signals = BuildTrustedScoringSignals(raw_request_, log_context_);
 
   if (!scoring_signals.ok()) {
     Finish(server_common::FromAbslStatus(scoring_signals.status()));
@@ -522,7 +515,7 @@ void ScoreAdsReactor::Execute() {
       DispatchRequest dispatch_request;
       dispatch_request = BuildScoreAdRequest(
           *ad, auction_config, raw_request_.publisher_hostname(),
-          scoring_signals.value(), enable_debug_reporting, logger_,
+          scoring_signals.value(), enable_debug_reporting, log_context_,
           enable_adtech_code_logging_);
       ad_data_.emplace(dispatch_request.id, std::move(ad));
       dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
@@ -548,10 +541,9 @@ void ScoreAdsReactor::Execute() {
       });
 
   if (!status.ok()) {
-    std::string original_request;
-    TextFormat::PrintToString(raw_request_, &original_request);
-    logger_.vlog(1, "Execution request failed for batch: ", original_request,
-                 status.ToString(absl::StatusToStringMode::kWithEverything));
+    PS_VLOG(1, log_context_)
+        << "Execution request failed for batch: " << raw_request_.DebugString()
+        << status.ToString(absl::StatusToStringMode::kWithEverything);
     LogIfError(
         metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     Finish(grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
@@ -617,7 +609,7 @@ std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
 ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
                        absl::string_view interest_group_owner,
                        absl::string_view interest_group_name,
-                       const ContextLogger& logger) {
+                       log::ContextImpl& log_context) {
   std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
       ad_rejection_reason;
   auto reject_reason_itr =
@@ -663,7 +655,7 @@ void ScoreAdsReactor::PerformReporting(
       .ad_cost = ad_data_.at(winning_ad_score.render()).get()->ad_cost()};
   dispatch_request = GetReportingDispatchRequest(
       winning_ad_score, raw_request_.publisher_hostname(),
-      enable_adtech_code_logging_, auction_config, logger_,
+      enable_adtech_code_logging_, auction_config, log_context_,
       buyer_reporting_metadata);
   dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
   dispatch_requests.push_back(std::move(dispatch_request));
@@ -674,11 +666,10 @@ void ScoreAdsReactor::PerformReporting(
       });
 
   if (!status.ok()) {
-    std::string original_request;
-    TextFormat::PrintToString(raw_request_, &original_request);
-    logger_.vlog(
-        1, "Reporting execution request failed for batch: ", original_request,
-        status.ToString(absl::StatusToStringMode::kWithEverything));
+    PS_VLOG(1, log_context_)
+        << "Reporting execution request failed for batch:\n"
+        << raw_request_.DebugString() << "\n"
+        << status.ToString(absl::StatusToStringMode::kWithEverything);
     FinishWithOkStatus();
   }
 }
@@ -689,11 +680,12 @@ void ScoreAdsReactor::PerformReporting(
 // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#23-scoring-bids
 void ScoreAdsReactor::ScoreAdsCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
-  if (VLOG_IS_ON(2)) {
+  if (log::PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : responses) {
-      logger_.vlog(2, "ScoreAds V8 Response: ", dispatch_response.status());
+      PS_VLOG(2, log_context_) << "ScoreAds V8 Response: ",
+          dispatch_response.status();
       if (dispatch_response.ok()) {
-        logger_.vlog(2, dispatch_response.value().resp);
+        PS_VLOG(2, log_context_) << dispatch_response.value().resp;
       }
     }
   }
@@ -721,11 +713,11 @@ void ScoreAdsReactor::ScoreAdsCallback(
       absl::StatusOr<rapidjson::Document> response_json =
           ParseAndGetScoreAdResponseJson(enable_adtech_code_logging_,
                                          responses[index].value().resp,
-                                         logger_);
+                                         log_context_);
       if (!response_json.ok()) {
-        logger_.vlog(0, "Failed to parse response from Roma ",
-                     response_json.status().ToString(
-                         absl::StatusToStringMode::kWithEverything));
+        PS_VLOG(0, log_context_) << "Failed to parse response from Roma ",
+            response_json.status().ToString(
+                absl::StatusToStringMode::kWithEverything);
       }
       const AdWithBidMetadata* ad =
           ad_data_.at(responses[index].value().id).get();
@@ -752,7 +744,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
           // Parse Ad rejection reason and store only if it has value.
           const auto& ad_rejection_reason =
               ParseAdRejectionReason(*response_json, ad->interest_group_owner(),
-                                     ad->interest_group_name(), logger_);
+                                     ad->interest_group_name(), log_context_);
           if (ad_rejection_reason.has_value()) {
             ad_rejection_reasons.push_back(ad_rejection_reason.value());
             seller_rejected_bid_count += 1;
@@ -765,14 +757,16 @@ void ScoreAdsReactor::ScoreAdsCallback(
           }
         }
       } else {
-        logger_.warn(
-            "Invalid json output from code execution for interest group ",
-            ad->interest_group_name(), ": ", responses[index].value().resp);
+        PS_LOG(WARNING, log_context_)
+            << "Invalid json output from code execution for interest group "
+            << ad->interest_group_name() << ": "
+            << responses[index].value().resp;
       }
     } else {
-      logger_.warn("Invalid execution (possibly invalid input): ",
-                   responses[index].status().ToString(
-                       absl::StatusToStringMode::kWithEverything));
+      PS_LOG(WARNING, log_context_)
+          << "Invalid execution (possibly invalid input): "
+          << responses[index].status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
     }
   }
   LogIfError(metric_context_->LogHistogram<metric::kAuctionBidRejectedPercent>(
@@ -823,7 +817,8 @@ void ScoreAdsReactor::ScoreAdsCallback(
     PerformDebugReporting(winning_ad);
     *raw_response_.mutable_ad_score() = winning_ad.value();
 
-    logger_.vlog(2, "ScoreAdsResponse:\n", response_->DebugString());
+    PS_VLOG(2, log_context_) << "ScoreAdsResponse:\n"
+                             << response_->DebugString();
     if (!enable_report_result_url_generation_) {
       DCHECK(encryption_enabled_);
       EncryptResponse();
@@ -833,7 +828,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
     }
     PerformReporting(winning_ad.value());
   } else {
-    LOG(WARNING) << "No ad was selected as most desirable";
+    ABSL_LOG(WARNING) << "No ad was selected as most desirable";
     PerformDebugReporting(winning_ad);
     benchmarking_logger_->HandleResponseEnd();
     Finish(grpc::Status(grpc::StatusCode::NOT_FOUND,
@@ -843,11 +838,12 @@ void ScoreAdsReactor::ScoreAdsCallback(
 
 void ScoreAdsReactor::ReportingCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
-  if (VLOG_IS_ON(2)) {
+  if (log::PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : responses) {
-      logger_.vlog(2, "Reporting V8 Response: ", dispatch_response.status());
+      PS_VLOG(2, log_context_)
+          << "Reporting V8 Response: " << dispatch_response.status();
       if (dispatch_response.ok()) {
-        logger_.vlog(2, dispatch_response.value().resp);
+        PS_VLOG(2, log_context_) << dispatch_response.value().resp;
       }
     }
   }
@@ -857,30 +853,36 @@ void ScoreAdsReactor::ReportingCallback(
           ParseAndGetReportingResponse(enable_adtech_code_logging_,
                                        response.value().resp);
       if (!reporting_response.ok()) {
-        logger_.vlog(0, "Failed to parse response from Roma ",
-                     reporting_response.status().ToString(
-                         absl::StatusToStringMode::kWithEverything));
+        PS_VLOG(0, log_context_) << "Failed to parse response from Roma ",
+            reporting_response.status().ToString(
+                absl::StatusToStringMode::kWithEverything);
         continue;
       }
-      if (VLOG_IS_ON(1) && enable_adtech_code_logging_) {
+      if (log::PS_VLOG_IS_ON(1) && enable_adtech_code_logging_) {
         for (std::string& log : reporting_response.value().seller_logs) {
-          logger_.vlog(1, "Log from Seller's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().seller_error_logs) {
-          logger_.vlog(1, "Error Log from Seller's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Error Log from Seller's execution script:" << log;
         }
         for (std::string& log :
              reporting_response.value().seller_warning_logs) {
-          logger_.vlog(1, "Warning Log from Seller's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Warning Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_logs) {
-          logger_.vlog(1, "Log from Buyer's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Log from Buyer's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_error_logs) {
-          logger_.vlog(1, "Error Log from Buyer's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Error Log from Buyer's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_warning_logs) {
-          logger_.vlog(1, "Warning Log from Buyer's execution script:", log);
+          PS_VLOG(1, log_context_)
+              << "Warning Log from Buyer's execution script:" << log;
         }
       }
       raw_response_.mutable_ad_score()
@@ -913,13 +915,15 @@ void ScoreAdsReactor::ReportingCallback(
             ->try_emplace(event, interactionReportingUrl);
       }
     } else {
-      logger_.warn("Invalid execution (possibly invalid input): ",
-                   response.status().ToString(
-                       absl::StatusToStringMode::kWithEverything));
+      PS_LOG(WARNING, log_context_)
+          << "Invalid execution (possibly invalid input): "
+          << response.status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
     }
   }
 
-  logger_.vlog(2, "ReportingResponse:\n", response_->DebugString());
+  PS_VLOG(2, log_context_) << "ReportingResponse:\n"
+                           << response_->DebugString();
   DCHECK(encryption_enabled_);
   EncryptResponse();
   benchmarking_logger_->HandleResponseEnd();
@@ -933,38 +937,42 @@ void ScoreAdsReactor::PerformDebugReporting(
   for (const auto& ad_score : ad_scores_) {
     if (ad_score->has_debug_report_urls()) {
       std::string debug_url;
+      bool is_win_debug_url = false;
       std::string ig_owner = ad_score->interest_group_owner();
       std::string ig_name = ad_score->interest_group_name();
-      auto done_cb = [ig_owner,
-                      ig_name](absl::StatusOr<absl::string_view> result) {
+      auto done_cb = [ig_owner, ig_name, log_context = log_context_](
+                         absl::StatusOr<absl::string_view> result) mutable {
         if (result.ok()) {
-          VLOG(2) << "Performed debug reporting for:" << ig_owner
-                  << ", interest_group: " << ig_name;
+          PS_VLOG(2, log_context)
+              << "Performed debug reporting for:" << ig_owner
+              << ", interest_group: " << ig_name;
         } else {
-          VLOG(1) << "Error while performing debug reporting for:" << ig_owner
-                  << ", interest_group: " << ig_name
-                  << " ,status:" << result.status();
+          PS_VLOG(1, log_context)
+              << "Error while performing debug reporting for:" << ig_owner
+              << ", interest_group: " << ig_name
+              << " ,status:" << result.status();
         }
       };
       if (ig_owner == post_auction_signals.winning_ig_owner &&
           ig_name == post_auction_signals.winning_ig_name) {
         debug_url = ad_score->debug_report_urls().auction_debug_win_url();
+        is_win_debug_url = true;
       } else {
         debug_url = ad_score->debug_report_urls().auction_debug_loss_url();
       }
-      HTTPRequest http_request = CreateDebugReportingHttpRequest(
-          debug_url, GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
-                                                        post_auction_signals));
-      async_reporter_->DoReport(http_request, done_cb);
+      const HTTPRequest http_request = CreateDebugReportingHttpRequest(
+          debug_url,
+          GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                             post_auction_signals),
+          is_win_debug_url);
+      async_reporter_.DoReport(http_request, done_cb);
     }
   }
 }
 
 void ScoreAdsReactor::FinishWithOkStatus() {
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(
-        1, absl::StrCat("ScoreAdsRawResponse: ", raw_response_.DebugString()));
-  }
+  PS_VLOG(1, log_context_) << "ScoreAdsRawResponse:\n"
+                           << raw_response_.DebugString();
   metric_context_->SetRequestSuccessful();
   Finish(grpc::Status::OK);
 }

@@ -157,3 +157,9 @@ variable "instance_template_waits_for_instances" {
   type        = bool
   default     = true
 }
+
+variable "otel_collector_image_uri" {
+  description = "URI to the otel collector image. Defaults to docker hub."
+  type        = string
+  default     = "otel/opentelemetry-collector-contrib:0.81.0"
+}

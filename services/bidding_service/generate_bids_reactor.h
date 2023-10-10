@@ -30,7 +30,6 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/metric/server_definition.h"
-#include "services/common/util/context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

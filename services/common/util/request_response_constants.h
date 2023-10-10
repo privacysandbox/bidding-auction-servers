@@ -107,6 +107,8 @@ inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
         kToken,
 };
 
+inline constexpr char kTimeoutMs[] = "TimeoutMs";
+
 inline constexpr int kNumErrorKeys = 2;
 inline constexpr char kError[] = "error";
 inline constexpr char kMessage[] = "message";
@@ -129,7 +131,7 @@ inline constexpr std::array<absl::string_view, kNumWinReportingUrlsKeys>
 inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
     kReportingKeys = {kReportingUrl, kInteractionReportingUrls};
 
-enum class AuctionType : int { kProtectedAudience };
+enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -22,7 +22,6 @@
 #include "rapidjson/document.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-#include "services/common/util/context_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/post_auction_signals.h"
 #include "services/common/util/reporting_util.h"
@@ -142,7 +141,7 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
 
 std::string GetBuyerMetadataJson(
     const BuyerReportingMetadata& buyer_reporting_metadata,
-    const ContextLogger& logger,
+    log::ContextImpl& log_context,
     const ScoreAdsResponse::AdScore& winning_ad_score) {
   if (!buyer_reporting_metadata.enable_report_win_url_generation) {
     return kDefaultBuyerReportingMetadata;
@@ -157,7 +156,7 @@ std::string GetBuyerMetadataJson(
   if (!buyer_reporting_metadata.buyer_signals.empty()) {
     buyer_signals_obj = ParseJsonString(buyer_reporting_metadata.buyer_signals);
     if (!buyer_signals_obj.ok()) {
-      logger.vlog(1, "Error parsing buyer signals to Json object");
+      PS_VLOG(1, log_context) << "Error parsing buyer signals to Json object";
     } else {
       buyer_reporting_signals_obj.AddMember(
           kBuyerSignals, buyer_signals_obj.value(),
@@ -184,8 +183,8 @@ std::string GetBuyerMetadataJson(
         buyer_reporting_signals_obj.GetAllocator());
   }
   if (buyer_reporting_metadata.recency.has_value()) {
-    logger.vlog(1, "BuyerReportingMetadata: Recency:",
-                buyer_reporting_metadata.recency.value());
+    PS_VLOG(1, log_context) << "BuyerReportingMetadata: Recency:"
+                            << buyer_reporting_metadata.recency.value();
     buyer_reporting_signals_obj.AddMember(
         kRecency, buyer_reporting_metadata.recency.value(),
         buyer_reporting_signals_obj.GetAllocator());
@@ -216,9 +215,9 @@ std::string GetBuyerMetadataJson(
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {
-    logger.vlog(2,
-                "Error constructing buyer_reporting_metadata_input for "
-                "reportingEntryFunction");
+    PS_VLOG(2, log_context)
+        << "Error constructing buyer_reporting_metadata_input for "
+           "reportingEntryFunction";
     return kDefaultBuyerReportingMetadata;
   }
   return buyer_reporting_metadata_json.value();
@@ -227,13 +226,13 @@ std::string GetBuyerMetadataJson(
 std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
-    std::shared_ptr<std::string> auction_config, const ContextLogger& logger,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata) {
   absl::StatusOr<std::string> seller_reporting_signals =
       GetSellerReportingSignals(winning_ad_score, publisher_hostname);
   if (!seller_reporting_signals.ok()) {
-    logger.vlog(
-        2, "Error generating Seller Reporting Signals for Reporting input");
+    PS_VLOG(2, log_context)
+        << "Error generating Seller Reporting Signals for Reporting input";
     return {};
   }
   std::vector<std::shared_ptr<std::string>> input(
@@ -249,31 +248,30 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   input[ReportingArgIndex(ReportingArgs::kEnableAdTechCodeLogging)] =
       std::make_shared<std::string>(
           absl::StrFormat("%v", enable_adtech_code_logging));
-  std::string buyer_reporting_metadata_json =
-      GetBuyerMetadataJson(buyer_reporting_metadata, logger, winning_ad_score);
+  std::string buyer_reporting_metadata_json = GetBuyerMetadataJson(
+      buyer_reporting_metadata, log_context, winning_ad_score);
   input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)] =
       std::make_shared<std::string>(buyer_reporting_metadata_json);
 
-  if (VLOG_IS_ON(2)) {
-    logger.vlog(
-        2, "\n\nReporting Input Args:", "\nAuction Config:\n",
-        *(input[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
-        "\nSeller Reporting Signals:\n",
-        *(input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)]),
-        "\nEnable AdTech Code Logging:\n",
-        *(input[ReportingArgIndex(ReportingArgs::kEnableAdTechCodeLogging)]),
-        "\nDirect from Seller Signals:\n",
-        *(input[ReportingArgIndex(ReportingArgs::kDirectFromSellerSignals)]),
-        "\nBuyer Reporting Metadata:\n",
-        *(input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]));
-  }
+  PS_VLOG(2, log_context)
+      << "\n\nReporting Input Args:"
+      << "\nAuction Config:\n"
+      << *(input[ReportingArgIndex(ReportingArgs::kAuctionConfig)])
+      << "\nSeller Reporting Signals:\n"
+      << *(input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)])
+      << "\nEnable AdTech Code Logging:\n"
+      << *(input[ReportingArgIndex(ReportingArgs::kEnableAdTechCodeLogging)])
+      << "\nDirect from Seller Signals:\n"
+      << *(input[ReportingArgIndex(ReportingArgs::kDirectFromSellerSignals)])
+      << "\nBuyer Reporting Metadata:\n"
+      << *(input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]);
   return input;
 }
 
 DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
-    std::shared_ptr<std::string> auction_config, const ContextLogger& logger,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
@@ -282,7 +280,7 @@ DispatchRequest GetReportingDispatchRequest(
       .handler_name = kReportingDispatchHandlerFunctionName,
       .input = GetReportingInput(winning_ad_score, publisher_hostname,
                                  enable_adtech_code_logging, auction_config,
-                                 logger, buyer_reporting_metadata),
+                                 log_context, buyer_reporting_metadata),
   };
 }
 

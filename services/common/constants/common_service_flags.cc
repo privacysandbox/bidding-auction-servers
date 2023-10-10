@@ -68,8 +68,9 @@ ABSL_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds,
 // Master flag for controlling all the features that needs to turned on for
 // testing.
 ABSL_FLAG(std::optional<bool>, test_mode, std::nullopt, "Enable test mode");
-ABSL_FLAG(std::optional<privacy_sandbox::server_common::TelemetryFlag>,
-          telemetry_config, std::nullopt, "configure telemetry.");
+ABSL_FLAG(
+    std::optional<privacy_sandbox::server_common::telemetry::TelemetryFlag>,
+    telemetry_config, std::nullopt, "configure telemetry.");
 ABSL_FLAG(std::optional<std::string>, roma_timeout_ms, std::nullopt,
           "The timeout used by Roma for dispatch requests");
 ABSL_FLAG(std::optional<std::string>, collector_endpoint, std::nullopt,
@@ -83,3 +84,6 @@ ABSL_FLAG(std::optional<bool>, enable_otel_based_logging, false,
           "debugging.");
 ABSL_FLAG(std::optional<bool>, enable_protected_app_signals, false,
           "Enables the protected app signals support.");
+ABSL_FLAG(std::optional<int>, ps_verbosity, 1,
+          "verbosity of consented debug logger in prod; or verbosity of all "
+          "loggers in non_prod");

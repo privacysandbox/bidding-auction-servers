@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/clients/http/http_fetcher_async.h"
@@ -35,6 +36,10 @@ struct GetSellerValuesInput {
   // [SSP] List of keys to query values for, under the namespace
   // adComponentRenderUrls.
   std::vector<std::string> ad_component_render_urls;
+
+  // [SSP] The client type that originated the request. Passed to the key/value
+  // service.
+  ClientType client_type{CLIENT_TYPE_UNKNOWN};
 };
 
 // Response from Seller Key Value server as JSON string.
@@ -47,6 +52,11 @@ struct GetSellerValuesOutput {
 class SellerKeyValueAsyncHttpClient
     : public AsyncClient<GetSellerValuesInput, GetSellerValuesOutput> {
  public:
+  // Builds Seller KV Value lookup https request url.
+  static HTTPRequest BuildSellerKeyValueRequest(
+      absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
+      std::unique_ptr<GetSellerValuesInput> client_input);
+
   // HttpFetcherAsync argument must outlive instance.
   // This class uses the http client to fetch KV values in real time.
   // If pre_warm is true, it will send an empty request to the

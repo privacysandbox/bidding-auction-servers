@@ -25,10 +25,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_format.h"
-#include "glog/logging.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
-#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/cpp/util/status_macro/status_macros.h"
@@ -48,10 +46,6 @@ struct ParsedTrustedBiddingSignals {
 using TrustedBiddingSignalsByIg =
     absl::flat_hash_map<std::string,
                         absl::StatusOr<ParsedTrustedBiddingSignals>>;
-
-constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
-    "generateBidEntryFunction";
-constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 constexpr int kArgsSizeWithWrapper = 6;
 
 std::string ProtoToJson(const google::protobuf::Message& proto) {
@@ -216,23 +210,25 @@ absl::StatusOr<std::string> SerializeIG(IGForBidding ig) {
 // in a loop for all Interest Groups.
 absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
-    const ContextLogger& logger) {
+    log::ContextImpl& log_context) {
   // Parse into JSON.
   auto start_parse_time = absl::Now();
   PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
                       ParseJsonString(raw_request.bidding_signals()));
-  logger.vlog(2, "\nTrusted Bidding Signals Deserialize Time: ",
-              ToInt64Microseconds((absl::Now() - start_parse_time)),
-              " microseconds for ", raw_request.bidding_signals().size(),
-              " bytes.");
+  PS_VLOG(2, log_context) << "\nTrusted Bidding Signals Deserialize Time: "
+                          << ToInt64Microseconds(
+                                 (absl::Now() - start_parse_time))
+                          << " microseconds for "
+                          << raw_request.bidding_signals().size() << " bytes.";
 
   // Select root key.
   if (!parsed_signals.HasMember("keys")) {
-    logger.vlog(2,
-                "Trusted bidding signals JSON validate error (Missing property "
-                "\"keys\")");
+    PS_VLOG(2, log_context)
+        << "Trusted bidding signals JSON validate error (Missing property "
+           "\"keys\")";
+
     return absl::InvalidArgumentError(
-        "Malformatted trusted bidding signals (Missing property \"keys\")");
+        "Malformed trusted bidding signals (Missing property \"keys\")");
   }
   rapidjson::Value& bidding_signals_obj = parsed_signals["keys"];
 
@@ -258,10 +254,6 @@ enum class GenerateBidArgs : int {
   kFeatureFlags
 };
 
-constexpr int BidArgIndex(GenerateBidArgs arg) {
-  return static_cast<std::underlying_type_t<GenerateBidArgs>>(arg);
-}
-
 // Builds a vector containing commonly shared inputs, following the description
 // here:
 // https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#generatebids
@@ -276,11 +268,11 @@ std::vector<std::shared_ptr<std::string>> BuildBaseInput(
 
   std::vector<std::shared_ptr<std::string>> input(
       args_size, std::make_shared<std::string>());  // GenerateBidArgs size.
-  input[BidArgIndex(GenerateBidArgs::kAuctionSignals)] =
+  input[ArgIndex(GenerateBidArgs::kAuctionSignals)] =
       std::make_shared<std::string>((raw_request.auction_signals().empty())
                                         ? "\"\""
                                         : raw_request.auction_signals());
-  input[BidArgIndex(GenerateBidArgs::kBuyerSignals)] =
+  input[ArgIndex(GenerateBidArgs::kBuyerSignals)] =
       std::make_shared<std::string>((raw_request.buyer_signals().empty())
                                         ? "\"\""
                                         : raw_request.buyer_signals());
@@ -292,7 +284,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     IGForBidding& interest_group, const RawRequest& raw_request,
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
-    const bool enable_buyer_debug_url_generation, const ContextLogger& logger,
+    const bool enable_buyer_debug_url_generation, log::ContextImpl& log_context,
     const bool enable_adtech_code_logging, uint64_t version_number) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
@@ -322,7 +314,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   }
 
   generate_bid_request
-      .input[BidArgIndex(GenerateBidArgs::kTrustedBiddingSignals)] =
+      .input[ArgIndex(GenerateBidArgs::kTrustedBiddingSignals)] =
       trusted_bidding_signals_itr->second.value().json;
 
   // IG must have device signals to participate in Bidding.
@@ -331,7 +323,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
       interest_group.browser_signals().IsInitialized() &&
       !differencer.Equals(BrowserSignals::default_instance(),
                           interest_group.browser_signals())) {
-    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
+    generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(MakeBrowserSignalsForScript(
             raw_request.publisher_name(), raw_request.seller(),
             interest_group.browser_signals()));
@@ -341,15 +333,15 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
                                  interest_group.browser_signals())) {
     std::string serialized_android_signals =
         ProtoToJson(interest_group.android_signals());
-    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
+    generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>((serialized_android_signals.empty())
                                           ? R"JSON("")JSON"
                                           : serialized_android_signals);
   } else {
-    generate_bid_request.input[BidArgIndex(GenerateBidArgs::kDeviceSignals)] =
+    generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(R"JSON("")JSON");
   }
-  generate_bid_request.input[BidArgIndex(GenerateBidArgs::kFeatureFlags)] =
+  generate_bid_request.input[ArgIndex(GenerateBidArgs::kFeatureFlags)] =
       std::make_shared<std::string>(
           GetFeatureFlagJson(enable_adtech_code_logging,
                              enable_buyer_debug_url_generation &&
@@ -367,19 +359,19 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   if (!serialized_ig.ok()) {
     return serialized_ig.status();
   }
-  generate_bid_request.input[BidArgIndex(GenerateBidArgs::kInterestGroup)] =
+  generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)] =
       std::make_shared<std::string>(std::move(serialized_ig.value()));
-  logger.vlog(
-      3, "\nInterest Group Serialize Time: ",
-      ToInt64Microseconds((absl::Now() - start_parse_time)),
-      " microseconds for ",
-      generate_bid_request.input[BidArgIndex(GenerateBidArgs::kInterestGroup)]
-          ->size(),
-      " bytes.");
-  if (VLOG_IS_ON(2)) {
-    logger.vlog(2, "\n\nGenerateBid Input Args:");
+  PS_VLOG(3, log_context)
+      << "\nInterest Group Serialize Time: "
+      << ToInt64Microseconds((absl::Now() - start_parse_time))
+      << " microseconds for "
+      << generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)]
+             ->size()
+      << " bytes.";
+  if (log::PS_VLOG_IS_ON(2)) {
+    PS_VLOG(2, log_context) << "\n\nGenerateBid Input Args:";
     for (const auto& it : generate_bid_request.input) {
-      logger.vlog(2, it->c_str(), "\n");
+      PS_VLOG(2, log_context) << it;
     }
   }
   return generate_bid_request;
@@ -397,44 +389,34 @@ GenerateBidsReactor::GenerateBidsReactor(
     : BaseGenerateBidsReactor<
           GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>(
-          dispatcher, request, response, key_fetcher_manager, crypto_client,
-          runtime_config),
+          dispatcher, runtime_config, request, response, key_fetcher_manager,
+          crypto_client),
       benchmarking_logger_(std::move(benchmarking_logger)) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
     return absl::OkStatus();
   }()) << "BiddingContextMap()->Get(request) should have been called";
-
-  ContextLogger::ContextMap context_map = GetLoggingContext(raw_request_);
-  logger_ = ContextLogger(context_map);
-  if (enable_otel_based_logging_) {
-    consented_logger_ =
-        ConsentedDebuggingLogger(context_map, consented_debug_token_);
-  }
 }
 
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
 
-  // Logger for consented debugging.
-  // The IsConsented() check here is for performance reasons, so we don't build
-  // the debug string if it is not going to be logged.
-  // TODO: Re-implement vlog() as a variadic function.
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(1, absl::StrCat("GenerateBidsRawRequest: ",
-                                            raw_request_.DebugString()));
-  }
+  PS_VLOG(2, log_context_) << "nGenerateBidsRequest:\n"
+                           << request_->DebugString();
+  PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"
+                           << raw_request_.DebugString();
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
 
   // Parse trusted bidding signals
   absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
-      SerializeTrustedBiddingSignalsPerIG(raw_request_, logger_);
+      SerializeTrustedBiddingSignalsPerIG(raw_request_, log_context_);
   if (!ig_trusted_signals_map.ok()) {
-    logger_.vlog(0, "Request failed while parsing bidding signals: ",
-                 ig_trusted_signals_map.status().ToString(
-                     absl::StatusToStringMode::kWithEverything));
+    PS_VLOG(0, log_context_)
+        << "Request failed while parsing bidding signals: ",
+        ig_trusted_signals_map.status().ToString(
+            absl::StatusToStringMode::kWithEverything);
     EncryptResponseAndFinish(
         server_common::FromAbslStatus(ig_trusted_signals_map.status()));
     return;
@@ -447,18 +429,16 @@ void GenerateBidsReactor::Execute() {
     absl::StatusOr<DispatchRequest> generate_bid_request =
         BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
                                 ig_trusted_signals_map.value(),
-                                enable_buyer_debug_url_generation_, logger_,
-                                enable_adtech_code_logging_,
+                                enable_buyer_debug_url_generation_,
+                                log_context_, enable_adtech_code_logging_,
                                 kProtectedAudienceGenerateBidBlobVersion);
     if (!generate_bid_request.ok()) {
-      if (VLOG_IS_ON(3)) {
-        logger_.vlog(3, "Unable to build GenerateBidRequest: ",
-                     generate_bid_request.status().ToString(
-                         absl::StatusToStringMode::kWithEverything));
-      }
+      PS_VLOG(3, log_context_) << "Unable to build GenerateBidRequest: ",
+          generate_bid_request.status().ToString(
+              absl::StatusToStringMode::kWithEverything);
     } else {
       auto dispatch_request = generate_bid_request.value();
-      dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
+      dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
       dispatch_requests_.push_back(dispatch_request);
     }
   }
@@ -483,10 +463,9 @@ void GenerateBidsReactor::Execute() {
       });
 
   if (!status.ok()) {
-    std::string original_request;
-    TextFormat::PrintToString(raw_request_, &original_request);
-    logger_.vlog(1, "Execution request failed for batch: ", original_request,
-                 status.ToString(absl::StatusToStringMode::kWithEverything));
+    PS_VLOG(1, log_context_)
+        << "Execution request failed for batch: " << raw_request_.DebugString()
+        << status.ToString(absl::StatusToStringMode::kWithEverything);
     LogIfError(
         metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     EncryptResponseAndFinish(
@@ -500,12 +479,12 @@ void GenerateBidsReactor::Execute() {
 // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#32-on-device-bidding
 void GenerateBidsReactor::GenerateBidsCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& output) {
-  if (VLOG_IS_ON(2)) {
+  if (log::PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : output) {
-      logger_.vlog(2,
-                   "Generate Bids V8 Response: ", dispatch_response.status());
+      PS_VLOG(2, log_context_)
+          << "Generate Bids V8 Response: " << dispatch_response.status();
       if (dispatch_response.ok()) {
-        logger_.vlog(2, dispatch_response.value().resp);
+        PS_VLOG(2, log_context_) << dispatch_response.value().resp;
       }
     }
   }
@@ -521,35 +500,38 @@ void GenerateBidsReactor::GenerateBidsCallback(
     if (result.ok()) {
       AdWithBid bid;
       absl::StatusOr<std::string> generate_bid_response =
-          ParseAndGetGenerateBidResponseJson(enable_adtech_code_logging_,
-                                             result->resp, logger_);
+          ParseAndGetResponseJson(enable_adtech_code_logging_, result->resp,
+                                  log_context_);
       if (!generate_bid_response.ok()) {
-        logger_.vlog(0, "Failed to parse response from Roma ",
-                     generate_bid_response.status().ToString(
-                         absl::StatusToStringMode::kWithEverything));
+        PS_VLOG(0, log_context_)
+            << "Failed to parse response from Roma "
+            << generate_bid_response.status().ToString(
+                   absl::StatusToStringMode::kWithEverything);
       }
       auto valid = google::protobuf::util::JsonStringToMessage(
           generate_bid_response.value(), &bid);
       const std::string interest_group_name = result->id;
       if (valid.ok()) {
-        if (bid.bid() == 0.0f && !bid.has_debug_report_urls()) {
-          logger_.vlog(2, "Skipping 0 bid for ", interest_group_name, ": ",
-                       bid.DebugString());
+        if (!IsValidBid(bid)) {
+          PS_VLOG(2, log_context_)
+              << "Skipping 0 bid for " << interest_group_name << ": "
+              << bid.DebugString();
         } else {
           bid.set_interest_group_name(interest_group_name);
           *raw_response_.add_bids() = bid;
           is_bid_zero = false;
         }
       } else {
-        logger_.vlog(
-            1, "Invalid json output from code execution for interest_group ",
-            interest_group_name, ": ", result->resp);
+        PS_VLOG(1, log_context_)
+            << "Invalid json output from code execution for interest_group "
+            << interest_group_name << ": " << result->resp;
       }
     } else {
       failed_requests = failed_requests + 1;
-      logger_.vlog(
-          1, "Invalid execution (possibly invalid input): ",
-          result.status().ToString(absl::StatusToStringMode::kWithEverything));
+      PS_VLOG(1, log_context_)
+          << "Invalid execution (possibly invalid input): "
+          << result.status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
     }
     if (is_bid_zero) {
       zero_bid_count += 1;
@@ -560,20 +542,18 @@ void GenerateBidsReactor::GenerateBidsCallback(
   LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
       (static_cast<double>(zero_bid_count)) / total_bid_count));
 
-  logger_.vlog(1, "\n\nFailed of total: ", failed_requests, "/", output.size());
+  PS_VLOG(1, log_context_) << "\n\nFailed of total: " << failed_requests << "/"
+                           << output.size();
   benchmarking_logger_->HandleResponseEnd();
-  logger_.vlog(2, "GenerateBidsResponse:\n", raw_response_.DebugString());
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(1, absl::StrCat("GenerateBidsRawResponse: ",
-                                            raw_response_.DebugString()));
-  }
+  PS_VLOG(1, log_context_) << "GenerateBidsRawResponse\n"
+                           << raw_response_.DebugString();
 
   DCHECK(encryption_enabled_);
   if (!EncryptResponse()) {
-    logger_.vlog(1, "Failed to encrypt the generate bids response.");
+    PS_VLOG(1, log_context_) << "Failed to encrypt the generate bids response.";
     status = grpc::Status(grpc::INTERNAL, kInternalServerError);
   }
   if (status.error_code() == grpc::StatusCode::OK) {

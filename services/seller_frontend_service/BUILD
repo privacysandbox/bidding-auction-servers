@@ -111,6 +111,7 @@ cc_library(
     ],
     deps = [
         ":seller_frontend_data",
+        "//services/common/clients:fake_seller_key_value_async_http_client",
         "//services/common/clients:seller_key_value_async_http_client",
         "//services/common/providers:async_provider",
         "@com_google_absl//absl/functional:any_invocable",

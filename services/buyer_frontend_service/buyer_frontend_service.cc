@@ -32,21 +32,21 @@ void LogMetrics(const GetBidsRequest* request, GetBidsResponse* response) {
   auto& metric_context = metric::BfeContextMap()->Get(request);
   LogIfError(
       metric_context
-          .LogUpDownCounter<server_common::metric::kTotalRequestCount>(1));
+          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
   LogIfError(
       metric_context
-          .LogHistogramDeferred<server_common::metric::kServerTotalTimeMs>(
+          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
-  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
       (int)request->ByteSizeLong()));
 
-  LogIfError(
-      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
-          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context
+                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
+                     [response]() -> int { return response->ByteSizeLong(); }));
   LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metric::kTotalRequestFailedCount>(
+             server_common::metrics::kTotalRequestFailedCount>(
       [&metric_context]() -> int {
         return metric_context.is_request_successful() ? 0 : 1;
       }));

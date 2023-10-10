@@ -95,10 +95,26 @@ cc_library(
         "client_params_template",
         ":async_client",
         ":http_kv_server_gen_url_utils",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "fake_buyer_key_value_async_http_client",
+    srcs = [
+        "http_kv_server/buyer/fake_buyer_key_value_async_http_client.cc",
+    ],
+    hdrs = [
+        "http_kv_server/buyer/fake_buyer_key_value_async_http_client.h",
+    ],
+    deps = [
+        ":buyer_key_value_async_http_client",
+        "@com_github_google_glog//:glog",
     ],
 )
 
@@ -114,10 +130,26 @@ cc_library(
         "client_params_template",
         ":async_client",
         ":http_kv_server_gen_url_utils",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "fake_seller_key_value_async_http_client",
+    srcs = [
+        "http_kv_server/seller/fake_seller_key_value_async_http_client.cc",
+    ],
+    hdrs = [
+        "http_kv_server/seller/fake_seller_key_value_async_http_client.h",
+    ],
+    deps = [
+        ":seller_key_value_async_http_client",
+        "@com_github_google_glog//:glog",
     ],
 )
 

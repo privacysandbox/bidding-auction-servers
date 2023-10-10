@@ -31,6 +31,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
+#include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -190,6 +191,34 @@ constexpr absl::string_view js_code_with_debug_urls_template = R"JS_CODE(
 
       forDebuggingOnly.reportAdAuctionLoss("https://example-dsp.com/debugLoss");
       forDebuggingOnly.reportAdAuctionWin("https://example-dsp.com/debugWin");
+
+      // Reshaped into an AdWithBid.
+      return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+  )JS_CODE";
+
+constexpr absl::string_view js_code_with_global_this_debug_urls_template =
+    R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Do a random amount of work to generate the price:
+      const bid = fibonacci(Math.floor(Math.random() * 10 + 1));
+
+      globalThis.forDebuggingOnly.reportAdAuctionLoss("https://example-dsp.com/debugLoss");
+      globalThis.forDebuggingOnly.reportAdAuctionWin("https://example-dsp.com/debugWin");
 
       // Reshaped into an AdWithBid.
       return {
@@ -364,10 +393,10 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::BiddingContextMap(
-        server_common::BuildDependentConfig(config_proto));
+        server_common::telemetry::BuildDependentConfig(config_proto));
 
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
@@ -383,6 +412,7 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
       key_fetcher_manager_;
   BiddingServiceRuntimeConfig bidding_service_runtime_config_ = {
       .encryption_enabled = true};
+  MockAsyncProvider<AdRetrievalInput, AdRetrievalOutput> ads_provider_;
 };
 
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
@@ -421,9 +451,24 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
+
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -493,9 +538,24 @@ TEST_F(GenerateBidsReactorIntegrationTest,
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
+
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -555,10 +615,26 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
+
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
+
   GenerateBidsResponse response;
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -610,10 +686,24 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
   GenerateBidsResponse response;
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -695,9 +785,23 @@ TEST_F(GenerateBidsReactorIntegrationTest,
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -761,9 +865,23 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
             client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
-      std::move(crypto_client_), bidding_service_runtime_config_);
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, &response);
 
   std::this_thread::sleep_for(
@@ -827,6 +945,20 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+                    http_ad_retrieval_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+      };
+
   std::unique_ptr<MockCryptoClientWrapper> crypto_client =
       std::make_unique<MockCryptoClientWrapper>();
   TrustedServersConfigClient config_client({});
@@ -841,9 +973,10 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
       .encryption_enabled = true,
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .enable_adtech_code_logging = enable_adtech_code_logging};
-  BiddingService service(std::move(generate_bids_reactor_factory),
-                         std::move(key_fetcher_manager),
-                         std::move(crypto_client), std::move(runtime_config));
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client), std::move(runtime_config),
+      std::move(protected_app_signals_generate_bids_reactor_factory));
   service.GenerateBids(&context, &request, response);
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
@@ -895,6 +1028,28 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_debug_urls_template,
+                      kAdRenderUrlPrefixForTest),
+      enable_debug_reporting, enable_buyer_debug_url_generation);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
+    EXPECT_GT(adWithBid.bid(), 0);
+    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
+              "https://example-dsp.com/debugWin");
+    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url(),
+              "https://example-dsp.com/debugLoss");
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       GeneratesBidsReturnDebugReportingUrlsWithGlobalThisMethodCalls) {
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = true;
+  bool enable_buyer_debug_url_generation = true;
+  GenerateBidCodeWrapperTestHelper(
+      &response,
+      absl::StrFormat(js_code_with_global_this_debug_urls_template,
                       kAdRenderUrlPrefixForTest),
       enable_debug_reporting, enable_buyer_debug_url_generation);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;

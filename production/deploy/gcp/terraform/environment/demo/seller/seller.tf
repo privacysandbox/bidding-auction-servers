@@ -64,6 +64,7 @@ module "seller" {
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
     ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
+    PS_VERBOSITY                           = "" # Example: "10"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
     # "{
@@ -73,8 +74,8 @@ module "seller" {
     #     "urlFetchTimeoutMs": 30000,
     #     "enableSellerDebugUrlGeneration": false,
     #     "enableAdtechCodeLogging": false,
-    #     "enableReportResultUrlGeneration": false,
-    #     "enableReportWinUrlGeneration": false,
+    #     "enableReportResultUrlGeneration": true,
+    #     "enableReportWinUrlGeneration": true,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
     #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},

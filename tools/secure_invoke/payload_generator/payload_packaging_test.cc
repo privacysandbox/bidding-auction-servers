@@ -183,7 +183,7 @@ TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
   auto parse_output =
       google::protobuf::util::JsonStringToMessage(output, &actual);
   ASSERT_TRUE(parse_output.ok()) << parse_output;
-  EXPECT_EQ(actual.client_type(), SelectAdRequest_ClientType_BROWSER);
+  EXPECT_EQ(actual.client_type(), ClientType::CLIENT_TYPE_BROWSER);
 }
 
 }  // namespace

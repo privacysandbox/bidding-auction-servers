@@ -71,6 +71,7 @@ module "buyer" {
     TEST_MODE                                     = "" # Example: "false"
     BUYER_CODE_FETCH_CONFIG                       = "" # Example:
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
+    PS_VERBOSITY                                  = "" # Example: "10"
     # "{
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",

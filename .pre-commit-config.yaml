@@ -42,7 +42,8 @@ repos:
   - id: detect-private-key
     exclude: (?x)^(
                   services/common/test/artifacts/grpc_tls/localhost.key|
-                  production/deploy/.*
+                  production/deploy/.*|
+                  google_internal/kokoro/key/.*
               )$
 
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
@@ -130,7 +131,7 @@ repos:
     - markdown
 
 - repo: https://github.com/DavidAnson/markdownlint-cli2
-  rev: v0.9.2
+  rev: v0.10.0
   hooks:
   - id: markdownlint-cli2
     name: lint markdown
@@ -165,7 +166,7 @@ repos:
     - --quiet
 
 - repo: https://github.com/psf/black
-  rev: 23.7.0
+  rev: 23.9.1
   hooks:
   - id: black
     name: black python formatter

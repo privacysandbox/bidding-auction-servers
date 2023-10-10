@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifndef SERVICES_COMMON_ENCRYPTION_MOCK_CRYPTO_CLIENT_WRAPPER_H_
+#define SERVICES_COMMON_ENCRYPTION_MOCK_CRYPTO_CLIENT_WRAPPER_H_
+
 #include <string>
 
 #include <include/gmock/gmock-matchers.h>
@@ -54,3 +57,5 @@ class MockCryptoClientWrapper : public CryptoClientWrapperInterface {
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
+
+#endif  // SERVICES_COMMON_ENCRYPTION_MOCK_CRYPTO_CLIENT_WRAPPER_H_

@@ -17,7 +17,6 @@
 #include <grpcpp/grpcpp.h>
 
 #include "api/bidding_auction_servers.pb.h"
-#include "glog/logging.h"
 #include "services/common/metric/server_definition.h"
 #include "src/cpp/telemetry/telemetry.h"
 
@@ -29,20 +28,20 @@ void LogMetrics(const ScoreAdsRequest* request, ScoreAdsResponse* response) {
   auto& metric_context = metric::AuctionContextMap()->Get(request);
   LogIfError(
       metric_context
-          .LogUpDownCounter<server_common::metric::kTotalRequestCount>(1));
+          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
   LogIfError(
       metric_context
-          .LogHistogramDeferred<server_common::metric::kServerTotalTimeMs>(
+          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
-  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
       (int)request->ByteSizeLong()));
-  LogIfError(
-      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
-          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context
+                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
+                     [response]() -> int { return response->ByteSizeLong(); }));
   LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metric::kTotalRequestFailedCount>(
+             server_common::metrics::kTotalRequestFailedCount>(
       [&metric_context]() -> int {
         return metric_context.is_request_successful() ? 0 : 1;
       }));
@@ -54,9 +53,6 @@ grpc::ServerUnaryReactor* AuctionService::ScoreAds(
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("ScoreAds"));
   LogMetrics(request, response);
-
-  VLOG(2) << "\nScoreAdsRequest:\n" << request->DebugString();
-
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto reactor =
       score_ads_reactor_factory_(request, response, key_fetcher_manager_.get(),

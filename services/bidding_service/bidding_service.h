@@ -22,6 +22,11 @@
 
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/bidding_service/generate_bids_reactor.h"
+#include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
+#include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
+#include "src/core/lib/event_engine/default_event_engine.h"
+#include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -33,6 +38,18 @@ using GenerateBidsReactorFactory = absl::AnyInvocable<GenerateBidsReactor*(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceRuntimeConfig& runtime_config)>;
+
+using ProtectedAppSignalsGenerateBidsReactorFactory =
+    absl::AnyInvocable<ProtectedAppSignalsGenerateBidsReactor*(
+        const grpc::CallbackServerContext* context,
+        const GenerateProtectedAppSignalsBidsRequest* request,
+        const BiddingServiceRuntimeConfig& runtime_config,
+        GenerateProtectedAppSignalsBidsResponse* response,
+        server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+        CryptoClientWrapperInterface* crypto_client,
+        AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+            http_ad_retrieval_async_client)>;
+
 // BiddingService implements business logic for generating a bid. It takes
 // input from the BuyerFrontEndService.
 // The bid generation uses proprietary AdTech code that runs in a secure privacy
@@ -40,19 +57,47 @@ using GenerateBidsReactorFactory = absl::AnyInvocable<GenerateBidsReactor*(
 // V8 to run the AdTech code.
 class BiddingService final : public Bidding::CallbackService {
  public:
+  using AdsRetrievalAsyncHttpClientType =
+      AsyncClient<AdRetrievalInput, AdRetrievalOutput>;
   explicit BiddingService(
       GenerateBidsReactorFactory generate_bids_reactor_factory,
       std::unique_ptr<server_common::KeyFetcherManagerInterface>
           key_fetcher_manager,
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
-      BiddingServiceRuntimeConfig runtime_config)
+      BiddingServiceRuntimeConfig runtime_config,
+      ProtectedAppSignalsGenerateBidsReactorFactory
+          protected_app_signals_generate_bids_reactor_factory,
+      std::unique_ptr<AdsRetrievalAsyncHttpClientType>
+          http_ad_retrieval_async_client = nullptr)
       : generate_bids_reactor_factory_(
             std::move(generate_bids_reactor_factory)),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
         crypto_client_(std::move(crypto_client)),
-        runtime_config_(std::move(runtime_config)) {}
+        runtime_config_(std::move(runtime_config)),
+        protected_app_signals_generate_bids_reactor_factory_(
+            std::move(protected_app_signals_generate_bids_reactor_factory)),
+        ads_retrieval_executor_(
+            runtime_config_.is_protected_app_signals_enabled
+                ? std::make_unique<server_common::EventEngineExecutor>(
+                      grpc_event_engine::experimental::GetDefaultEventEngine())
+                : nullptr) {
+    if (runtime_config_.is_protected_app_signals_enabled) {
+      if (http_ad_retrieval_async_client) {
+        http_ad_retrieval_async_client_ =
+            std::move(http_ad_retrieval_async_client);
+        return;
+      }
 
-  // Generate bids for ad candidates owned by the Buyer in an ad auction
+      http_ad_retrieval_async_client_ =
+          std::make_unique<AdsRetrievalAsyncHttpClient>(
+              runtime_config_.ad_retrieval_server_kv_server_addr,
+              std::make_unique<MultiCurlHttpFetcherAsync>(
+                  ads_retrieval_executor_.get()),
+              /*pre_warm=*/true);
+    }
+  }
+
+  // Generates bids for ad candidates owned by the Buyer in an ad auction
   // orchestrated by the SellerFrontEndService.
   //
   // This is the API that is accessed by the BuyerFrontEndService. This is the
@@ -69,12 +114,23 @@ class BiddingService final : public Bidding::CallbackService {
       grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
       GenerateBidsResponse* response) override;
 
+  // Generates bids for protected app signals.
+  grpc::ServerUnaryReactor* GenerateProtectedAppSignalsBids(
+      grpc::CallbackServerContext* context,
+      const GenerateProtectedAppSignalsBidsRequest* request,
+      GenerateProtectedAppSignalsBidsResponse* response) override;
+
  private:
   GenerateBidsReactorFactory generate_bids_reactor_factory_;
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
   std::unique_ptr<CryptoClientWrapperInterface> crypto_client_;
   BiddingServiceRuntimeConfig runtime_config_;
+  ProtectedAppSignalsGenerateBidsReactorFactory
+      protected_app_signals_generate_bids_reactor_factory_;
+  std::unique_ptr<server_common::Executor> ads_retrieval_executor_;
+  std::unique_ptr<AdsRetrievalAsyncHttpClientType>
+      http_ad_retrieval_async_client_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

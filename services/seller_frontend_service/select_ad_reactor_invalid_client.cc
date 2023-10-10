@@ -26,10 +26,9 @@ SelectAdReactorInvalidClient::SelectAdReactorInvalidClient(
       client_type_(request->client_type()) {}
 
 void SelectAdReactorInvalidClient::Execute() {
-  Finish(grpc::Status(
-      grpc::INVALID_ARGUMENT,
-      absl::StrCat(kUnsupportedClientType, " (",
-                   SelectAdRequest_ClientType_Name(client_type_), ")")));
+  Finish(grpc::Status(grpc::INVALID_ARGUMENT,
+                      absl::StrCat(kUnsupportedClientType, " (",
+                                   ClientType_Name(client_type_), ")")));
 }
 
 absl::StatusOr<std::string>

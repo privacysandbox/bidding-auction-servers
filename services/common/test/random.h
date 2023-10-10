@@ -189,7 +189,7 @@ SelectAdRequest MakeARandomSelectAdRequest(
   }
 
   request.mutable_auction_config()->set_seller(seller_domain_origin);
-  request.set_client_type(SelectAdRequest::BROWSER);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
   return request;
 }
 
@@ -202,8 +202,7 @@ google::protobuf::Value MakeAListValue(
 
 BuyerInput MakeARandomBuyerInput();
 
-ProtectedAuctionInput MakeARandomProtectedAuctionInput(
-    SelectAdRequest::ClientType client_type);
+ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
 
 AuctionResult MakeARandomAuctionResult();
 

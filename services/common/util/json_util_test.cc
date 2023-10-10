@@ -73,22 +73,50 @@ TEST(SerializeJsonDoc, WorksForValidDoc) {
   EXPECT_STREQ(output.value().c_str(), expected_output.c_str());
 }
 
-TEST(SerializeJsonDoc, GetString_WorksForStringInDocument) {
+TEST(SerializeJsonDoc, GetStringMember_WorksForKeyPresentInDocument) {
   std::string json_str = R"json({"key": "value"})json";
   auto document = ParseJsonString(json_str);
   ASSERT_TRUE(document.ok()) << document.status();
 
-  auto actual_value = GetString(*document, "key");
+  auto actual_value = GetStringMember(*document, "key");
   ASSERT_TRUE(actual_value.ok()) << actual_value.status();
   EXPECT_EQ(*actual_value, "value");
 }
 
-TEST(SerializeJsonDoc, GetString_FailOnEmptyString) {
+TEST(SerializeJsonDoc, GetStringMember_FailsOnEmptyStringVal) {
   std::string json_str = R"json({"key": ""})json";
   auto document = ParseJsonString(json_str);
   ASSERT_TRUE(document.ok()) << document.status();
 
-  auto actual_value = GetString(*document, "key");
+  auto actual_value = GetStringMember(*document, "key");
+  EXPECT_FALSE(actual_value.ok());
+}
+
+TEST(SerializeJsonDoc, GetStringMember_ConditionallyAllowsEmptyStringVal) {
+  std::string json_str = R"json({"key": ""})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetStringMember(*document, "key", /*is_empty_ok=*/true);
+  ASSERT_TRUE(actual_value.ok()) << actual_value.status();
+  EXPECT_TRUE(actual_value->empty()) << *actual_value;
+}
+
+TEST(SerializeJsonDoc, GetStringMember_FailsOnMissingKey) {
+  std::string json_str = R"json({"key": "val"})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetStringMember(*document, "NotPresentKey");
+  EXPECT_FALSE(actual_value.ok());
+}
+
+TEST(SerializeJsonDoc, GetStringMember_FailsOnNonStringVal) {
+  std::string json_str = R"json({"key": 123})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetStringMember(*document, "key");
   EXPECT_FALSE(actual_value.ok());
 }
 

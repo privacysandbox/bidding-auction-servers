@@ -22,6 +22,54 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr uint64_t kProtectedAudienceGenerateBidBlobVersion = 1;
+inline constexpr uint64_t kProtectedAppSignalsGenerateBidBlobVersion = 2;
+inline constexpr uint64_t kPrepareDataForAdRetrievalBlobVersion = 3;
+inline constexpr char kProtectedAppSignals[] = "protectedAppSignals";
+inline constexpr char kProtectedEmbeddings[] = "protectedEmbeddings";
+inline constexpr char kPrepareDataForAdRetrievalHandler[] =
+    "prepareDataForAdRetrieval";
+inline constexpr char kPrepareDataForAdRetrievalEntryFunction[] =
+    "prepareDataForAdRetrievalEntryFunction";
+inline constexpr char kPrepareDataForAdRetrievalArgs[] =
+    "encodedOnDeviceSignals, encodedOnDeviceSignalsVersion, "
+    "sellerAuctionSignals, contextualSignals";
+constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
+    "interest_group, auction_signals, buyer_signals, trusted_bidding_signals, "
+    "device_signals";
+constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
+    "ads, onDeviceDecodedSignals, sellerAuctionSignals, buyerSignals, "
+    "preprocessedDataForRetrieval";
+
+// Params related to the UDF that can be used to retrieve the protected
+// embeddings that can later be used to fetch the top-k ads from ads retrieval
+// service.
+inline constexpr int kNumPrepareDataForRetrievalUdfArgs = 5;
+enum class PrepareDataForRetrievalUdfArgs {
+  kProtectedAppSignals = 0,
+  kProtectedAppSignalsVersion,
+  kAuctionSignals,
+  kBuyerSignals,
+  kFeatureFlags,
+};
+
+// Params related to the UDF to use to generate bids for the protected signals.
+inline constexpr int kNumGenerateBidsUdfArgs = 7;
+enum class GenerateBidsUdfArgs {
+  kAds = 0,
+  kProtectedAppSignals,
+  kAuctionSignals,
+  kBuyerSignals,
+  kContextualEmbeddings,
+  kBiddingSignals,
+  kFeatureFlags,
+};
+
+inline constexpr char kUnexpectedNumberOfRomaResponses[] =
+    "Unexpected count of roma responses received.";
+inline constexpr char kDecodedProtectedAppSignalsNotFound[] =
+    "Decoded protected signals were not found.";
+inline constexpr char kDecodedProtectedAppSignalsUnexpectedType[] =
+    "Decoded protected signals are not in a string format.";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

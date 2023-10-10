@@ -21,12 +21,20 @@
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/pointer.h"
 #include "rapidjson/writer.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+inline constexpr char kMissingMember[] = "Missing %s in the JSON document";
+inline constexpr char kUnexpectedMemberType[] =
+    "Value of member: %s, has unexpected member type (expected: %d, observed: "
+    "%d)";
+inline constexpr char kEmptyStringMember[] =
+    "Value of member: %s, is unexpectedly an empty string.";
 
 // This is a custom class that implements the necessary methods for
 // serialization of a Rapid JSON document in a shared string.
@@ -109,22 +117,30 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
   return absl::InternalError("Unknown JSON to string serialization error");
 }
 
-// Returns the value for a corresponding field from a rapidjson::Value.
-// Note: This method returns an error if the value is empty.
-inline absl::StatusOr<std::string> GetString(rapidjson::Value& value,
-                                             absl::string_view field_name) {
-  auto itr = value.FindMember(field_name.data());
-  if (itr == value.MemberEnd()) {
+// Retrieves the string value of the specified member in the document/Value.
+template <typename T>
+inline absl::StatusOr<std::string> GetStringMember(
+    const T& document, const std::string& member_name,
+    bool is_empty_ok = false) {
+  auto it = document.FindMember(member_name.c_str());
+  if (it == document.MemberEnd()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Field not found in document: ", field_name));
+        absl::StrFormat(kMissingMember, member_name));
   }
 
-  if (*value[field_name.data()].GetString() == 0) {
+  if (!it->value.IsString()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Empty value for field in document: ", field_name));
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kStringType, it->value.GetType()));
   }
 
-  return value[field_name.data()].GetString();
+  const auto result = std::string(it->value.GetString());
+  if (!is_empty_ok && result.empty()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kEmptyStringMember, member_name));
+  }
+
+  return result;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

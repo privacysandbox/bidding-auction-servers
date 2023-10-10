@@ -68,5 +68,15 @@ TEST(GetBuyerWrappedCode, GenerateFeatureFlagsAllConbinations) {
   GenerateFeatureFlagsTestHelper(false, true);
   GenerateFeatureFlagsTestHelper(false, false);
 }
+
+TEST(GetBuyerWrappedCode, GeneratesCompleteGenericFinalJavascript) {
+  EXPECT_EQ(GetGenericBuyerWrappedCode(
+                absl::StrFormat(kBuyerBaseCode_template,
+                                kAdRenderUrlPrefixForCodeWrapperTest),
+                /*ad_tech_wasm=*/"", "testFunctionName", "testArg"),
+            absl::StrFormat(kExpectedGenericWrapperCode_template,
+                            kAdRenderUrlPrefixForCodeWrapperTest));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

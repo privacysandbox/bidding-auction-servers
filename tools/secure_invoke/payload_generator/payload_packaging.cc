@@ -131,7 +131,7 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
-                                SelectAdRequest::ClientType client_type) {
+                                ClientType client_type) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
       GetBuyerInputMap(&input_json);
@@ -139,10 +139,10 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
   absl::StatusOr<google::protobuf::Map<std::string, std::string>>
       encoded_buyer_map;
   switch (client_type) {
-    case SelectAdRequest::BROWSER:
+    case CLIENT_TYPE_BROWSER:
       encoded_buyer_map = PackageBuyerInputsForBrowser(buyer_map_proto);
       break;
-    case SelectAdRequest::ANDROID:
+    case CLIENT_TYPE_ANDROID:
       encoded_buyer_map = PackageBuyerInputsForApp(buyer_map_proto);
     default:
       break;
@@ -169,7 +169,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
 }
 
 std::string PackagePlainTextSelectAdRequestToJson(
-    absl::string_view input_json_str, SelectAdRequest::ClientType client_type) {
+    absl::string_view input_json_str, ClientType client_type) {
   auto req = std::move(
       PackagePlainTextSelectAdRequest(input_json_str, client_type).first);
   std::string select_ad_json;

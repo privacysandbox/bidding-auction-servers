@@ -36,7 +36,6 @@ cc_library(
     srcs = ["trusted_server_config_client.cc"],
     hdrs = ["trusted_server_config_client.h"],
     deps = [
-        "//services/common/telemetry:telemetry_flag",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/flags:flag",
@@ -46,6 +45,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@control_plane_shared//cc/public/core/interface:errors",
         "@control_plane_shared//cc/public/cpio/interface/parameter_client",
+        "@google_privacysandbox_servers_common//src/cpp/telemetry/flag:telemetry_flag",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )

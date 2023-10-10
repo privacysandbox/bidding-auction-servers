@@ -29,6 +29,7 @@
 #include "include/grpc/event_engine/event_engine.h"
 #include "services/auction_service/score_ads_reactor.h"
 #include "services/bidding_service/generate_bids_reactor.h"
+#include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/common/clients/auction_server/scoring_async_client.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
@@ -184,7 +185,7 @@ class MockAsyncReporter : public AsyncReporter {
               (const HTTPRequest& reporting_request,
                absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
                    done_callback),
-              (override));
+              (const, override));
 };
 
 // Dummy server in leu of no support for mocking async stubs
@@ -342,10 +343,10 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
       CryptoClientWrapperInterface* crypto_client,
       const AuctionServiceRuntimeConfig& runtime_config,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
-      std::unique_ptr<AsyncReporter> async_reporter, absl::string_view js)
+      const AsyncReporter* async_reporter, absl::string_view js)
       : ScoreAdsReactor(dispatcher, request, response,
                         std::move(benchmarking_logger), key_fetcher_manager,
-                        crypto_client, std::move(async_reporter),
+                        crypto_client, async_reporter,
                         std::move(runtime_config)) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
@@ -362,6 +363,26 @@ class MockGenerateBidsReactor : public GenerateBidsReactor {
       : GenerateBidsReactor(dispatcher, request, response,
                             std::move(benchmarkingLogger), key_fetcher_manager,
                             crypto_client_, std::move(runtime_config)) {}
+  MOCK_METHOD(void, Execute, (), (override));
+};
+
+class GenerateProtectedAppSignalsMockBidsReactor
+    : public ProtectedAppSignalsGenerateBidsReactor {
+ public:
+  GenerateProtectedAppSignalsMockBidsReactor(
+      const grpc::CallbackServerContext* context,
+      const CodeDispatchClient& dispatcher,
+      const BiddingServiceRuntimeConfig& runtime_config,
+      const GenerateProtectedAppSignalsBidsRequest* request,
+      GenerateProtectedAppSignalsBidsResponse* response,
+      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+      CryptoClientWrapperInterface* crypto_client,
+      AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
+          http_ad_retrieval_async_client)
+      : ProtectedAppSignalsGenerateBidsReactor(
+            context, dispatcher, runtime_config, request, response,
+            key_fetcher_manager, crypto_client,
+            http_ad_retrieval_async_client) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 

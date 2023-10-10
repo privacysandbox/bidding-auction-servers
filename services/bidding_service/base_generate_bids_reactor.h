@@ -22,11 +22,20 @@
 
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
-#include "services/common/util/consented_debugging_logger.h"
-#include "services/common/util/context_logger.h"
+#include "services/common/loggers/request_context_impl.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+inline constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
+    "generateBidEntryFunction";
+
+// Returns up the index of the provided enum as int from the underlying enum
+// storage.
+template <typename T>
+inline constexpr int ArgIndex(T arg) {
+  return static_cast<std::underlying_type_t<T>>(arg);
+}
 
 template <typename Request, typename RawRequest, typename Response,
           typename RawResponse>
@@ -34,11 +43,11 @@ class BaseGenerateBidsReactor
     : public CodeDispatchReactor<Request, RawRequest, Response, RawResponse> {
  public:
   explicit BaseGenerateBidsReactor(
-      const CodeDispatchClient& dispatcher, const Request* request,
+      const CodeDispatchClient& dispatcher,
+      const BiddingServiceRuntimeConfig& runtime_config, const Request* request,
       Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client,
-      const BiddingServiceRuntimeConfig& runtime_config)
+      CryptoClientWrapperInterface* crypto_client)
       : CodeDispatchReactor<Request, RawRequest, Response, RawResponse>(
             dispatcher, request, response, key_fetcher_manager, crypto_client,
             runtime_config.encryption_enabled),
@@ -46,18 +55,20 @@ class BaseGenerateBidsReactor
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
         enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
-        enable_otel_based_logging_(runtime_config.enable_otel_based_logging),
-        consented_debug_token_(runtime_config.consented_debug_token) {}
+        log_context_(GetLoggingContext(this->raw_request_),
+                     runtime_config.enable_otel_based_logging
+                         ? runtime_config.consented_debug_token
+                         : "") {}
 
   virtual ~BaseGenerateBidsReactor() = default;
 
  protected:
   // Gets logging context as key/value pair that is useful for tracking a
   // request through the B&A services.
-  ContextLogger::ContextMap GetLoggingContext(
+  log::ContextImpl::ContextMap GetLoggingContext(
       const RawRequest& generate_bids_request) {
     const auto& logging_context = generate_bids_request.log_context();
-    ContextLogger::ContextMap context_map = {
+    log::ContextImpl::ContextMap context_map = {
         {kGenerationId, logging_context.generation_id()},
         {kAdtechDebugId, logging_context.adtech_debug_id()}};
     if (generate_bids_request.has_consented_debug_config()) {
@@ -67,13 +78,15 @@ class BaseGenerateBidsReactor
     return context_map;
   }
 
+  template <typename BidType>
+  bool IsValidBid(BidType bid) {
+    return bid.bid() != 0.0f || bid.has_debug_report_urls();
+  }
+
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
-  ContextLogger logger_;
-  std::optional<ConsentedDebuggingLogger> consented_logger_;
   bool enable_adtech_code_logging_;
-  bool enable_otel_based_logging_;
-  std::string consented_debug_token_;
+  log::ContextImpl log_context_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

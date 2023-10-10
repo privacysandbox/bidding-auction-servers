@@ -39,6 +39,7 @@ void HttpScoringSignalsAsyncProvider::Get(
           ad.ad_components().end());
     }
   }
+  request->client_type = scoring_signals_request.client_type_;
   http_seller_kv_async_client_->Execute(
       std::move(request), scoring_signals_request.filtering_metadata_,
       [on_done = std::move(on_done)](

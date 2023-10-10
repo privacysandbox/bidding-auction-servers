@@ -88,24 +88,28 @@ TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
 }
 
 TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidSuccess) {
-  absl::string_view url =
+  absl::string_view url_1 =
       "https://wikipedia.org?wb=${winningBid}&m_wb=${madeWinningBid}";
   std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
       std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 0.0, false,
+          2.25, false, 0.0, false,
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
-  absl::string_view expected_url = "https://wikipedia.org?wb=1.9&m_wb=false";
-  HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
-  EXPECT_EQ(request.url, expected_url);
-
+  absl::string_view url_2 =
+      "https://wikipedia.org?wb=${winningBid}&m_wb=${madeWinningBid}";
   std::unique_ptr<DebugReportingPlaceholder> placeholder_2 =
       std::make_unique<DebugReportingPlaceholder>(
           1.9, true, 0.0, false,
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
-  expected_url = "https://wikipedia.org?wb=1.9&m_wb=true";
-  request = CreateDebugReportingHttpRequest(url, std::move(placeholder_2));
-  EXPECT_EQ(request.url, expected_url);
+
+  HTTPRequest request_1 =
+      CreateDebugReportingHttpRequest(url_1, std::move(placeholder_1), true);
+  HTTPRequest request_2 =
+      CreateDebugReportingHttpRequest(url_2, std::move(placeholder_2), true);
+
+  absl::string_view expected_url_1 = "https://wikipedia.org?wb=2.25&m_wb=false";
+  absl::string_view expected_url_2 = "https://wikipedia.org?wb=1.90&m_wb=true";
+  EXPECT_EQ(request_1.url, expected_url_1);
+  EXPECT_EQ(request_2.url, expected_url_2);
 }
 
 TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidAsZero) {
@@ -115,9 +119,9 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidAsZero) {
       std::make_unique<DebugReportingPlaceholder>(
           0.0, false, 0.0, false,
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
-  absl::string_view expected_url = "https://wikipedia.org?wb=0&m_wb=false";
+  absl::string_view expected_url = "https://wikipedia.org?wb=0.00&m_wb=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -132,7 +136,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidSuccess) {
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
   absl::string_view expected_url = "https://wikipedia.org?hob=2.18&m_hob=true";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
   EXPECT_EQ(request.url, expected_url);
 
   std::unique_ptr<DebugReportingPlaceholder> placeholder_2 =
@@ -140,7 +144,8 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidSuccess) {
           1.9, false, 2.18, false,
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
   expected_url = "https://wikipedia.org?hob=2.18&m_hob=false";
-  request = CreateDebugReportingHttpRequest(url, std::move(placeholder_2));
+  request =
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_2), true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -153,9 +158,9 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidAsZero) {
       std::make_unique<DebugReportingPlaceholder>(
           1.9, false, 0.0, false,
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
-  absl::string_view expected_url = "https://wikipedia.org?hob=0&m_hob=false";
+  absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -168,7 +173,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithRejectionReasonSuccess) {
   absl::string_view expected_url =
       "https://wikipedia.org?seller_rejection_reason=invalid-bid";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -182,7 +187,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithRejectionReasonNotAvailable) {
   absl::string_view expected_url =
       "https://wikipedia.org?seller_rejection_reason=not-available";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -194,7 +199,23 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithNoPlaceholder) {
   absl::string_view url = "https://wikipedia.org";
   absl::string_view expected_url = "https://wikipedia.org";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder));
+      CreateDebugReportingHttpRequest(url, std::move(placeholder), true);
+  EXPECT_EQ(request.url, expected_url);
+}
+
+TEST(CreateDebugReportingHttpRequestTest,
+     GetWithHighestOtherBidForLossDebugUrls) {
+  absl::string_view url =
+      "https://"
+      "wikipedia.org?hob=${highestScoringOtherBid}&m_hob=${"
+      "madeHighestScoringOtherBid}";
+  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
+      std::make_unique<DebugReportingPlaceholder>(
+          1.9, false, 2.18, true,
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
+  HTTPRequest request =
+      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), false);
   EXPECT_EQ(request.url, expected_url);
 }
 

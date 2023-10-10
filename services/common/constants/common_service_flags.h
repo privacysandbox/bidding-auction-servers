@@ -22,7 +22,7 @@
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
-#include "services/common/telemetry/telemetry_flag.h"
+#include "src/cpp/telemetry/flag/telemetry_flag.h"
 
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_encryption);
 ABSL_DECLARE_FLAG(std::optional<bool>, test_mode);
@@ -47,13 +47,15 @@ ABSL_DECLARE_FLAG(std::optional<std::string>,
                   gcp_secondary_key_service_cloud_function_url);
 ABSL_DECLARE_FLAG(std::optional<int>, private_key_cache_ttl_seconds);
 ABSL_DECLARE_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds);
-ABSL_DECLARE_FLAG(std::optional<privacy_sandbox::server_common::TelemetryFlag>,
-                  telemetry_config);
+ABSL_DECLARE_FLAG(
+    std::optional<privacy_sandbox::server_common::telemetry::TelemetryFlag>,
+    telemetry_config);
 ABSL_DECLARE_FLAG(std::optional<std::string>, roma_timeout_ms);
 ABSL_DECLARE_FLAG(std::optional<std::string>, collector_endpoint);
 ABSL_DECLARE_FLAG(std::optional<std::string>, consented_debug_token);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_otel_based_logging);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_protected_app_signals);
+ABSL_DECLARE_FLAG(std::optional<int>, ps_verbosity);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -91,6 +93,7 @@ inline constexpr char CONSENTED_DEBUG_TOKEN[] = "CONSENTED_DEBUG_TOKEN";
 inline constexpr char ENABLE_OTEL_BASED_LOGGING[] = "ENABLE_OTEL_BASED_LOGGING";
 inline constexpr char ENABLE_PROTECTED_APP_SIGNALS[] =
     "ENABLE_PROTECTED_APP_SIGNALS";
+inline constexpr char PS_VERBOSITY[] = "PS_VERBOSITY";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     ENABLE_ENCRYPTION,
@@ -113,7 +116,8 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     COLLECTOR_ENDPOINT,
     CONSENTED_DEBUG_TOKEN,
     ENABLE_OTEL_BASED_LOGGING,
-    ENABLE_PROTECTED_APP_SIGNALS};
+    ENABLE_PROTECTED_APP_SIGNALS,
+    PS_VERBOSITY};
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

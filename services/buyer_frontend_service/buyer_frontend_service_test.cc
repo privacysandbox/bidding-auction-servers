@@ -31,6 +31,7 @@
 #include "gmock/gmock.h"
 #include "googletest/include/gtest/gtest.h"
 #include "gtest/gtest.h"
+#include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -59,6 +60,9 @@ using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
+
+constexpr char valid_bidding_signals[] =
+    R"JSON({"keys":{"ig_name":[123,456]}})JSON";
 
 TrustedServersConfigClient CreateTrustedServerConfigClient() {
   TrustedServersConfigClient config_client({});
@@ -140,9 +144,10 @@ GetBidsConfig CreateGetBidsConfig() {
 class BuyerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::BfeContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::BfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
     bidding_service_client_config_.encryption_enabled = true;
@@ -153,23 +158,6 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
   GetBidsRequest request_;
   GetBidsResponse response_;
 };
-
-std::unique_ptr<MockBiddingSignalsProvider>
-GetValidBiddingSignalsProviderMock() {
-  auto bidding_signals_async_provider =
-      std::make_unique<MockBiddingSignalsProvider>();
-  EXPECT_CALL(
-      *bidding_signals_async_provider,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
-      .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
-                   auto on_done, absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<BiddingSignals>());
-      });
-  return bidding_signals_async_provider;
-}
 
 std::unique_ptr<BiddingAsyncClientMock> GetValidBiddingAsyncClientMock() {
   std::unique_ptr<BiddingAsyncClientMock> bidding_async_client =
@@ -239,7 +227,10 @@ GetValidProtectedAppSignalsBiddingClientMock() {
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceAndProtectedAppSignalsBidsFetched) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetValidBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetValidProtectedAppSignalsBiddingClientMock();
@@ -260,6 +251,39 @@ TEST_F(BuyerFrontEndServiceTest,
   GetBidsResponse::GetBidsRawResponse raw_response;
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(
+    BuyerFrontEndServiceTest,
+    NoProtectedAudienceButSomeProtectedAppSignalsBidsFetchedForEmptySignals) {
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/"",
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
+  auto bidding_async_client = std::make_unique<BiddingAsyncClientMock>();
+  // We never expect the Bidding client to be called; this call should be
+  // skipped for lack of trusted bidding signals.
+  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          std::move(bidding_signals_async_provider),
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client)),
+      CreateGetBidsConfig());
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  raw_response.ParseFromString(response_.response_ciphertext());
+  EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
 }
 
@@ -330,7 +354,10 @@ std::unique_ptr<BiddingAsyncClientMock> GetErrorBiddingAsyncClientMock() {
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceBiddingErrorButProtectedAppSignalsBidsFetched) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetErrorBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetValidProtectedAppSignalsBiddingClientMock();
@@ -380,7 +407,10 @@ GetErrorProtectedAppSignalsBiddingClientMock() {
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceBidFetchedButProtectedAppSignalsBidsErrored) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetValidBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetErrorProtectedAppSignalsBiddingClientMock();
@@ -427,7 +457,10 @@ std::unique_ptr<BiddingAsyncClientMock> GetEmptyBiddingAsyncClientMock() {
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceBidEmptyButProtectedAppSignalsBidsFetched) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetEmptyBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetValidProtectedAppSignalsBiddingClientMock();
@@ -477,7 +510,10 @@ GetEmptyProtectedAppSignalsBiddingClientMock() {
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceBidFetchedButProtectedAppSignalsBidsEmpty) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetValidBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetEmptyProtectedAppSignalsBiddingClientMock();
@@ -503,7 +539,10 @@ TEST_F(BuyerFrontEndServiceTest,
 
 TEST_F(BuyerFrontEndServiceTest,
        BothProtectedAudienceBidAndProtectedAppSignalsBidsEmptyIsOk) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetEmptyBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetEmptyProtectedAppSignalsBiddingClientMock();
@@ -529,7 +568,10 @@ TEST_F(BuyerFrontEndServiceTest,
 
 TEST_F(BuyerFrontEndServiceTest,
        ProtectedAudienceBidEmptyAndProtectedAppSignalsBidsErrorIsOk) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetEmptyBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetErrorProtectedAppSignalsBiddingClientMock();
@@ -556,7 +598,10 @@ TEST_F(BuyerFrontEndServiceTest,
 TEST_F(
     BuyerFrontEndServiceTest,
     ProtectedAudienceBidErrorAndProtectedAppSignalsBidErrorMeansOverallError) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetErrorBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetErrorProtectedAppSignalsBiddingClientMock();
@@ -603,7 +648,10 @@ GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled() {
 
 TEST_F(BuyerFrontEndServiceTest,
        RPCFinishesEvenWhenProtectedAppSignalsAreNotProvided) {
-  auto bidding_signals_async_provider = GetValidBiddingSignalsProviderMock();
+  auto bidding_signals_async_provider = SetupBiddingProviderMock(
+      /*bidding_signals_value=*/valid_bidding_signals,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
   auto bidding_async_client = GetValidBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
       GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();

@@ -78,10 +78,10 @@ std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
 class AuctionServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::AuctionContextMap(
-        server_common::BuildDependentConfig(config_proto));
+        server_common::telemetry::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
   }
 
@@ -120,6 +120,9 @@ class AuctionServiceTest : public ::testing::Test {
   std::unique_ptr<MockCryptoClientWrapper> crypto_client_ =
       std::make_unique<MockCryptoClientWrapper>();
   TrustedServersConfigClient config_client_{{}};
+  std::unique_ptr<MockAsyncReporter> async_reporter_ =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
 };
 
 TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
@@ -132,13 +135,10 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
           const AuctionServiceRuntimeConfig& runtime_config) {
         std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
             std::make_unique<ScoreAdsNoOpLogger>();
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         auto mock = std::make_unique<MockScoreAdsReactor>(
             dispatcher_, request_, response_, key_fetcher_manager,
             crypto_client_, runtime_config, std::move(benchmarkingLogger),
-            std::move(async_reporter), "");
+            async_reporter_.get(), "");
         EXPECT_CALL(*mock, Execute).Times(1);
         init_pending.DecrementCount();
         return mock;
@@ -164,13 +164,10 @@ TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
             dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, std::move(async_reporter), runtime_config);
+            crypto_client_, async_reporter_.get(), runtime_config);
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
@@ -198,13 +195,10 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
             dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, std::move(async_reporter), runtime_config);
+            crypto_client_, async_reporter_.get(), runtime_config);
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
@@ -236,13 +230,10 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
-        std::unique_ptr<MockAsyncReporter> async_reporter =
-            std::make_unique<MockAsyncReporter>(
-                std::make_unique<MockHttpFetcherAsync>());
         return std::make_unique<ScoreAdsReactor>(
             dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, std::move(async_reporter), runtime_config);
+            crypto_client_, async_reporter_.get(), runtime_config);
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);

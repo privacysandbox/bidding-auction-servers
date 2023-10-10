@@ -21,6 +21,8 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "glog/logging.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
+#include "services/common/clients/http_kv_server/seller/fake_seller_key_value_async_http_client.h"
+#include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
 #include "services/common/metric/server_definition.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
@@ -36,20 +38,20 @@ void LogMetrics(const SelectAdRequest* request, SelectAdResponse* response) {
   auto& metric_context = metric::SfeContextMap()->Get(request);
   LogIfError(
       metric_context
-          .LogUpDownCounter<server_common::metric::kTotalRequestCount>(1));
+          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
   LogIfError(
       metric_context
-          .LogHistogramDeferred<server_common::metric::kServerTotalTimeMs>(
+          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
               [start = absl::Now()]() -> int {
                 return (absl::Now() - start) / absl::Milliseconds(1);
               }));
-  LogIfError(metric_context.LogHistogram<server_common::metric::kRequestByte>(
+  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
       (int)request->ByteSizeLong()));
-  LogIfError(
-      metric_context.LogHistogramDeferred<server_common::metric::kResponseByte>(
-          [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context
+                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
+                     [response]() -> int { return response->ByteSizeLong(); }));
   LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metric::kTotalRequestFailedCount>(
+             server_common::metrics::kTotalRequestFailedCount>(
       [&metric_context]() -> int {
         return metric_context.is_request_successful() ? 0 : 1;
       }));
@@ -61,10 +63,10 @@ std::unique_ptr<SelectAdReactor> GetReactorForRequest(
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client) {
   switch (request->client_type()) {
-    case SelectAdRequest::ANDROID:
+    case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(context, request, response,
                                                      clients, config_client);
-    case SelectAdRequest::BROWSER:
+    case CLIENT_TYPE_BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(context, request, response,
                                                      clients, config_client);
     default:
@@ -74,6 +76,19 @@ std::unique_ptr<SelectAdReactor> GetReactorForRequest(
 }
 
 }  // namespace
+
+std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
+SellerFrontEndService::CreateKVClient() {
+  if (config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST) ==
+      "E2E_TEST_MODE") {
+    return std::make_unique<FakeSellerKeyValueAsyncHttpClient>(
+        config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST));
+  } else {
+    return std::make_unique<SellerKeyValueAsyncHttpClient>(
+        config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
+        std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()), true);
+  }
+}
 
 grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,

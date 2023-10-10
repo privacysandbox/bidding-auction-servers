@@ -36,10 +36,48 @@ GetBidsRequest::GetBidsRawRequest GetRequest() {
   return request;
 }
 
+TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
+  auto mock_client = std::make_unique<
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+  auto request = GetRequest();
+  request.clear_client_type();
+  absl::Notification notification;
+  EXPECT_CALL(
+      *mock_client,
+      Execute(An<std::unique_ptr<GetBuyerValuesInput>>(),
+              An<const RequestMetadata&>(),
+              An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                             GetBuyerValuesOutput>>) &&>>(),
+              An<absl::Duration>()))
+      .WillOnce(
+          [&request, &notification](
+              std::unique_ptr<GetBuyerValuesInput> input,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<
+                  void(
+                      absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
+                  callback,
+              absl::Duration timeout) {
+            EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_UNKNOWN);
+            notification.Notify();
+            return absl::OkStatus();
+          });
+
+  HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
+
+  BiddingSignalsRequest bidding_signals_request(request, {});
+  class_under_test.Get(
+      bidding_signals_request,
+      [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {},
+      absl::Milliseconds(100));
+  notification.WaitForNotification();
+}
+
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
   auto request = GetRequest();
+  request.set_client_type(ClientType::CLIENT_TYPE_BROWSER);
   absl::Notification notification;
 
   EXPECT_CALL(
@@ -61,6 +99,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
             // Check that keys received in input are from buyer_input
             EXPECT_STREQ(input->hostname.data(),
                          request.publisher_name().data());
+            EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
             absl::flat_hash_set<std::string> received_keys(input->keys.begin(),
                                                            input->keys.end());
 

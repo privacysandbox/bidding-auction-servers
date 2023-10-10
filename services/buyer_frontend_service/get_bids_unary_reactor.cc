@@ -338,7 +338,7 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
         }
         if (!response.ok()) {
           LogIfError(metric_context_->AccumulateMetric<
-                     server_common::metric::kInitiatedRequestErrorCount>(1));
+                     server_common::metrics::kInitiatedRequestErrorCount>(1));
           // Return error to client.
           logger_.vlog(1, "GetBiddingSignals request failed with status:",
                        response.status());
@@ -348,9 +348,8 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
               });
           return;
         }
-
         // Sends protected audience bid request to bidding service.
-        PrepareAndGenerateProtectedAudienceBid(std::move(response.value()));
+        PrepareAndGenerateProtectedAudienceBid(*std::move(response));
       },
       absl::Milliseconds(config_.bidding_signals_load_timeout_ms));
 }
@@ -359,6 +358,12 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
 // All Preload actions must have completed before this is invoked.
 void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
     std::unique_ptr<BiddingSignals> bidding_signals) {
+  if (!bidding_signals || !bidding_signals->trusted_signals ||
+      bidding_signals->trusted_signals->empty()) {
+    logger_.vlog(1, "GetBiddingSignals request succeeded but was empty.");
+    async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
+    return;
+  }
   const auto& log_context = raw_request_.log_context();
   std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
       raw_bidding_input =
@@ -389,7 +394,7 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
             [this](const absl::Status& status) {
               LogIfError(
                   metric_context_->AccumulateMetric<
-                      server_common::metric::kInitiatedRequestErrorCount>(1));
+                      server_common::metrics::kInitiatedRequestErrorCount>(1));
               logger_.vlog(
                   1, "Execution of GenerateBids request failed with status: ",
                   status);
@@ -400,9 +405,7 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
             },
             // Empty response handler
             [this]() {
-              async_task_tracker_.TaskCompleted(
-                  TaskStatus::EMPTY_RESPONSE,
-                  [this]() { get_bids_raw_response_->mutable_bids(); });
+              async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
             },
             // Successful response handler
             [this](auto response) {

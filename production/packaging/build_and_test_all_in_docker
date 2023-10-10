@@ -38,6 +38,7 @@ function _print_runtime() {
 
 declare -a SERVICES
 declare INSTANCE
+declare -i E2E=0
 declare BUILD_FLAVOR=prod
 declare PLATFORM
 declare -i VERBOSE=0
@@ -66,6 +67,7 @@ usage:
                                    Use multiple times to specify more than one service.
     --instance                   [REQUIRED] Recognized values: local, aws
     --platform                   [REQUIRED] Recognized values: gcp, aws
+    --e2e                        Run e2e mode
     --build-flavor               Recognized values: prod, non_prod. Default: prod
                                    Use non_prod to enable verbose logging.
     --precommit-only             Run precommit then exit
@@ -98,6 +100,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-tests)
       NO_TESTS=1
+      shift
+      ;;
+    --e2e)
+      E2E=1
       shift
       ;;
     --no-platform-build)
@@ -266,6 +272,7 @@ function build_service_for_gcp() {
   --server-image "${docker_image}" \
   --service-path "${service}" \
   --gcp-image-tag "${GCP_IMAGE_TAG}" \
+  --e2e "${E2E}" \
   --gcp-image-repo "${GCP_IMAGE_REPO}"
 }
 

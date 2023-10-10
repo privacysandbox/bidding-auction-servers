@@ -17,6 +17,7 @@ set -o pipefail
 set -o errexit
 export PS5='+\t ' # xtrace prompt
 
+declare -i E2E=0
 START=$(date +%s)
 
 trap _print_runtime EXIT
@@ -38,6 +39,7 @@ usage:
     --service-path               [REQUIRED] One of: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service
     --gcp-image-tag              [REQUIRED] (All lowercase) Custom image tag for GCP image.
     --gcp-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
+    --e2e                        Run e2e mode
 
 environment variables (all optional):
     WORKSPACE                    Set the path to the workspace (repo root)
@@ -68,6 +70,10 @@ while [[ $# -gt 0 ]]; do
       GCP_IMAGE_REPO="$2"
       shift 2 || usage
       ;;
+    --e2e)
+      E2E="$2"
+      shift 2 || usage
+      ;;
     --verbose)
       set -o xtrace
       shift
@@ -87,14 +93,20 @@ chmod 770 "${DIST}" "${DIST}"/gcp
 
 cp "${WORKSPACE}/${SERVER_IMAGE}" "${DIST}"/gcp
 
-if ! [[ -v KOKORO_ARTIFACTS_DIR ]]; then
+if ! [[ -v KOKORO_ARTIFACTS_DIR ]] || [[ ${E2E} -eq 1 ]]; then
   printf "==== Uploading local image to gcloud Artifact Repository us-docker.pkg.dev =====\n"
   readonly IMAGE_URI=bazel/production/packaging/gcp/${SERVICE}
-  docker load -i "${SERVER_IMAGE}"
+  docker load -i "${WORKSPACE}/${SERVER_IMAGE}"
   TAGGED_IMAGE_URI="${GCP_IMAGE_REPO}/${SERVICE}:${GCP_IMAGE_TAG}"
   docker tag "${IMAGE_URI}:server_docker_image" "${TAGGED_IMAGE_URI}"
 
   # Note: if the following command fails, double check that the local environment has
   # authenticated to the repo.
+  if [[ ${E2E} -eq 1 ]]; then
+    gcloud config get-value project
+    gcloud auth activate-service-account bas-dev-383721@appspot.gserviceaccount.com --key-file "${WORKSPACE}"/google_internal/kokoro/key/bas-dev-383721-b66154f51315.json
+    gcloud config set account bas-dev-383721@appspot.gserviceaccount.com
+    gcloud config set project bas-dev-383721
+  fi
   docker push "${TAGGED_IMAGE_URI}"
 fi

@@ -36,20 +36,32 @@ constexpr char kFeatureEnabled[] = "true";
 // - Exporting console.logs from the AdTech execution.
 // - wasmHelper added to device_signals
 std::string GetBuyerWrappedCode(
-    absl::string_view adtech_js, absl::string_view adtech_wasm = "",
-    AuctionType auction_type = AuctionType::kProtectedAudience);
+    absl::string_view ad_tech_js, absl::string_view ad_tech_wasm = "",
+    AuctionType auction_type = AuctionType::kProtectedAudience,
+    absl::string_view auction_specific_setup =
+        "device_signals.wasmHelper = globalWasmHelper;");
+
+// Returns the complete wrapped code for Buyer.
+// The function adds wrappers to the Buyer provided generateBid function.
+// This enables:
+// - Exporting console.logs from the AdTech execution.
+// - wasmHelper added to device_signals
+std::string GetGenericBuyerWrappedCode(absl::string_view ad_tech_js,
+                                       absl::string_view ad_tech_wasm,
+                                       absl::string_view function_name,
+                                       absl::string_view args);
 
 // Returns a JSON string for feature flags to be used by the wrapper script.
-std::string GetFeatureFlagJson(bool enable_logging,
-                               bool enable_debug_url_generation);
+std::string GetFeatureFlagJson(bool enable_logging = true,
+                               bool enable_debug_url_generation = false);
 
 // Wrapper Javascript over AdTech code.
 // This wrapper supports the features below:
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
-    function generateBidEntryFunction(%s, featureFlags){
-      device_signals.wasmHelper = globalWasmHelper;
+    function generateBidEntryFunction($0, featureFlags){
+      $1
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -78,7 +90,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
       var generateBidResponse = {};
       try {
-        generateBidResponse = generateBid(%s);
+        generateBidResponse = generateBid($0);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
       } finally {
@@ -93,6 +105,41 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       }
       return {
         response: generateBidResponse,
+        logs: ps_logs,
+        errors: ps_errors,
+        warnings: ps_warns
+      }
+    }
+)JS_CODE";
+
+// Wrapper Javascript over AdTech code.
+// This wrapper supports the features below:
+//- Exporting logs to Bidding Service using console.log
+//- Hooks in wasm module
+inline constexpr absl::string_view kGenericBuyerEntryFunction = R"JS_CODE(
+    function $0EntryFunction($1, featureFlags){
+      var ps_logs = [];
+      var ps_errors = [];
+      var ps_warns = [];
+      if (featureFlags.enable_logging) {
+        console.log = function(...args) {
+          ps_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_errors.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_warns.push(JSON.stringify(args))
+        }
+      }
+      var response = {};
+      try {
+        response = $0($1);
+      } catch({error, message}) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
+      }
+      return {
+        response: response,
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns

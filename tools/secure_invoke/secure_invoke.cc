@@ -19,12 +19,13 @@
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/secure_invoke_lib.h"
 
-constexpr absl::string_view kAndroidClientType = "ANDROID";
+constexpr absl::string_view kAndroidClientType = "CLIENT_TYPE_ANDROID";
 constexpr char kSfe[] = "SFE";
 constexpr char kBfe[] = "BFE";
 constexpr char kJsonFormat[] = "JSON";
 constexpr char kProtoFormat[] = "PROTO";
 
+using ::privacy_sandbox::bidding_auction_servers::ClientType;
 using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 
 ABSL_FLAG(
@@ -82,10 +83,10 @@ int main(int argc, char** argv) {
   std::string json_input_str = absl::GetFlag(FLAGS_json_input_str);
   std::string op = absl::GetFlag(FLAGS_op);
   std::string input_client_type = absl::GetFlag(FLAGS_client_type);
-  SelectAdRequest::ClientType client_type =
+  ClientType client_type =
       absl::AsciiStrToUpper(input_client_type) == kAndroidClientType
-          ? SelectAdRequest::ANDROID
-          : SelectAdRequest::BROWSER;
+          ? ClientType::CLIENT_TYPE_ANDROID
+          : ClientType::CLIENT_TYPE_BROWSER;
   const std::string target_service =
       absl::AsciiStrToUpper(absl::GetFlag(FLAGS_target_service));
   const std::string input_format =

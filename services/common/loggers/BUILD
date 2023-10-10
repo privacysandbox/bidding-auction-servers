@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "timer",
     srcs = ["timer.cc"],
     hdrs = ["timer.h"],
-    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/time",
     ],
@@ -31,7 +32,6 @@ cc_library(
         "benchmarking_logger.h",
         "no_ops_logger.h",
     ],
-    visibility = ["//visibility:public"],
     deps = [
         "//services/common/loggers:timer",
         "@com_github_google_glog//:glog",
@@ -44,9 +44,71 @@ cc_library(
     name = "build_input_process_response_benchmarking_logger",
     srcs = ["build_input_process_response_benchmarking_logger.cc"],
     hdrs = ["build_input_process_response_benchmarking_logger.h"],
-    visibility = ["//visibility:public"],
     deps = [
         ":benchmarking_logger",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "request_context_logger",
+    hdrs = [
+        "request_context_logger.h",
+    ],
+    defines = select({
+        "//:non_prod_build": ["PS_LOG_NON_PROD=1"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@com_google_absl//absl/log:absl_log",
+    ],
+)
+
+cc_test(
+    name = "request_context_logger_test",
+    timeout = "short",
+    srcs = ["request_context_logger_test.h"] +
+           select({
+               "//:non_prod_build": ["request_context_logger_non_prod_test.cc"],
+               "//conditions:default": ["request_context_logger_prod_test.cc"],
+           }),
+    deps = [
+        ":request_context_logger",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "request_context_impl",
+    hdrs = [
+        "request_context_impl.h",
+    ],
+    deps = [
+        ":request_context_logger",
+        "//services/common/util:consented_debugging_logger",
+        "//services/common/util:context_logger",
+    ],
+)
+
+cc_test(
+    name = "request_context_impl_test",
+    timeout = "short",
+    srcs = [
+        "request_context_impl_test.h",
+        "request_context_logger_test.h",
+    ] + select({
+        "//:non_prod_build": ["request_context_impl_non_prod_test.cc"],
+        "//conditions:default": ["request_context_impl_prod_test.cc"],
+    }),
+    deps = [
+        ":request_context_impl",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@io_opentelemetry_cpp//exporters/ostream:ostream_log_record_exporter",
     ],
 )

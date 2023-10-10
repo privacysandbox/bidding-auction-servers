@@ -277,11 +277,64 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoHostname) {
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
-TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
-  const GetBuyerValuesInput getValuesClientInput = {
+TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoClientType) {
+  const GetBuyerValuesInput client_input = {
       {"lloyd_george", "clementine", "birkenhead"}, ""};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(client_input);
+  const std::string expected_url =
+      hostname_ + "?keys=lloyd_george,clementine,birkenhead";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeBrowser) {
+  const GetBuyerValuesInput client_input = {
+      {"lloyd_george", "clementine", "birkenhead"}, ""};
+  std::unique_ptr<GetBuyerValuesInput> input =
+      std::make_unique<GetBuyerValuesInput>(client_input);
+  // Note: if the client type is not CLIENT_TYPE_ANDROID, no client_type
+  // param is attached to the url. This behavior will change after beta
+  // testing to always include a client_type.
+  const std::string expected_url =
+      hostname_ + "?keys=lloyd_george,clementine,birkenhead";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
+  const GetBuyerValuesInput client_input = {
+      {"lloyd_george", "clementine", "birkenhead"},
+      "",
+      ClientType::CLIENT_TYPE_ANDROID};
+  std::unique_ptr<GetBuyerValuesInput> input =
+      std::make_unique<GetBuyerValuesInput>(client_input);
+  const std::string expected_url =
+      hostname_ + "?client_type=1&keys=lloyd_george,clementine,birkenhead";
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+      .WillOnce(
+          [&expected_url](
+              HTTPRequest request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
+  CheckGetValuesFromKeysViaHttpClient(std::move(input));
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
+  const GetBuyerValuesInput client_input = {
+      {"lloyd_george", "clementine", "birkenhead"}, ""};
+  std::unique_ptr<GetBuyerValuesInput> input =
+      std::make_unique<GetBuyerValuesInput>(client_input);
 
   RequestMetadata expectedMetadata = MakeARandomMap();
   for (const auto& it : kMandatoryHeaders) {

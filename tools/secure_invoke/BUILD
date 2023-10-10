@@ -85,6 +85,7 @@ cc_test(
         ":secure_invoke_lib",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/buyer_frontend_service",
+        "//services/buyer_frontend_service:buyer_frontend_test_utils",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

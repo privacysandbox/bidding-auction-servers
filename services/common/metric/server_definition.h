@@ -19,15 +19,15 @@
 #include <string>
 #include <utility>
 
-#include "services/common/metric/context_map.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/reporting_util.h"
+#include "src/cpp/metric/context_map.h"
 
 // Defines API used by Bidding auction servers, and B&A specific metrics.
 namespace privacy_sandbox::bidding_auction_servers {
 namespace metric {
 
-inline constexpr server_common::metric::PrivacyBudget server_total_budget{
+inline constexpr server_common::metrics::PrivacyBudget server_total_budget{
     /*epsilon*/ 5};
 
 inline constexpr double kPercentHistogram[] = {0.06, 0.12, 0.25, 0.5, 1};
@@ -45,88 +45,88 @@ inline constexpr absl::string_view kServerName[]{
 };
 
 // Metric Definitions that are specific to bidding & auction servers.
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kJSExecutionDuration("js_execution.duration_ms",
                          "Time taken to execute the JS dispatcher",
-                         server_common::metric::kTimeHistogram);
+                         server_common::metrics::kTimeHistogram);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kUpDownCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kUpDownCounter>
     kJSExecutionErrorCount("js_execution.error.count",
                            "No. of times js execution returned status != OK");
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestKVDuration(
         "initiated_request.kv.duration_ms",
         "Total duration request takes to get response back from KV server",
-        server_common::metric::kTimeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kTimeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestBiddingDuration(
         "initiated_request.bidding.duration_ms",
         "Total duration request takes to get response back from bidding server",
-        server_common::metric::kTimeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kTimeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestAuctionDuration(
         "initiated_request.auction.duration_ms",
         "Total duration request takes to get response back from Auction server",
-        server_common::metric::kTimeHistogram);
+        server_common::metrics::kTimeHistogram);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestKVSize(
         "initiated_request.kv.size_bytes",
         "Size of the Initiated Request to KV server in Bytes",
-        server_common::metric::kSizeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestBiddingSize(
         "initiated_request.bidding.size_bytes",
         "Size of the Initiated Request to Bidding server in Bytes",
-        server_common::metric::kSizeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestAuctionSize(
         "initiated_request.auction.size_bytes",
         "Size of the initiated Request to Auction server in Bytes",
-        server_common::metric::kSizeHistogram);
+        server_common::metrics::kSizeHistogram);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedResponseKVSize(
         "initiated_response.kv.size_bytes",
         "Size of the Initiated Response by KV server in Bytes",
-        server_common::metric::kSizeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedResponseBiddingSize(
         "initiated_response.bidding.size_bytes",
         "Size of the Initiated Response by Bidding server in Bytes",
-        server_common::metric::kSizeHistogram);
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+        server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kInitiatedResponseAuctionSize(
         "initiated_response.auction.size_bytes",
         "Size of the initiated Response by Auction server in Bytes",
-        server_common::metric::kSizeHistogram);
+        server_common::metrics::kSizeHistogram);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kPartitionedCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
     kInitiatedRequestCountByServer(
         /*name*/ "initiated_request.count_by_server",
         /*description*/
@@ -135,16 +135,16 @@ inline constexpr server_common::metric::Definition<
         /*partition_type*/ "server name",
         /* public_partitions*/ kServerName);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kUpDownCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kUpDownCounter>
     kBiddingZeroBidCount(
         "business_logic.bidding.zero_bid.count",
         "Total number of times bidding service returns a zero bid");
 
-inline constexpr server_common::metric::Definition<
-    double, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kBiddingZeroBidPercent(
         "business_logic.bidding.zero_bid.percent",
         "Percentage of times bidding service returns a zero bid",
@@ -161,9 +161,9 @@ inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonPendingApprovalByExchange,
 };
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kPartitionedCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
     kAuctionBidRejectedCount(
         /*name*/ "business_logic.auction.bid_rejected.count",
         /*description*/
@@ -172,69 +172,71 @@ inline constexpr server_common::metric::Definition<
         /*partition_type*/ "seller_rejection_reason",
         /*public_partitions*/ kSellerRejectReasons);
 
-inline constexpr server_common::metric::Definition<
-    double, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kHistogram>
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
     kAuctionBidRejectedPercent(
         /*name*/ "business_logic.auction.bid_rejected.percent",
         /*description*/
         "Percentage of times auction service rejects a bid", kPercentHistogram);
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kUpDownCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kUpDownCounter>
     kBiddingTotalBidsCount(
         /*name*/ "business_logic.bidding.bids.count",
         /*description*/ "Total number of bids generated by bidding service");
 
-inline constexpr server_common::metric::Definition<
-    int, server_common::metric::Privacy::kNonImpacting,
-    server_common::metric::Instrument::kUpDownCounter>
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kUpDownCounter>
     kAuctionTotalBidsCount(
         /*name*/ "business_logic.auction.bids.count",
         /*description*/
         "Total number of bids used to score in auction service");
 
 // API to get `Context` for bidding server to log metric
-inline constexpr const server_common::metric::DefinitionName*
+inline constexpr const server_common::metrics::DefinitionName*
     kBiddingMetricList[] = {
-        &server_common::metric::kTotalRequestCount,
-        &server_common::metric::kTotalRequestFailedCount,
-        &server_common::metric::kServerTotalTimeMs,
-        &server_common::metric::kRequestByte,
-        &server_common::metric::kResponseByte,
+        &server_common::metrics::kTotalRequestCount,
+        &server_common::metrics::kTotalRequestFailedCount,
+        &server_common::metrics::kServerTotalTimeMs,
+        &server_common::metrics::kRequestByte,
+        &server_common::metrics::kResponseByte,
         &kBiddingTotalBidsCount,
         &kBiddingZeroBidCount,
         &kBiddingZeroBidPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
 };
-inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
+inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kBiddingMetricSpan = kBiddingMetricList;
 inline auto* BiddingContextMap(
-    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
+    std::optional<server_common::telemetry::BuildDependentConfig> config =
+        std::nullopt,
     std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
     absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metric::GetContextMap<const GenerateBidsRequest,
-                                              kBiddingMetricSpan>(
+  return server_common::metrics::GetContextMap<const GenerateBidsRequest,
+                                               kBiddingMetricSpan>(
       std::move(config), std::move(provider), service, version,
       server_total_budget);
 }
-using BiddingContext = server_common::metric::ServerContext<kBiddingMetricSpan>;
+using BiddingContext =
+    server_common::metrics::ServerContext<kBiddingMetricSpan>;
 
 // API to get `Context` for BFE server to log metric
-inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
-    {
-        &server_common::metric::kTotalRequestCount,
-        &server_common::metric::kTotalRequestFailedCount,
-        &server_common::metric::kServerTotalTimeMs,
-        &server_common::metric::kRequestByte,
-        &server_common::metric::kResponseByte,
-        &server_common::metric::kInitiatedRequestCount,
-        &server_common::metric::kInitiatedRequestErrorCount,
-        &server_common::metric::kInitiatedRequestTotalDuration,
-        &server_common::metric::kInitiatedRequestByte,
-        &server_common::metric::kInitiatedResponseByte,
+inline constexpr const server_common::metrics::DefinitionName*
+    kBfeMetricList[] = {
+        &server_common::metrics::kTotalRequestCount,
+        &server_common::metrics::kTotalRequestFailedCount,
+        &server_common::metrics::kServerTotalTimeMs,
+        &server_common::metrics::kRequestByte,
+        &server_common::metrics::kResponseByte,
+        &server_common::metrics::kInitiatedRequestCount,
+        &server_common::metrics::kInitiatedRequestErrorCount,
+        &server_common::metrics::kInitiatedRequestTotalDuration,
+        &server_common::metrics::kInitiatedRequestByte,
+        &server_common::metrics::kInitiatedResponseByte,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestBiddingDuration,
@@ -243,32 +245,33 @@ inline constexpr const server_common::metric::DefinitionName* kBfeMetricList[] =
         &kInitiatedResponseKVSize,
         &kInitiatedResponseBiddingSize,
 };
-inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
+inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
 inline auto* BfeContextMap(
-    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
+    std::optional<server_common::telemetry::BuildDependentConfig> config =
+        std::nullopt,
     std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
     absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metric::GetContextMap<const GetBidsRequest,
-                                              kBfeMetricSpan>(
+  return server_common::metrics::GetContextMap<const GetBidsRequest,
+                                               kBfeMetricSpan>(
       std::move(config), std::move(provider), service, version,
       server_total_budget);
 }
-using BfeContext = server_common::metric::ServerContext<kBfeMetricSpan>;
+using BfeContext = server_common::metrics::ServerContext<kBfeMetricSpan>;
 
 // API to get `Context` for SFE server to log metric
-inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
-    {
-        &server_common::metric::kTotalRequestCount,
-        &server_common::metric::kTotalRequestFailedCount,
-        &server_common::metric::kServerTotalTimeMs,
-        &server_common::metric::kRequestByte,
-        &server_common::metric::kResponseByte,
-        &server_common::metric::kInitiatedRequestCount,
-        &server_common::metric::kInitiatedRequestErrorCount,
-        &server_common::metric::kInitiatedRequestTotalDuration,
-        &server_common::metric::kInitiatedRequestByte,
-        &server_common::metric::kInitiatedResponseByte,
+inline constexpr const server_common::metrics::DefinitionName*
+    kSfeMetricList[] = {
+        &server_common::metrics::kTotalRequestCount,
+        &server_common::metrics::kTotalRequestFailedCount,
+        &server_common::metrics::kServerTotalTimeMs,
+        &server_common::metrics::kRequestByte,
+        &server_common::metrics::kResponseByte,
+        &server_common::metrics::kInitiatedRequestCount,
+        &server_common::metrics::kInitiatedRequestErrorCount,
+        &server_common::metrics::kInitiatedRequestTotalDuration,
+        &server_common::metrics::kInitiatedRequestByte,
+        &server_common::metrics::kInitiatedResponseByte,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestAuctionDuration,
@@ -277,45 +280,48 @@ inline constexpr const server_common::metric::DefinitionName* kSfeMetricList[] =
         &kInitiatedResponseKVSize,
         &kInitiatedResponseAuctionSize,
 };
-inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
+inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
 inline auto* SfeContextMap(
-    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
+    std::optional<server_common::telemetry::BuildDependentConfig> config =
+        std::nullopt,
     std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
     absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metric::GetContextMap<const SelectAdRequest,
-                                              kSfeMetricSpan>(
+  return server_common::metrics::GetContextMap<const SelectAdRequest,
+                                               kSfeMetricSpan>(
       std::move(config), std::move(provider), service, version,
       server_total_budget);
 }
-using SfeContext = server_common::metric::ServerContext<kSfeMetricSpan>;
+using SfeContext = server_common::metrics::ServerContext<kSfeMetricSpan>;
 
 // API to get `Context` for Auction server to log metric
-inline constexpr const server_common::metric::DefinitionName*
+inline constexpr const server_common::metrics::DefinitionName*
     kAuctionMetricList[] = {
-        &server_common::metric::kTotalRequestCount,
-        &server_common::metric::kTotalRequestFailedCount,
-        &server_common::metric::kServerTotalTimeMs,
-        &server_common::metric::kRequestByte,
-        &server_common::metric::kResponseByte,
+        &server_common::metrics::kTotalRequestCount,
+        &server_common::metrics::kTotalRequestFailedCount,
+        &server_common::metrics::kServerTotalTimeMs,
+        &server_common::metrics::kRequestByte,
+        &server_common::metrics::kResponseByte,
         &kAuctionTotalBidsCount,
         &kAuctionBidRejectedCount,
         &kAuctionBidRejectedPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
 };
-inline constexpr absl::Span<const server_common::metric::DefinitionName* const>
+inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kAuctionMetricSpan = kAuctionMetricList;
 inline auto* AuctionContextMap(
-    std::optional<server_common::BuildDependentConfig> config = std::nullopt,
+    std::optional<server_common::telemetry::BuildDependentConfig> config =
+        std::nullopt,
     std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
     absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metric::GetContextMap<const ScoreAdsRequest,
-                                              kAuctionMetricSpan>(
+  return server_common::metrics::GetContextMap<const ScoreAdsRequest,
+                                               kAuctionMetricSpan>(
       std::move(config), std::move(provider), service, version,
       server_total_budget);
 }
-using AuctionContext = server_common::metric::ServerContext<kAuctionMetricSpan>;
+using AuctionContext =
+    server_common::metrics::ServerContext<kAuctionMetricSpan>;
 
 }  // namespace metric
 
@@ -355,18 +361,18 @@ class InitiatedRequest {
   void LogMetrics() {
     int initiated_request_ms = (absl::Now() - start_) / absl::Milliseconds(1);
     LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metric::kInitiatedRequestCount>(1));
+               server_common::metrics::kInitiatedRequestCount>(1));
     LogIfError(
         metric_context_
             .template AccumulateMetric<metric::kInitiatedRequestCountByServer>(
                 1, destination_));
     LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metric::kInitiatedRequestTotalDuration>(
+               server_common::metrics::kInitiatedRequestTotalDuration>(
         initiated_request_ms));
     LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metric::kInitiatedRequestByte>(request_size_));
+               server_common::metrics::kInitiatedRequestByte>(request_size_));
     LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metric::kInitiatedResponseByte>(response_size_));
+               server_common::metrics::kInitiatedResponseByte>(response_size_));
 
     if (destination_ == metric::kKv) {
       if constexpr (std::is_same_v<ContextT, SfeContext> ||
@@ -420,9 +426,9 @@ std::unique_ptr<InitiatedRequest<ContextT>> MakeInitiatedRequest(
 
 template <typename T>
 inline void AddSystemMetric(T* context_map) {
-  context_map->AddObserverable(server_common::metric::kCpuPercent,
+  context_map->AddObserverable(server_common::metrics::kCpuPercent,
                                server_common::GetCpu);
-  context_map->AddObserverable(server_common::metric::kMemoryKB,
+  context_map->AddObserverable(server_common::metrics::kMemoryKB,
                                server_common::GetMemory);
 }
 

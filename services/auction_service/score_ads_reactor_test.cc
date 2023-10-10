@@ -159,9 +159,10 @@ void GetTestAdWithBidBarbecueWithComponents(AdWithBidMetadata& ad_with_bid) {
   }
 }
 
-constexpr char testSellerSignals[] = R"json({"seller_signal": "test 1"})json";
-constexpr char testAuctionSignals[] = R"json({"auction_signal": "test 2"})json";
-constexpr char testScoringSignals[] = R"json(
+constexpr char kTestSellerSignals[] = R"json({"seller_signal": "test 1"})json";
+constexpr char kTestAuctionSignals[] =
+    R"json({"auction_signal": "test 2"})json";
+constexpr char kTestScoringSignals[] = R"json(
   {
     "renderUrls": {
       "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0": [
@@ -194,8 +195,8 @@ constexpr char testScoringSignals[] = R"json(
     }
   }
 )json";
-constexpr char testPublisherHostname[] = "publisher_hostname";
-constexpr char testDirectFromSellerSignals[] = "{}";
+constexpr char kTestPublisherHostname[] = "publisher_hostname";
+constexpr char kTestDirectFromSellerSignals[] = "{}";
 
 absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
                          const BatchDispatchDoneCallback& done_callback,
@@ -338,9 +339,10 @@ void SetupMockCryptoClientWrapper(Request request,
 class ScoreAdsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::AuctionContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::AuctionContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
   }
   ScoreAdsResponse ExecuteScoreAds(
@@ -370,7 +372,7 @@ class ScoreAdsReactorTest : public ::testing::Test {
     ScoreAdsReactor reactor(dispatcher, &request_, &response,
                             std::move(benchmarkingLogger),
                             key_fetcher_manager.get(), &crypto_client,
-                            std::move(async_reporter), runtime_config);
+                            async_reporter.get(), runtime_config);
     reactor.Execute();
     return response;
   }
@@ -402,9 +404,9 @@ TEST_F(
   AdWithBidMetadata foo, has_foo_components;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidSameComponentAsFoo(has_foo_components);
-  BuildRawRequest({foo, has_foo_components}, testSellerSignals,
-                  testAuctionSignals, testScoringSignals, testPublisherHostname,
-                  raw_request);
+  BuildRawRequest({foo, has_foo_components}, kTestSellerSignals,
+                  kTestAuctionSignals, kTestScoringSignals,
+                  kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -432,8 +434,8 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -454,8 +456,8 @@ TEST_F(ScoreAdsReactorTest,
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
-  BuildRawRequest({foo}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -475,8 +477,8 @@ TEST_F(ScoreAdsReactorTest,
   RawRequest raw_request;
   AdWithBidMetadata bar;
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -507,8 +509,8 @@ TEST_F(ScoreAdsReactorTest,
   RawRequest raw_request;
   AdWithBidMetadata awb;
   GetTestAdWithBidBarbecue(awb);
-  BuildRawRequest({awb}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({awb}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -539,8 +541,8 @@ TEST_F(ScoreAdsReactorTest,
   RawRequest raw_request;
   AdWithBidMetadata awb;
   GetTestAdWithBidBarbecueWithComponents(awb);
-  BuildRawRequest({awb}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({awb}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -583,8 +585,8 @@ TEST_F(ScoreAdsReactorTest, CreatesScoringSignalInputPerAdWithSignal) {
         return absl::OkStatus();
       });
 
-  BuildRawRequest(ads, testSellerSignals, testAuctionSignals,
-                  trusted_scoring_signals, testPublisherHostname, raw_request);
+  BuildRawRequest(ads, kTestSellerSignals, kTestAuctionSignals,
+                  trusted_scoring_signals, kTestPublisherHostname, raw_request);
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
 }
 
@@ -610,8 +612,8 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   RawRequest raw_request_copy = raw_request;
 
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
@@ -625,17 +627,18 @@ TEST_F(ScoreAdsReactorTest,
       .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
                        &id_to_ad](std::vector<DispatchRequest>& batch,
                                   BatchDispatchDoneCallback done_callback) {
-        VLOG(1) << "Batch executing";
+        ABSL_LOG(INFO) << "Batch executing";
 
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
         for (auto request : batch) {
-          VLOG(1) << "Accessing id ad mapping for " << request.id;
+          ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
           score_to_ad.insert_or_assign(current_score + 1,
                                        id_to_ad.at(request.id));
-          VLOG(1) << "Successfully accessed id ad mapping for " << request.id;
+          ABSL_LOG(INFO) << "Successfully accessed id ad mapping for "
+                         << request.id;
           score_logic.push_back(absl::Substitute(
               R"(
       {
@@ -657,9 +660,11 @@ TEST_F(ScoreAdsReactorTest,
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scored_ad = raw_response.ad_score();
-  VLOG(1) << "Accessing score to ad mapping for " << scored_ad.desirability();
+  ABSL_LOG(INFO) << "Accessing score to ad mapping for "
+                 << scored_ad.desirability();
   auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
-  VLOG(1) << "Accessed score to ad mapping for " << scored_ad.desirability();
+  ABSL_LOG(INFO) << "Accessed score to ad mapping for "
+                 << scored_ad.desirability();
   // All scored ads must have these next four fields present and set.
   // The next three of these are all taken from the ad_with_bid.
   EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
@@ -677,14 +682,16 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_FALSE(scored_ad.allow_component_auction());
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
   EXPECT_EQ(scored_ad.ad_type(), AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
-  VLOG(1) << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
+  ABSL_LOG(INFO)
+      << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
   EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map()
                 .at(kInterestGroupOwnerOfBarBidder)
                 .values()
                 .at(0)
                 .number_value(),
             2);
-  VLOG(1) << "Accessed mapping for ig_owner_highest_scoring_other_bids_map";
+  ABSL_LOG(INFO)
+      << "Accessed mapping for ig_owner_highest_scoring_other_bids_map";
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -696,8 +703,8 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   RawRequest raw_request_copy = raw_request;
 
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
@@ -773,8 +780,8 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
   for (auto ad : raw_request_copy.ad_bids()) {
@@ -842,8 +849,9 @@ TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request, true);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  true);
 
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([&current_score, &allowComponentAuction](
@@ -894,8 +902,9 @@ TEST_F(ScoreAdsReactorTest, SuccessExecutesInRomaWithLogsEnabled) {
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request, true);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  true);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
   for (const auto& ad : raw_request_copy.ad_bids()) {
@@ -957,8 +966,8 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request,
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
                   enable_debug_reporting);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
@@ -1044,8 +1053,8 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request,
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
                   enable_debug_reporting);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
@@ -1149,8 +1158,8 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request,
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
                   enable_debug_reporting);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
@@ -1226,8 +1235,9 @@ TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
-  BuildRawRequest({foo}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request, true);
+  BuildRawRequest({foo}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  true);
   RawRequest raw_request_copy = raw_request;
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
@@ -1282,8 +1292,8 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
-  BuildRawRequest({foo}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request);
+  BuildRawRequest({foo}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
 
   ScoreAdsResponse response;
   request_.set_key_id("key_id");
@@ -1321,8 +1331,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   AuctionServiceRuntimeConfig runtime_config = {.encryption_enabled = true};
   ScoreAdsReactor reactor(dispatcher, &request_, &response,
                           std::move(benchmarkingLogger), &key_fetcher_manager,
-                          &crypto_client, std::move(async_reporter),
-                          runtime_config);
+                          &crypto_client, async_reporter.get(), runtime_config);
   reactor.Execute();
 
   EXPECT_FALSE(response.response_ciphertext().empty());
@@ -1339,8 +1348,9 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
 
-  BuildRawRequest({foo, bar}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request, true);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  true);
 
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, std::string> id_to_rejection_reason;
@@ -1400,8 +1410,9 @@ TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
-  BuildRawRequest({foo}, testSellerSignals, testAuctionSignals,
-                  testScoringSignals, testPublisherHostname, raw_request, true);
+  BuildRawRequest({foo}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  true);
   RawRequest raw_request_copy = raw_request;
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,

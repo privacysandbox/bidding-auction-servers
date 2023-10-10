@@ -99,8 +99,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
     auto [protected_auction_input, request, context] =
-        GetSampleSelectAdRequest<T>(SelectAdRequest::BROWSER,
-                                    kSellerOriginDomain);
+        GetSampleSelectAdRequest<T>(CLIENT_TYPE_BROWSER, kSellerOriginDomain);
     protected_auction_input_ = std::move(protected_auction_input);
     request_ = std::move(request);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
@@ -113,9 +112,10 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         .WillRepeatedly(Return(GetPrivateKey()));
 
     // Initialization for telemetry.
-    server_common::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::TelemetryConfig::PROD);
-    metric::SfeContextMap(server_common::BuildDependentConfig(config_proto))
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::SfeContextMap(
+        server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
   }
 
@@ -189,6 +189,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
+          EXPECT_EQ(get_values_request->client_type(),
+                    this->request_.client_type());
           EXPECT_TRUE(
               diff.Compare(buyer_input, get_values_request->buyer_input()));
           EXPECT_EQ(this->request_.auction_config().auction_signals(),
@@ -627,7 +629,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   }
   this->protected_auction_input_.set_generation_id(MakeARandomString());
   this->protected_auction_input_.set_publisher_name(MakeARandomString());
-  this->request_.set_client_type(SelectAdRequest_ClientType_ANDROID);
+  this->request_.set_client_type(ClientType::CLIENT_TYPE_ANDROID);
 
   // KV Client
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;

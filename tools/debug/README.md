@@ -20,8 +20,8 @@ sudo apt install python3-clang
 #### Build Buyer stack
 
 ```bash
-bazel build //services/bidding_service:server --config=local_local
-bazel build //services/buyer_frontend_service:server --config=local_local
+builders/tools/bazel-debian build //services/bidding_service:server
+builders/tools/bazel-debian build //services/buyer_frontend_service:server
 ```
 
 #### Start Buyer stack
@@ -45,8 +45,8 @@ bazel build //services/buyer_frontend_service:server --config=local_local
 #### Build Seller stack
 
 ```bash
-bazel build //services/auction_service:server --config=local_local
-bazel build //services/seller_frontend_service:server --config=local_local
+builders/tools/bazel-debian build //services/auction_service:server
+builders/tools/bazel-debian build //services/seller_frontend_service:server
 ```
 
 #### Start Seller stack

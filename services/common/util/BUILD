@@ -195,7 +195,7 @@ cc_library(
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
-        "//services/common/util:context_logger",
+        "//services/common/loggers:request_context_impl",
         "//services/common/util:json_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",

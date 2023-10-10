@@ -29,7 +29,8 @@ void HttpBiddingSignalsAsyncProvider::Get(
   auto request = std::make_unique<GetBuyerValuesInput>();
   request->hostname =
       bidding_signals_request.get_bids_raw_request_.publisher_name();
-
+  request->client_type =
+      bidding_signals_request.get_bids_raw_request_.client_type();
   absl::StatusOr<std::unique_ptr<BiddingSignals>> output =
       std::make_unique<BiddingSignals>();
 

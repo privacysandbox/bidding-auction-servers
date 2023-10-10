@@ -30,24 +30,31 @@ using ::grpc_event_engine::experimental::EventEngine;
 namespace {
 
 // Parses curl message to result string or an error message for the callback.
-absl::StatusOr<std::string> GetResultFromMsg(CURLMsg* msg) {
-  std::string* output;
+std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg) {
+  void* output;
+  absl::Status status;
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
   if (msg->msg == CURLMSG_DONE) {
     auto result_msg = curl_easy_strerror(msg->data.result);
     switch (msg->data.result) {
       case CURLE_OK:
-        curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
-        return *output;
+        status = absl::OkStatus();
+        break;
       case CURLE_OPERATION_TIMEDOUT:
-        return absl::DeadlineExceededError(result_msg);
+        status = absl::DeadlineExceededError(result_msg);
+        break;
       case CURLE_URL_MALFORMAT:
-        return absl::InvalidArgumentError(result_msg);
+        status = absl::InvalidArgumentError(result_msg);
+        break;
       default:
-        return absl::InternalError(result_msg);
+        status = absl::InternalError(result_msg);
+        break;
     }
   } else {
-    return absl::InternalError("Failed to read message via curl.");
+    status = absl::InternalError(
+        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
   }
+  return std::make_pair(status, output);
 }
 
 constexpr int log_level = 2;
@@ -127,7 +134,7 @@ MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
 }
 
 MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
-    ABSL_LOCKS_EXCLUDED(in_loop_mu_, curl_data_map_lock_) {
+    ABSL_LOCKS_EXCLUDED(in_loop_mu_, curl_handle_set_lock_) {
   // Notify other threads about shutdown.
   shutdown_requested_.Notify();
   shutdown_complete_.WaitForNotification();
@@ -135,11 +142,20 @@ MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
   // here since no new requests are being accepted, or processed through
   // the execution loop.
   absl::MutexLock l1(&in_loop_mu_);
-  absl::MutexLock l2(&curl_data_map_lock_);
+  absl::MutexLock l2(&curl_handle_set_lock_);
+
   // Execute all callbacks and clean up handles
-  for (auto& [handle, handle_data] : curl_data_map_) {
+  for (auto& handle : curl_handle_set_) {
     multi_curl_request_manager_.Remove(handle);
-    std::move(handle_data->done_callback)(
+    CurlRequestData* output;
+    curl_easy_getinfo(handle, CURLINFO_PRIVATE, &output);
+    std::unique_ptr<CurlRequestData> curl_request_data_ptr(output);
+    // Server is shutting down, so exiting gracefully.
+    if (output == nullptr) {
+      LOG(ERROR) << "Curl Error: Pointer to Curl data lost";
+      continue;
+    }
+    std::move(output->done_callback)(
         absl::InternalError("Request cancelled due to server shutdown."));
   }
 }
@@ -236,8 +252,7 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(const HTTPRequest& request,
   curl_easy_setopt(req_handle, CURLOPT_URL, request.url.begin());
   curl_easy_setopt(req_handle, CURLOPT_WRITEDATA,
                    curl_request_data->output.get());
-  curl_easy_setopt(req_handle, CURLOPT_PRIVATE,
-                   curl_request_data->output.get());
+  curl_easy_setopt(req_handle, CURLOPT_PRIVATE, curl_request_data.get());
   curl_easy_setopt(req_handle, CURLOPT_FOLLOWLOCATION, 1);
   curl_easy_setopt(req_handle, CURLOPT_TIMEOUT_MS, timeout_ms);
   // Enable TCP keep-alive to keep connection warm.
@@ -262,10 +277,27 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(const HTTPRequest& request,
 
 void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
     std::unique_ptr<CurlRequestData> request) {
+  // If shutdown has been initiated while we were preparing/adding request.
+  if (shutdown_requested_.HasBeenNotified()) {
+    std::move(request->done_callback)(
+        absl::InternalError("Client is shutting down."));
+    return;
+  }
   // Check for errors from multi handle here and execute callback immediately.
   auto* req_handle = request->req_handle;
   CURLMcode mc = multi_curl_request_manager_.Add(req_handle);
   switch (mc) {
+    case CURLM_CALL_MULTI_PERFORM:
+    case CURLM_OK:
+    case CURLM_ADDED_ALREADY:
+    case CURLM_RECURSIVE_API_CALL:
+    case CURLM_LAST:
+      Add(req_handle);
+      // Release request data ownership so it can be tracked
+      // completely through the curl easy handle. This will be manually cleaned
+      // when the request completes or when this class is destroyed.
+      request.release();
+      return;
     case CURLM_BAD_HANDLE:
     case CURLM_BAD_EASY_HANDLE:
     case CURLM_OUT_OF_MEMORY:
@@ -276,24 +308,17 @@ void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
     case CURLM_ABORTED_BY_CALLBACK:
     case CURLM_UNRECOVERABLE_POLL:
     case CURLM_UNKNOWN_OPTION:
+    default:
       std::move(request->done_callback)(absl::InternalError(
           absl::StrCat("Failed to invoke request via curl with error ",
                        curl_multi_strerror(mc))));
       return;
-    case CURLM_CALL_MULTI_PERFORM:
-    case CURLM_OK:
-    case CURLM_ADDED_ALREADY:
-    case CURLM_RECURSIVE_API_CALL:
-    case CURLM_LAST:
-      Add(req_handle, std::move(request));
-      break;
   }
 }
 
 void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
                                          int timeout_ms,
-                                         OnDoneFetchUrl done_callback)
-    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+                                         OnDoneFetchUrl done_callback) {
   ExecuteCurlRequest(CreateCurlRequest(request, timeout_ms, keepalive_idle_sec_,
                                        keepalive_interval_sec_,
                                        std::move(done_callback)));
@@ -301,8 +326,7 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
 
 void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
                                        int timeout_ms,
-                                       OnDoneFetchUrl done_callback)
-    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+                                       OnDoneFetchUrl done_callback) {
   auto request =
       CreateCurlRequest(http_request, timeout_ms, keepalive_idle_sec_,
                         keepalive_interval_sec_, std::move(done_callback));
@@ -319,21 +343,6 @@ void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
   ExecuteCurlRequest(std::move(request));
 }
 
-void MultiCurlHttpFetcherAsync::Add(
-    CURL* handle, std::unique_ptr<CurlRequestData> curl_request_data)
-    ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
-  // If shutdown has been initiated while we were preparing/adding request.
-  if (shutdown_requested_.HasBeenNotified()) {
-    std::move(curl_request_data->done_callback)(
-        absl::InternalError("Client is shutting down."));
-    return;
-  }
-
-  // Add callback to map.
-  absl::MutexLock l(&curl_data_map_lock_);
-  curl_data_map_.try_emplace(handle, std::move(curl_request_data));
-}
-
 void MultiCurlHttpFetcherAsync::ExecuteLoop() ABSL_LOCKS_EXCLUDED(in_loop_mu_) {
   if (in_loop_mu_.TryLock()) {
     while (!shutdown_requested_.HasBeenNotified()) {
@@ -348,30 +357,49 @@ void MultiCurlHttpFetcherAsync::ExecuteLoop() ABSL_LOCKS_EXCLUDED(in_loop_mu_) {
 
 void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
-        ABSL_LOCKS_EXCLUDED(curl_data_map_lock_) {
+        ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_) {
   // Check for updates (provide computation for Libcurl to perform I/O).
   int msgs_left = -1;
   while (CURLMsg* msg = multi_curl_request_manager_.GetUpdate(&msgs_left)) {
-    multi_curl_request_manager_.Remove(msg->easy_handle);
-
     // Get data for completed message.
-    std::unique_ptr<CurlRequestData> curl_request_data;
-    {
-      absl::MutexLock lock(&curl_data_map_lock_);
-      curl_request_data = std::move(curl_data_map_.at(msg->easy_handle));
-      curl_data_map_.erase(msg->easy_handle);
-    }
-
+    auto [status, data_ptr] = GetResultFromMsg(msg);
+    multi_curl_request_manager_.Remove(msg->easy_handle);
+    // Must be called before the handle has been cleaned up.
+    // The cleanup happens at the end of the lambda in the next block when the
+    // std::unique_ptr<CurlRequestData> object goes out of scope.
+    Remove(msg->easy_handle);
     // Execute callback in another thread.
-    executor_->Run(
-        [req_handle = msg->easy_handle, result = GetResultFromMsg(msg),
-         curl_request_data = std::move(curl_request_data)]() mutable {
-          // invoke callback for handle.
-          std::move(curl_request_data->done_callback)(result);
-          // perform cleanup for handle.
-          GetTraceFromCurl(req_handle);
-        });
+    executor_->Run([req_handle = msg->easy_handle, status = status,
+                    data_ptr = data_ptr]() mutable {
+      // If this happens, then we've effectively lost the reactor that made
+      // this call and this memory has leaked.
+      if (data_ptr == nullptr) {
+        LOG(ERROR) << "Curl Error: Pointer to Curl data lost with status: "
+                   << status.message() << ". Memory for this call has leaked.";
+        return;
+      }
+      std::unique_ptr<CurlRequestData> curl_request_data_ptr(
+          static_cast<CurlRequestData*>(data_ptr));
+      // invoke callback for handle.
+      if (status.ok()) {
+        std::move(curl_request_data_ptr->done_callback)(
+            *curl_request_data_ptr->output);
+      } else {
+        std::move(curl_request_data_ptr->done_callback)(status);
+      }
+      // perform cleanup for handle.
+      GetTraceFromCurl(req_handle);
+    });
   }
+}
+void MultiCurlHttpFetcherAsync::Add(CURL* handle) {
+  // Add request handle to set if required for cleanup.
+  absl::MutexLock lock(&curl_handle_set_lock_);
+  curl_handle_set_.emplace(handle);
+}
+void MultiCurlHttpFetcherAsync::Remove(CURL* handle) {
+  absl::MutexLock lock(&curl_handle_set_lock_);
+  curl_handle_set_.erase(handle);
 }
 
 MultiCurlHttpFetcherAsync::CurlRequestData::CurlRequestData(
