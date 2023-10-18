@@ -20,7 +20,6 @@
 
 #include "absl/functional/bind_front.h"
 #include "absl/strings/str_format.h"
-#include "glog/logging.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
@@ -35,7 +34,7 @@ using BiddingGroupsMap =
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using ReportErrorSignature = std::function<void(
-    ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+    log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code)>;
 
 namespace {
@@ -57,26 +56,6 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
   return Decode<T>(payload, error_accumulator, fail_fast);
 }
 
-// TODO(b/279955398): Consider using `cbor_describe`.
-void LogResponse(const std::optional<ScoreAdsResponse::AdScore>& high_score,
-                 const BiddingGroupsMap& bidding_group_map,
-                 const std::optional<AuctionResult::Error>& error,
-                 const ConsentedDebuggingLogger& consented_logger) {
-  if (error.has_value()) {
-    consented_logger.vlog(
-        1, absl::StrCat("AuctionResult::Error: ", error->DebugString()));
-  } else if (high_score.has_value()) {
-    consented_logger.vlog(1,
-                          absl::StrCat("AdScore: ", high_score->DebugString()));
-    for (const auto& [buyer, ig] : bidding_group_map) {
-      consented_logger.vlog(
-          1, absl::StrCat("bidding_group[", buyer, "]: ", ig.DebugString()));
-    }
-  } else {
-    consented_logger.vlog(1, "AuctionResult: is_chaff: true");
-  }
-}
-
 }  // namespace
 
 SelectAdReactorForWeb::SelectAdReactorForWeb(
@@ -90,23 +69,26 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    LogResponse(high_score, bidding_group_map, error,
-                consented_logger_.value());
-  }
-
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithInternalError, this);
-  PS_ASSIGN_OR_RETURN(auto encoded_data, Encode(high_score, bidding_group_map,
-                                                error, error_handler));
+  PS_ASSIGN_OR_RETURN(
+      std::string encoded_data,
+      Encode(high_score, bidding_group_map, error, error_handler));
+  PS_VLOG(1, log_context_) << "AuctionResult:\n"
+                           << ([&]() {
+                                auto result = CborDecodeAuctionResultToProto(
+                                    encoded_data);
+                                return result.ok() ? result->DebugString()
+                                                   : result.status().ToString();
+                              }());
 
   absl::string_view data_to_compress = absl::string_view(
       reinterpret_cast<char*>(encoded_data.data()), encoded_data.size());
 
   absl::StatusOr<std::string> compressed_data = GzipCompress(data_to_compress);
   if (!compressed_data.ok()) {
-    LOG(ERROR) << "Failed to compress the CBOR serialized data: "
-               << compressed_data.status().message();
+    ABSL_LOG(ERROR) << "Failed to compress the CBOR serialized data: "
+                    << compressed_data.status().message();
     FinishWithInternalError("Failed to compress CBOR data");
     return absl::InternalError("");
   }

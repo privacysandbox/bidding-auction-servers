@@ -17,7 +17,7 @@
 #include <memory>
 #include <utility>
 
-#include "cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "services/common/encryption/crypto_client_wrapper.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 

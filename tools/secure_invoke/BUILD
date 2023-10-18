@@ -32,6 +32,7 @@ cc_library(
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "//tools/secure_invoke/payload_generator:payload_packaging_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
     ],
 )
 
@@ -51,7 +52,9 @@ cc_binary(
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_utils",
     ],
 )
 
@@ -89,6 +92,7 @@ cc_test(
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test/utils:ohttp_test_utils",
         "//services/common/test/utils:service_utils",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",

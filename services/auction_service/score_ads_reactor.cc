@@ -477,8 +477,8 @@ log::ContextImpl::ContextMap ScoreAdsReactor::GetLoggingContext(
       {kGenerationId, log_context.generation_id()},
       {kSellerDebugId, log_context.adtech_debug_id()}};
   if (score_ads_request.has_consented_debug_config()) {
-    MaybeAddConsentedDebugConfig(score_ads_request.consented_debug_config(),
-                                 context_map);
+    log::MaybeAddConsentedDebugConfig(
+        score_ads_request.consented_debug_config(), context_map);
   }
   return context_map;
 }
@@ -817,8 +817,6 @@ void ScoreAdsReactor::ScoreAdsCallback(
     PerformDebugReporting(winning_ad);
     *raw_response_.mutable_ad_score() = winning_ad.value();
 
-    PS_VLOG(2, log_context_) << "ScoreAdsResponse:\n"
-                             << response_->DebugString();
     if (!enable_report_result_url_generation_) {
       DCHECK(encryption_enabled_);
       EncryptResponse();
@@ -922,8 +920,6 @@ void ScoreAdsReactor::ReportingCallback(
     }
   }
 
-  PS_VLOG(2, log_context_) << "ReportingResponse:\n"
-                           << response_->DebugString();
   DCHECK(encryption_enabled_);
   EncryptResponse();
   benchmarking_logger_->HandleResponseEnd();
@@ -940,17 +936,15 @@ void ScoreAdsReactor::PerformDebugReporting(
       bool is_win_debug_url = false;
       std::string ig_owner = ad_score->interest_group_owner();
       std::string ig_name = ad_score->interest_group_name();
-      auto done_cb = [ig_owner, ig_name, log_context = log_context_](
+      auto done_cb = [ig_owner, ig_name](
                          absl::StatusOr<absl::string_view> result) mutable {
         if (result.ok()) {
-          PS_VLOG(2, log_context)
-              << "Performed debug reporting for:" << ig_owner
-              << ", interest_group: " << ig_name;
+          PS_VLOG(2) << "Performed debug reporting for:" << ig_owner
+                     << ", interest_group: " << ig_name;
         } else {
-          PS_VLOG(1, log_context)
-              << "Error while performing debug reporting for:" << ig_owner
-              << ", interest_group: " << ig_name
-              << " ,status:" << result.status();
+          PS_VLOG(1) << "Error while performing debug reporting for:"
+                     << ig_owner << ", interest_group: " << ig_name
+                     << " ,status:" << result.status();
         }
       };
       if (ig_owner == post_auction_signals.winning_ig_owner &&

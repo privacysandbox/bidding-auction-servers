@@ -11,11 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <string>
+
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/numbers.h"
 #include "absl/synchronization/notification.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "services/common/test/utils/ohttp_utils.h"
+#include "src/cpp/encryption/key_fetcher/src/key_fetcher_utils.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/secure_invoke_lib.h"
 
@@ -71,6 +77,15 @@ ABSL_FLAG(bool, insecure, false,
 ABSL_FLAG(std::string, target_service, kSfe,
           "Service name to which the request must be sent to.");
 
+// Coordinator key defaults correspond to defaults in
+// https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h#L29C34-L29C34
+ABSL_FLAG(std::string, public_key,
+          "87ey8XZPXAd+/+ytKv2GFUWW5j9zdepSJ2G4gebDwyM=",
+          "Use exact output from the coordinator. Public key. Must be base64.");
+ABSL_FLAG(std::string, key_id, "4000000000000000",
+          "Use exact output from the coordinator. Hexadecimal key id string "
+          "with trailing zeros.");
+
 namespace {}  // namespace
 
 int main(int argc, char** argv) {
@@ -106,27 +121,39 @@ int main(int argc, char** argv) {
   CHECK(!op.empty())
       << "Please specify the operation to be performed - encrypt/invoke. This "
          "tool can only be used to call B&A servers running in test mode.";
+
+  std::string public_key_bytes;
+  CHECK(
+      absl::Base64Unescape(absl::GetFlag(FLAGS_public_key), &public_key_bytes))
+      << "Failed to unescape public key.";
+  std::string public_key_hex = absl::BytesToHexString(public_key_bytes);
+
+  std::string id =
+      privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
+  uint8_t key_id = stoi(id);
+
   if (op == "encrypt") {
     if (target_service == kSfe) {
       json_input_str =
           privacy_sandbox::bidding_auction_servers::LoadFile(input_file);
       // LOG causes clipping of response.
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextSelectAdRequestToJson(json_input_str,
-                                                    client_type);
+              PackagePlainTextSelectAdRequestToJson(json_input_str, client_type,
+                                                    public_key_hex, key_id);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextGetBidsRequestToJson();
+              PackagePlainTextGetBidsRequestToJson(public_key_hex, key_id);
     }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type);
+              client_type, public_key_hex, key_id);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =
-          privacy_sandbox::bidding_auction_servers::SendRequestToBfe();
+          privacy_sandbox::bidding_auction_servers::SendRequestToBfe(
+              public_key_hex, key_id);
       CHECK(status.ok()) << status;
     } else {
       LOG(FATAL) << "Unsupported target service: " << target_service;

@@ -425,16 +425,15 @@ void SetupBuyerClientMock(
     absl::string_view hostname,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients) {
   // Setup a buyer that returns a success.
-  auto MockGetBids =
-      [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
-         absl::Duration timeout) {
-        VLOG(1) << "Getting mock bids returning mocked response to callback";
-        std::move(on_done)(
-            std::make_unique<GetBidsResponse::GetBidsRawResponse>());
-        VLOG(1) << "Getting mock bids returned mocked response to callback";
-        return absl::OkStatus();
-      };
+  auto MockGetBids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                            get_values_request,
+                        const RequestMetadata& metadata,
+                        GetBidDoneCallback on_done, absl::Duration timeout) {
+    ABSL_LOG(INFO) << "Getting mock bids returning mocked response to callback";
+    std::move(on_done)(std::make_unique<GetBidsResponse::GetBidsRawResponse>());
+    ABSL_LOG(INFO) << "Getting mock bids returned mocked response to callback";
+    return absl::OkStatus();
+  };
   auto SetupMockBuyer =
       [MockGetBids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
         EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(MockGetBids);
@@ -891,7 +890,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       response.auction_result_ciphertext(), encryption_context);
-  VLOG(1) << "Response: " << auction_result.DebugString();
+  ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
 }
 

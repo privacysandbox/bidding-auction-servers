@@ -86,11 +86,10 @@ TEST_F(LogTest, SkipStreamingIfNotLog) {
 
 TEST_F(LogTest, NoContext) {
   std::string log =
-      LogWithCapturedStderr([]() { PS_VLOG_NO_CONTEXT(kMaxV) << kLogContent; });
+      LogWithCapturedStderr([]() { PS_VLOG(kMaxV) << kLogContent; });
   EXPECT_THAT(log, HasSubstr(kLogContent));
 
-  log = LogWithCapturedStderr(
-      []() { PS_VLOG_NO_CONTEXT(kMaxV + 1) << kLogContent; });
+  log = LogWithCapturedStderr([]() { PS_VLOG(kMaxV + 1) << kLogContent; });
   EXPECT_EQ(log, "");
 }
 

@@ -14,8 +14,7 @@
 
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 
-#include "cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
-#include "glog/logging.h"
+#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -41,30 +40,31 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
     RawClientParams<GetBidsRequest, GetBidsResponse,
                     GetBidsResponse::GetBidsRawResponse>* params) const {
-  VLOG(5) << "BuyerFrontEndAsyncGrpcClient SendRpc invoked ...";
+  PS_VLOG(5) << "BuyerFrontEndAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GetBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
         DCHECK(encryption_enabled_);
         if (!status.ok()) {
-          VLOG(1) << "SendRPC completion status not ok: "
-                  << server_common::ToAbslStatus(status);
+          PS_VLOG(1) << "SendRPC completion status not ok: "
+                     << server_common::ToAbslStatus(status);
           params->OnDone(status);
           return;
         }
 
-        VLOG(6) << "SendRPC completion status ok";
+        PS_VLOG(6) << "SendRPC completion status ok";
         auto decrypted_response =
             DecryptResponse(hpke_secret, params->ResponseRef());
         if (!decrypted_response.ok()) {
-          VLOG(1) << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
+          PS_VLOG(1)
+              << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                       decrypted_response.status().ToString()));
           return;
         }
 
         params->SetRawResponse(*std::move(decrypted_response));
-        VLOG(6) << "Returning the decrypted response via callback";
+        PS_VLOG(6) << "Returning the decrypted response via callback";
         params->OnDone(status);
       });
 }

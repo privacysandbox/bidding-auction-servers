@@ -23,7 +23,7 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
-#include "glog/logging.h"
+#include "services/common/loggers/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -73,13 +73,13 @@ void PeriodicCodeFetcher::PeriodicCodeFetch() {
 
         for (const auto& result : results) {
           if (!result.ok()) {
-            VLOG(1) << "MultiCurlHttpFetcher Failure Response: "
-                    << result.status();
+            PS_VLOG(1) << "MultiCurlHttpFetcher Failure Response: "
+                       << result.status();
             all_status_ok = false;
             break;
           } else {
-            VLOG(1) << "MultiCurlHttpFetcher Success Response: "
-                    << result.status();
+            PS_VLOG(1) << "MultiCurlHttpFetcher Success Response: "
+                       << result.status();
             results_value.push_back(*result);
           }
         }
@@ -92,9 +92,9 @@ void PeriodicCodeFetcher::PeriodicCodeFetch() {
             std::string wrapped_code = wrap_code_(cb_results_value_);
             absl::Status syncResult =
                 dispatcher_.LoadSync(version_num_, wrapped_code);
-            VLOG(1) << "Roma Client Response: " << syncResult;
+            PS_VLOG(1) << "Roma Client Response: " << syncResult;
             if (syncResult.ok()) {
-              VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
+              PS_VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
             }
           }
         }

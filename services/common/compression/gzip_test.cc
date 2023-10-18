@@ -22,7 +22,6 @@
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
 
-#include "glog/logging.h"
 #include "gtest/gtest.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

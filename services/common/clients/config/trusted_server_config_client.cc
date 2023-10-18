@@ -12,8 +12,6 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#define GLOG_NO_ABBREVIATED_SEVERITIES
-
 #include "services/common/clients/config/trusted_server_config_client.h"
 
 #include <memory>
@@ -26,10 +24,10 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
-#include "cc/core/interface/errors.h"
-#include "cc/public/core/interface/execution_result.h"
-#include "cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
-#include "glog/logging.h"
+#include "scp/cc/core/interface/errors.h"
+#include "scp/cc/public/core/interface/execution_result.h"
+#include "scp/cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
+#include "services/common/loggers/request_context_logger.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterRequest;
@@ -47,7 +45,7 @@ constexpr char error_message[] =
     "status_code: %s)\n";
 
 absl::Status HandleFailure(absl::string_view error) noexcept {
-  LOG(ERROR) << error;
+  ABSL_LOG(ERROR) << error;
   return absl::UnavailableError(error);
 }
 
@@ -89,10 +87,10 @@ absl::Status TrustedServersConfigClient::Init(
             config_entries_map_.insert_or_assign(key,
                                                  response.parameter_value());
           } else if (initial_value == kEmptyValue) {
-            LOG(ERROR) << absl::StrFormat(error_message, key,
-                                          GetErrorMessage(result.status_code));
+            ABSL_LOG(ERROR) << absl::StrFormat(
+                error_message, key, GetErrorMessage(result.status_code));
           } else {
-            LOG(WARNING) << absl::StrFormat(
+            ABSL_LOG(WARNING) << absl::StrFormat(
                 error_message, key, GetErrorMessage(result.status_code));
           }
           counter.DecrementCount();

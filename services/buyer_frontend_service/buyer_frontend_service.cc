@@ -20,7 +20,6 @@
 #include <grpcpp/grpcpp.h>
 
 #include "api/bidding_auction_servers.pb.h"
-#include "glog/logging.h"
 #include "services/buyer_frontend_service/get_bids_unary_reactor.h"
 #include "services/common/metric/server_definition.h"
 #include "src/cpp/telemetry/telemetry.h"
@@ -99,14 +98,6 @@ grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("GetBids"));
   LogMetrics(request, response);
-
-  VLOG(2) << "\nGetBidsRequest:\n" << request->DebugString();
-  if (VLOG_IS_ON(2)) {
-    VLOG(2) << "Headers:\n";
-    for (const auto& it : context->client_metadata()) {
-      VLOG(2) << it.first << " : " << it.second << "\n";
-    }
-  }
 
   // Will be deleted in onDone
   auto reactor = std::make_unique<GetBidsUnaryReactor>(

@@ -68,11 +68,8 @@ class PSLogMessage : public absl::log_internal::LogMessage {
 
 }  // namespace privacy_sandbox::bidding_auction_servers::log
 
-// Similar to `VLOG(verbose_level)`, but with extra functionality using
-// `request_context`, which implements `RequestContext`
-// `verbose_level` is int,  `request_context` is `RequestContext&`
 #ifdef PS_LOG_NON_PROD
-#define PS_VLOG(verbose_level, request_context)                                \
+#define PS_VLOG_INTERNAL(verbose_level, request_context)                       \
   switch (::privacy_sandbox::bidding_auction_servers::log::                    \
               RequestContext& ps_logging_internal_context = (request_context); \
           const int ps_logging_internal_verbose_level = (verbose_level))       \
@@ -82,10 +79,9 @@ class PSLogMessage : public absl::log_internal::LogMessage {
         ::privacy_sandbox::bidding_auction_servers::log::PS_VLOG_IS_ON(        \
             ps_logging_internal_verbose_level),                                \
         ps_logging_internal_context)                                           \
-            .WithVerbosity(ps_logging_internal_verbose_level)                  \
-        << ps_logging_internal_context.ContextStr()
+        .WithVerbosity(ps_logging_internal_verbose_level)
 #else
-#define PS_VLOG(verbose_level, request_context)                                \
+#define PS_VLOG_INTERNAL(verbose_level, request_context)                       \
   switch (::privacy_sandbox::bidding_auction_servers::log::                    \
               RequestContext& ps_logging_internal_context = (request_context); \
           const int ps_logging_internal_verbose_level = (verbose_level))       \
@@ -94,8 +90,7 @@ class PSLogMessage : public absl::log_internal::LogMessage {
         INFO, ::privacy_sandbox::bidding_auction_servers::log::PS_VLOG_IS_ON(  \
                   ps_logging_internal_verbose_level) &&                        \
                   ps_logging_internal_context.is_consented())                  \
-            .ToSinkOnly(ps_logging_internal_context.ConsentedSink())           \
-        << ps_logging_internal_context.ContextStr()
+        .ToSinkOnly(ps_logging_internal_context.ConsentedSink())
 #endif
 
 #define PS_LOG_INTERNAL_LOG_IF_IMPL(severity, condition, request_context) \
@@ -125,6 +120,10 @@ class PSLogMessage : public absl::log_internal::LogMessage {
       .ToSinkAlsoIf(request_context.is_debug_response(),         \
                     request_context.DebugResponseSink())
 
+#define PS_VLOG_CONTEXT_INTERNAL(verbose_level, request_context) \
+  PS_VLOG_INTERNAL(verbose_level, request_context)               \
+      << ps_logging_internal_context.ContextStr()
+
 // Same as ABSL_LOG, just log with extra request_context.ContextStr()
 #define PS_LOG(severity, request_context)                                      \
   switch (::privacy_sandbox::bidding_auction_servers::log::                    \
@@ -133,11 +132,23 @@ class PSLogMessage : public absl::log_internal::LogMessage {
   default:                                                                     \
     ABSL_LOG(severity) << ps_logging_internal_context.ContextStr()
 
-// Same as ABSL_VLOG, but only log in `non_prod`
-#define PS_VLOG_NO_CONTEXT(verbose_level)                                     \
-  PS_VLOG(verbose_level,                                                      \
-          const_cast<                                                         \
-              ::privacy_sandbox::bidding_auction_servers::log::NoOpContext&>( \
-              ::privacy_sandbox::bidding_auction_servers::log::kNoOpContext))
+#define PS_VLOG_NO_CONTEXT_INTERNAL(verbose_level)                        \
+  PS_VLOG_INTERNAL(                                                       \
+      verbose_level,                                                      \
+      const_cast<                                                         \
+          ::privacy_sandbox::bidding_auction_servers::log::NoOpContext&>( \
+          ::privacy_sandbox::bidding_auction_servers::log::kNoOpContext))
+
+// It can have 1 or 2 arguments. i.e.
+// PS_VLOG(verbose_level)
+//   Same as ABSL_VLOG(verbose_level), but only log in `non_prod`
+// PS_VLOG(verbose_level, request_context)
+//   Similar to ABSL_VLOG(verbose_level), but with extra functionality using
+//   `request_context` (as `RequestContext&`)
+#define PS_VLOG(...)                                 \
+  GET_PS_VLOG(__VA_ARGS__, PS_VLOG_CONTEXT_INTERNAL, \
+              PS_VLOG_NO_CONTEXT_INTERNAL)           \
+  (__VA_ARGS__)
+#define GET_PS_VLOG(_1, _2, NAME, ...) NAME
 
 #endif  // SERVICES_COMMON_LOGGERS_REQUEST_CONTEXT_LOGGER_H_

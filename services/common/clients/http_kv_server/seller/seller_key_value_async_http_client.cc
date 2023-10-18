@@ -16,7 +16,6 @@
 #include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
 
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
 #include "services/common/util/request_metadata.h"
 
@@ -58,23 +57,23 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout) const {
   HTTPRequest request = BuildSellerKeyValueRequest(kv_server_base_address_,
                                                    metadata, std::move(keys));
-  VLOG(2) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
-  VLOG(2) << "\nSellerKeyValueAsyncHttpClient Headers:\n";
+  PS_VLOG(2) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
+  PS_VLOG(2) << "\nSellerKeyValueAsyncHttpClient Headers:\n";
   for (const auto& header : request.headers) {
-    VLOG(2) << header;
+    PS_VLOG(2) << header;
   }
   auto done_callback = [on_done = std::move(on_done)](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
-      VLOG(2) << "SellerKeyValueAsyncHttpClient Response: "
-              << resultStr.value();
+      PS_VLOG(2) << "SellerKeyValueAsyncHttpClient Response: "
+                 << resultStr.value();
       std::unique_ptr<GetSellerValuesOutput> resultUPtr =
           std::make_unique<GetSellerValuesOutput>(
               GetSellerValuesOutput({std::move(resultStr.value())}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
-      VLOG(2) << "SellerKeyValueAsyncHttpClients Response: "
-              << resultStr.status();
+      PS_VLOG(2) << "SellerKeyValueAsyncHttpClients Response: "
+                 << resultStr.status();
       std::move(on_done)(resultStr.status());
     }
   };
@@ -96,8 +95,9 @@ SellerKeyValueAsyncHttpClient::SellerKeyValueAsyncHttpClient(
         [](absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
                seller_kv_output) mutable {
           if (!seller_kv_output.ok()) {
-            VLOG(1) << "SellerKeyValueAsyncHttpClient pre-warm returned status:"
-                    << seller_kv_output.status().message();
+            PS_VLOG(1)
+                << "SellerKeyValueAsyncHttpClient pre-warm returned status:"
+                << seller_kv_output.status().message();
           }
         },
         // Longer timeout for first request

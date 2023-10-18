@@ -15,7 +15,6 @@
 #include "services/buyer_frontend_service/util/proto_factory.h"
 
 #include "api/bidding_auction_servers.pb.h"
-#include "glog/logging.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/common/test/random.h"
@@ -211,11 +210,11 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
     google::protobuf::util::MessageToJsonString(
         raw_output->interest_group_for_bidding().at(0), &output_str);
 
-    VLOG(0) << "\nExpected First IG:\n" << expected_output_str;
-    VLOG(0) << "\nActual First IG:\n" << output_str;
+    ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
+    ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
 
-    VLOG(0) << "\nExpected seller:\n" << expected_raw_output.seller();
-    VLOG(0) << "\nActual seller:\n" << raw_output->seller();
+    ABSL_LOG(INFO) << "\nExpected seller:\n" << expected_raw_output.seller();
+    ABSL_LOG(INFO) << "\nActual seller:\n" << raw_output->seller();
   }
 }
 
@@ -367,13 +366,13 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
     google::protobuf::util::MessageToJsonString(
         raw_output->interest_group_for_bidding().at(0), &output_str);
 
-    VLOG(0) << "\nExpected First IG:\n" << expected_output_str;
-    VLOG(0) << "\nActual First IG:\n" << output_str;
+    ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
+    ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
 
-    VLOG(0) << "\nExpected seller:\n" << expected_raw_output.seller();
-    VLOG(0) << "\nActual seller:\n" << raw_output->seller();
+    ABSL_LOG(INFO) << "\nExpected seller:\n" << expected_raw_output.seller();
+    ABSL_LOG(INFO) << "\nActual seller:\n" << raw_output->seller();
 
-    VLOG(0) << "\nDifference in comparison:\n" << difference;
+    ABSL_LOG(INFO) << "\nDifference in comparison:\n" << difference;
   }
 }
 

@@ -26,7 +26,7 @@ pkg_zip(
     srcs = [
         ":ami_config_group",
         "//api:bidding_auction_servers_descriptor_set",
-        "@control_plane_shared//cc/aws/proxy/src:proxy",
+        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxy",
     ],
 )
 

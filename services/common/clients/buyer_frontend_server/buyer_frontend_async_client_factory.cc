@@ -18,7 +18,6 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/concurrent/static_local_cache.h"

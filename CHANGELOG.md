@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.4.0 (2023-10-18)
+
+
+### Features
+
+* API changes to pass top_level_seller to the Auction Service for reporting
+* support passing in a custom public key/id to secure_invoke
+
+
+### Bug Fixes
+
+* [reporting] Fix the description for component_seller_reporting_urls and top_level_seller_reporting_urls in the API
+* [reporting] Remove unnecessary flags in aws config
+* increases limit for default gRPC message size between servers
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.48.0
+
 ## 2.3.0 (2023-10-09)
 
 

@@ -36,8 +36,6 @@
 #include "services/common/loggers/no_ops_logger.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
-#include "services/common/util/consented_debugging_logger.h"
-#include "services/common/util/context_logger.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/error_reporter.h"
 #include "services/common/util/request_metadata.h"
@@ -83,8 +81,8 @@ inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
 
 inline constexpr char kNoBidsReceived[] = "No bids received.";
 
-// Struct for any objects needed throughout the lifecycle of the request.
-struct RequestContext {
+// Crypto key needed throughout the lifecycle of the request.
+struct KeyContext {
   // Key ID used to encrypt the request.
   google::scp::cpio::PublicPrivateKeyPairId key_id;
 
@@ -206,7 +204,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
         // Log but don't report the errors for malformed buyer inputs because we
         // have found at least one buyer input that is well formed.
         for (const auto& observed_error : observed_errors) {
-          logger_.vlog(2, observed_error);
+          PS_VLOG(2, log_context_) << observed_error;
         }
       }
     }
@@ -227,7 +225,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Decrypts the ProtectedAudienceInput in the request object and returns
   // whether decryption was successful.
-  bool DecryptRequest();
+  grpc::Status DecryptRequest();
 
   // Fetches the bids from a single buyer by initiating an asynchronous GetBids
   // rpc.
@@ -308,11 +306,11 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Populates the logging context needed for request tracing. For the case when
   // encrypting is enabled, this method should be called after decrypting
   // and decoding the request.
-  ContextLogger::ContextMap GetLoggingContext();
+  log::ContextImpl::ContextMap GetLoggingContext();
 
   // Reports an error to the error accumulator object.
   void ReportError(
-      ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+      log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
       const std::string& msg, ErrorCode error_code);
 
   ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata BuildAdWithBidMetadata(
@@ -344,13 +342,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Benchmarking Logger to benchmark the service
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
 
-  // Request context needed throughout the lifecycle of the request.
-  RequestContext request_context_;
-  // Logger that logs enough context around a request so that it can be traced
-  // through B&A services.
-  ContextLogger logger_;
-  // Logger for consented debugging.
-  std::optional<ConsentedDebuggingLogger> consented_logger_;
+  // Key context needed throughout the lifecycle of the request.
+  KeyContext key_context_;
+
+  log::ContextImpl log_context_;
 
   // Decompressed and decoded buyer inputs.
   absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>
@@ -381,6 +376,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // were erroneous. If all bids ended up in an error state then that should be
   // flagged as an error eventually.
   AsyncTaskTracker async_task_tracker_;
+
+  // Log metrics for the Initiated requests errors that were initiated by the
+  // server
+  void LogInitiatedRequestErrorMetrics(absl::string_view server_name);
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

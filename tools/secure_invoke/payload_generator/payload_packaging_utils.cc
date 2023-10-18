@@ -27,7 +27,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
 PackagePayload(const ProtectedAuctionInput& protected_auction_input,
-               ClientType client_type, absl::string_view public_key) {
+               ClientType client_type, absl::string_view public_key,
+               uint8_t key_id) {
   // Encode request.
   std::string encoded_request;
   switch (client_type) {
@@ -56,9 +57,9 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
   }
 
   // Encrypt request.
-  PS_ASSIGN_OR_RETURN(
-      (quiche::ObliviousHttpRequest ohttp_request),
-      CreateValidEncryptedRequest(std::move(encoded_request), public_key));
+  PS_ASSIGN_OR_RETURN((quiche::ObliviousHttpRequest ohttp_request),
+                      CreateValidEncryptedRequest(std::move(encoded_request),
+                                                  public_key, key_id));
   std::string encrypted_request = ohttp_request.EncapsulateAndSerialize();
   auto context = std::move(ohttp_request).ReleaseContext();
   return absl::StatusOr<
@@ -81,11 +82,11 @@ PackageBuyerInputsForBrowser(
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
     absl::string_view auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context,
-    absl::string_view public_key) {
+    absl::string_view public_key, uint8_t key_id) {
   // Decrypt Response.
   PS_ASSIGN_OR_RETURN((quiche::ObliviousHttpResponse decrypted_response),
                       DecryptEncapsulatedResponse(auction_result_ciphertext,
-                                                  context, public_key));
+                                                  context, public_key, key_id));
 
   switch (client_type) {
     case CLIENT_TYPE_BROWSER: {

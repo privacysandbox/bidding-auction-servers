@@ -25,7 +25,6 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/clients/async_grpc:default_async_grpc_client",
-        "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/time",

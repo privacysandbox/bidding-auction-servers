@@ -20,11 +20,10 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
-#include "cc/core/interface/errors.h"
-#include "cc/public/cpio/interface/crypto_client/type_def.h"
-#include "glog/logging.h"
 #include "proto/hpke.pb.h"
 #include "proto/tink.pb.h"
+#include "scp/cc/core/interface/errors.h"
+#include "scp/cc/public/cpio/interface/crypto_client/type_def.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -63,7 +62,7 @@ absl::Status HandleCryptoOperationResult(const ExecutionResult& result,
       const std::string error =
           absl::StrFormat(kCryptoOperationFailureError, operation.data(),
                           GetErrorMessage(result.status_code));
-      LOG(ERROR) << error;
+      ABSL_LOG(ERROR) << error;
     }
 
     return absl::Status(absl::StatusCode::kInternal,
@@ -111,9 +110,9 @@ absl::StatusOr<HpkeEncryptResponse> CryptoClientWrapper::HpkeEncrypt(
           success = true;
           response = std::move(encrypt_response);
         } else {
-          LOG(ERROR) << absl::StrFormat(kCryptoOperationFailureError,
-                                        kHpkeEncrypt,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kCryptoOperationFailureError, kHpkeEncrypt,
+              GetErrorMessage(result.status_code));
         }
       });
 
@@ -140,9 +139,9 @@ absl::StatusOr<AeadEncryptResponse> CryptoClientWrapper::AeadEncrypt(
           success = true;
           response = std::move(encrypt_response);
         } else {
-          LOG(ERROR) << absl::StrFormat(kCryptoOperationFailureError,
-                                        kAeadEncrypt,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kCryptoOperationFailureError, kAeadEncrypt,
+              GetErrorMessage(result.status_code));
         }
       });
 
@@ -196,9 +195,9 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
           success = true;
           response = std::move(decrypt_response);
         } else {
-          LOG(ERROR) << absl::StrFormat(kCryptoOperationFailureError,
-                                        kHpkeDecrypt,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kCryptoOperationFailureError, kHpkeDecrypt,
+              GetErrorMessage(result.status_code));
         }
       });
 
@@ -225,9 +224,9 @@ absl::StatusOr<AeadDecryptResponse> CryptoClientWrapper::AeadDecrypt(
           success = true;
           response = std::move(decrypt_response);
         } else {
-          LOG(ERROR) << absl::StrFormat(kCryptoOperationFailureError,
-                                        kAeadDecrypt,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kCryptoOperationFailureError, kAeadDecrypt,
+              GetErrorMessage(result.status_code));
         }
       });
 

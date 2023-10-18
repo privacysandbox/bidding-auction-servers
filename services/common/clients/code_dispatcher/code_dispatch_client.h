@@ -20,7 +20,7 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "cc/roma/interface/roma.h"
+#include "scp/cc/roma/interface/roma.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

@@ -33,15 +33,15 @@ build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
 build:platform_local --//:platform=local
 build:platform_local --@google_privacysandbox_servers_common//:platform=local
-build:platform_local --@control_plane_shared//cc/public/cpio/interface:platform=local
+build:platform_local --@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:platform=local
 
 build:platform_aws --//:platform=aws
 build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
-build:platform_aws --@control_plane_shared//cc/public/cpio/interface:platform=aws
+build:platform_aws --@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:platform=aws
 
 build:platform_gcp --//:platform=gcp
 build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
-build:platform_gcp --@control_plane_shared//cc/public/cpio/interface:platform=gcp
+build:platform_gcp --@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:platform=gcp
 
 build:local_aws --config=instance_local
 build:local_aws --config=platform_aws

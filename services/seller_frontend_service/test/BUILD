@@ -29,6 +29,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/compression:gzip",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
     ],
 )

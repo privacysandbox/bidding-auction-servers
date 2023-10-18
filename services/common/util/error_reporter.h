@@ -33,11 +33,11 @@ class ErrorReporter {
   virtual ~ErrorReporter() = default;
 
   // Informs the object about details of an error. Callers can call this method
-  // directly without explicitly creating the ParamWithSourceLoc object (by
+  // directly without explicitly creating the log::ParamWithSourceLoc object (by
   // just passing in the error_visibility instead) and the source location
   // context will be captured by this method automatically.
   virtual void ReportError(
-      ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+      log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
       absl::string_view msg, ErrorCode error_code = ErrorCode::CLIENT_SIDE) = 0;
 
   // Informs the object about details of an error. This variant is helpful

@@ -18,17 +18,17 @@
 #include <utility>
 #include <vector>
 
-#include <google/protobuf/util/message_differencer.h>
-#include <include/gmock/gmock-actions.h>
-
+#include "absl/log/check.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
+#include "gmock/gmock.h"
+#include "google/protobuf/text_format.h"
+#include "google/protobuf/util/message_differencer.h"
+#include "gtest/gtest.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/test/utils/cbor_test_utils.h"
-#include "services/common/util/context_logger.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
@@ -67,6 +67,7 @@ inline constexpr char kTestInteractionUrl3[] = "http://close.com";
 inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
+log::ContextImpl log_context{{}, ""};
 
 using ErrorVisibility::CLIENT_VISIBLE;
 using BiddingGroupMap =
@@ -226,8 +227,8 @@ TEST(ChromeRequestUtils, Decode_Success) {
        cbor_move(consented_debug_config_map)}));
 
   std::string serialized_cbor = SerializeCbor(*protected_auction_input);
-  ContextLogger logger;
-  ErrorAccumulator error_accumulator(&logger);
+
+  ErrorAccumulator error_accumulator(&log_context);
   ProtectedAuctionInput actual =
       Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_FALSE(error_accumulator.HasErrors());
@@ -280,11 +281,11 @@ TEST(ChromeRequestUtils, Decode_Success) {
   // between the order in which the data items are added in the test vs how
   // they are added in the implementation, we will start to see failures.
   if (!papi_differencer.Compare(actual, expected)) {
-    VLOG(1) << "Actual proto does not match expected proto";
-    VLOG(1) << "\nExpected:\n" << expected.DebugString();
-    VLOG(1) << "\nActual:\n" << actual.DebugString();
-    VLOG(1) << "\nFound differences in ProtectedAuctionInput:\n"
-            << papi_differences;
+    ABSL_LOG(INFO) << "Actual proto does not match expected proto";
+    ABSL_LOG(INFO) << "\nExpected:\n" << expected.DebugString();
+    ABSL_LOG(INFO) << "\nActual:\n" << actual.DebugString();
+    ABSL_LOG(INFO) << "\nFound differences in ProtectedAuctionInput:\n"
+                   << papi_differences;
 
     auto expected_buyer_inputs =
         DecodeBuyerInputs(expected.buyer_input(), error_accumulator);
@@ -296,12 +297,14 @@ TEST(ChromeRequestUtils, Decode_Success) {
     std::string bi_differences;
     google::protobuf::util::MessageDifferencer bi_differencer;
     bi_differencer.ReportDifferencesToString(&bi_differences);
-    VLOG(1) << "\nExpected BuyerInput:\n" << expected_buyer_input.DebugString();
+    ABSL_LOG(INFO) << "\nExpected BuyerInput:\n"
+                   << expected_buyer_input.DebugString();
     BuyerInput actual_buyer_input =
         DecodeBuyerInputs(actual.buyer_input(), error_accumulator)
             .begin()
             ->second;
-    VLOG(1) << "\nActual BuyerInput:\n" << actual_buyer_input.DebugString();
+    ABSL_LOG(INFO) << "\nActual BuyerInput:\n"
+                   << actual_buyer_input.DebugString();
     EXPECT_TRUE(
         !bi_differencer.Compare(actual_buyer_input, expected_buyer_input))
         << bi_differences;
@@ -312,8 +315,8 @@ TEST(ChromeRequestUtils, Decode_Success) {
 TEST(ChromeRequestUtils, Decode_FailOnWrongType) {
   ScopedCbor root(cbor_build_stringn("string", 6));
   std::string serialized_cbor = SerializeCbor(*root);
-  ContextLogger logger;
-  ErrorAccumulator error_accumulator(&logger);
+
+  ErrorAccumulator error_accumulator(&log_context);
   ProtectedAuctionInput actual =
       Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_TRUE(error_accumulator.HasErrors());
@@ -329,8 +332,8 @@ TEST(ChromeRequestUtils, Decode_FailOnUnsupportedVersion) {
   EXPECT_TRUE(
       cbor_map_add(*protected_auction_input, BuildIntMapPair(kVersion, 999)));
   std::string serialized_cbor = SerializeCbor(*protected_auction_input);
-  ContextLogger logger;
-  ErrorAccumulator error_accumulator(&logger);
+
+  ErrorAccumulator error_accumulator(&log_context);
   ProtectedAuctionInput actual =
       Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_TRUE(error_accumulator.HasErrors());
@@ -361,8 +364,8 @@ TEST(ChromeRequestUtils, Decode_FailOnMalformedCompresedBytestring) {
                             cbor_move(interest_group_data_map)}));
 
   std::string serialized_cbor = SerializeCbor(*protected_auction_input);
-  ContextLogger logger;
-  ErrorAccumulator error_accumulator(&logger);
+
+  ErrorAccumulator error_accumulator(&log_context);
   // The main decoding method for protected audience input doesn't decompress
   // and decode the BuyerInput. The latter is handled separately.
   ProtectedAuctionInput actual =
@@ -652,7 +655,8 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
              [](absl::string_view error) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
-  VLOG(1) << "Encoded CBOR: " << absl::BytesToHexString(*response_with_cbor);
+  ABSL_LOG(INFO) << "Encoded CBOR: "
+                 << absl::BytesToHexString(*response_with_cbor);
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);
   ASSERT_TRUE(decoded_result.ok()) << decoded_result.status();
@@ -799,14 +803,14 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
                             cbor_move(interest_group_data_map)}));
 
   std::string serialized_cbor = SerializeCbor(*protected_auction_input);
-  ContextLogger logger;
-  ErrorAccumulator error_accumulator(&logger);
+
+  ErrorAccumulator error_accumulator(&log_context);
   ProtectedAuctionInput decoded_protected_auction_input =
       Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator,
                                     /*fail_fast=*/false);
   ASSERT_TRUE(error_accumulator.HasErrors());
-  VLOG(0) << "Decoded protected audience input:\n"
-          << decoded_protected_auction_input.DebugString();
+  ABSL_LOG(INFO) << "Decoded protected audience input:\n"
+                 << decoded_protected_auction_input.DebugString();
 
   // Verify all the errors were reported to the error accumulator.
   const auto& client_visible_errors =
@@ -962,6 +966,74 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
       "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d65636967"
       "3172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
       "636f6d");
+}
+
+MATCHER_P(ProtoEq, value, "") {
+  AuctionResult result;
+  CHECK(google::protobuf::TextFormat::ParseFromString(value, &result));
+  return google::protobuf::util::MessageDifferencer::Equals(arg, result);
+}
+
+TEST(CborDecodeAuctionResultToProto, ValidAuctionResult) {
+  absl::string_view hex_cbor =
+      "a963626964fa41235c296573636f7265fa401666666769734368616666f46a636f6d706f"
+      "6e656e7473806b616452656e64657255524c781e68747470733a2f2f61642d666f756e64"
+      "2d686572652e636f6d2f61642d316d62696464696e6747726f757073a178196874747073"
+      "3a2f2f69672d6f776e65722e636f6d3a3132333481027077696e5265706f7274696e6755"
+      "524c73a27262757965725265706f7274696e6755524c73a26c7265706f7274696e675552"
+      "4c74687474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e52"
+      "65706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d"
+      "781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a26c7265706f72"
+      "74696e6755524c77687474703a2f2f7265706f7274526573756c742e636f6d7818696e74"
+      "6572616374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f"
+      "636c69636b2e636f6d71696e74657265737447726f75704e616d656e696e746572657374"
+      "5f67726f757072696e74657265737447726f75704f776e6572781968747470733a2f2f69"
+      "672d6f776e65722e636f6d3a31323334";
+
+  absl::StatusOr<AuctionResult> decoded_result =
+      CborDecodeAuctionResultToProto(absl::HexStringToBytes(hex_cbor));
+  CHECK_OK(decoded_result);
+
+  absl::string_view expected_result =
+      R"pb(ad_render_url: "https://ad-found-here.com/ad-1"
+           interest_group_name: "interest_group"
+           interest_group_owner: "https://ig-owner.com:1234"
+           score: 2.35
+           bid: 10.21
+           win_reporting_urls {
+             buyer_reporting_urls {
+               reporting_url: "http://reportWin.com"
+               interaction_reporting_urls {
+                 key: "click"
+                 value: "http://click.com"
+               }
+             }
+             top_level_seller_reporting_urls {
+               reporting_url: "http://reportResult.com"
+               interaction_reporting_urls {
+                 key: "click"
+                 value: "http://click.com"
+               }
+             }
+           }
+           bidding_groups {
+             key: "https://ig-owner.com:1234"
+             value { index: 2 }
+           })pb";
+  EXPECT_THAT(*decoded_result, ProtoEq(expected_result));
+}
+
+TEST(CborDecodeAuctionResultToProto, ErrorResult) {
+  absl::string_view hex_cbor =
+      "a1656572726f72a2676d657373616765684261644572726f7264636f6465190190";
+  absl::StatusOr<AuctionResult> decoded_result =
+      CborDecodeAuctionResultToProto(absl::HexStringToBytes(hex_cbor));
+  CHECK_OK(decoded_result);
+
+  absl::string_view expected_result =
+      R"pb(
+    error { code: 400 message: "BadError" })pb";
+  EXPECT_THAT(*decoded_result, ProtoEq(expected_result));
 }
 
 }  // namespace

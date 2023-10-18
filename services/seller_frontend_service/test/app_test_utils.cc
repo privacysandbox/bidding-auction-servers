@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "absl/log/check.h"
 #include "absl/status/statusor.h"
-#include "glog/logging.h"
 #include "services/common/compression/gzip.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

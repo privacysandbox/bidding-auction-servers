@@ -152,10 +152,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
 
-  PS_VLOG_NO_CONTEXT(1)
-      << "Protected App Signals support enabled for the service: "
-      << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  PS_VLOG_NO_CONTEXT(1) << "Successfully constructed the config client.";
+  PS_VLOG(1) << "Protected App Signals support enabled for the service: "
+             << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  PS_VLOG(1) << "Successfully constructed the config client.";
   return config_client;
 }
 
@@ -444,6 +443,9 @@ absl::Status RunServer() {
         grpc::InsecureServerCredentials());
   }
 
+  // Set max message size to 256 MB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
+                             256L * 1024L * 1024L);
   builder.RegisterService(&bidding_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());
@@ -452,7 +454,7 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  PS_VLOG_NO_CONTEXT(1) << "Server listening on " << server_address;
+  PS_VLOG(1) << "Server listening on " << server_address;
   server->Wait();
   // Ends periodic code blob fetching from an arbitrary url.
   for (const auto& code_fetcher : code_fetchers) {
@@ -469,7 +471,8 @@ absl::Status RunServer() {
 int main(int argc, char** argv) {
   signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
-  google::InitGoogleLogging(argv[0]);
+  absl::InitializeLog();
+  absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 
   google::scp::cpio::CpioOptions cpio_options;
 

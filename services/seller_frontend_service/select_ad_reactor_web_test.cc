@@ -118,8 +118,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request);
-  VLOG(0) << "Encrypted SelectAdResponse:\n"
-          << MessageToJson(response_with_cbor);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
@@ -140,16 +140,16 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
 
   std::string base64_response;
   absl::Base64Escape(*decompressed_response, &base64_response);
-  VLOG(0) << "Decrypted, decompressed but CBOR encoded auction result:\n"
-          << base64_response;
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << base64_response;
 
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
   EXPECT_TRUE(deserialized_auction_result.ok());
   EXPECT_FALSE(deserialized_auction_result->is_chaff());
 
-  VLOG(0) << "Decrypted, decompressed and CBOR decoded auction result:\n"
-          << MessageToJson(*deserialized_auction_result);
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
 
   // Validate that the bidding groups data is present.
   EXPECT_EQ(deserialized_auction_result->bidding_groups().size(), 1);

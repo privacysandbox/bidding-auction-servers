@@ -44,13 +44,15 @@ std::string GetHpkePublicKey(
 // OHTTP Encrypt using passed or default public key.
 absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
     const std::string& plaintext_payload,
-    absl::string_view public_key_hex = kDefaultPublicKey);
+    absl::string_view public_key_hex = kDefaultPublicKey,
+    uint8_t key_id = kTestKeyId);
 
 // OHTTP Decrypt using passed or default public key.
 absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(
     absl::string_view encapsulated_response,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
-    absl::string_view public_key_hex = kDefaultPublicKey);
+    absl::string_view public_key_hex = kDefaultPublicKey,
+    uint8_t key_id = kTestKeyId);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

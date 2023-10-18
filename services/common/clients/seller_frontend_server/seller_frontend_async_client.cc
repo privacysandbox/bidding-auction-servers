@@ -16,29 +16,26 @@
 
 #include <algorithm>
 
-#include "glog/logging.h"
-
 namespace privacy_sandbox::bidding_auction_servers {
 
 SellerFrontEndGrpcClient::SellerFrontEndGrpcClient(
     const SellerFrontEndServiceClientConfig& client_config)
     : AsyncClient() {
-  std::shared_ptr<grpc::Channel> channel;
   std::shared_ptr<grpc::ChannelCredentials> creds =
       client_config.secure_client
           ? grpc::SslCredentials(grpc::SslCredentialsOptions())
           : grpc::InsecureChannelCredentials();
+
+  grpc::ChannelArguments args;
+  // Set max message size to 256 MB.
+  args.SetMaxSendMessageSize(256L * 1024L * 1024L);
+  args.SetMaxReceiveMessageSize(256L * 1024L * 1024L);
   if (client_config.compression) {
-    grpc::ChannelArguments args;
     // Set the default compression algorithm for the channel.
     args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
-    channel = grpc::CreateCustomChannel(absl::StrCat(client_config.server_addr),
-                                        std::move(creds), args);
-  } else {
-    channel = grpc::CreateChannel(absl::StrCat(client_config.server_addr),
-                                  std::move(creds));
   }
-  stub_ = SellerFrontEnd::NewStub(channel);
+  stub_ = SellerFrontEnd::NewStub(grpc::CreateCustomChannel(
+      absl::StrCat(client_config.server_addr), std::move(creds), args));
 }
 
 absl::Status SellerFrontEndGrpcClient::Execute(

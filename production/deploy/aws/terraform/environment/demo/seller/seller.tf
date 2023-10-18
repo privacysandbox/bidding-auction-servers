@@ -79,6 +79,10 @@ module "seller" {
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
     #     "enableSellerDebugUrlGeneration": false,
+    # This flag should only be set if console.logs from the AdTech code(Ex:scoreAd(), reportResult(), reportWin())
+    # execution need to be exported as VLOG.
+    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
+    # and additional latency for parsing the logs.
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": true,
     #     "enableReportWinUrlGeneration": true,
@@ -91,17 +95,6 @@ module "seller" {
     JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
     ROMA_TIMEOUT_MS     = "" # Example: "10000"
-    # This flag should only be set if console.logs from the AdTech code(Ex:scoreAd(), reportResult(), reportWin())
-    # execution need to be exported as VLOG.
-    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
-    # and additional latency for parsing the logs.
-
-    # This flag should only be set if console.logs from the AdTech code(Ex:scoreAd(), reportResult(), reportWin())
-    # execution need to be exported as VLOG.
-    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
-    # and additional latency for parsing the logs.
-    ENABLE_ADTECH_CODE_LOGGING = "" # Example: "false"
-    ENABLE_SELLER_CODE_WRAPPER = "" # Example: "true"
 
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators

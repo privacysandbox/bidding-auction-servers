@@ -15,8 +15,6 @@
 
 #include "services/common/clients/http_kv_server/seller/fake_seller_key_value_async_http_client.h"
 
-#include "glog/logging.h"
-
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
@@ -44,17 +42,17 @@ absl::Status FakeSellerKeyValueAsyncHttpClient::Execute(
   HTTPRequest request =
       SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
           kv_server_base_address_, metadata, std::move(keys));
-  VLOG(2) << "FakeSellerKeyValueAsyncHttpClient Request: " << request.url;
-  VLOG(2) << "\nFakeSellerKeyValueAsyncHttpClient Headers:\n";
+  PS_VLOG(2) << "FakeSellerKeyValueAsyncHttpClient Request: " << request.url;
+  PS_VLOG(2) << "\nFakeSellerKeyValueAsyncHttpClient Headers:\n";
   for (const auto& header : request.headers) {
-    VLOG(2) << header;
+    PS_VLOG(2) << header;
   }
   // Below are faked
   std::unique_ptr<GetSellerValuesOutput> resultUPtr =
       std::make_unique<GetSellerValuesOutput>(
           GetSellerValuesOutput({kFakeKeyResponse}));
   std::move(on_done)(std::move(resultUPtr));
-  VLOG(2) << "E2E testing received hard coded seller kv request";
+  PS_VLOG(2) << "E2E testing received hard coded seller kv request";
   return absl::OkStatus();
 }
 

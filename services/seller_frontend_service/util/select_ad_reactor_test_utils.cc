@@ -70,7 +70,7 @@ void SetupBuyerClientMock(
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
           const RequestMetadata& metadata, GetBidDoneCallback on_done,
           absl::Duration timeout) {
-        VLOG(1) << "Returning mock bids";
+        ABSL_LOG(INFO) << "Returning mock bids";
         if (bid.has_value()) {
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid));

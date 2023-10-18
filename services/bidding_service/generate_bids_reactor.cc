@@ -402,7 +402,7 @@ GenerateBidsReactor::GenerateBidsReactor(
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
 
-  PS_VLOG(2, log_context_) << "nGenerateBidsRequest:\n"
+  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
                            << request_->DebugString();
   PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"
                            << raw_request_.DebugString();

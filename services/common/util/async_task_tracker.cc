@@ -16,13 +16,13 @@
 
 #include <utility>
 
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
-#include "glog/logging.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 AsyncTaskTracker::AsyncTaskTracker(
-    int num_tasks_to_track, const ContextLogger& logger,
+    int num_tasks_to_track, log::ContextImpl& log_context,
     absl::AnyInvocable<void(bool) &&> on_all_tasks_done)
     : num_tasks_to_track_(num_tasks_to_track),
       pending_tasks_count_(num_tasks_to_track),
@@ -30,8 +30,8 @@ AsyncTaskTracker::AsyncTaskTracker(
       empty_tasks_count_(0),
       skipped_tasks_count_(0),
       error_tasks_count_(0),
-      on_all_tasks_done_(std::move(on_all_tasks_done)),
-      logger_(logger) {}
+      log_context_(log_context),
+      on_all_tasks_done_(std::move(on_all_tasks_done)) {}
 
 void AsyncTaskTracker::TaskCompleted(TaskStatus task_status) {
   TaskCompleted(task_status, std::nullopt);
@@ -68,10 +68,11 @@ void AsyncTaskTracker::TaskCompleted(
         ++successful_tasks_count_;
         break;
       default:
-        logger_.error("Unexpected task status : ", absl::StrCat(task_status));
+        PS_LOG(ERROR, log_context_)
+            << "Unexpected task status : " << absl::StrCat(task_status);
         break;
     }
-    logger_.vlog(5, "Updated pending tasks state: ", ToString());
+    PS_VLOG(5, log_context_) << "Updated pending tasks state: " << ToString();
     if (pending_tasks_count_ == 0) {
       is_last_response = true;
       // Accounts for chaffs.

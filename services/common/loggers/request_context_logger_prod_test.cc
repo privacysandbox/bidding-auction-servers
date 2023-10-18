@@ -96,7 +96,7 @@ TEST_F(LogTest, Error) {
 
 TEST_F(LogTest, NoContext) {
   std::string log =
-      LogWithCapturedStderr([]() { PS_VLOG_NO_CONTEXT(kMaxV) << kLogContent; });
+      LogWithCapturedStderr([]() { PS_VLOG(kMaxV) << kLogContent; });
   EXPECT_EQ(log, "");
 }
 

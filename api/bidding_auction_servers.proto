@@ -1133,13 +1133,13 @@ message WinReportingUrls {
   ReportingUrls buyer_reporting_urls = 1;
 
   // The reporting urls registered during the execution of reportResult() of the
-  // seller in case of single seller auction and component seller in case of
-  // multi seller auctions. These urls will be pinged from client.
+  // component seller in case of multi seller auction. These urls will be pinged
+  // from client. This will not be set for single seller auctions.
   ReportingUrls component_seller_reporting_urls = 2;
 
   // The reporting urls registered during the execution of reportResult() of the
-  // top level seller in case of multi seller auction. These urls will be pinged
-  // from client. This will not be set for single seller auctions.
+  // seller in case of single seller auction and top level seller in case of
+  // multi seller auctions. These urls will be pinged from client.
   ReportingUrls top_level_seller_reporting_urls = 3;
 }
 
