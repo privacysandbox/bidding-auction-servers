@@ -38,6 +38,7 @@ cc_library(
     # header only library for interface
     linkstatic = True,
     deps = [
+        "//services/common/loggers:request_context_logger",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
@@ -99,7 +100,6 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -114,7 +114,6 @@ cc_library(
     ],
     deps = [
         ":buyer_key_value_async_http_client",
-        "@com_github_google_glog//:glog",
     ],
 )
 
@@ -134,7 +133,6 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/util:request_metadata",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -149,7 +147,6 @@ cc_library(
     ],
     deps = [
         ":seller_key_value_async_http_client",
-        "@com_github_google_glog//:glog",
     ],
 )
 
@@ -204,7 +201,7 @@ cc_library(
         "//services/common/util:json_util",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",
-        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",

@@ -16,8 +16,6 @@
 
 #include <utility>
 
-#include "glog/logging.h"
-
 namespace privacy_sandbox::bidding_auction_servers {
 absl::Status CodeDispatchClient::BatchExecute(
     std::vector<DispatchRequest>& batch,

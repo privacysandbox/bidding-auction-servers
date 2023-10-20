@@ -49,16 +49,18 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   if (!document.HasMember(kReportResultResponse)) {
     return reporting_response;
   }
-  rapidjson::Value& response_obj = document[kReportResultResponse];
-  reporting_response.report_result_response.report_result_url =
-      response_obj[kReportResultUrl].GetString();
-  reporting_response.report_result_response.send_report_to_invoked =
-      response_obj[kSendReportToInvoked].GetBool();
-  reporting_response.report_result_response.register_ad_beacon_invoked =
-      response_obj[kRegisterAdBeaconInvoked].GetBool();
 
-  rapidjson::Value interaction_reporting_urls_map =
-      response_obj[kInteractionReportingUrlsWrapperResponse].GetObject();
+  rapidjson::Value& response_obj = document[kReportResultResponse];
+  auto& report_result_response = reporting_response.report_result_response;
+  PS_ASSIGN_IF_PRESENT(report_result_response.report_result_url, response_obj,
+                       kReportResultUrl, GetString);
+  PS_ASSIGN_IF_PRESENT(report_result_response.send_report_to_invoked,
+                       response_obj, kSendReportToInvoked, GetBool);
+  PS_ASSIGN_IF_PRESENT(report_result_response.register_ad_beacon_invoked,
+                       response_obj, kRegisterAdBeaconInvoked, GetBool);
+  rapidjson::Value interaction_reporting_urls_map;
+  PS_ASSIGN_IF_PRESENT(interaction_reporting_urls_map, response_obj,
+                       kInteractionReportingUrlsWrapperResponse, GetObject);
   for (rapidjson::Value::MemberIterator it =
            interaction_reporting_urls_map.MemberBegin();
        it != interaction_reporting_urls_map.MemberEnd(); ++it) {
@@ -78,25 +80,25 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   if (!document.HasMember(kReportWinResponse)) {
     return reporting_response;
   }
+
   rapidjson::Value& report_win_obj = document[kReportWinResponse];
-  reporting_response.report_win_response.report_win_url =
-      report_win_obj[kReportWinUrl].GetString();
-
-  reporting_response.report_win_response.send_report_to_invoked =
-      report_win_obj[kSendReportToInvoked].GetBool();
-
-  reporting_response.report_win_response.register_ad_beacon_invoked =
-      report_win_obj[kRegisterAdBeaconInvoked].GetBool();
-
-  rapidjson::Value report_win_interaction_urls_map =
-      report_win_obj[kInteractionReportingUrlsWrapperResponse].GetObject();
+  auto& report_win_response = reporting_response.report_win_response;
+  PS_ASSIGN_IF_PRESENT(report_win_response.report_win_url, report_win_obj,
+                       kReportWinUrl, GetString);
+  PS_ASSIGN_IF_PRESENT(report_win_response.send_report_to_invoked,
+                       report_win_obj, kSendReportToInvoked, GetBool);
+  PS_ASSIGN_IF_PRESENT(report_win_response.register_ad_beacon_invoked,
+                       report_win_obj, kRegisterAdBeaconInvoked, GetBool);
+  rapidjson::Value report_win_interaction_urls_map;
+  PS_ASSIGN_IF_PRESENT(report_win_interaction_urls_map, report_win_obj,
+                       kInteractionReportingUrlsWrapperResponse, GetObject);
 
   for (rapidjson::Value::MemberIterator it =
            report_win_interaction_urls_map.MemberBegin();
        it != report_win_interaction_urls_map.MemberEnd(); ++it) {
     const auto& [key, value] = *it;
-    reporting_response.report_win_response.interaction_reporting_urls
-        .try_emplace(key.GetString(), value.GetString());
+    report_win_response.interaction_reporting_urls.try_emplace(
+        key.GetString(), value.GetString());
   }
   return reporting_response;
 }

@@ -33,8 +33,8 @@ cc_library(
         "no_ops_logger.h",
     ],
     deps = [
+        "//services/common/loggers:request_context_logger",
         "//services/common/loggers:timer",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
     ],
@@ -83,13 +83,20 @@ cc_test(
 
 cc_library(
     name = "request_context_impl",
+    srcs = [
+        "request_context_impl.cc",
+    ],
     hdrs = [
         "request_context_impl.h",
     ],
     deps = [
         ":request_context_logger",
-        "//services/common/util:consented_debugging_logger",
-        "//services/common/util:context_logger",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/util:request_response_constants",
+        "@com_google_absl//absl/log:globals",
+        "@com_google_absl//absl/log:initialize",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
+        "@io_opentelemetry_cpp//api",
     ],
 )
 

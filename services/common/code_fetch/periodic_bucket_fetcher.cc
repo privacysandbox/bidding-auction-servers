@@ -23,12 +23,12 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/time/time.h"
-#include "cc/core/interface/async_context.h"
-#include "cc/core/interface/errors.h"
-#include "cc/public/core/interface/execution_result.h"
-#include "cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
-#include "cc/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
-#include "glog/logging.h"
+#include "scp/cc/core/interface/async_context.h"
+#include "scp/cc/core/interface/errors.h"
+#include "scp/cc/public/core/interface/execution_result.h"
+#include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "scp/cc/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
+#include "services/common/loggers/request_context_logger.h"
 
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest;
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse;
@@ -90,22 +90,22 @@ void PeriodicBucketFetcher::PeriodicBucketFetch() {
         result = context.result;
 
         if (result.Successful()) {
-          VLOG(2) << "BlobStorageClient GetBlob() Response: "
-                  << context.response;
+          PS_VLOG(2) << "BlobStorageClient GetBlob() Response: "
+                     << context.response;
 
           auto result_value = context.response->blob().data();
           if (cb_result_value_ != result_value) {
             cb_result_value_ = result_value;
 
             absl::Status roma_result = dispatcher_.LoadSync(1, result_value);
-            VLOG(1) << "Roma Client Response: " << roma_result;
+            PS_VLOG(1) << "Roma Client Response: " << roma_result;
             if (roma_result.ok()) {
-              VLOG(2) << "Current code loaded into Roma:\n" << result_value;
+              PS_VLOG(2) << "Current code loaded into Roma:\n" << result_value;
             }
           }
         } else {
-          VLOG(0) << "Failed to Blob Fetch: "
-                  << GetErrorMessage(result.status_code);
+          PS_VLOG(0) << "Failed to Blob Fetch: "
+                     << GetErrorMessage(result.status_code);
         }
 
         // Schedules the next code blob fetch and saves that task into task_id_.
@@ -115,8 +115,8 @@ void PeriodicBucketFetcher::PeriodicBucketFetch() {
 
   auto get_blob_result = blob_storage_client_->GetBlob(get_blob_context);
   if (!get_blob_result.Successful()) {
-    VLOG(0) << "BlobStorageClient -> GetBlob() failed: "
-            << GetErrorMessage(get_blob_result.status_code);
+    PS_VLOG(0) << "BlobStorageClient -> GetBlob() failed: "
+               << GetErrorMessage(get_blob_result.status_code);
   }
 }
 

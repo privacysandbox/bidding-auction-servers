@@ -57,8 +57,7 @@ absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
     case AuctionType::kProtectedAppSignals:
       return kProtectedAppSignalsGenerateBidsArgs;
     default:
-      PS_VLOG_NO_CONTEXT(1)
-          << "Unsupported auction type: " << absl::StrCat(auction_type);
+      PS_VLOG(1) << "Unsupported auction type: " << absl::StrCat(auction_type);
       return "";
   }
 }

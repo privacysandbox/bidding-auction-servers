@@ -15,7 +15,6 @@
 #include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
 
 #include "absl/strings/str_split.h"
-#include "glog/logging.h"
 #include "gtest/gtest-death-test.h"
 #include "gtest/gtest.h"
 #include "services/common/clients/http_kv_server/buyer/ad_retrieval_constants.h"
@@ -122,7 +121,7 @@ void ValidateRequestBody(absl::string_view request) {
     ASSERT_TRUE(key_tags_array.IsArray());
     ASSERT_EQ(key_tags_array.Size(), 1);
     const auto key_tag = std::string(key_tags_array[0].GetString());
-    LOG(INFO) << "Found key tag: " << key_tag;
+    ABSL_LOG(INFO) << "Found key tag: " << key_tag;
 
     const auto& key_list = key_group_entry[kKeyList];
     ASSERT_TRUE(key_list.IsArray());

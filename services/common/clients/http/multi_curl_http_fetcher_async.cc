@@ -22,7 +22,7 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "glog/logging.h"
+#include "services/common/loggers/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
@@ -73,7 +73,7 @@ struct CurlTimeStats {
   curl_off_t new_conns = -1;
 };
 void GetTraceFromCurl(CURL* handle) {
-  if (VLOG_IS_ON(log_level)) {
+  if (log::PS_VLOG_IS_ON(log_level)) {
     CurlTimeStats curl_time_stats;
     char* request_url = NULL;
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);
@@ -102,7 +102,7 @@ void GetTraceFromCurl(CURL* handle) {
     curl_easy_getinfo(handle, CURLINFO_NUM_CONNECTS,
                       &curl_time_stats.new_conns);
 
-    VLOG(log_level)
+    PS_VLOG(log_level)
         << "Curl request " << absl::StrCat(request_url) << " stats: \n"
         << "time_namelookup:  " << curl_time_stats.time_namelookup << "\n"
         << "time_connect:  " << curl_time_stats.time_connect << "\n"
@@ -152,7 +152,7 @@ MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
     std::unique_ptr<CurlRequestData> curl_request_data_ptr(output);
     // Server is shutting down, so exiting gracefully.
     if (output == nullptr) {
-      LOG(ERROR) << "Curl Error: Pointer to Curl data lost";
+      ABSL_LOG(ERROR) << "Curl Error: Pointer to Curl data lost";
       continue;
     }
     std::move(output->done_callback)(
@@ -191,9 +191,9 @@ static size_t ReadCallback(char* data, size_t size, size_t num_items,
       std::min(to_upload->data.size() - to_upload->offset, num_items * size);
   memcpy(data, to_upload->data.c_str() + to_upload->offset,
          num_bytes_to_upload);
-  VLOG(8) << "PUTing data (offset: " << to_upload->offset
-          << ", chunk size: " << num_bytes_to_upload
-          << "): " << to_upload->data;
+  PS_VLOG(8) << "PUTing data (offset: " << to_upload->offset
+             << ", chunk size: " << num_bytes_to_upload
+             << "): " << to_upload->data;
   to_upload->offset += num_bytes_to_upload;
   return num_bytes_to_upload;
 }
@@ -374,8 +374,9 @@ void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
       // If this happens, then we've effectively lost the reactor that made
       // this call and this memory has leaked.
       if (data_ptr == nullptr) {
-        LOG(ERROR) << "Curl Error: Pointer to Curl data lost with status: "
-                   << status.message() << ". Memory for this call has leaked.";
+        ABSL_LOG(ERROR) << "Curl Error: Pointer to Curl data lost with status: "
+                        << status.message()
+                        << ". Memory for this call has leaked.";
         return;
       }
       std::unique_ptr<CurlRequestData> curl_request_data_ptr(

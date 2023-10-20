@@ -12,8 +12,6 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#define GLOG_NO_ABBREVIATED_SEVERITIES
-
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 
 #include <memory>
@@ -25,9 +23,9 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
-#include "cc/public/core/interface/execution_result.h"
-#include "cc/public/cpio/interface/instance_client/instance_client_interface.h"
-#include "glog/logging.h"
+#include "scp/cc/public/core/interface/execution_result.h"
+#include "scp/cc/public/cpio/interface/instance_client/instance_client_interface.h"
+#include "services/common/loggers/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -61,7 +59,7 @@ inline constexpr char kResourceTagFetchError[] =
     "Unable to fetch instance's tags: (status_code: %s)";
 
 absl::Status HandleFailure(absl::string_view error) noexcept {
-  LOG(ERROR) << error;
+  ABSL_LOG(ERROR) << error;
   return absl::InternalError(error);
 }
 
@@ -77,8 +75,8 @@ absl::StatusOr<std::string> GetResourceName(
         if (result.Successful()) {
           resource_name = std::string{response.instance_resource_name()};
         } else {
-          LOG(ERROR) << absl::StrFormat(kResourceNameFetchError,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kResourceNameFetchError, GetErrorMessage(result.status_code));
         }
 
         done.Notify();
@@ -122,15 +120,15 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
       [&](const ExecutionResult& result,
           const GetInstanceDetailsByResourceNameResponse& response) {
         if (result.Successful()) {
-          VLOG(2) << response.DebugString();
+          PS_VLOG(2) << response.DebugString();
           instance_id_ = std::string{response.instance_details().instance_id()};
           operator_ = response.instance_details().labels().at(kOperatorTagName);
           environment_ =
               response.instance_details().labels().at(kEnvironmentTagName);
           service_ = response.instance_details().labels().at(kServiceTagName);
         } else {
-          LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
-                                        GetErrorMessage(result.status_code));
+          ABSL_LOG(ERROR) << absl::StrFormat(
+              kResourceTagFetchError, GetErrorMessage(result.status_code));
         }
         done.Notify();
       });

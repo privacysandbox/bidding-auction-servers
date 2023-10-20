@@ -23,7 +23,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "src/cpp/encryption/key_fetcher/interface/private_key_fetcher_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

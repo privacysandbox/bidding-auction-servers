@@ -23,7 +23,6 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
 #include "include/gtest/gtest.h"
-#include "services/common/util/context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -33,12 +32,12 @@ constexpr int kNumMaxThreads = 10;
 
 class AsyncTasksTrackerTest : public testing::Test {
  protected:
-  ContextLogger context_logger_;
+  log::ContextImpl log_context_{log::ContextImpl::ContextMap{}, ""};
   absl::Notification notification_;
 };
 
 TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskSuccess) {
-  AsyncTaskTracker async_task_tracker(1, context_logger_,
+  AsyncTaskTracker async_task_tracker(1, log_context_,
                                       [this](bool any_successful) {
                                         EXPECT_TRUE(any_successful);
                                         notification_.Notify();
@@ -53,7 +52,7 @@ TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskSuccess) {
 }
 
 TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskError) {
-  AsyncTaskTracker async_task_tracker(1, context_logger_,
+  AsyncTaskTracker async_task_tracker(1, log_context_,
                                       [this](bool any_successful) {
                                         EXPECT_FALSE(any_successful);
                                         notification_.Notify();
@@ -68,11 +67,10 @@ TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskError) {
 }
 
 TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskSkipped) {
-  AsyncTaskTracker task_tracker(1, context_logger_,
-                                [this](bool any_successful) {
-                                  EXPECT_TRUE(any_successful);
-                                  notification_.Notify();
-                                });
+  AsyncTaskTracker task_tracker(1, log_context_, [this](bool any_successful) {
+    EXPECT_TRUE(any_successful);
+    notification_.Notify();
+  });
 
   std::thread t(
       [&task_tracker]() { task_tracker.TaskCompleted(TaskStatus::SKIPPED); });
@@ -82,13 +80,12 @@ TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskSkipped) {
 }
 
 TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskEmptyResponse) {
-  AsyncTaskTracker task_tracker(1, context_logger_,
-                                [this](bool any_successful) {
-                                  // No task errored and one task successful =>
-                                  // chaff to the caller.
-                                  EXPECT_TRUE(any_successful);
-                                  notification_.Notify();
-                                });
+  AsyncTaskTracker task_tracker(1, log_context_, [this](bool any_successful) {
+    // No task errored and one task successful =>
+    // chaff to the caller.
+    EXPECT_TRUE(any_successful);
+    notification_.Notify();
+  });
 
   std::thread t([&task_tracker]() {
     task_tracker.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
@@ -99,13 +96,12 @@ TEST_F(AsyncTasksTrackerTest, CallsBackOnTaskEmptyResponse) {
 }
 
 TEST_F(AsyncTasksTrackerTest, DeclaresSuccessIfAnyTaskSucceeded) {
-  AsyncTaskTracker task_tracker(4, context_logger_,
-                                [this](bool any_successful) {
-                                  // At least one task succeeded => succeeded
-                                  // overall.
-                                  EXPECT_TRUE(any_successful);
-                                  notification_.Notify();
-                                });
+  AsyncTaskTracker task_tracker(4, log_context_, [this](bool any_successful) {
+    // At least one task succeeded => succeeded
+    // overall.
+    EXPECT_TRUE(any_successful);
+    notification_.Notify();
+  });
 
   std::vector<std::thread> threads;
   for (auto status : {TaskStatus::SUCCESS, TaskStatus::ERROR,
@@ -121,14 +117,13 @@ TEST_F(AsyncTasksTrackerTest, DeclaresSuccessIfAnyTaskSucceeded) {
 }
 
 TEST_F(AsyncTasksTrackerTest, DeclaresSuccessIfNoTaskExplicitlyFailed) {
-  AsyncTaskTracker task_tracker(3, context_logger_,
-                                [this](bool any_successful) {
-                                  // No task errored (but there is either a
-                                  // skipped or empty response) => succeeded
-                                  // overall.
-                                  EXPECT_TRUE(any_successful);
-                                  notification_.Notify();
-                                });
+  AsyncTaskTracker task_tracker(3, log_context_, [this](bool any_successful) {
+    // No task errored (but there is either a
+    // skipped or empty response) => succeeded
+    // overall.
+    EXPECT_TRUE(any_successful);
+    notification_.Notify();
+  });
 
   std::vector<std::thread> threads;
   for (auto status :
@@ -145,7 +140,7 @@ TEST_F(AsyncTasksTrackerTest, DeclaresSuccessIfNoTaskExplicitlyFailed) {
 
 TEST_F(AsyncTasksTrackerTest, CallbackCalledOnlyOnce) {
   int count = 0;
-  AsyncTaskTracker task_tracker(kNumMaxThreads, context_logger_,
+  AsyncTaskTracker task_tracker(kNumMaxThreads, log_context_,
                                 [this, &count](bool any_successful) {
                                   // No task errored (but there is either a
                                   // skipped or empty response) => succeeded
@@ -170,7 +165,7 @@ TEST_F(AsyncTasksTrackerTest, CallbackCalledOnlyOnce) {
 
 TEST_F(AsyncTasksTrackerTest, OnSingleTaskDoneCalledWithLock) {
   AsyncTaskTracker task_tracker(
-      kNumMaxThreads, context_logger_,
+      kNumMaxThreads, log_context_,
       [this](bool any_successful) { notification_.Notify(); });
 
   std::vector<std::thread> threads;

@@ -169,7 +169,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
-        interactionReportingUrls : "",
+        interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
@@ -247,7 +247,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                               directFromSellerSignals, enable_logging) {
       var ps_report_win_response = {
         reportWinUrl : "",
-        interactionReportingUrls : "",
+        interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
@@ -412,7 +412,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
-        interactionReportingUrls : "",
+        interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }

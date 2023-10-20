@@ -13,10 +13,10 @@ python_deps("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    sha256 = "66ec2c12d2368c841d43a69461fc647fbad051a3e8f1b5f19e9476348d619104",
-    strip_prefix = "data-plane-shared-libraries-041450f2ca7bce0a4106d9d55ac2e08ecb7622b3",
+    sha256 = "ee394744a70e9b810a26a8ff7e4dd8a92f4fcbbe19e083c5a9e036c1b2774dd0",
+    strip_prefix = "data-plane-shared-libraries-79d4958591ca0f3adaa739d5288831dba172ff97",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/041450f2ca7bce0a4106d9d55ac2e08ecb7622b3.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/79d4958591ca0f3adaa739d5288831dba172ff97.zip",
     ],
 )
 
@@ -47,7 +47,7 @@ load("//third_party:container_deps.bzl", "container_deps")
 
 container_deps()
 
-load("@control_plane_shared//build_defs/shared:rpm.bzl", rpmpack_repositories = "rpm")
+load("@google_privacysandbox_servers_common//scp/build_defs/shared:rpm.bzl", rpmpack_repositories = "rpm")
 
 rpmpack_repositories()
 

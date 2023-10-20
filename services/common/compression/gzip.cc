@@ -17,7 +17,6 @@
 #include <zlib.h>
 
 #include "absl/strings/str_format.h"
-#include "glog/logging.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

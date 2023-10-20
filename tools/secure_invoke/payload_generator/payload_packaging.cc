@@ -131,7 +131,8 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
-                                ClientType client_type) {
+                                ClientType client_type,
+                                absl::string_view public_key, uint8_t key_id) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
       GetBuyerInputMap(&input_json);
@@ -155,7 +156,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
   protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
   // Package protected_auction_input.
   auto pa_ciphertext_encryption_context_pair =
-      PackagePayload(protected_auction_input, client_type);
+      PackagePayload(protected_auction_input, client_type, public_key, key_id);
   CHECK(pa_ciphertext_encryption_context_pair.ok())
       << pa_ciphertext_encryption_context_pair.status();
   auto select_ad_request = std::make_unique<SelectAdRequest>();
@@ -169,9 +170,11 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
 }
 
 std::string PackagePlainTextSelectAdRequestToJson(
-    absl::string_view input_json_str, ClientType client_type) {
-  auto req = std::move(
-      PackagePlainTextSelectAdRequest(input_json_str, client_type).first);
+    absl::string_view input_json_str, ClientType client_type,
+    absl::string_view public_key, uint8_t key_id) {
+  auto req = std::move(PackagePlainTextSelectAdRequest(
+                           input_json_str, client_type, public_key, key_id)
+                           .first);
   std::string select_ad_json;
   auto select_ad_json_status =
       google::protobuf::util::MessageToJsonString(*req, &select_ad_json);

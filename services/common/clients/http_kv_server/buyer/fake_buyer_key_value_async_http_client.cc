@@ -15,8 +15,6 @@
 
 #include "services/common/clients/http_kv_server/buyer/fake_buyer_key_value_async_http_client.h"
 
-#include "glog/logging.h"
-
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
@@ -207,13 +205,13 @@ absl::Status FakeBuyerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout) const {
   HTTPRequest request = BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
       kv_server_base_address_, metadata, std::move(keys));
-  VLOG(2) << "FakeBuyerKeyValueAsyncHttpClient Request: " << request.url;
+  PS_VLOG(2) << "FakeBuyerKeyValueAsyncHttpClient Request: " << request.url;
   // Below was faked
   std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
       std::make_unique<GetBuyerValuesOutput>(
           GetBuyerValuesOutput({kFakeKeyResponse}));
   std::move(on_done)(std::move(resultUPtr));
-  VLOG(2) << "E2E testing received hard coded buyer kv request";
+  PS_VLOG(2) << "E2E testing received hard coded buyer kv request";
   return absl::OkStatus();
 }
 

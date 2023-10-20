@@ -58,16 +58,15 @@ inline void PopulateArgInRomaRequest(
 // want to allow a maximum of 23-bits to egress).
 inline bool IsEgressMSBClear(absl::string_view egress_features) {
   auto hex_string = absl::BytesToHexString(egress_features);
-  PS_VLOG_NO_CONTEXT(5) << "Egress features as hex: " << hex_string;
+  PS_VLOG(5) << "Egress features as hex: " << hex_string;
   uint32_t out;
   if (auto success = absl::SimpleHexAtoi(hex_string, &out); !success) {
-    PS_VLOG_NO_CONTEXT(1) << "Failed to convert hex egress features (bytes: "
-                          << egress_features << ", hex: " << hex_string
-                          << ") to integer";
+    PS_VLOG(1) << "Failed to convert hex egress features (bytes: "
+               << egress_features << ", hex: " << hex_string << ") to integer";
     return false;
   }
 
-  PS_VLOG_NO_CONTEXT(5) << "Egress features as int: " << out;
+  PS_VLOG(5) << "Egress features as int: " << out;
   return (out & kEgressHighestBitMask) == 0;
 }
 
@@ -310,7 +309,7 @@ void ProtectedAppSignalsGenerateBidsReactor::
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::Execute() {
-  PS_VLOG_NO_CONTEXT(8) << __func__;
+  PS_VLOG(8) << __func__;
   PS_VLOG(2, log_context_) << "nGenerateBidsRequest:\n"
                            << request_->DebugString();
   PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"

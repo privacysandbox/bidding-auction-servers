@@ -82,6 +82,17 @@ inline constexpr server_common::metrics::Definition<
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInitiatedRequestErrorCountByServer(
+        /*name*/ "initiated_request.errors_count_by_server",
+        /*description*/
+        "Total number of errors occurred for the requests initiated by the "
+        "server partitioned by outgoing server",
+        /*partition_type*/ "server name",
+        /* public_partitions*/ kServerName);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
     kInitiatedRequestKVSize(
         "initiated_request.kv.size_bytes",
@@ -237,6 +248,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kInitiatedRequestTotalDuration,
         &server_common::metrics::kInitiatedRequestByte,
         &server_common::metrics::kInitiatedResponseByte,
+        &kInitiatedRequestErrorCountByServer,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestBiddingDuration,
@@ -272,6 +284,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kInitiatedRequestTotalDuration,
         &server_common::metrics::kInitiatedRequestByte,
         &server_common::metrics::kInitiatedResponseByte,
+        &kInitiatedRequestErrorCountByServer,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestAuctionDuration,

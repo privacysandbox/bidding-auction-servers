@@ -20,11 +20,12 @@
 #include <string>
 #include <utility>
 
-#include "glog/logging.h"
+#include "absl/log/check.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_context_logger.h"
 #include "services/common/util/error_categories.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 #include "src/cpp/util/status_macro/status_macros.h"
@@ -77,26 +78,25 @@ class DefaultAsyncGrpcClient
           on_done,
       absl::Duration timeout = max_timeout) const override {
     DCHECK(encryption_enabled_);
-    if (VLOG_IS_ON(6)) {
-      VLOG(6) << "Raw request:\n" << raw_request->DebugString();
-    }
-    VLOG(5) << "Encrypting request ...";
+    PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
+    PS_VLOG(5) << "Encrypting request ...";
     auto secret_request = EncryptRequestWithHpke<RawRequest, Request>(
         std::move(raw_request), *crypto_client_, *key_fetcher_manager_,
         cloud_platform_);
     if (!secret_request.ok()) {
-      VLOG(1) << "Failed to encrypt the request: " << secret_request.status();
+      PS_VLOG(1) << "Failed to encrypt the request: "
+                 << secret_request.status();
       auto error_status = absl::InternalError(kEncryptionFailed);
       return error_status;
     }
     auto& [hpke_secret, request] = *secret_request;
-    VLOG(5) << "Encryption completed ...";
+    PS_VLOG(5) << "Encryption completed ...";
 
     auto params =
         std::make_unique<RawClientParams<Request, Response, RawResponse>>(
             std::move(request), std::move(on_done), metadata);
     params->SetDeadline(std::min(max_timeout, timeout));
-    VLOG(5) << "Sending RPC ...";
+    PS_VLOG(5) << "Sending RPC ...";
     SendRpc(hpke_secret, params.release());
     return absl::OkStatus();
   }
@@ -114,19 +114,19 @@ class DefaultAsyncGrpcClient
   virtual void SendRpc(
       const std::string& hpke_secret,
       RawClientParams<Request, Response, RawResponse>* params) const {
-    VLOG(5) << "Stub SendRpc invoked ...";
+    PS_VLOG(5) << "Stub SendRpc invoked ...";
   }
 
   absl::StatusOr<std::unique_ptr<RawResponse>> DecryptResponse(
       const std::string& hpke_secret, Response* response) const {
-    VLOG(6) << "Decrypting the response ...";
+    PS_VLOG(6) << "Decrypting the response ...";
     absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
         decrypt_response = crypto_client_->AeadDecrypt(
             response->response_ciphertext(), hpke_secret);
     if (!decrypt_response.ok()) {
       const std::string error = absl::StrCat(
           "Could not decrypt response: ", decrypt_response.status().message());
-      LOG(ERROR) << error;
+      ABSL_LOG(ERROR) << error;
       return absl::InternalError(error);
     }
 
@@ -137,10 +137,8 @@ class DefaultAsyncGrpcClient
       return absl::InvalidArgumentError(error_msg);
     }
 
-    if (VLOG_IS_ON(6)) {
-      VLOG(6) << "Decryption/decoding of response succeeded: "
-              << raw_response->DebugString();
-    }
+    PS_VLOG(6) << "Decryption/decoding of response succeeded: "
+               << raw_response->DebugString();
     return raw_response;
   }
 
@@ -164,20 +162,18 @@ inline std::shared_ptr<grpc::Channel> CreateChannel(
     // to argument for grpc::CreateChannel.
     absl::string_view server_addr, bool compression = false,
     bool secure = true) {
-  std::shared_ptr<grpc::Channel> channel;
   std::shared_ptr<grpc::ChannelCredentials> creds =
       secure ? grpc::SslCredentials(grpc::SslCredentialsOptions())
              : grpc::InsecureChannelCredentials();
+  grpc::ChannelArguments args;
+  // Set max message size to 256 MB.
+  args.SetMaxSendMessageSize(256L * 1024L * 1024L);
+  args.SetMaxReceiveMessageSize(256L * 1024L * 1024L);
   if (compression) {
-    grpc::ChannelArguments args;
     // Set the default compression algorithm for the channel.
     args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
-    channel =
-        grpc::CreateCustomChannel(server_addr.data(), std::move(creds), args);
-  } else {
-    channel = grpc::CreateChannel(server_addr.data(), std::move(creds));
   }
-  return channel;
+  return grpc::CreateCustomChannel(server_addr.data(), std::move(creds), args);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

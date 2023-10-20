@@ -14,9 +14,9 @@
 
 #include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
 
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "glog/logging.h"
 #include "services/common/clients/http_kv_server/buyer/ad_retrieval_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -124,7 +124,7 @@ absl::StatusOr<AdRetrievalOutput> AdRetrievalOutput::FromJson(
   DCHECK(document.IsObject());
   auto partitions_array_it = document.FindMember(kPartitions);
   if (partitions_array_it == document.MemberEnd()) {
-    VLOG(4) << "No partitions found in the ad retrieval response";
+    PS_VLOG(4) << "No partitions found in the ad retrieval response";
     return ad_retrieval_output;
   }
 
@@ -139,7 +139,8 @@ absl::StatusOr<AdRetrievalOutput> AdRetrievalOutput::FromJson(
   DCHECK(partition.IsObject());
   auto key_group_output_it = partition.FindMember(kKeyGroupOutputs);
   if (key_group_output_it == partition.MemberEnd()) {
-    VLOG(4) << "No " << kKeyGroupOutputs << " found in ad retrieval response";
+    PS_VLOG(4) << "No " << kKeyGroupOutputs
+               << " found in ad retrieval response";
     return ad_retrieval_output;
   }
 
@@ -147,7 +148,7 @@ absl::StatusOr<AdRetrievalOutput> AdRetrievalOutput::FromJson(
   DCHECK(key_group_outputs.IsArray());
   const auto& key_group_outputs_array = key_group_outputs.GetArray();
   if (key_group_outputs_array.Empty()) {
-    VLOG(4) << kKeyGroupOutputs << " is empty in ad retrieval response";
+    PS_VLOG(4) << kKeyGroupOutputs << " is empty in ad retrieval response";
     return ad_retrieval_output;
   }
 
@@ -184,10 +185,11 @@ absl::StatusOr<AdRetrievalOutput> AdRetrievalOutput::FromJson(
     }
   }
   if (!found_ads) {
-    VLOG(2) << "No ads found in the ads retrieval response";
+    PS_VLOG(2) << "No ads found in the ads retrieval response";
   }
   if (!found_contextual_embeddings) {
-    VLOG(2) << "No contextual embeddings found in the ads retrieval response";
+    PS_VLOG(2)
+        << "No contextual embeddings found in the ads retrieval response";
   }
   return ad_retrieval_output;
 }
@@ -203,8 +205,9 @@ AdsRetrievalAsyncHttpClient::AdsRetrievalAsyncHttpClient(
         std::move(request), {},
         [](absl::StatusOr<std::unique_ptr<AdRetrievalOutput>> ads_kv_output) {
           if (!ads_kv_output.ok()) {
-            VLOG(1) << "AdsRetrievalAsyncHttpClient pre-warm returned status:"
-                    << ads_kv_output.status();
+            PS_VLOG(1)
+                << "AdsRetrievalAsyncHttpClient pre-warm returned status:"
+                << ads_kv_output.status();
           }
         },
         // Longer timeout for first request
@@ -226,8 +229,8 @@ absl::Status AdsRetrievalAsyncHttpClient::Execute(
   // Setup a callback for the returned data from server.
   auto done_callback = [on_done = std::move(on_done)](
                            absl::StatusOr<std::string> result_json) mutable {
-    VLOG(3) << "AdsRetrievalKeyValueAsyncHttpClient Response: "
-            << result_json.status();
+    PS_VLOG(3) << "AdsRetrievalKeyValueAsyncHttpClient Response: "
+               << result_json.status();
     if (!result_json.ok()) {
       std::move(on_done)(result_json.status());
       return;
@@ -237,10 +240,10 @@ absl::Status AdsRetrievalAsyncHttpClient::Execute(
         AdRetrievalOutput({*std::move(result_json)})));
   };
 
-  VLOG(3) << "\n\nAds Retrieval Request Url:\n"
-          << request.url << "\nHeaders:\n"
-          << absl::StrJoin(request.headers, kKeyValDelimiter) << "\nBody: \n"
-          << request.body;
+  PS_VLOG(3) << "\n\nAds Retrieval Request Url:\n"
+             << request.url << "\nHeaders:\n"
+             << absl::StrJoin(request.headers, kKeyValDelimiter) << "\nBody: \n"
+             << request.body;
 
   http_fetcher_async_->PutUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),

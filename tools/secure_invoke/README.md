@@ -6,8 +6,8 @@ Secure invoke binary can be used to:
 -   Send a `GetBidsRawRequest` directly to BFE.
 
 The tool takes as input an unencrypted request and then serializes, compresses, pads and then
-encrypts it with test keys (thus the services are also expected to be running with `TEST_MODE` flag
-enabled). The response returned by the target service is then similarly decrypted (with test keys),
+encrypts it with test keys (the default uses the same keys as services running with the `TEST_MODE`
+flag enabled). The response returned by the target service is then similarly decrypted,
 decompressed, deserialized and printed to console.
 
 ## Example Usage
@@ -127,3 +127,37 @@ Notes:
     https://github.com/privacysandbox/bidding-auction-servers/blob/332e46b216bfa51873ca410a5a47f8bec9615948/api/bidding_auction_servers.proto#L225
 [getbidsrawrequest]:
     https://github.com/privacysandbox/bidding-auction-servers/blob/332e46b216bfa51873ca410a5a47f8bec9615948/api/bidding_auction_servers.proto#L394
+
+### Using Custom Keys
+
+By default, the tool uses the keys found
+[here](https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h#L29C34-L29C34).
+
+If you want to send a request to servers running keys other than the `TEST_MODE=true` keys, you'll
+need to specify the keys.
+
+The example below queries a live public key endpoint, picks the first key, and passes it to
+`secure_invoke`:
+
+```bash
+# Setup arguments.
+INPUT_PATH=...
+SFE_HOST_ADDRESS=...
+CLIENT_IP=...
+
+# Setup keys.
+LIVE_KEYS=$(curl https://<LIVE KEY ENDPOINT>)
+PUBLIC_KEY=$(echo $LIVE_KEYS | jq .keys[0].key)
+KEY_ID=$(echo $LIVE_KEYS | jq .keys[0].id)
+
+
+# Run the tool with desired arguments.
+./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
+    -- \
+    -target_service=sfe \
+    -input_file="/src/workspace/${INPUT_PATH}" \
+    -host_addr=${SFE_HOST_ADDRESS} \
+    -client_ip=${CLIENT_IP}
+    -public_key=${PUBLIC_KEY}
+    -key_id=${KEY_ID}
+```

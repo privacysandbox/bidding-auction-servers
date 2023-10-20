@@ -27,7 +27,7 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "cc/core/interface/type_def.h"
+#include "scp/cc/core/interface/type_def.h"
 #include "src/cpp/telemetry/flag/telemetry_flag.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

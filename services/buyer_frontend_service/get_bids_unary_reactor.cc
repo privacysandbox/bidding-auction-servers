@@ -17,12 +17,10 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
 #include "services/buyer_frontend_service/util/proto_factory.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
-#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 
@@ -86,16 +84,21 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                                                       kBiddingKVMetadata)),
       bidding_signals_async_provider_(&bidding_signals_async_provider),
       bidding_async_client_(&bidding_async_client),
-      config_(config),
       protected_app_signals_bidding_async_client_(pas_bidding_async_client),
+      config_(config),
       key_fetcher_manager_(key_fetcher_manager),
       crypto_client_(crypto_client),
-      // `logger_` doesn't have the log context yet.
-      logger_(GetLoggingContext()),
+      log_context_([this]() {
+        decrypt_status_ = DecryptRequest();
+        return log::ContextImpl(GetLoggingContext(),
+                                config_.enable_otel_based_logging
+                                    ? config_.consented_debug_token
+                                    : "");
+      }()),
       async_task_tracker_(config_.is_protected_app_signals_enabled
                               ? kNumOutboundBiddingCallsWithProtectedAppSignals
                               : kNumDefaultOutboundBiddingCalls,
-                          logger_, [this](bool any_successful_bid) {
+                          log_context_, [this](bool any_successful_bid) {
                             OnAllBidsDone(any_successful_bid);
                           }) {
   if (enable_benchmarking) {
@@ -137,33 +140,24 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     return;
   }
 
-  if (VLOG_IS_ON(2)) {
-    logger_.vlog(2, "Accumulated Raw response:\n",
-                 get_bids_raw_response_->DebugString());
-  }
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(
-        1, absl::StrCat("GetBidsRawResponse: ",
-                        get_bids_raw_response_->DebugString()));
-  }
+  PS_VLOG(2, log_context_) << "GetBidsRawResponse:\n"
+                           << get_bids_raw_response_->DebugString();
 
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
-    logger_.vlog(1, "Failed to encrypt the response");
+    PS_VLOG(1, log_context_) << "Failed to encrypt the response";
     benchmarking_logger_->End();
     Finish(
         grpc::Status(grpc::StatusCode::INTERNAL, encryption_status.ToString()));
     return;
   }
 
-  if (VLOG_IS_ON(3)) {
-    logger_.vlog(3, "Encrypted GetBidsResponse:\n",
-                 get_bids_response_->DebugString());
-  }
+  PS_VLOG(3, log_context_) << "Encrypted GetBidsResponse:\n"
+                           << get_bids_response_->DebugString();
 
   if (!any_successful_bids) {
-    logger_.vlog(3,
-                 "Finishing the GetBids RPC with an error, since there are "
-                 "no successful bids returned by the bidding service");
+    PS_VLOG(3, log_context_)
+        << "Finishing the GetBids RPC with an error, since there are "
+           "no successful bids returned by the bidding service";
     benchmarking_logger_->End();
     Finish(grpc::Status(grpc::INTERNAL, absl::StrJoin(bid_errors_, "; ")));
     return;
@@ -173,85 +167,76 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   FinishWithOkStatus();
 }
 
-bool GetBidsUnaryReactor::DecryptRequest() {
+grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   if (request_->key_id().empty()) {
-    VLOG(1) << kEmptyKeyIdError;
-    Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError};
   }
-
   if (request_->request_ciphertext().empty()) {
-    VLOG(1) << kEmptyCiphertextError;
-    Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        kEmptyCiphertextError));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kEmptyCiphertextError};
   }
-
   std::optional<server_common::PrivateKey> private_key =
       key_fetcher_manager_->GetPrivateKey(request_->key_id());
   if (!private_key.has_value()) {
-    VLOG(1) << kInvalidKeyIdError;
-    Finish(
-        grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError};
   }
-
   absl::StatusOr<HpkeDecryptResponse> decrypt_response =
       crypto_client_->HpkeDecrypt(*private_key, request_->request_ciphertext());
   if (!decrypt_response.ok()) {
-    VLOG(1) << kMalformedCiphertext;
-    Finish(
-        grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
-
   hpke_secret_ = std::move(decrypt_response->secret());
   if (!raw_request_.ParseFromString(decrypt_response->payload())) {
-    VLOG(1) << "Unable to parse proto from the decrypted request: "
-            << kMalformedCiphertext;
-    Finish(
-        grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
-
-  return true;
+  return grpc::Status::OK;
 }
 
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   DCHECK(config_.encryption_enabled);
-  if (!DecryptRequest()) {
-    VLOG(1) << "Decrypting the request failed";
+  PS_VLOG(2, log_context_) << "GetBidsRequest:\n"
+                           << request_->ShortDebugString();
+  PS_VLOG(2, log_context_) << "Headers:\n"
+                           << absl::StrJoin(context_->client_metadata(), "\n",
+                                            absl::PairFormatter(
+                                                absl::StreamFormatter(), " : ",
+                                                absl::StreamFormatter()));
+
+  if (!decrypt_status_.ok()) {
+    PS_VLOG(1, log_context_) << "Decrypting the request failed:"
+                             << server_common::ToAbslStatus(decrypt_status_);
+    Finish(decrypt_status_);
     return;
   }
-  VLOG(5) << "Successfully decrypted the request";
-
-  // Set the request context right after the decrypted request is available.
-  logger_.Configure(GetLoggingContext());
-  // TODO(b/299366050): Refactor ContextLogger & ConsentedDebuggingLogger to
-  // move initialization to the constructor if possible.
-  if (config_.enable_otel_based_logging) {
-    consented_logger_ = ConsentedDebuggingLogger(GetLoggingContext(),
-                                                 config_.consented_debug_token);
-  }
-
-  MayLogRawRequest();
+  PS_VLOG(5, log_context_) << "Successfully decrypted the request";
+  PS_VLOG(1, log_context_) << "GetBidsRawRequest:\n"
+                           << raw_request_.ShortDebugString();
   GetProtectedAudienceBids();
   MayGetProtectedSignalsBids();
 }
 
+void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
+    absl::string_view server_name) {
+  LogIfError(metric_context_->AccumulateMetric<
+             server_common::metrics::kInitiatedRequestErrorCount>(1));
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
+              1, server_name));
+}
+
 void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   if (!config_.is_protected_app_signals_enabled) {
-    logger_.vlog(8, "Protected App Signals feature not enabled");
+    PS_VLOG(8, log_context_) << "Protected App Signals feature not enabled";
     return;
   }
 
   if (!raw_request_.has_protected_app_signals_buyer_input() ||
       !raw_request_.protected_app_signals_buyer_input()
            .has_protected_app_signals()) {
-    logger_.vlog(3,
-                 "No protected app buyer signals input found, skipping "
-                 "fetching bids for protected app signals");
+    PS_VLOG(3, log_context_)
+        << "No protected app buyer signals input found, skipping fetching bids "
+           "for protected app signals";
     async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
     return;
   }
@@ -270,11 +255,10 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                 std::move(raw_response),
                 // Error response handler
                 [this](const absl::Status& status) {
-                  logger_.vlog(
-                      1,
-                      "Execution of GenerateProtectedAppSignalsBids request "
-                      "failed with status: ",
-                      status);
+                  PS_VLOG(1, log_context_)
+                      << "Execution of GenerateProtectedAppSignalsBids request "
+                         "failed with status: "
+                      << status;
                   async_task_tracker_.TaskCompleted(
                       TaskStatus::ERROR, [this, &status]() {
                         bid_errors_.push_back(status.ToString());
@@ -302,21 +286,13 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
           absl::Milliseconds(
               config_.protected_app_signals_generate_bid_timeout_ms));
   if (!execute_result.ok()) {
-    logger_.error(
-        "Failed to make async GenerateProtectedAppInstallBids call: (error: ",
-        execute_result.ToString(), ")");
+    PS_LOG(ERROR, log_context_)
+        << "Failed to make async GenerateProtectedAppInstallBids call: (error: "
+        << execute_result.ToString() << ")";
     async_task_tracker_.TaskCompleted(
         TaskStatus::ERROR, [this, &execute_result]() {
           bid_errors_.push_back(execute_result.ToString());
         });
-  }
-}
-
-void GetBidsUnaryReactor::MayLogRawRequest() {
-  // Logger for consented debugging.
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(
-        1, absl::StrCat("GetBidsRawRequest: ", raw_request_.DebugString()));
   }
 }
 
@@ -337,11 +313,11 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
           auto not_used = std::move(kv_request);
         }
         if (!response.ok()) {
-          LogIfError(metric_context_->AccumulateMetric<
-                     server_common::metrics::kInitiatedRequestErrorCount>(1));
+          LogInitiatedRequestErrorMetrics(metric::kKv);
           // Return error to client.
-          logger_.vlog(1, "GetBiddingSignals request failed with status:",
-                       response.status());
+          PS_VLOG(1, log_context_)
+              << "GetBiddingSignals request failed with status:"
+              << response.status();
           async_task_tracker_.TaskCompleted(
               TaskStatus::ERROR, [this, &response]() {
                 bid_errors_.push_back(response.status().ToString());
@@ -360,7 +336,8 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
     std::unique_ptr<BiddingSignals> bidding_signals) {
   if (!bidding_signals || !bidding_signals->trusted_signals ||
       bidding_signals->trusted_signals->empty()) {
-    logger_.vlog(1, "GetBiddingSignals request succeeded but was empty.");
+    PS_VLOG(1, log_context_)
+        << "GetBiddingSignals request succeeded but was empty.";
     async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
     return;
   }
@@ -370,7 +347,8 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
           CreateGenerateBidsRawRequest(raw_request_, raw_request_.buyer_input(),
                                        std::move(bidding_signals), log_context);
 
-  logger_.vlog(2, "GenerateBidsRequest:\n", raw_bidding_input->DebugString());
+  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
+                           << raw_bidding_input->ShortDebugString();
   auto bidding_request =
       metric::MakeInitiatedRequest(metric::kBs, metric_context_.get());
   bidding_request->SetRequestSize((int)raw_bidding_input->ByteSizeLong());
@@ -392,12 +370,10 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
             std::move(raw_response),
             // Error response handler
             [this](const absl::Status& status) {
-              LogIfError(
-                  metric_context_->AccumulateMetric<
-                      server_common::metrics::kInitiatedRequestErrorCount>(1));
-              logger_.vlog(
-                  1, "Execution of GenerateBids request failed with status: ",
-                  status);
+              LogInitiatedRequestErrorMetrics(metric::kBs);
+              PS_VLOG(1, log_context_)
+                  << "Execution of GenerateBids request failed with status: "
+                  << status;
               async_task_tracker_.TaskCompleted(
                   TaskStatus::ERROR, [this, &status]() {
                     bid_errors_.push_back(status.ToString());
@@ -419,8 +395,9 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       },
       absl::Milliseconds(config_.generate_bid_timeout_ms));
   if (!execute_result.ok()) {
-    logger_.error("Failed to make async GenerateBids call: (error: ",
-                  execute_result.ToString(), ")");
+    PS_LOG(ERROR, log_context_)
+        << "Failed to make async GenerateBids call: (error: "
+        << execute_result.ToString() << ")";
     async_task_tracker_.TaskCompleted(
         TaskStatus::ERROR, [this, &execute_result]() {
           bid_errors_.push_back(execute_result.ToString());
@@ -438,14 +415,14 @@ absl::Status GetBidsUnaryReactor::EncryptResponse() {
   return absl::OkStatus();
 }
 
-ContextLogger::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
+log::ContextImpl::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
   const auto& log_context = raw_request_.log_context();
-  ContextLogger::ContextMap context_map = {
+  log::ContextImpl::ContextMap context_map = {
       {kGenerationId, log_context.generation_id()},
       {kBuyerDebugId, log_context.adtech_debug_id()}};
   if (raw_request_.has_consented_debug_config()) {
-    MaybeAddConsentedDebugConfig(raw_request_.consented_debug_config(),
-                                 context_map);
+    log::MaybeAddConsentedDebugConfig(raw_request_.consented_debug_config(),
+                                      context_map);
   }
   return context_map;
 }

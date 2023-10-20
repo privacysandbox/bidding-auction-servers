@@ -48,7 +48,6 @@ cc_library(
     deps = [
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
-        "@com_github_google_glog//:glog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
@@ -66,10 +65,9 @@ cc_library(
         "crypto_client_wrapper_interface.h",
     ],
     deps = [
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/status:statusor",
-        "@control_plane_shared//cc/public/cpio/interface/crypto_client",
-        "@control_plane_shared//cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/crypto_client",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:public_key_fetcher_interface",
     ],
@@ -86,10 +84,9 @@ cc_library(
     ],
     deps = [
         ":crypto_client_wrapper_interface",
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/status:statusor",
-        "@control_plane_shared//cc/public/cpio/interface/crypto_client",
-        "@control_plane_shared//cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/crypto_client",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],

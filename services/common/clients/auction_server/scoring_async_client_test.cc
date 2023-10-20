@@ -20,10 +20,8 @@
 
 #include <include/gmock/gmock-actions.h>
 
-#include "cpio/client_providers/interface/crypto_client_provider_interface.h"
-#define GLOG_NO_ABBREVIATED_SEVERITIES
 #include "absl/status/statusor.h"
-#include "glog/logging.h"
+#include "cpio/client_providers/interface/crypto_client_provider_interface.h"
 #include "gmock/gmock.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"

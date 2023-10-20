@@ -110,30 +110,6 @@ cc_test(
 )
 
 cc_library(
-    name = "context_logger",
-    srcs = ["context_logger.cc"],
-    hdrs = ["context_logger.h"],
-    deps = [
-        ":request_response_constants",
-        "@com_github_google_glog//:glog",
-        "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
-    ],
-)
-
-cc_test(
-    name = "context_logger_test",
-    size = "small",
-    srcs = [
-        "context_logger_test.cc",
-    ],
-    deps = [
-        ":context_logger",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
     name = "error_categories",
     hdrs = ["error_categories.h"],
 )
@@ -153,9 +129,9 @@ cc_library(
     srcs = ["error_accumulator.cc"],
     hdrs = ["error_accumulator.h"],
     deps = [
-        ":context_logger",
         ":error_categories",
         ":error_reporter",
+        "//services/common/loggers:request_context_impl",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
@@ -244,36 +220,6 @@ cc_test(
 )
 
 cc_library(
-    name = "consented_debugging_logger",
-    srcs = ["consented_debugging_logger.cc"],
-    hdrs = ["consented_debugging_logger.h"],
-    deps = [
-        ":context_logger",
-        ":request_response_constants",
-        "//api:bidding_auction_servers_cc_proto",
-        "@com_github_google_glog//:glog",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
-        "@io_opentelemetry_cpp//api",
-        "@io_opentelemetry_cpp//sdk:headers",
-        "@io_opentelemetry_cpp//sdk/src/logs",
-        "@io_opentelemetry_cpp//sdk/src/trace",
-    ],
-)
-
-cc_test(
-    name = "consented_debugging_logger_test",
-    size = "small",
-    srcs = [
-        "consented_debugging_logger_test.cc",
-    ],
-    deps = [
-        ":consented_debugging_logger",
-        ":request_response_constants",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
     name = "signal_handler",
     hdrs = ["signal_handler.h"],
     deps = [
@@ -286,9 +232,9 @@ cc_library(
     srcs = ["async_task_tracker.cc"],
     hdrs = ["async_task_tracker.h"],
     deps = [
-        ":context_logger",
-        "@com_github_google_glog//:glog",
+        "//services/common/loggers:request_context_impl",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
@@ -303,33 +249,6 @@ cc_test(
     ],
     deps = [
         ":async_task_tracker",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "multi_logger",
-    hdrs = ["multi_logger.h"],
-    deps = [
-        ":consented_debugging_logger",
-        ":context_logger",
-        "@com_github_google_glog//:glog",
-        "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
-    ],
-)
-
-cc_test(
-    name = "multi_logger_test",
-    size = "small",
-    srcs = [
-        "multi_logger_test.cc",
-    ],
-    deps = [
-        ":consented_debugging_logger",
-        ":context_logger",
-        ":multi_logger",
-        ":request_response_constants",
         "@com_google_googletest//:gtest_main",
     ],
 )

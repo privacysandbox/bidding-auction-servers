@@ -40,9 +40,10 @@ std::string GetHpkePublicKey(absl::string_view public_key_hex) {
 }
 
 absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
-    const std::string& plaintext_payload, absl::string_view public_key_hex) {
+    const std::string& plaintext_payload, absl::string_view public_key_hex,
+    uint8_t key_id) {
   const auto config =
-      GetOhttpKeyConfig(kTestKeyId, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
+      GetOhttpKeyConfig(key_id, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
                         EVP_HPKE_HKDF_SHA256, EVP_HPKE_AES_256_GCM);
   return quiche::ObliviousHttpRequest::CreateClientObliviousRequest(
       std::move(plaintext_payload), GetHpkePublicKey(public_key_hex), config);
@@ -51,9 +52,9 @@ absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
 absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(
     absl::string_view encapsulated_response,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
-    absl::string_view public_key_hex) {
+    absl::string_view public_key_hex, uint8_t key_id) {
   const auto config =
-      GetOhttpKeyConfig(kTestKeyId, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
+      GetOhttpKeyConfig(key_id, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
                         EVP_HPKE_HKDF_SHA256, EVP_HPKE_AES_256_GCM);
   const auto http_client = quiche::ObliviousHttpClient::Create(
       GetHpkePublicKey(public_key_hex), config);

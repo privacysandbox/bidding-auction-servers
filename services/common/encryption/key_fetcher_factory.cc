@@ -24,9 +24,9 @@
 #include <rapidjson/error/error.h>
 #include <rapidjson/reader.h>
 
-#include "glog/logging.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/loggers/request_context_logger.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
@@ -104,7 +104,7 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
       config_client.GetStringParameter(SECONDARY_COORDINATOR_REGION);
 
   if (config_client.HasParameter(GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER)) {
-    VLOG(3) << "Found GCP Workload Identity Pool Provider, proceeding...";
+    PS_VLOG(3) << "Found GCP Workload Identity Pool Provider, proceeding...";
     primary.gcp_private_key_vending_service_cloudfunction_url =
         config_client.GetStringParameter(
             GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);

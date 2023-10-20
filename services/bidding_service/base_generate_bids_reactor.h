@@ -72,7 +72,7 @@ class BaseGenerateBidsReactor
         {kGenerationId, logging_context.generation_id()},
         {kAdtechDebugId, logging_context.adtech_debug_id()}};
     if (generate_bids_request.has_consented_debug_config()) {
-      MaybeAddConsentedDebugConfig(
+      log::MaybeAddConsentedDebugConfig(
           generate_bids_request.consented_debug_config(), context_map);
     }
     return context_map;

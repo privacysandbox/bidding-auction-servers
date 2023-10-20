@@ -126,7 +126,7 @@ class TestDefaultAsyncGrpcClient
   void SendRpc(const std::string& hpke_secret,
                RawClientParams<MockRequest, MockResponse, MockRawResponse>*
                    params) const override {
-    VLOG(1) << "SendRpc invoked";
+    PS_VLOG(1) << "SendRpc invoked";
     EXPECT_EQ(params->RequestRef()->request_ciphertext(),
               req_.request_ciphertext());
     absl::Duration actual_timeout =

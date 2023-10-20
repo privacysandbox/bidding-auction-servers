@@ -32,8 +32,8 @@ pkg_files(
     srcs = [
         "bin/init_server_basic",
         "//services/buyer_frontend_service:server",
-        "@control_plane_shared//cc/aws/proxy/src:proxify",
-        "@control_plane_shared//cc/aws/proxy/src:socket_vendor",
+        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify",
+        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:socket_vendor",
     ],
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/",
@@ -42,7 +42,7 @@ pkg_files(
 pkg_files(
     name = "server_libs",
     srcs = [
-        "@control_plane_shared//cc/aws/proxy/src:proxy_preload",
+        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxy_preload",
     ],
     attributes = pkg_attributes(mode = "0444"),
     prefix = "/",

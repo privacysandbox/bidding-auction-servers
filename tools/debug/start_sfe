@@ -43,6 +43,7 @@ export SERVER_START_CMD=$(cat << END
 --enable_encryption="true" \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \
+--ps_verbosity=2 \
 --enable_protected_app_signals="false" && exit
 END
 )

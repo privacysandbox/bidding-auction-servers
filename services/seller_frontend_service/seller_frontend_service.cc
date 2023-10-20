@@ -19,7 +19,6 @@
 #include <grpcpp/grpcpp.h>
 
 #include "api/bidding_auction_servers.pb.h"
-#include "glog/logging.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
 #include "services/common/clients/http_kv_server/seller/fake_seller_key_value_async_http_client.h"
 #include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
@@ -96,15 +95,6 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("SelectAd"));
   LogMetrics(request, response);
-
-  VLOG(2) << "\nSelectAdRequest:\n" << request->DebugString();
-  if (VLOG_IS_ON(2)) {
-    VLOG(2) << "Headers:\n";
-    for (const auto& it : context->client_metadata()) {
-      VLOG(2) << it.first << " : " << it.second << "\n";
-    }
-  }
-
   auto reactor = GetReactorForRequest(context, request, response, clients_,
                                       config_client_);
   reactor->Execute();

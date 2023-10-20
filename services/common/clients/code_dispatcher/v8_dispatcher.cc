@@ -21,7 +21,7 @@
 
 #include "absl/status/status.h"
 #include "absl/synchronization/blocking_counter.h"
-#include "cc/roma/interface/roma.h"
+#include "scp/cc/roma/interface/roma.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -28,11 +28,9 @@
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
-#include "glog/logging.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/reporters/async_reporter.h"
-#include "services/common/util/consented_debugging_logger.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/web_utils.h"
@@ -67,14 +65,18 @@ SelectAdReactor::SelectAdReactor(
       // TODO(b/278039901): Add integration test for metadata forwarding.
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                                     kBuyerMetadataKeysMap)),
-      error_accumulator_(&logger_),
-      fail_fast_(fail_fast),
-      async_task_tracker_(
-          request->auction_config().buyer_list_size(), logger_,
-          [this](bool successful) { OnAllBidsDone(successful); }),
       is_protected_auction_request_(false),
+      log_context_(
+          {}, config_client_.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING)
+                  ? config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN)
+                  : ""),
+      error_accumulator_(&log_context_),
+      fail_fast_(fail_fast),
       is_pas_enabled_(
-          config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)) {
+          config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)),
+      async_task_tracker_(
+          request->auction_config().buyer_list_size(), log_context_,
+          [this](bool successful) { OnAllBidsDone(successful); }) {
   if (config_client_.GetBooleanParameter(ENABLE_SELLER_FRONTEND_BENCHMARKING)) {
     benchmarking_logger_ =
         std::make_unique<BuildInputProcessResponseBenchmarkingLogger>(
@@ -110,8 +112,9 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
                     result.interest_group_name().c_str())) {
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
-        logger_.vlog(1, "BrowserSignal: Recency:",
-                     interest_group.browser_signals().recency());
+        PS_VLOG(1, log_context_) << "BrowserSignal: Recency:"
+                                 << interest_group.browser_signals().recency();
+
         result.set_recency(interest_group.browser_signals().recency());
       }
       break;
@@ -139,12 +142,11 @@ void SelectAdReactor::MayPopulateClientVisibleErrors() {
       GetAccumulatedErrorString(ErrorVisibility::CLIENT_VISIBLE));
 }
 
-bool SelectAdReactor::DecryptRequest() {
+grpc::Status SelectAdReactor::DecryptRequest() {
   if (request_->protected_auction_ciphertext().empty() &&
       request_->protected_audience_ciphertext().empty()) {
-    Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        kEmptyProtectedAuctionCiphertextError));
-    return false;
+    return {grpc::StatusCode::INVALID_ARGUMENT,
+            kEmptyProtectedAuctionCiphertextError};
   }
   is_protected_auction_request_ =
       !request_->protected_auction_ciphertext().empty();
@@ -155,58 +157,51 @@ bool SelectAdReactor::DecryptRequest() {
   } else {
     encapsulated_req = request_->protected_audience_ciphertext();
   }
-  if (VLOG_IS_ON(5)) {
-    logger_.vlog(5, "Protected ",
-                 is_protected_auction_request_ ? "auction" : "audience",
-                 " ciphertext: ", absl::Base64Escape(encapsulated_req));
-  }
+  PS_VLOG(5) << "Protected "
+             << (is_protected_auction_request_ ? "auction" : "audience")
+             << " ciphertext: " << absl::Base64Escape(encapsulated_req);
 
   // Parse the encapsulated request for the key ID.
   absl::StatusOr<uint8_t> key_id = server_common::ParseKeyId(encapsulated_req);
   if (!key_id.ok()) {
-    logger_.vlog(2, "Parsed key id error status: ", key_id.status().message());
-    Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        kInvalidOhttpKeyIdError));
-    return false;
+    PS_VLOG(2) << "Parsed key id error status: " << key_id.status().message();
+    return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidOhttpKeyIdError};
   }
-  logger_.vlog(5, "Key Id parsed correctly");
+  PS_VLOG(5) << "Key Id parsed correctly";
 
   std::string str_key_id = std::to_string(*key_id);
   std::optional<server_common::PrivateKey> private_key =
       clients_.key_fetcher_manager_.GetPrivateKey(str_key_id);
 
   if (!private_key.has_value()) {
-    logger_.vlog(2, "Unable to retrieve private key for key ID: ", str_key_id);
-    Finish(
-        grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kMissingPrivateKey));
-    return false;
+    PS_VLOG(2) << "Unable to retrieve private key for key ID: " << str_key_id;
+    return {grpc::StatusCode::INVALID_ARGUMENT, kMissingPrivateKey};
   }
 
-  logger_.vlog(3, "Private Key Id: ", private_key->key_id,
-               ", Key Hex: ", absl::BytesToHexString(private_key->private_key));
+  PS_VLOG(3) << "Private Key Id: " << private_key->key_id << ", Key Hex: "
+             << absl::BytesToHexString(private_key->private_key);
   // Decrypt the ciphertext.
   absl::StatusOr<quiche::ObliviousHttpRequest> ohttp_request =
       server_common::DecryptEncapsulatedRequest(*private_key, encapsulated_req);
   if (!ohttp_request.ok()) {
-    logger_.vlog(2, "Unable to decrypt the ciphertext. Reason: ",
-                 ohttp_request.status().message());
-    Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        absl::StrFormat(kMalformedEncapsulatedRequest,
-                                        ohttp_request.status().message())));
-    return false;
+    PS_VLOG(2) << "Unable to decrypt the ciphertext. Reason: "
+               << ohttp_request.status().message();
+    return {grpc::StatusCode::INVALID_ARGUMENT,
+            absl::StrFormat(kMalformedEncapsulatedRequest,
+                            ohttp_request.status().message())};
   }
 
-  logger_.vlog(5, "Successfully decrypted the protected ",
-               is_protected_auction_request_ ? "auction" : "audience",
-               " input ciphertext");
+  PS_VLOG(5) << "Successfully decrypted the protected "
+             << (is_protected_auction_request_ ? "auction" : "audience")
+             << " input ciphertext";
+
   quiche::ObliviousHttpRequest::Context ohttp_context =
       std::move(ohttp_request.value()).ReleaseContext();
-  RequestContext request = {
-      str_key_id,
-      std::make_unique<quiche::ObliviousHttpRequest::Context>(
-          std::move(ohttp_context)),
-      *private_key};
-  request_context_ = std::move(request);
+  key_context_ =
+      KeyContext{str_key_id,
+                 std::make_unique<quiche::ObliviousHttpRequest::Context>(
+                     std::move(ohttp_context)),
+                 *private_key};
   if (is_protected_auction_request_) {
     protected_auction_input_ =
         GetDecodedProtectedAuctionInput(ohttp_request->GetPlaintextData());
@@ -220,11 +215,11 @@ bool SelectAdReactor::DecryptRequest() {
             GetDecodedBuyerinputs(protected_auction_input.buyer_input());
       },
       protected_auction_input_);
-  return true;
+  return grpc::Status::OK;
 }
 
-ContextLogger::ContextMap SelectAdReactor::GetLoggingContext() {
-  ContextLogger::ContextMap context_map;
+log::ContextImpl::ContextMap SelectAdReactor::GetLoggingContext() {
+  log::ContextImpl::ContextMap context_map;
   std::visit(
       [&context_map, this](const auto& protected_auction_input) {
         context_map = {
@@ -291,12 +286,17 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
 
 void SelectAdReactor::MayLogBuyerInput() {
   if (!buyer_inputs_.ok()) {
-    logger_.vlog(1, "Failed to decode buyer inputs");
-  } else if (VLOG_IS_ON(6)) {
-    for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
-      logger_.vlog(6, "Decoded buyer input for buyer: ", buyer,
-                   " is: ", buyer_input.DebugString());
-    }
+    PS_VLOG(1, log_context_) << "Failed to decode buyer inputs";
+  } else {
+    PS_VLOG(6, log_context_)
+        << "Decoded BuyerInput:\n"
+        << absl::StrJoin(
+               *buyer_inputs_, "\n",
+               absl::PairFormatter(absl::AlphaNumFormatter(), " : ",
+                                   [](std::string* out, const auto& bi) {
+                                     absl::StrAppend(
+                                         out, "{", bi.ShortDebugString(), "}");
+                                   }));
   }
 }
 
@@ -307,23 +307,39 @@ void SelectAdReactor::Execute() {
   if (!config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)) {
     // This find absl_log.h first instead of glog.
     // change back to `DFATAL` once it is in absl release (already in HEAD)
-    LOG(ERROR) << "Expected encryption to be enabled";
-  }
-  if (!DecryptRequest()) {
-    VLOG(1) << "SelectAdRequest decryption failed";
-    return;
-  }
-  logger_.Configure(GetLoggingContext());
-  if (config_client_.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING)) {
-    consented_logger_ = ConsentedDebuggingLogger(
-        GetLoggingContext(),
-        config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN));
+    ABSL_LOG(ERROR) << "Expected encryption to be enabled";
   }
 
+  grpc::Status decrypt_status = DecryptRequest();
+  log_context_.UpdateContext(GetLoggingContext());
+
+  PS_VLOG(2, log_context_) << "SelectAdRequest:\n"
+                           << request_->ShortDebugString();
+  PS_VLOG(2, log_context_) << "Headers:\n"
+                           << absl::StrJoin(context_->client_metadata(), "\n",
+                                            absl::PairFormatter(
+                                                absl::StreamFormatter(), " : ",
+                                                absl::StreamFormatter()));
+  if (!decrypt_status.ok()) {
+    Finish(decrypt_status);
+    PS_VLOG(1, log_context_) << "SelectAdRequest decryption failed:"
+                             << server_common::ToAbslStatus(decrypt_status);
+    return;
+  }
+  std::visit(
+      [this](const auto& input) {
+        PS_VLOG(1, log_context_)
+            << (is_protected_auction_request_ ? "ProtectedAuctionInput"
+                                              : "ProtectedAudienceInput")
+            << ":\n"
+            << input.ShortDebugString();
+      },
+      protected_auction_input_);
   MayLogBuyerInput();
   MayPopulateAdServerVisibleErrors();
   if (HaveAdServerVisibleErrors()) {
-    logger_.vlog(1, "AdServerVisible errors found, failing now");
+    PS_VLOG(1, log_context_) << "AdServerVisible errors found, failing now";
+
     // Finish the GRPC request if we have received bad data from the ad tech
     // server.
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
@@ -332,7 +348,9 @@ void SelectAdReactor::Execute() {
 
   // Validate mandatory fields if decoding went through fine.
   if (!HaveClientVisibleErrors()) {
-    logger_.vlog(5, "No ClientVisible errors found, validating input now");
+    PS_VLOG(5, log_context_)
+        << "No ClientVisible errors found, validating input now";
+
     std::visit(
         [this](const auto& protected_auction_input) {
           ValidateProtectedAuctionInput(protected_auction_input);
@@ -346,42 +364,19 @@ void SelectAdReactor::Execute() {
   MayPopulateClientVisibleErrors();
 
   if (error_accumulator_.HasErrors()) {
-    logger_.vlog(1, "Some errors found, failing now");
+    PS_VLOG(1, log_context_) << "Some errors found, failing now";
+
     // Finish the GRPC request now.
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-  logger_.vlog(1, "No client / Adtech server errors found");
-
-  // Logger for consented debugging.
-  // TODO(b/279955398): Add logs for AuctionConfig & ClientType.
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    std::visit(
-        [this](const auto& protected_auction_input) {
-          consented_logger_->vlog(
-              1, absl::StrCat("ProtectedAudienceInput: ",
-                              protected_auction_input.DebugString()));
-        },
-        protected_auction_input_);
-
-    if (!buyer_inputs_.ok()) {
-      consented_logger_->vlog(
-          1, absl::StrCat("Failed to decode buyer inputs. Reason: ",
-                          buyer_inputs_.status().ToString()));
-    } else if (buyer_inputs_->empty()) {
-      consented_logger_->vlog(1, "buyer inputs are missing.");
-    } else {
-      for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
-        consented_logger_->vlog(1, absl::StrCat("buyer_input[", buyer, "]: ",
-                                                buyer_input.DebugString()));
-      }
-    }
-  }
+  PS_VLOG(1, log_context_) << "No client / Adtech server errors found";
 
   benchmarking_logger_->Begin();
 
-  logger_.vlog(
-      6, "Buyer list size: ", request_->auction_config().buyer_list().size());
+  PS_VLOG(6, log_context_) << "Buyer list size: "
+                           << request_->auction_config().buyer_list().size();
+
   for (const std::string& buyer_ig_owner :
        request_->auction_config().buyer_list()) {
     const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
@@ -389,7 +384,8 @@ void SelectAdReactor::Execute() {
       FetchBid(buyer_ig_owner, buyer_input_iterator->second,
                request_->auction_config().seller());
     } else {
-      logger_.vlog(2, "No buyer input found for buyer: ", buyer_ig_owner);
+      PS_VLOG(2, log_context_)
+          << "No buyer input found for buyer: " << buyer_ig_owner;
 
       // Pending bids count is set on reactor construction to buyer_list_size().
       // If no BuyerInput is found for a buyer in buyer_list, must decrement
@@ -397,7 +393,8 @@ void SelectAdReactor::Execute() {
       async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
     }
   }
-  logger_.vlog(5, "Finishing execute call, response may be available later");
+  PS_VLOG(5, log_context_)
+      << "Finishing execute call, response may be available later";
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
@@ -448,10 +445,12 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
       server_common::GetTracer()->StartSpan("FetchBid"));
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
   if (buyer_client == nullptr) {
-    logger_.vlog(2, "No buyer client found for buyer: ", buyer_ig_owner);
+    PS_VLOG(2, log_context_)
+        << "No buyer client found for buyer: " << buyer_ig_owner;
+
     async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
   } else {
-    VLOG(6) << "Getting bid from a BFE";
+    PS_VLOG(6, log_context_) << "Getting bid from a BFE";
     absl::Duration timeout = absl::Milliseconds(
         config_client_.GetIntParameter(GET_BID_RPC_TIMEOUT_MS));
     if (request_->auction_config().buyer_timeout_ms() > 0) {
@@ -476,34 +475,47 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
             // destruct bfe_request, destructor measures request time
             auto not_used = std::move(bfe_request);
           }
-          VLOG(6) << "Received a response from a BFE";
+          PS_VLOG(6, log_context_) << "Received a response from a BFE";
           OnFetchBidsDone(std::move(response), buyer_ig_owner);
         },
         timeout);
     if (!execute_result.ok()) {
-      logger_.error(
-          absl::StrFormat("Failed to make async GetBids call: (buyer: %s, "
-                          "seller: %s, error: "
-                          "%s)",
-                          buyer_ig_owner, seller, execute_result.ToString()));
+      PS_LOG(ERROR, log_context_) << absl::StrFormat(
+          "Failed to make async GetBids call: (buyer: %s, "
+          "seller: %s, error: "
+          "%s)",
+          buyer_ig_owner, seller, execute_result.ToString());
       async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
     }
   }
+}
+
+void SelectAdReactor::LogInitiatedRequestErrorMetrics(
+    absl::string_view server_name) {
+  LogIfError(metric_context_->AccumulateMetric<
+             server_common::metrics::kInitiatedRequestErrorCount>(1));
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
+              1, server_name));
 }
 
 void SelectAdReactor::OnFetchBidsDone(
     absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
         response,
     const std::string& buyer_ig_owner) {
-  VLOG(5) << "Received response from a BFE ... ";
+  PS_VLOG(5, log_context_) << "Received response from a BFE ... ";
   if (response.ok()) {
     auto& found_response = *response;
-    logger_.vlog(2, "\nGetBidsResponse:\n", found_response->DebugString());
+    PS_VLOG(2, log_context_) << "\nGetBidsResponse:\n"
+                             << found_response->DebugString();
+
     if (found_response->bids().empty() &&
         (!is_pas_enabled_ ||
          found_response->protected_app_signals_bids().empty())) {
-      logger_.vlog(2, "Skipping buyer ", buyer_ig_owner,
-                   " due to empty GetBidsResponse.");
+      PS_VLOG(2, log_context_) << "Skipping buyer " << buyer_ig_owner
+                               << " due to empty GetBidsResponse.";
+
       async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
     } else {
       async_task_tracker_.TaskCompleted(
@@ -514,10 +526,11 @@ void SelectAdReactor::OnFetchBidsDone(
           });
     }
   } else {
-    LogIfError(metric_context_->AccumulateMetric<
-               server_common::metrics::kInitiatedRequestErrorCount>(1));
-    logger_.vlog(1, "GetBidsRequest failed for buyer ", buyer_ig_owner,
-                 "\nresponse status: ", response.status());
+    LogInitiatedRequestErrorMetrics(metric::kBfe);
+    PS_VLOG(1, log_context_) << "GetBidsRequest failed for buyer "
+                             << buyer_ig_owner << "\nresponse status: ",
+        response.status();
+
     async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
   }
 }
@@ -531,9 +544,12 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 
   // No successful bids received.
   if (shared_buyer_bids_map_.empty()) {
-    logger_.vlog(2, kNoBidsReceived);
+    PS_VLOG(2, log_context_) << kNoBidsReceived;
+
     if (!any_successful_bids) {
-      logger_.vlog(3, "Finishing the SelectAdRequest RPC with an error");
+      PS_VLOG(3, log_context_)
+          << "Finishing the SelectAdRequest RPC with an error";
+
       FinishWithInternalError(kInternalError);
       return;
     }
@@ -569,10 +585,11 @@ void SelectAdReactor::FetchScoringSignals() {
 void SelectAdReactor::OnFetchScoringSignalsDone(
     absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
   if (!result.ok()) {
-    LogIfError(metric_context_->AccumulateMetric<
-               server_common::metrics::kInitiatedRequestErrorCount>(1));
-    logger_.vlog(1, "Scoring signals fetch from key-value server failed: ",
-                 result.status());
+    LogInitiatedRequestErrorMetrics(metric::kKv);
+    PS_VLOG(1, log_context_)
+        << "Scoring signals fetch from key-value server failed: ",
+        result.status();
+
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInternalError,
                 ErrorCode::SERVER_SIDE);
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
@@ -581,9 +598,9 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
   scoring_signals_ = std::move(result).value();
   // If signals are empty, return chaff.
   if (scoring_signals_->scoring_signals->empty()) {
-    logger_.vlog(2,
-                 "Scoring signals fetch from key-value server succeeded but "
-                 "were empty.");
+    PS_VLOG(2, log_context_) << "Scoring signals fetch from key-value server "
+                                "succeeded but were empty.";
+
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
@@ -637,7 +654,9 @@ SelectAdReactor::CreateScoreAdsRequest() {
 
 void SelectAdReactor::ScoreAds() {
   auto raw_request = CreateScoreAdsRequest();
-  logger_.vlog(2, "\nScoreAdsRawRequest:\n", raw_request->DebugString());
+  PS_VLOG(2, log_context_) << "\nScoreAdsRawRequest:\n"
+                           << raw_request->DebugString();
+
   auto auction_request =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
   auction_request->SetRequestSize((int)raw_request->ByteSizeLong());
@@ -659,9 +678,9 @@ void SelectAdReactor::ScoreAds() {
       absl::Milliseconds(
           config_client_.GetIntParameter(SCORE_ADS_RPC_TIMEOUT_MS)));
   if (!execute_result.ok()) {
-    logger_.error(
-        absl::StrFormat("Failed to make async ScoreAds call: (error: %s)",
-                        execute_result.ToString()));
+    PS_LOG(ERROR, log_context_)
+        << absl::StrFormat("Failed to make async ScoreAds call: (error: %s)",
+                           execute_result.ToString());
     Finish(grpc::Status(grpc::INTERNAL, kInternalServerError));
   }
 }
@@ -700,13 +719,13 @@ void SelectAdReactor::FinishWithOkStatus() {
 }
 
 void SelectAdReactor::FinishWithInternalError(absl::string_view error) {
-  logger_.error("RPC failed: ", error);
+  PS_LOG(ERROR, log_context_) << "RPC failed: " << error;
   benchmarking_logger_->End();
   Finish(grpc::Status(grpc::INTERNAL, kInternalServerError));
 }
 
 void SelectAdReactor::FinishWithAborted() {
-  logger_.error("RPC aborted: Request Cancelled by Client.");
+  PS_LOG(ERROR, log_context_) << "RPC aborted: Request Cancelled by Client.";
   benchmarking_logger_->End();
   Finish(grpc::Status(grpc::ABORTED, kRequestCancelled));
 }
@@ -728,8 +747,9 @@ void SelectAdReactor::OnScoreAdsDone(
         response) {
   std::optional<AdScore> high_score;
   if (HaveAdServerVisibleErrors()) {
-    logger_.vlog(
-        3, "Finishing the SelectAdRequest RPC with ad server visible error");
+    PS_VLOG(3, log_context_)
+        << "Finishing the SelectAdRequest RPC with ad server visible error";
+
     PerformDebugReporting(high_score);
     Finish(grpc::Status(
         grpc::StatusCode::INVALID_ARGUMENT,
@@ -737,10 +757,10 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
-  logger_.vlog(2, "ScoreAdsResponse status:", response.status());
+  PS_VLOG(2, log_context_) << "ScoreAdsResponse status:" << response.status();
+
   if (!response.ok()) {
-    LogIfError(metric_context_->AccumulateMetric<
-               server_common::metrics::kInitiatedRequestErrorCount>(1));
+    LogInitiatedRequestErrorMetrics(metric::kAs);
     PerformDebugReporting(high_score);
     benchmarking_logger_->End();
     Finish(grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
@@ -770,7 +790,9 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
-  logger_.vlog(2, "\nSelectAdResponse:\n", response_->DebugString());
+  PS_VLOG(2, log_context_) << "\nSelectAdResponse:\n"
+                           << response_->DebugString();
+
   FinishWithOkStatus();
 }
 
@@ -782,25 +804,25 @@ DecodedBuyerInputs SelectAdReactor::GetDecodedBuyerinputs(
 
 bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
   std::optional<server_common::PrivateKey> private_key =
-      clients_.key_fetcher_manager_.GetPrivateKey(request_context_.key_id);
+      clients_.key_fetcher_manager_.GetPrivateKey(key_context_.key_id);
   if (!private_key.has_value()) {
-    logger_.vlog(
-        4,
-        absl::StrFormat(
-            "Encryption key not found during response encryption: (key ID: %s)",
-            request_context_.key_id));
+    PS_VLOG(4, log_context_) << absl::StrFormat(
+        "Encryption key not found during response encryption: (key ID: %s)",
+        key_context_.key_id);
+
     Finish(grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     return false;
   }
 
   absl::StatusOr<std::string> encapsulated_response =
       server_common::EncryptAndEncapsulateResponse(
-          std::move(plaintext_response), request_context_.private_key,
-          *request_context_.context);
+          std::move(plaintext_response), key_context_.private_key,
+          *key_context_.context);
   if (!encapsulated_response.ok()) {
-    logger_.vlog(
-        4, absl::StrFormat("Error during response encryption/encapsulation: %s",
-                           encapsulated_response.status().message()));
+    PS_VLOG(4, log_context_)
+        << absl::StrFormat("Error during response encryption/encapsulation: %s",
+                           encapsulated_response.status().message());
+
     Finish(grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     return false;
   }
@@ -823,12 +845,12 @@ void SelectAdReactor::PerformDebugReporting(
         auto done_cb = [ig_owner,
                         ig_name](absl::StatusOr<absl::string_view> result) {
           if (result.ok()) {
-            VLOG(2) << "Performed debug reporting for:" << ig_owner
-                    << ", interest_group: " << ig_name;
+            PS_VLOG(2) << "Performed debug reporting for:" << ig_owner
+                       << ", interest_group: " << ig_name;
           } else {
-            VLOG(1) << "Error while performing debug reporting for:" << ig_owner
-                    << ", interest_group: " << ig_name
-                    << " ,status:" << result.status();
+            PS_VLOG(1) << "Error while performing debug reporting for:"
+                       << ig_owner << ", interest_group: " << ig_name
+                       << " ,status:" << result.status();
           }
         };
         std::string debug_url;
@@ -859,7 +881,7 @@ void SelectAdReactor::OnCancel() {
 }
 
 void SelectAdReactor::ReportError(
-    ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+    log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code) {
   const auto& location = error_visibility_with_loc.location;
   ErrorVisibility error_visibility = error_visibility_with_loc.mandatory_param;

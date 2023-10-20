@@ -108,7 +108,7 @@ inline constexpr absl::string_view kReportingEntryFunction =
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
-        interactionReportingUrls : "",
+        interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
@@ -189,7 +189,7 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
                               directFromSellerSignals, enable_logging) {
       var ps_report_win_response = {
         reportWinUrl : "",
-        interactionReportingUrls : "",
+        interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }

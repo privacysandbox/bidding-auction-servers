@@ -18,7 +18,6 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "glog/logging.h"
 #include "services/common/compression/gzip.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
@@ -31,7 +30,7 @@ using BiddingGroupsMap =
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using ReportErrorSignature = std::function<void(
-    ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
+    log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code)>;
 
 using ProtectedAppSignalsAdWithBidMetadata =
@@ -120,10 +119,8 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     auction_result.set_is_chaff(true);
   }
 
-  if (consented_logger_.has_value() && consented_logger_->IsConsented()) {
-    consented_logger_->vlog(
-        1, absl::StrCat("AuctionResult: ", auction_result.DebugString()));
-  }
+  PS_VLOG(1, log_context_) << "AuctionResult:\n"
+                           << auction_result.DebugString();
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();
@@ -192,8 +189,8 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
 void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
     GetBidsRequest::GetBidsRawRequest* get_bids_raw_request) {
   if (!is_pas_enabled_) {
-    VLOG(8) << "Protected app signals is not enabled and hence not populating "
-               "PAS buyer input";
+    PS_VLOG(8, log_context_) << "Protected app signals is not enabled and "
+                                "hence not populating PAS buyer input";
     // We don't want to forward the protected signals when feature is disabled,
     // even when if client sent them erroneously.
     get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
@@ -201,11 +198,13 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
   }
 
   if (!get_bids_raw_request->buyer_input().has_protected_app_signals()) {
-    VLOG(8) << "No protected app signals in buyer inputs from client";
+    PS_VLOG(8, log_context_)
+        << "No protected app signals in buyer inputs from client";
     return;
   }
 
-  VLOG(3) << "Found protected signals in buyer input, passing them to get bids";
+  PS_VLOG(3, log_context_)
+      << "Found protected signals in buyer input, passing them to get bids";
   auto* protected_app_signals_buyer_input =
       get_bids_raw_request->mutable_protected_app_signals_buyer_input();
   protected_app_signals_buyer_input->mutable_protected_app_signals()->Swap(
@@ -250,13 +249,13 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
 void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
     ScoreAdsRequest::ScoreAdsRawRequest* score_ads_raw_request) {
   if (!is_pas_enabled_) {
-    VLOG(8) << "Protected app signals is not enabled and hence not populating "
-               "PAS bids";
+    PS_VLOG(8, log_context_) << "Protected app signals is not enabled and "
+                                "hence not populating PAS bids";
     return;
   }
 
-  VLOG(3) << "Protected App signals, may add protected app signals bids to "
-             "score ads request";
+  PS_VLOG(3, log_context_) << "Protected App signals, may add protected app "
+                              "signals bids to score ads request";
   for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
          i++) {

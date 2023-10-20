@@ -26,11 +26,11 @@
 #include "quiche/oblivious_http/oblivious_http_client.h"
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
-#include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/seller_frontend_server/seller_frontend_async_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+#include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
 
@@ -45,6 +45,8 @@ ABSL_DECLARE_FLAG(std::string, client_user_agent);
 ABSL_DECLARE_FLAG(std::string, client_type);
 ABSL_DECLARE_FLAG(bool, insecure);
 ABSL_DECLARE_FLAG(std::string, target_service);
+ABSL_DECLARE_FLAG(std::string, public_key);
+ABSL_DECLARE_FLAG(std::string, key_id);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -74,6 +76,7 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
 absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
+    absl::string_view public_key, uint8_t key_id,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -96,7 +99,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
   std::pair<std::unique_ptr<SelectAdRequest>,
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
-          raw_select_ad_request_json, client_type);
+          raw_select_ad_request_json, client_type, public_key, key_id);
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -128,7 +131,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
 
 absl::Status InvokeBuyerFrontEndWithRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
-    const RequestOptions& request_options,
+    const RequestOptions& request_options, absl::string_view public_key,
+    uint8_t key_id,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr) {
   // Validate input
@@ -161,12 +165,9 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       .encryption_enabled = true,
       .secure_client = !request_options.insecure,
   };
-  TrustedServersConfigClient config_client({});
-  // Revisit if we have to test against non-test deployments.
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  auto key_fetcher_manager = CreateKeyFetcherManager(
-      config_client, CreatePublicKeyFetcher(config_client));
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          public_key, "unused", std::to_string(key_id));
   auto crypto_client = CreateCryptoClient();
   BuyerFrontEndAsyncGrpcClient bfe_client(
       key_fetcher_manager.get(), crypto_client.get(), service_client_config,
@@ -175,10 +176,11 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
   auto call_status = bfe_client.ExecuteInternal(
       std::make_unique<GetBidsRequest::GetBidsRawRequest>(get_bids_raw_request),
       request_metadata,
-      [onDone = std::move(on_done), &notification](
+      [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               raw_response) mutable {
-        VLOG(0) << "Received bid response from BFE";
+        VLOG(0) << "Received bid response from BFE in "
+                << ((absl::Now() - start) / absl::Milliseconds(1)) << " ms.";
         if (!raw_response.ok()) {
           std::move(onDone)(raw_response.status());
         } else {
@@ -195,8 +197,8 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
         notification.Notify();
       },
       absl::Duration(timeout));
-  notification.WaitForNotification();
   CHECK(call_status.ok()) << call_status;
+  notification.WaitForNotification();
   return call_status;
 }
 
@@ -206,7 +208,8 @@ std::string LoadFile(absl::string_view file_path) {
                      (std::istreambuf_iterator<char>()));
 }
 
-absl::Status SendRequestToSfe(ClientType client_type) {
+absl::Status SendRequestToSfe(ClientType client_type,
+                              absl::string_view public_key, uint8_t key_id) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -220,7 +223,7 @@ absl::Status SendRequestToSfe(ClientType client_type) {
   absl::Notification notification;
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
-          raw_select_ad_request_json, options, client_type,
+          raw_select_ad_request_json, options, client_type, public_key, key_id,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response
@@ -231,6 +234,7 @@ absl::Status SendRequestToSfe(ClientType client_type) {
             }
             notification.Notify();
           });
+  CHECK(status.ok()) << status;
   notification.WaitForNotification();
   return status;
 }
@@ -260,14 +264,13 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput() {
   return get_bids_raw_request;
 }
 
-std::string PackagePlainTextGetBidsRequestToJson() {
+std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
+                                                 uint8_t key_id) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput();
-  TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-  auto key_fetcher_manager = CreateKeyFetcherManager(
-      config_client, CreatePublicKeyFetcher(config_client));
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          public_key, "unused", std::to_string(key_id));
   auto crypto_client = CreateCryptoClient();
   auto secret_request =
       EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
@@ -285,6 +288,7 @@ std::string PackagePlainTextGetBidsRequestToJson() {
 }
 
 absl::Status SendRequestToBfe(
+    absl::string_view public_key, uint8_t key_id,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput();
@@ -297,7 +301,7 @@ absl::Status SendRequestToBfe(
   absl::Status status = absl::OkStatus();
   auto call_status = privacy_sandbox::bidding_auction_servers::
       InvokeBuyerFrontEndWithRawRequest(
-          get_bids_raw_request, request_options,
+          get_bids_raw_request, request_options, public_key, key_id,
           [&status](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response

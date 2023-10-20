@@ -21,32 +21,57 @@
 #include <string>
 #include <utility>
 
+#include "absl/container/btree_map.h"
+#include "absl/log/globals.h"
+#include "absl/log/initialize.h"
+#include "api/bidding_auction_servers.pb.h"
 #include "opentelemetry/logs/logger_provider.h"
 #include "opentelemetry/logs/provider.h"
 #include "services/common/loggers/request_context_logger.h"
-#include "services/common/util/consented_debugging_logger.h"
-#include "services/common/util/context_logger.h"
+#include "src/cpp/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers::log {
 
+inline absl::string_view TokenWithMinLength(absl::string_view token) {
+  constexpr int kTokenMinLength = 1;
+  return token.size() < kTokenMinLength ? "" : token;
+}
+
 class ContextImpl : public RequestContext {
  public:
-  using ContextMap = ContextLogger::ContextMap;
+  using ContextMap = absl::btree_map<std::string, std::string>;
 
   ContextImpl(const ContextMap& context_map,
               absl::string_view server_debug_token)
       : context_(FormatContext(context_map)),
-        consent_logger(context_map, server_debug_token) {}
+        client_debug_token_(GetClientToken(context_map)),
+        server_debug_token_(TokenWithMinLength(server_debug_token)) {}
 
   absl::string_view ContextStr() const override { return context_; }
 
-  bool is_consented() const override { return consent_logger.IsConsented(); }
+  void UpdateContext(const ContextMap& new_context) {
+    context_ = FormatContext(new_context);
+    client_debug_token_ = GetClientToken(new_context);
+  }
+
+  bool is_consented() const override {
+    return !server_debug_token_.empty() &&
+           server_debug_token_ == client_debug_token_;
+  }
 
   absl::LogSink* ConsentedSink() override { return &consented_sink; }
 
   bool is_debug_response() const override { return false; };
 
   absl::LogSink* DebugResponseSink() override { return &debug_response_sink_; };
+
+  // Utility method to format the context provided as key/value pair into a
+  // string. Function excludes any empty values from the output string.
+  static std::string FormatContext(const ContextMap& context_map);
+
+  // Return the client token string if it exists in `context_map`, otherwise
+  // return empty string
+  static std::string GetClientToken(const ContextMap& context_map);
 
  private:
   class ConsentedSinkImpl : public absl::LogSink {
@@ -72,9 +97,26 @@ class ContextImpl : public RequestContext {
   };
 
   std::string context_;
-  ConsentedDebuggingLogger consent_logger;
   ConsentedSinkImpl consented_sink;
   DebugResponseSinkImpl debug_response_sink_;
+
+  // Debug token given by a consented client request.
+  std::string client_debug_token_;
+  // Debug token owned by the server.
+  std::string server_debug_token_;
+};
+
+bool MaybeAddConsentedDebugConfig(const ConsentedDebugConfiguration& config,
+                                  ContextImpl::ContextMap& context_map);
+
+template <class T>
+struct ParamWithSourceLoc {
+  T mandatory_param;
+  server_common::SourceLocation location;
+  template <class U>
+  ParamWithSourceLoc(
+      U param, server_common::SourceLocation loc_in PS_LOC_CURRENT_DEFAULT_ARG)
+      : mandatory_param(std::forward<U>(param)), location(loc_in) {}
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::log

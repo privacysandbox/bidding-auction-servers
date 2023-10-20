@@ -25,7 +25,7 @@ cc_library(
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",
-        "@com_github_google_glog//:glog",
+        "//services/common/loggers:request_context_logger",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",

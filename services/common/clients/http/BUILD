@@ -39,7 +39,7 @@ cc_library(
         "multi_curl_http_fetcher_async.h",
     ],
     deps = [
-        "@com_github_google_glog//:glog",
+        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

@@ -310,11 +310,9 @@ absl::StatusOr<cbor_item_t*> cbor_build_float(double input);
 template <typename T, typename U>
 bool AreFloatsEqual(T a, U b) {
   bool result = std::fabs(a - b) < std::numeric_limits<double>::epsilon();
-  if (VLOG_IS_ON(6)) {
-    VLOG(6) << "a: " << a << ", b: " << b << ", diff: " << fabs(a - b)
-            << ", EPS: " << std::numeric_limits<double>::epsilon()
-            << ", floats equal: " << result;
-  }
+  PS_VLOG(6) << "a: " << a << ", b: " << b << ", diff: " << fabs(a - b)
+             << ", EPS: " << std::numeric_limits<double>::epsilon()
+             << ", floats equal: " << result;
   return result;
 }
 
@@ -323,6 +321,41 @@ absl::Status CborSerializeWinReportingUrls(
     const WinReportingUrls& win_reporting_urls,
     const std::function<void(absl::string_view)>& error_handler,
     cbor_item_t& root);
+
+// Decodes cbor string input to std::string
+inline std::string CborDecodeString(cbor_item_t* input) {
+  return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
+                     cbor_string_length(input));
+}
+
+inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
+    kAuctionResultKeys = {
+        kScore,               // 0
+        kBid,                 // 1
+        kChaff,               // 2
+        kAdRenderUrl,         // 3
+        kBiddingGroups,       // 4
+        kInterestGroupName,   // 5
+        kInterestGroupOwner,  // 6
+        kAdComponents,        // 7
+        kError,               // 8
+        kWinReportingUrls     // 9
+};
+
+template <std::size_t Size>
+int FindKeyIndex(const std::array<absl::string_view, Size>& haystack,
+                 absl::string_view needle) {
+  auto it = std::find(haystack.begin(), haystack.end(), needle);
+  if (it == haystack.end()) {
+    return -1;
+  }
+  return std::distance(haystack.begin(), it);
+}
+
+// Decodes the CBOR-serialized AuctionResult to proto.
+absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
+    absl::string_view serialized_input);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_SELLER_FRONTEND_SERVICE_UTIL_WEB_UTILS_H_

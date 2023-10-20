@@ -23,7 +23,6 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
@@ -147,15 +146,19 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
+
+  // Set verbosity
+  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
 
-  VLOG(1) << "Protected App Signals support enabled on the service: "
-          << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  VLOG(1) << "Successfully constructed the config client.\n";
+  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
+             << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  PS_VLOG(1) << "Successfully constructed the config client.\n";
   return config_client;
 }
 
@@ -286,13 +289,16 @@ absl::Status RunServer() {
         grpc::InsecureServerCredentials());
   }
 
+  // Set max message size to 256 MB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
+                             256L * 1024L * 1024L);
   builder.RegisterService(&buyer_frontend_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());
   if (server == nullptr) {
     return absl::UnavailableError("Error starting Server.");
   }
-  VLOG(1) << "Server listening on " << server_address;
+  PS_VLOG(1) << "Server listening on " << server_address;
 
   // Wait for the server to shut down. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
@@ -304,7 +310,8 @@ absl::Status RunServer() {
 int main(int argc, char** argv) {
   signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
   absl::ParseCommandLine(argc, argv);
-  google::InitGoogleLogging(argv[0]);
+  absl::InitializeLog();
+  absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 
   google::scp::cpio::CpioOptions cpio_options;
 

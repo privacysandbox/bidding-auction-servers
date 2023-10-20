@@ -154,7 +154,7 @@ cc_library(
         "//services/common/metric:server_definition",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",
-        "@control_plane_shared//cc/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
     ],

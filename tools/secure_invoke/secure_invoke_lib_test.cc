@@ -31,6 +31,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/ohttp_utils.h"
 #include "services/common/test/utils/service_utils.h"
 
 using ::testing::HasSubstr;
@@ -66,8 +67,6 @@ constexpr char kSampleGetBidRequest[] = R"JSON({
    "publisherName" : "example.com",
    "seller" : "https://securepubads.g.doubleclick.net"
 })JSON";
-
-using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 
 ABSL_FLAG(std::string, input_file, "",
           "The full path to the unencrypted input request");
@@ -112,8 +111,12 @@ namespace {
 constexpr char valid_bidding_signals[] =
     R"JSON({"keys":{"keyA":["member1","member2"]}})JSON";
 
+using ::privacy_sandbox::bidding_auction_servers::kDefaultPublicKey;
+using ::privacy_sandbox::bidding_auction_servers::kTestKeyId;
+using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 using ::testing::_;
 using ::testing::AnyNumber;
+using ::testing::HasSubstr;
 
 class SecureInvokeLib : public testing::Test {
  protected:
@@ -163,11 +166,10 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsClientIp) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  std::unique_ptr<Bidding::StubInterface> stub =
-      CreateServiceStub<Bidding>(start_service_result.port);
   absl::SetFlag(&FLAGS_host_addr,
                 absl::StrFormat("localhost:%d", start_service_result.port));
-  EXPECT_DEATH(SendRequestToBfe(), "Client IP must be specified");
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+               "Client IP must be specified");
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
@@ -177,9 +179,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  std::unique_ptr<Bidding::StubInterface> stub =
-      CreateServiceStub<Bidding>(start_service_result.port);
-  EXPECT_DEATH(SendRequestToBfe(), "BFE host address must be specified");
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+               "BFE host address must be specified");
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
@@ -189,14 +190,13 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  std::unique_ptr<Bidding::StubInterface> stub =
-      CreateServiceStub<Bidding>(start_service_result.port);
   absl::SetFlag(&FLAGS_host_addr,
                 absl::StrFormat("localhost:%d", start_service_result.port));
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty user agent would cause the validation failure.
   absl::SetFlag(&FLAGS_client_user_agent, "");
-  EXPECT_DEATH(SendRequestToBfe(), "User Agent must be specified");
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+               "User Agent must be specified");
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
@@ -206,14 +206,13 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  std::unique_ptr<Bidding::StubInterface> stub =
-      CreateServiceStub<Bidding>(start_service_result.port);
   absl::SetFlag(&FLAGS_host_addr,
                 absl::StrFormat("localhost:%d", start_service_result.port));
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty client accept language would cause the validation failure.
   absl::SetFlag(&FLAGS_client_accept_language, "");
-  EXPECT_DEATH(SendRequestToBfe(), "Accept Language must be specified");
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+               "Accept Language must be specified");
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
@@ -234,10 +233,64 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
 
   // Verifies that the encrypted request makes it to BFE and the response comes
   // back. Error is expected because test is not setting up the bidding service.
-  auto status = SendRequestToBfe(std::move(stub));
+  auto status = SendRequestToBfe(
+      privacy_sandbox::bidding_auction_servers::kDefaultPublicKey,
+      privacy_sandbox::bidding_auction_servers::kTestKeyId, std::move(stub));
   EXPECT_FALSE(status.ok()) << status;
   EXPECT_THAT(status.message(),
               HasSubstr("Failed to create secure client channel"))
+      << status;
+}
+
+TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {
+  BuyerFrontEndService buyer_front_end_service{
+      std::move(bidding_signals_provider_), bidding_service_client_config_,
+      std::move(key_fetcher_manager_), std::move(crypto_client_),
+      std::move(get_bids_config_)};
+
+  auto start_service_result = StartLocalService(&buyer_front_end_service);
+  std::unique_ptr<BuyerFrontEnd::StubInterface> stub =
+      CreateServiceStub<BuyerFrontEnd>(start_service_result.port);
+  absl::SetFlag(&FLAGS_host_addr,
+                absl::StrFormat("localhost:%d", start_service_result.port));
+  absl::SetFlag(&FLAGS_client_ip, kClientIp);
+  absl::SetFlag(&FLAGS_client_user_agent, kUserAgent);
+  absl::SetFlag(&FLAGS_client_accept_language, kAcceptLanguage);
+  absl::SetFlag(&FLAGS_json_input_str, kSampleGetBidRequest);
+
+  // When we pass a malformed key, we expect an error from the client.
+  const std::string invalid_key =
+      "rvJwF4YQi1hZLWMcGbDf9uGN2jQInZvtHPJsgTUewQY=";
+  EXPECT_NE(invalid_key,
+            privacy_sandbox::bidding_auction_servers::kDefaultPublicKey);
+  EXPECT_DEATH(SendRequestToBfe(invalid_key, kTestKeyId, std::move(stub)),
+               "Encryption Failure.");
+}
+
+TEST_F(SecureInvokeLib, UsesKeyForBfeEncryption) {
+  BuyerFrontEndService buyer_front_end_service{
+      std::move(bidding_signals_provider_), bidding_service_client_config_,
+      std::move(key_fetcher_manager_), std::move(crypto_client_),
+      std::move(get_bids_config_)};
+
+  auto start_service_result = StartLocalService(&buyer_front_end_service);
+  std::unique_ptr<BuyerFrontEnd::StubInterface> stub =
+      CreateServiceStub<BuyerFrontEnd>(start_service_result.port);
+  absl::SetFlag(&FLAGS_host_addr,
+                absl::StrFormat("localhost:%d", start_service_result.port));
+  absl::SetFlag(&FLAGS_client_ip, kClientIp);
+  absl::SetFlag(&FLAGS_client_user_agent, kUserAgent);
+  absl::SetFlag(&FLAGS_client_accept_language, kAcceptLanguage);
+  absl::SetFlag(&FLAGS_json_input_str, kSampleGetBidRequest);
+
+  // The BFE expects the key to be kDefaultPublicKey if using TEST_MODE = true.
+  // When we pass a bogus key, we expect an error from the server.
+  const std::string unrecognized_key =
+      "aef2701786108b58592d631c19b0dff6e18dda34089d9bed1cf26c81351ec106";
+  EXPECT_NE(unrecognized_key, kDefaultPublicKey);
+  auto status = SendRequestToBfe(unrecognized_key, kTestKeyId, std::move(stub));
+  EXPECT_FALSE(status.ok()) << status;
+  EXPECT_THAT(status.message(), HasSubstr("Malformed request ciphertext"))
       << status;
 }
 

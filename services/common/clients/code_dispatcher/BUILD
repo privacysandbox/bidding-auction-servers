@@ -25,10 +25,9 @@ cc_library(
         "v8_dispatcher.h",
     ],
     deps = [
-        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
-        "@control_plane_shared//cc/roma/roma_service/src:roma_service_lib",
+        "@google_privacysandbox_servers_common//scp/cc/roma/roma_service/src:roma_service_lib",
     ],
 )
 

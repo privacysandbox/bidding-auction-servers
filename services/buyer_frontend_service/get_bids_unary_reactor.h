@@ -35,10 +35,9 @@
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/loggers/benchmarking_logger.h"
+#include "services/common/loggers/request_context_impl.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
-#include "services/common/util/consented_debugging_logger.h"
-#include "services/common/util/context_logger.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -103,7 +102,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Decrypts the request ciphertext in and returns whether decryption was
   // successful. If successful, the result is written into 'raw_request_'.
-  bool DecryptRequest();
+  grpc::Status DecryptRequest();
 
   // Encrypts `raw_response` and sets the result on the 'response_ciphertext'
   // field in the response. Returns ok status if encryption succeeded.
@@ -111,7 +110,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Gets logging context (as a key/val pair) that can help debug/trace a
   // request through the BA services.
-  ContextLogger::ContextMap GetLoggingContext();
+  log::ContextImpl::ContextMap GetLoggingContext();
 
   // Finishes the RPC call with an OK status.
   void FinishWithOkStatus();
@@ -146,8 +145,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   CryptoClientWrapperInterface* crypto_client_;
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
   std::string hpke_secret_;
-  ContextLogger logger_;
-  std::optional<ConsentedDebuggingLogger> consented_logger_;
+
+  grpc::Status decrypt_status_;
+  log::ContextImpl log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;
@@ -171,6 +171,10 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Once all bids are fetched, this callback gets executed.
   void OnAllBidsDone(bool any_successful_bids);
+
+  // Log metrics for the Initiated requests errors that were initiated by the
+  // server
+  void LogInitiatedRequestErrorMetrics(absl::string_view server_name);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

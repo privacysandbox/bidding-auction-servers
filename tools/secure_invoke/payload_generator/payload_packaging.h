@@ -23,6 +23,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "glog/logging.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
+#include "services/common/test/utils/ohttp_utils.h"
 
 const char kAuctionConfigField[] = "auction_config";
 const char kProtectedAuctionInputField[] = "raw_protected_audience_input";
@@ -71,14 +72,19 @@ namespace privacy_sandbox::bidding_auction_servers {
 // This will extended in the future to support CLIENT_TYPE_ANDROID as well.
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
-PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
-                                ClientType client_type = CLIENT_TYPE_BROWSER);
+PackagePlainTextSelectAdRequest(
+    absl::string_view input_json_str,
+    ClientType client_type = CLIENT_TYPE_BROWSER,
+    absl::string_view public_key = kDefaultPublicKey,
+    uint8_t key_id = kTestKeyId);
 
 // This method returns a SelectAdRequest json for testing B&A servers in
 // "test_mode" using the PackagePlainTextSelectAdRequest method.
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str,
-    ClientType client_type = CLIENT_TYPE_BROWSER);
+    ClientType client_type = CLIENT_TYPE_BROWSER,
+    absl::string_view public_key = kDefaultPublicKey,
+    uint8_t key_id = kTestKeyId);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // TOOLS_PAYLOAD_GENERATOR_PAYLOAD_PACKAGING_H_

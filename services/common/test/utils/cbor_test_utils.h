@@ -31,10 +31,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using PrevWin = std::pair<uint64_t, std::string>;
 
-// Decodes the CBOR-serialized AuctionResult to proto.
-absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
-    const std::string& serialized_input);
-
 // Converts the raw protected audience input into CBOR encoded byte string.
 [[deprecated]] absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
     const ProtectedAudienceInput& protected_audience_input);
@@ -51,12 +47,6 @@ GetEncodedBuyerInputMap(
 
 // Converts the passed in CBOR data handle to the serialized CBOR byte-string.
 std::string SerializeCbor(cbor_item_t* root);
-
-// Decodes cbor string input to std::string
-inline std::string CborDecodeString(cbor_item_t* input) {
-  return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
-                     cbor_string_length(input));
-}
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

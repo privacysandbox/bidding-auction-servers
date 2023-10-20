@@ -106,16 +106,17 @@ std::unique_ptr<MockCryptoClientWrapper> CreateCryptoClient() {
   // the response coming back from the service.
   EXPECT_CALL(*crypto_client, AeadEncrypt)
       .Times(AnyNumber())
-      .WillRepeatedly([](const std::string& plaintext_payload,
-                         const std::string& secret) {
-        google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
-        *data.mutable_ciphertext() = plaintext_payload;
-        VLOG(1) << "AeadEncrypt sending response back: " << plaintext_payload;
-        google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
-            aead_encrypt_response;
-        *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
-        return aead_encrypt_response;
-      });
+      .WillRepeatedly(
+          [](const std::string& plaintext_payload, const std::string& secret) {
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
+            *data.mutable_ciphertext() = plaintext_payload;
+            ABSL_LOG(INFO) << "AeadEncrypt sending response back: "
+                           << plaintext_payload;
+            google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
+                aead_encrypt_response;
+            *aead_encrypt_response.mutable_encrypted_data() = std::move(data);
+            return aead_encrypt_response;
+          });
   return crypto_client;
 }
 

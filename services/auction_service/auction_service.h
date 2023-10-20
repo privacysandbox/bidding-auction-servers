@@ -22,7 +22,7 @@
 
 #include "absl/functional/any_invocable.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/score_ads_reactor.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"

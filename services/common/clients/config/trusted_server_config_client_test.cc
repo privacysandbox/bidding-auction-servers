@@ -20,15 +20,13 @@
 #include <utility>
 #include <vector>
 
-#include <gmock/gmock-matchers.h>
-#define GLOG_NO_ABBREVIATED_SEVERITIES
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "cc/public/cpio/interface/error_codes.h"
-#include "cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
-#include "cc/public/cpio/mock/parameter_client/mock_parameter_client.h"
-#include "glog/logging.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "scp/cc/public/cpio/interface/error_codes.h"
+#include "scp/cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
+#include "scp/cc/public/cpio/mock/parameter_client/mock_parameter_client.h"
 #include "services/common/test/mocks.h"
 
 ABSL_FLAG(std::optional<std::string>, config_param_1, std::nullopt,
@@ -62,10 +60,6 @@ constexpr absl::string_view kFlags[] = {"config_param_1", "config_param_2",
                                         "config_param_6"};
 
 TEST(TrustedServerConfigClientTest, CanReadFlagsPassedThroughConstructor) {
-  // Initialize logging for warning logs when parameter not found.
-  google::LogToStderr();
-  google::InitGoogleLogging("Test");
-
   absl::SetFlag(&FLAGS_config_param_1, "config_value_1");
   absl::SetFlag(&FLAGS_config_param_2, true);
   absl::SetFlag(&FLAGS_config_param_3, false);

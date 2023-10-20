@@ -58,7 +58,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
 PackagePayload(const ProtectedAuctionInput& protected_auction_input,
                ClientType client_type,
-               absl::string_view public_key = kDefaultPublicKey);
+               absl::string_view public_key = kDefaultPublicKey,
+               uint8_t key_id = kTestKeyId);
 
 // Returns 1. CBOR Encoded and 2. GZIP Compressed (in that order)
 // Map of IG owners -> Buyer Inputs. The output from this method
@@ -82,7 +83,8 @@ PackageBuyerInputsForApp(
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
     absl::string_view auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
-    absl::string_view public_key = kDefaultPublicKey);
+    absl::string_view public_key = kDefaultPublicKey,
+    uint8_t key_id = kTestKeyId);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -22,8 +22,8 @@
 #include <utility>
 
 #include "absl/status/statusor.h"
-#include "glog/logging.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_context_logger.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -40,7 +40,7 @@ EncryptRequestWithHpke(
     const std::string error =
         absl::StrCat("Could not get public key to use for HPKE encryption: ",
                      key.status().message());
-    LOG(ERROR) << error;
+    ABSL_LOG(ERROR) << error;
     return absl::InternalError(error);
   }
 
@@ -50,7 +50,7 @@ EncryptRequestWithHpke(
   if (!encrypt_response.ok()) {
     const std::string error = absl::StrCat("Failed encrypting request: ",
                                            encrypt_response.status().message());
-    LOG(ERROR) << error;
+    ABSL_LOG(ERROR) << error;
     return absl::InternalError(error);
   }
 
