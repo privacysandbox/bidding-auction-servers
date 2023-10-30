@@ -105,5 +105,7 @@ module "buyer" {
     SECONDARY_COORDINATOR_REGION               = "" # Example: "us-east-1"
     PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "3974400" (46 days)
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
+    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
+    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
   }
 }

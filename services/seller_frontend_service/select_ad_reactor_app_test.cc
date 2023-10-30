@@ -79,7 +79,7 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     metric::SfeContextMap(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
 
@@ -241,7 +241,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/false);
   auto& protected_auction_input = request_with_context.protected_auction_input;
   auto& request = request_with_context.select_ad_request;
   // Set up the encoded cipher text in the request.
@@ -309,7 +310,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
     metric::SfeContextMap(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)

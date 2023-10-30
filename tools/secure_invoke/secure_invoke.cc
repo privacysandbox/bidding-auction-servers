@@ -86,6 +86,10 @@ ABSL_FLAG(std::string, key_id, "4000000000000000",
           "Use exact output from the coordinator. Hexadecimal key id string "
           "with trailing zeros.");
 
+ABSL_FLAG(bool, enable_debug_reporting, false,
+          "Set to true to send a request to an SFE server with "
+          "debug reporting enabled for this request");
+
 namespace {}  // namespace
 
 int main(int argc, char** argv) {
@@ -131,7 +135,7 @@ int main(int argc, char** argv) {
   std::string id =
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
   uint8_t key_id = stoi(id);
-
+  bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);
   if (op == "encrypt") {
     if (target_service == kSfe) {
       json_input_str =
@@ -139,21 +143,23 @@ int main(int argc, char** argv) {
       // LOG causes clipping of response.
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextSelectAdRequestToJson(json_input_str, client_type,
-                                                    public_key_hex, key_id);
+                                                    public_key_hex, key_id,
+                                                    enable_debug_reporting);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextGetBidsRequestToJson(public_key_hex, key_id);
+              PackagePlainTextGetBidsRequestToJson(public_key_hex, key_id,
+                                                   enable_debug_reporting);
     }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type, public_key_hex, key_id);
+              client_type, public_key_hex, key_id, enable_debug_reporting);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToBfe(
-              public_key_hex, key_id);
+              public_key_hex, key_id, enable_debug_reporting);
       CHECK(status.ok()) << status;
     } else {
       LOG(FATAL) << "Unsupported target service: " << target_service;

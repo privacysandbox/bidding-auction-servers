@@ -129,6 +129,39 @@ absl::flat_hash_map<std::string, double> GetCpu() {
       internal::ReadCpuTime(SystemCpuTime(), SelfStat());
   ret["total utilization"] = cpu_utilization.total;
   ret["main process utilization"] = cpu_utilization.self;
+  ret["total cpu cores"] = static_cast<double>(get_nprocs());
+  return ret;
+}
+
+absl::flat_hash_map<std::string, double> GetThread() {
+  absl::flat_hash_map<std::string, double> ret;
+
+  FILE* fd = fopen("/proc/self/status", "r");
+  if (fd == nullptr) {
+    ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+        << "Failed to open /proc/self/status; " << strerror(errno);
+    return ret;
+  }
+
+  char buff[256];
+  while (fgets(buff, sizeof(buff), fd) != nullptr) {
+    if (absl::StartsWith(buff, "Threads:")) {
+      int thread_count;
+      if (sscanf(buff, "Threads: %d", &thread_count) == 1) {
+        ret["thread count"] = static_cast<double>(thread_count);
+      } else {
+        ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+            << "Failed to parse thread count from /proc/self/status";
+      }
+      break;
+    }
+  }
+  fclose(fd);
+
+  if (ret.empty()) {
+    ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+        << "Thread count information not found in /proc/self/status";
+  }
   return ret;
 }
 

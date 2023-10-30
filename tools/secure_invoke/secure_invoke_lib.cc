@@ -76,7 +76,7 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
 absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
-    absl::string_view public_key, uint8_t key_id,
+    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -99,7 +99,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
   std::pair<std::unique_ptr<SelectAdRequest>,
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
-          raw_select_ad_request_json, client_type, public_key, key_id);
+          raw_select_ad_request_json, client_type, public_key, key_id,
+          enable_debug_reporting);
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -209,7 +210,8 @@ std::string LoadFile(absl::string_view file_path) {
 }
 
 absl::Status SendRequestToSfe(ClientType client_type,
-                              absl::string_view public_key, uint8_t key_id) {
+                              absl::string_view public_key, uint8_t key_id,
+                              bool enable_debug_reporting) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -224,6 +226,7 @@ absl::Status SendRequestToSfe(ClientType client_type,
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
           raw_select_ad_request_json, options, client_type, public_key, key_id,
+          enable_debug_reporting,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response
@@ -239,11 +242,13 @@ absl::Status SendRequestToSfe(ClientType client_type,
   return status;
 }
 
-GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput() {
+GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
+    bool enable_debug_reporting) {
   std::string raw_get_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
   const bool is_json = (!raw_get_bids_request_str.empty() ||
                         absl::GetFlag(FLAGS_input_format) == kJsonFormat);
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request;
+  get_bids_raw_request.set_enable_debug_reporting(enable_debug_reporting);
   if (is_json) {
     if (raw_get_bids_request_str.empty()) {
       raw_get_bids_request_str = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -265,9 +270,10 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput() {
 }
 
 std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
-                                                 uint8_t key_id) {
+                                                 uint8_t key_id,
+                                                 bool enable_debug_reporting) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
-      GetBidsRawRequestFromInput();
+      GetBidsRawRequestFromInput(enable_debug_reporting);
   auto key_fetcher_manager =
       std::make_unique<server_common::FakeKeyFetcherManager>(
           public_key, "unused", std::to_string(key_id));
@@ -288,10 +294,10 @@ std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
 }
 
 absl::Status SendRequestToBfe(
-    absl::string_view public_key, uint8_t key_id,
+    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
-      GetBidsRawRequestFromInput();
+      GetBidsRawRequestFromInput(enable_debug_reporting);
   privacy_sandbox::bidding_auction_servers::RequestOptions request_options;
   request_options.host_addr = absl::GetFlag(FLAGS_host_addr);
   request_options.client_ip = absl::GetFlag(FLAGS_client_ip);

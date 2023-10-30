@@ -33,7 +33,8 @@ class SelectAdReactorForWeb : public SelectAdReactor {
   explicit SelectAdReactorForWeb(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
-      const TrustedServersConfigClient& config_client, bool fail_fast = true);
+      const TrustedServersConfigClient& config_client, bool fail_fast = true,
+      int max_buyers_solicited = 2);
   virtual ~SelectAdReactorForWeb() = default;
 
   // SelectAdReactorForWeb is neither copyable nor movable.

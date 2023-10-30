@@ -66,7 +66,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     metric::SfeContextMap(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
 
@@ -339,7 +339,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/false);
 
   // Setup bad request that should be validated by our validation logic.
   auto& protected_auction_input = request_with_context.protected_auction_input;
@@ -425,7 +426,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/false);
 
   // Setup bad request that should be validated by our validation logic.
   auto& protected_auction_input = request_with_context.protected_auction_input;
@@ -487,7 +489,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/false);
 
   // Set up a buyer input map with no usable buyer/IGs that could be used to get
   // a bid and expect that this is reported as an error.

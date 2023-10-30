@@ -38,7 +38,7 @@ constexpr char kSeller[] = "https://www.example-ssp.com";
 constexpr char kPublisherName[] = "www.example-publisher.com";
 constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
-constexpr char kTestRenderUrl[] = "test.com";
+constexpr char kTestRenderUrl[] = "https://adTech.com/ad?id=123";
 constexpr int kTestEncodingVersion = 2;
 constexpr char kTestAppInstallSignals[] = "test_app_install_signals";
 constexpr char kTestDecodedAppInstallSignals[] =
@@ -46,7 +46,6 @@ constexpr char kTestDecodedAppInstallSignals[] =
 constexpr char kGenerateBidEntryFunction[] = "generateBidEntryFunction";
 constexpr char kTestProtectedAppSignals[] = "test_protected_app_signals";
 constexpr char kTestProtectedEmbeddings[] = "test_protected_embeddings";
-constexpr char kTestWinningAdRender[] = "test.com";
 constexpr double kTestWinningBid = 1.25;
 constexpr int kTestAdRetrievalTimeoutMs = 100000;
 constexpr char kTestEgressFeaturesHex[] = "bccd";
@@ -107,8 +106,7 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 
 // Creates a mock response from `generateBid` UDF.
 std::string CreateGenerateBidsUdfResponse(
-    absl::string_view render = kTestWinningAdRender,
-    double bid = kTestWinningBid,
+    absl::string_view render = kTestRenderUrl, double bid = kTestWinningBid,
     absl::string_view egress_features_hex_string = kTestEgressFeaturesHex);
 
 // Creates a mock response from ads retrieval service.

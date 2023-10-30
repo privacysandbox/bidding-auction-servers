@@ -84,6 +84,11 @@ ABSL_FLAG(std::optional<bool>, enable_otel_based_logging, false,
           "debugging.");
 ABSL_FLAG(std::optional<bool>, enable_protected_app_signals, false,
           "Enables the protected app signals support.");
-ABSL_FLAG(std::optional<int>, ps_verbosity, 1,
+ABSL_FLAG(std::optional<int>, ps_verbosity, std::nullopt,
           "verbosity of consented debug logger in prod; or verbosity of all "
           "loggers in non_prod");
+ABSL_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes, 1,
+          "Max allowed size of a debug win or loss URL in bytes");
+ABSL_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb, 1,
+          "Max allowed size of all debug win or loss URLs summed together in "
+          "kilobytes");

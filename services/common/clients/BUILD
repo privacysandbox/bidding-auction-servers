@@ -79,6 +79,7 @@ cc_library(
         "http_kv_server/util/generate_url.h",
     ],
     deps = [
+        "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/strings",
         "@curl",
     ],

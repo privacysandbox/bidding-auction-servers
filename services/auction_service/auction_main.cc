@@ -127,14 +127,18 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
-
-  // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  config_client.SetFlag(FLAGS_max_allowed_size_debug_url_bytes,
+                        MAX_ALLOWED_SIZE_DEBUG_URL_BYTES);
+  config_client.SetFlag(FLAGS_max_allowed_size_all_debug_urls_kb,
+                        MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
+  // Set verbosity
+  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
              << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   PS_VLOG(1) << "Successfully constructed the config client.";
@@ -301,7 +305,11 @@ absl::Status RunServer() {
       .enable_otel_based_logging =
           config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
       .consented_debug_token =
-          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN))};
+          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
+      .max_allowed_size_debug_url_bytes =
+          config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
+      .max_allowed_size_all_debug_urls_kb =
+          config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB)};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),

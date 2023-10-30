@@ -21,21 +21,23 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/clients/http/http_fetcher_async.h"
+#include "services/common/clients/http_kv_server/util/generate_url.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 // The data used to build the Seller KV look url suffix
 struct GetSellerValuesInput {
   // [SSP] List of keys to query values for, under the namespace renderUrls.
-  std::vector<std::string> render_urls;
+  UrlKeysSet render_urls;
 
   // [SSP] List of keys to query values for, under the namespace
   // adComponentRenderUrls.
-  std::vector<std::string> ad_component_render_urls;
+  UrlKeysSet ad_component_render_urls;
 
   // [SSP] The client type that originated the request. Passed to the key/value
   // service.

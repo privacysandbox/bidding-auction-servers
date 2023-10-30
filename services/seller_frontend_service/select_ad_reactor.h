@@ -103,7 +103,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
                            SelectAdResponse* response,
                            const ClientRegistry& clients,
                            const TrustedServersConfigClient& config_client,
-                           bool fail_fast = true);
+                           bool fail_fast = true, int max_buyers_solicited = 2);
 
   // Initiate the asynchronous execution of the SelectingWinningAdRequest.
   virtual void Execute();
@@ -303,11 +303,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Finishes the RPC call with an OK status.
   void FinishWithOkStatus();
 
-  // Populates the logging context needed for request tracing. For the case when
-  // encrypting is enabled, this method should be called after decrypting
-  // and decoding the request.
-  log::ContextImpl::ContextMap GetLoggingContext();
-
   // Reports an error to the error accumulator object.
   void ReportError(
       log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
@@ -371,6 +366,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // not.
   const bool is_pas_enabled_;
 
+  // Temporary workaround for compliance, will be removed (b/308032414).
+  const int max_buyers_solicited_;
+
  private:
   // Keeps track of how many buyer bids were expected initially and how many
   // were erroneous. If all bids ended up in an error state then that should be
@@ -379,7 +377,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Log metrics for the Initiated requests errors that were initiated by the
   // server
-  void LogInitiatedRequestErrorMetrics(absl::string_view server_name);
+  void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
+                                       absl::string_view buyer = "");
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

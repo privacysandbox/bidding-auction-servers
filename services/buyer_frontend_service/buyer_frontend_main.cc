@@ -148,13 +148,12 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_PROTECTED_APP_SIGNALS);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
 
-  // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
-
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
+  // Set verbosity
+  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
 
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
              << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);

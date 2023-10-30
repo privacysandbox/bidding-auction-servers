@@ -22,8 +22,7 @@ using ::testing::ContainsRegex;
 
 TEST_F(ContextLogTest, LogNotConsented) {
   test_instance_ = std::make_unique<ContextImpl>(
-      ContextImpl::ContextMap{{kToken, "server_tok"}, {"id", "1234"}},
-      "mismatched_Token");
+      ContextImpl::ContextMap{{"id", "1234"}}, kServerToken, mismatched_token_);
   EXPECT_THAT(LogWithCapturedStderr(
                   [this]() { PS_VLOG(kMaxV, *test_instance_) << kLogContent; }),
               ContainsRegex(absl::StrCat("\\(id: 1234\\)[ \t]+", kLogContent)));
@@ -32,8 +31,7 @@ TEST_F(ContextLogTest, LogNotConsented) {
 
 TEST_F(ContextLogTest, LogConsented) {
   test_instance_ = std::make_unique<ContextImpl>(
-      ContextImpl::ContextMap{{kToken, "server_tok"}, {"id", "1234"}},
-      "server_tok");
+      ContextImpl::ContextMap{{"id", "1234"}}, kServerToken, matched_token_);
   EXPECT_THAT(LogWithCapturedStderr(
                   [this]() { PS_VLOG(kMaxV, *test_instance_) << kLogContent; }),
               ContainsRegex(absl::StrCat("\\(id: 1234\\)[ \t]+", kLogContent)));

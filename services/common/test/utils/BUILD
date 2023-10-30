@@ -74,3 +74,14 @@ cc_library(
         "//services/common/test:random",
     ],
 )
+
+cc_library(
+    name = "proto_utils",
+    testonly = True,
+    hdrs = ["proto_utils.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+    ],
+)

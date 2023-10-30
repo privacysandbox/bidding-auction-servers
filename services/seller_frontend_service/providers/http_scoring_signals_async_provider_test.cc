@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/synchronization/notification.h"
 #include "gtest/gtest.h"
 #include "services/common/test/mocks.h"
@@ -69,29 +70,42 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
-  std::vector<std::string> ad_render_urls;
-  std::vector<std::string> ad_component_render_urls;
+  // These are so the strings will outlive the string_views taken of them.
+  // In the main path these strings are owned by the IGs which are going to be
+  // sent to BiddingServer.
+  std::vector<std::string> ad_render_urls_orig;
+  std::vector<std::string> ad_component_render_urls_orig;
+  UrlKeysSet ad_render_urls;
+  UrlKeysSet ad_component_render_urls;
   // Construct input for provider and seller key value.
   int num_buyers = 2;
   int num_ad_with_bids_per_buyer = 2;
   int num_ad_components_per_ad = 2;
   for (int buyer_index = 0; buyer_index < num_buyers; buyer_index++) {
-    std::string buyer_ig_owner = MakeARandomString();
+    std::string buyer_ig_owner = absl::StrCat(MakeARandomString(), ".com");
     auto get_bid_res = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
     for (int ad_with_bid_index = 0;
          ad_with_bid_index < num_ad_with_bids_per_buyer; ad_with_bid_index++) {
-      std::string url = MakeARandomString();
+      std::string url =
+          absl::StrCat("https://adTech.com/ad?id=", MakeARandomString());
       AdWithBid* ad_with_bid = get_bid_res->mutable_bids()->Add();
       ad_with_bid->set_render(url);
-      ad_render_urls.emplace_back(url);
+      // Move the string to a vector where it will outlive its reference.
+      ad_render_urls_orig.emplace_back(std::move(url));
+      // Take the reference of the string from the vector which now owns it.
+      ad_render_urls.emplace(
+          ad_render_urls_orig.at(ad_render_urls_orig.size() - 1));
       for (int ad_component_index = 0;
            ad_component_index < num_ad_components_per_ad;
            ad_component_index++) {
-        std::string new_ad_comp_url = MakeARandomString();
-        std::string* ad_component_render_url_to_add =
-            ad_with_bid->mutable_ad_components()->Add();
-        *ad_component_render_url_to_add = new_ad_comp_url;
-        ad_component_render_urls.emplace_back(new_ad_comp_url);
+        std::string new_ad_comp_url = absl::StrCat(
+            "https://adTech.com/adComponent?id=", MakeARandomString());
+        *ad_with_bid->mutable_ad_components()->Add() = new_ad_comp_url;
+        // Move the string to a vector where it will outlive its reference.
+        ad_component_render_urls_orig.emplace_back(std::move(new_ad_comp_url));
+        // Take the reference of the string from the vector which now owns it.
+        ad_component_render_urls.emplace(ad_component_render_urls_orig.at(
+            ad_component_render_urls_orig.size() - 1));
       }
     }
     buyer_bids_map.try_emplace(buyer_ig_owner, std::move(get_bid_res));
@@ -113,15 +127,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
                         callback,
                     absl::Duration timeout) {
         // All ads from all responses were sent to KV client.
-        // Order is irrelevant but may have been changed, so sort.
-        std::sort(input->render_urls.begin(), input->render_urls.end());
-        std::sort(ad_render_urls.begin(), ad_render_urls.end());
         EXPECT_EQ(input->render_urls, ad_render_urls);
-        // And again for ad component render urls:
-        std::sort(input->ad_component_render_urls.begin(),
-                  input->ad_component_render_urls.end());
-        std::sort(ad_component_render_urls.begin(),
-                  ad_component_render_urls.end());
         EXPECT_EQ(input->ad_component_render_urls, ad_component_render_urls);
         notification.Notify();
         return absl::OkStatus();
@@ -214,8 +220,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
       scoring_signals_request,
       [&expected_output,
        &notification](absl::StatusOr<std::unique_ptr<ScoringSignals>> signals) {
-        EXPECT_STREQ(signals.value()->scoring_signals->c_str(),
-                     expected_output.c_str());
+        EXPECT_EQ(*(signals.value()->scoring_signals), expected_output);
         notification.Notify();
       },
       absl::Milliseconds(100));

@@ -48,6 +48,8 @@ using ScoringSignalsDoneCallback =
                            absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
+using ::testing::AnyNumber;
+using ::testing::Cardinality;
 
 absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
     const SelectAdRequest& request) {
@@ -60,13 +62,27 @@ absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
   return buyer_to_ad_url;
 }
 
+Cardinality BuyerCallCardinality(bool expect_all_buyers_solicited,
+                                 bool repeated_get_allowed) {
+  if (expect_all_buyers_solicited && repeated_get_allowed) {
+    return testing::AtLeast(1);
+  } else if (expect_all_buyers_solicited && !repeated_get_allowed) {
+    return testing::Exactly(1);
+  } else if (!expect_all_buyers_solicited && repeated_get_allowed) {
+    return AnyNumber();
+  } else {
+    return testing::AtMost(1);
+  }
+}
+
 void SetupBuyerClientMock(
     absl::string_view hostname,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
     const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
-    bool repeated_get_allowed) {
+    bool repeated_get_allowed, bool expect_all_buyers_solicited,
+    int* num_buyers_solicited) {
   auto MockGetBids =
-      [bid](
+      [bid, num_buyers_solicited](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
           const RequestMetadata& metadata, GetBidDoneCallback on_done,
           absl::Duration timeout) {
@@ -75,28 +91,27 @@ void SetupBuyerClientMock(
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid));
         }
-
+        if (num_buyers_solicited) {
+          ++(*num_buyers_solicited);
+        }
         return absl::OkStatus();
       };
   auto SetupMockBuyer =
-      [MockGetBids, repeated_get_allowed](
+      [MockGetBids, repeated_get_allowed, expect_all_buyers_solicited](
           std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        if (repeated_get_allowed) {
-          EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(MockGetBids);
-        } else {
-          EXPECT_CALL(*buyer, ExecuteInternal).Times(1).WillOnce(MockGetBids);
-        }
+        EXPECT_CALL(*buyer, ExecuteInternal)
+            .Times(BuyerCallCardinality(expect_all_buyers_solicited,
+                                        repeated_get_allowed))
+            .WillRepeatedly(MockGetBids);
         return buyer;
       };
   auto MockBuyerFactoryCall = [SetupMockBuyer](absl::string_view hostname) {
     return SetupMockBuyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
   };
-  if (repeated_get_allowed) {
-    EXPECT_CALL(buyer_clients, Get(hostname))
-        .WillRepeatedly(MockBuyerFactoryCall);
-  } else {
-    EXPECT_CALL(buyer_clients, Get(hostname)).WillOnce(MockBuyerFactoryCall);
-  }
+  EXPECT_CALL(buyer_clients, Get(hostname))
+      .Times(BuyerCallCardinality(expect_all_buyers_solicited,
+                                  repeated_get_allowed))
+      .WillRepeatedly(MockBuyerFactoryCall);
 }
 
 void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
@@ -156,23 +171,34 @@ void SetupScoringProviderMock(
     const BuyerBidsResponseMap& expected_buyer_bids,
     const std::optional<std::string>& scoring_signals_value,
     bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return) {
+    const std::optional<absl::Status>& server_error_to_return,
+    int expected_num_bids) {
   auto MockScoringSignalsProvider =
-      [&expected_buyer_bids, scoring_signals_value, server_error_to_return](
-          const ScoringSignalsRequest& scoring_signals_request,
-          ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
-        EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
-                  expected_buyer_bids.size());
+      [&expected_buyer_bids, scoring_signals_value, server_error_to_return,
+       expected_num_bids](const ScoringSignalsRequest& scoring_signals_request,
+                          ScoringSignalsDoneCallback on_done,
+                          absl::Duration timeout) {
+        if (expected_num_bids > -1) {
+          EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
+                    expected_num_bids);
+        } else {
+          EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
+                    expected_buyer_bids.size());
+        }
         google::protobuf::util::MessageDifferencer diff;
         std::string diff_output;
         diff.ReportDifferencesToString(&diff_output);
 
-        for (const auto& [unused, get_bid_response] : expected_buyer_bids) {
+        // Finds one expected bid for every actual bid.
+        // When sets are equal size this is a full equality check.
+        // When there are more 'expected' than actual this will not error.
+        for (const auto& [unused, actual_get_bids_raw_response] :
+             scoring_signals_request.buyer_bids_map_) {
           EXPECT_TRUE(std::any_of(
-              scoring_signals_request.buyer_bids_map_.begin(),
-              scoring_signals_request.buyer_bids_map_.end(),
-              [&diff, expected = get_bid_response.get()](auto& actual) {
-                return diff.Compare(*actual.second, *expected);
+              expected_buyer_bids.begin(), expected_buyer_bids.end(),
+              [&diff,
+               actual = actual_get_bids_raw_response.get()](auto& expected) {
+                return diff.Compare(*actual, *expected.second);
               }));
         }
         if (server_error_to_return.has_value()) {

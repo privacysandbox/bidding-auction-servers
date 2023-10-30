@@ -79,7 +79,7 @@ SelectAdRequest::AuctionConfig GetAuctionConfig(
 }
 
 ProtectedAuctionInput GetProtectedAuctionInput(
-    rapidjson::Document* input_json) {
+    rapidjson::Document* input_json, bool enable_debug_reporting = false) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
   rapidjson::Value& protected_auction_json =
       (*input_json)[kProtectedAuctionInputField];
@@ -91,6 +91,8 @@ ProtectedAuctionInput GetProtectedAuctionInput(
   auto protected_auction_input_parse =
       google::protobuf::util::JsonStringToMessage(
           protected_auction_json_str, &protected_auction_input, parse_options);
+  // Enable debug reporting for all calls from this tool.
+  protected_auction_input.set_enable_debug_reporting(enable_debug_reporting);
   CHECK(protected_auction_input_parse.ok()) << protected_auction_input_parse;
   return protected_auction_input;
 }
@@ -132,7 +134,8 @@ std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 ClientType client_type,
-                                absl::string_view public_key, uint8_t key_id) {
+                                absl::string_view public_key, uint8_t key_id,
+                                bool enable_debug_reporting) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
       GetBuyerInputMap(&input_json);
@@ -151,7 +154,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
   CHECK(encoded_buyer_map.ok()) << encoded_buyer_map.status();
 
   ProtectedAuctionInput protected_auction_input =
-      GetProtectedAuctionInput(&input_json);
+      GetProtectedAuctionInput(&input_json, enable_debug_reporting);
   // Set encoded BuyerInput.
   protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
   // Package protected_auction_input.
@@ -171,10 +174,11 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
 
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
-    absl::string_view public_key, uint8_t key_id) {
-  auto req = std::move(PackagePlainTextSelectAdRequest(
-                           input_json_str, client_type, public_key, key_id)
-                           .first);
+    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting) {
+  auto req = std::move(
+      PackagePlainTextSelectAdRequest(input_json_str, client_type, public_key,
+                                      key_id, enable_debug_reporting)
+          .first);
   std::string select_ad_json;
   auto select_ad_json_status =
       google::protobuf::util::MessageToJsonString(*req, &select_ad_json);

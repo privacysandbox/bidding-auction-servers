@@ -28,6 +28,7 @@
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
 #include "services/common/loggers/request_context_impl.h"
 #include "services/common/loggers/request_context_logger_test.h"
+#include "services/common/test/utils/proto_utils.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers::log {
@@ -47,6 +48,16 @@ class ContextLogTest : public LogTest {
             logs_sdk::SimpleLogRecordProcessorFactory::Create(
                 std::make_unique<logs_exporter::OStreamLogRecordExporter>(
                     GetSs()))));
+
+    mismatched_token_ = ParseTextOrDie<ConsentedDebugConfiguration>(R"pb(
+      is_consented: true
+      token: "mismatched_Token"
+    )pb");
+
+    matched_token_ = ParseTextOrDie<ConsentedDebugConfiguration>(R"pb(
+      is_consented: true
+      token: "server_tok"
+    )pb");
   }
 
   static std::stringstream& GetSs() {
@@ -64,6 +75,9 @@ class ContextLogTest : public LogTest {
   }
 
   std::unique_ptr<ContextImpl> test_instance_;
+  ConsentedDebugConfiguration matched_token_, mismatched_token_;
+
+  const absl::string_view kServerToken = "server_tok";
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::log

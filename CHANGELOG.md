@@ -2,12 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.5.0 (2023-10-30)
+
+
+### Features
+
+* Add support for interestGroupNames
+* Temporarily Hardcode Maximum Buyers Called to Two
+* Use set instead of vector for Key-Value Server input key fields
+
+
+### Bug Fixes
+
+* Change Set type to bTree to ensure deterministic key order
+* read PS_VERBOSITY from cloud parameter
+* Update visibility target to public target in common repo
+
+
+### API: Features
+
+* **api:** Add fields for component auction support
+
+
+### Documentation
+
+* Add load testing guide
+
 ## 2.4.0 (2023-10-18)
 
 
 ### Features
 
-* API changes to pass top_level_seller to the Auction Service for reporting
 * support passing in a custom public key/id to secure_invoke
 
 

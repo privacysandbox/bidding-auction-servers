@@ -16,6 +16,7 @@
 #include "services/seller_frontend_service/util/config_param_parser.h"
 
 #include <string>
+#include <vector>
 
 #include <rapidjson/error/en.h>
 
@@ -107,6 +108,20 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
         "Zero valid entries for IG Owner to BFE domain map.");
   }
   return ig_owner_to_bfe_endpoint_map;
+}
+
+std::vector<std::string> FetchIgOwnerList(
+    const absl::StatusOr<
+        absl::flat_hash_map<std::string, BuyerServiceEndpoint>>&
+        ig_owner_to_bfe_domain_map) {
+  ABSL_CHECK_OK(ig_owner_to_bfe_domain_map)
+      << "Error in fetching IG Owner to BFE domain map.";
+  std::vector<std::string> ig_list;
+  for (const auto& [ig_owner, bfe_domain] : *ig_owner_to_bfe_domain_map) {
+    ig_list.push_back(ig_owner);
+  }
+
+  return ig_list;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

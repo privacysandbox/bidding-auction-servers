@@ -212,7 +212,7 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
   }
 };
 
-TEST_F(BiddingProtectedAppSignalsTest, NormalWorfklowWorks) {
+TEST_F(BiddingProtectedAppSignalsTest, NormalWorkflowWorks) {
   SetupProtectedAppSignalsRomaExpectations(
       code_dispatch_client_, num_roma_requests_,
       CreatePrepareDataForAdsRetrievalResponse(),

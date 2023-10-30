@@ -29,9 +29,43 @@ using test_timeout = absl::Duration;
 
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
-  std::string hostname_ = "https://pubads.g.doubleclick.net/td/sts";
+  static constexpr char hostname_[] = "https://pubads.g.doubleclick.net/td/sts";
   std::unique_ptr<MockHttpFetcherAsync> mock_http_fetcher_async_ =
       std::make_unique<MockHttpFetcherAsync>();
+  const absl::flat_hash_set<std::string> expected_urls_ = {
+      absl::StrCat(
+          hostname_,
+          "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge,"
+          "url2&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
+          "3D456,url4"),
+      absl::StrCat(
+          hostname_,
+          "?renderUrls=url2,https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge"
+          "&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
+          "3D456,url4"),
+      absl::StrCat(hostname_,
+                   "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+                   "3Ffls%3Dtrue%"
+                   "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+                   "3Drtbhfledge,"
+                   "url2&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%"
+                   "3D123%26another_id%"
+                   "3D456"),
+      absl::StrCat(
+          hostname_,
+          "?renderUrls=url2,https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge"
+          "&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%3D123%26another_"
+          "id%"
+          "3D456")};
 
  protected:
   void CheckGetValuesFromKeysViaHttpClient(
@@ -94,15 +128,6 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
-  // This is the URL we expect to see built from the input object.
-  const std::string expectedUrl =
-      hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
-      "3Ffls%3Dtrue%"
-      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
-      "3D456,url4";
-
   // Now we define what we expect to get back out of the client, which is a
   // GetSellerValuesOutput struct.
   // Note that this test is trivial; we use the same string
@@ -117,7 +142,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
               }
             },
             "ad_component_render_urls": {
-              "url3": {
+              "www.foo.com/ad?id=123&another_id=456": {
                 "first_president": "washington",
                 "chief_of_staff": "marshall"
               },
@@ -159,11 +184,11 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expectedUrl](
+      .WillOnce([actualResult, expected_urls = &(expected_urls_)](
                     const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
-        EXPECT_STREQ(request.url.c_str(), expectedUrl.c_str());
+        EXPECT_TRUE(expected_urls->contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
             absl::StatusOr<std::string>(actualResult);
@@ -186,18 +211,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
        "rtbhfledge",
        "url2"},
-      {"url3", "url4"}};
+      {"www.foo.com/ad?id=123&another_id=456", "url4"}};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
-  // This is the URL we expect to see built from the input object.
-  const std::string expectedUrl =
-      hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
-      "3Ffls%3Dtrue%"
-      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2&adComponentRenderUrls=url3,url4";
-
   // Now we define what we expect to get back out of the client, which is a
   // GetSellerValuesOutput struct.
   // Note that this test is trivial; we use the same string
@@ -212,7 +229,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
               }
             },
             "ad_component_render_urls": {
-              "url3": {
+              "www.foo.com/ad?id=123&another_id=456": {
                 "first_president": "washington",
                 "chief_of_staff": "marshall"
               },
@@ -225,8 +242,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
 
   const std::string actualResult = R"json({
             "render_urls": {
-              "https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge_WRONG_ENDING": {
-                "constitution_author": "madison",
+              "https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge": {
+                "constitution_author": "WRONG_NAME",
                 "money_man": "hamilton"
               },
               "wrong_render_url": {
@@ -274,11 +291,11 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expectedUrl](
+      .WillOnce([actualResult, expected_urls = &(expected_urls_)](
                     HTTPRequest request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
-        EXPECT_STREQ(request.url.c_str(), expectedUrl.c_str());
+        EXPECT_TRUE(expected_urls->contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
             absl::StatusOr<std::string>(actualResult);
@@ -294,21 +311,21 @@ TEST_F(KeyValueAsyncHttpClientTest,
 }
 
 TEST_F(KeyValueAsyncHttpClientTest,
-       MakesSSPUrlCorrectlyWithNoAdComponentRenderUrls) {
+       MakesSSPUrlCorrectlyWithNoAdComponentRenderUrlsAndADuplicateKey) {
   const GetSellerValuesInput getValuesClientInput3 = {
       {"https://ams.creativecdn.com/"
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
        "rtbhfledge",
-       "url2", "url3", "url4"},
+       "url2", "url3", "url4", "url4"},
       {}};
   std::unique_ptr<GetSellerValuesInput> input3 =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
-  const std::string expectedUrl =
-      hostname_ +
+  const std::string expectedUrl = absl::StrCat(
+      hostname_,
       "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
       "3Ffls%3Dtrue%"
       "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2,url3,url4";
+      "url2,url3,url4");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);
   CheckGetValuesFromKeysViaHttpClient(std::move(input3));
 }
@@ -317,17 +334,16 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoClientType) {
   const GetSellerValuesInput client_input = {
       {"https://ams.creativecdn.com/"
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
-       "rtbhfledge",
-       "url2", "url3", "url4"},
+       "rtbhfledge"},
       {}};
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(client_input);
   const std::string expected_url =
-      hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
-      "3Ffls%3Dtrue%"
-      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2,url3,url4";
+      absl::StrCat(hostname_,
+                   "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+                   "3Ffls%3Dtrue%"
+                   "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+                   "3Drtbhfledge");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
@@ -341,8 +357,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeBrowser) {
   const GetSellerValuesInput client_input = {
       {"https://ams.creativecdn.com/"
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
-       "rtbhfledge",
-       "url2", "url3", "url4"},
+       "rtbhfledge"},
       {},
       ClientType::CLIENT_TYPE_BROWSER};
   std::unique_ptr<GetSellerValuesInput> input =
@@ -352,11 +367,11 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeBrowser) {
   // param is attached to the url. This behavior will change after beta
   // testing to always include a client_type.
   const std::string expected_url =
-      hostname_ +
-      "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
-      "3Ffls%3Dtrue%"
-      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2,url3,url4";
+      absl::StrCat(hostname_,
+                   "?renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
+                   "3Ffls%3Dtrue%"
+                   "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+                   "3Drtbhfledge");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
@@ -370,18 +385,17 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeAndroid) {
   const GetSellerValuesInput client_input = {
       {"https://ams.creativecdn.com/"
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
-       "rtbhfledge",
-       "url2", "url3", "url4"},
+       "rtbhfledge"},
       {},
       ClientType::CLIENT_TYPE_ANDROID};
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(client_input);
-  const std::string expected_url =
-      hostname_ +
+  const std::string expected_url = absl::StrCat(
+      hostname_,
       "?client_type=1&renderUrls=https%3A%2F%2Fams.creativecdn.com%2Fcreatives%"
       "3Ffls%3Dtrue%"
-      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge,"
-      "url2,url3,url4";
+      "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+      "3Drtbhfledge");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
@@ -399,12 +413,12 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoRenderUrls) {
        "url2", "url3", "url4"}};
   std::unique_ptr<GetSellerValuesInput> input3 =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput3);
-  const std::string expectedUrl =
-      hostname_ +
+  const std::string expectedUrl = absl::StrCat(
+      hostname_,
       "?adComponentRenderUrls=https%3A%2F%2Fams.creativecdn.com%"
       "2Fcreatives%"
       "3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
-      "3Drtbhfledge,url2,url3,url4";
+      "3Drtbhfledge,url2,url3,url4");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);
   CheckGetValuesFromKeysViaHttpClient(std::move(input3));
 }

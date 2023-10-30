@@ -29,6 +29,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
     "generateBidEntryFunction";
+inline constexpr int kBytesMultiplyer = 1024;
 
 // Returns up the index of the provided enum as int from the underlying enum
 // storage.
@@ -56,9 +57,13 @@ class BaseGenerateBidsReactor
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
         enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
         log_context_(GetLoggingContext(this->raw_request_),
-                     runtime_config.enable_otel_based_logging
-                         ? runtime_config.consented_debug_token
-                         : "") {}
+                     runtime_config.consented_debug_token,
+                     this->raw_request_.consented_debug_config()),
+        max_allowed_size_debug_url_chars_(
+            runtime_config.max_allowed_size_debug_url_bytes),
+        max_allowed_size_all_debug_urls_chars_(
+            kBytesMultiplyer *
+            runtime_config.max_allowed_size_all_debug_urls_kb) {}
 
   virtual ~BaseGenerateBidsReactor() = default;
 
@@ -68,14 +73,8 @@ class BaseGenerateBidsReactor
   log::ContextImpl::ContextMap GetLoggingContext(
       const RawRequest& generate_bids_request) {
     const auto& logging_context = generate_bids_request.log_context();
-    log::ContextImpl::ContextMap context_map = {
-        {kGenerationId, logging_context.generation_id()},
-        {kAdtechDebugId, logging_context.adtech_debug_id()}};
-    if (generate_bids_request.has_consented_debug_config()) {
-      log::MaybeAddConsentedDebugConfig(
-          generate_bids_request.consented_debug_config(), context_map);
-    }
-    return context_map;
+    return {{kGenerationId, logging_context.generation_id()},
+            {kAdtechDebugId, logging_context.adtech_debug_id()}};
   }
 
   template <typename BidType>
@@ -87,6 +86,8 @@ class BaseGenerateBidsReactor
   std::string roma_timeout_ms_;
   bool enable_adtech_code_logging_;
   log::ContextImpl log_context_;
+  int max_allowed_size_debug_url_chars_;
+  long max_allowed_size_all_debug_urls_chars_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

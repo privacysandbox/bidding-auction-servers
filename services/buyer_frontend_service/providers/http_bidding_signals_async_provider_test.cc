@@ -39,6 +39,7 @@ GetBidsRequest::GetBidsRawRequest GetRequest() {
 TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+  // The IGs created by this function have both names and bidding_signals_keys.
   auto request = GetRequest();
   request.clear_client_type();
   absl::Notification notification;
@@ -87,40 +88,40 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetBuyerValuesOutput>>) &&>>(),
               An<absl::Duration>()))
-      .WillOnce(
-          [&request, &notification](
-              std::unique_ptr<GetBuyerValuesInput> input,
-              const RequestMetadata& metadata,
-              absl::AnyInvocable<
-                  void(
-                      absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
-                  callback,
-              absl::Duration timeout) {
-            // Check that keys received in input are from buyer_input
-            EXPECT_STREQ(input->hostname.data(),
-                         request.publisher_name().data());
-            EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
-            absl::flat_hash_set<std::string> received_keys(input->keys.begin(),
-                                                           input->keys.end());
+      .WillOnce([&request, &notification](
+                    std::unique_ptr<GetBuyerValuesInput> input,
+                    const RequestMetadata& metadata,
+                    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                                GetBuyerValuesOutput>>) &&>
+                        callback,
+                    absl::Duration timeout) {
+        // Check that keys received in input are from buyer_input
+        EXPECT_EQ(input->hostname, request.publisher_name());
+        EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
 
-            // Collect all expected keys
-            absl::flat_hash_set<std::string> expected_keys;
-            for (const auto& ca : request.buyer_input().interest_groups()) {
-              expected_keys.emplace(ca.name());
-              expected_keys.insert(ca.bidding_signals_keys().begin(),
-                                   ca.bidding_signals_keys().end());
-            }
+        // Collect all expected keys
+        UrlKeysSet expected_keys;
+        UrlKeysSet expected_ig_names;
+        for (const auto& interest_group :
+             request.buyer_input().interest_groups()) {
+          expected_ig_names.emplace(interest_group.name());
+          expected_keys.insert(interest_group.bidding_signals_keys().begin(),
+                               interest_group.bidding_signals_keys().end());
+        }
 
-            // All expected keys in received keys and vice versa
-            for (auto& key : expected_keys) {
-              EXPECT_TRUE(received_keys.contains(key));
-            }
-            for (auto& key : received_keys) {
-              EXPECT_TRUE(expected_keys.contains(key));
-            }
-            notification.Notify();
-            return absl::OkStatus();
-          });
+        // All expected keys in received keys and vice versa
+        std::vector<absl::string_view> keys_diff;
+        absl::c_set_difference(input->keys, expected_keys,
+                               std::back_inserter(keys_diff));
+        EXPECT_TRUE(keys_diff.empty());
+        // All expected IG names in received names and vice versa
+        std::vector<absl::string_view> ig_names_diff;
+        absl::c_set_difference(input->interest_group_names, expected_ig_names,
+                               std::back_inserter(ig_names_diff));
+        EXPECT_TRUE(ig_names_diff.empty());
+        notification.Notify();
+        return absl::OkStatus();
+      });
 
   HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
 
@@ -208,8 +209,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
       bidding_signals_request,
       [&expected_output,
        &notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {
-        EXPECT_STREQ(signals.value()->trusted_signals->c_str(),
-                     expected_output.c_str());
+        EXPECT_EQ(*(signals.value()->trusted_signals), expected_output);
         notification.Notify();
       },
       absl::Milliseconds(100));

@@ -56,7 +56,8 @@ using ErrorVisibility::CLIENT_VISIBLE;
 SelectAdReactor::SelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool fail_fast)
+    const TrustedServersConfigClient& config_client, bool fail_fast,
+    int max_buyers_solicited)
     : context_(context),
       request_(request),
       response_(response),
@@ -66,14 +67,13 @@ SelectAdReactor::SelectAdReactor(
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                                     kBuyerMetadataKeysMap)),
       is_protected_auction_request_(false),
-      log_context_(
-          {}, config_client_.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING)
-                  ? config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN)
-                  : ""),
+      log_context_({}, config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN),
+                   ConsentedDebugConfiguration()),
       error_accumulator_(&log_context_),
       fail_fast_(fail_fast),
       is_pas_enabled_(
           config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)),
+      max_buyers_solicited_(max_buyers_solicited),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -218,26 +218,6 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   return grpc::Status::OK;
 }
 
-log::ContextImpl::ContextMap SelectAdReactor::GetLoggingContext() {
-  log::ContextImpl::ContextMap context_map;
-  std::visit(
-      [&context_map, this](const auto& protected_auction_input) {
-        context_map = {
-            {kGenerationId, protected_auction_input.generation_id()},
-            {kSellerDebugId, request_->auction_config().seller_debug_id()}};
-        if (protected_auction_input.has_consented_debug_config() &&
-            protected_auction_input.consented_debug_config().is_consented()) {
-          absl::string_view token =
-              protected_auction_input.consented_debug_config().token();
-          if (!token.empty()) {
-            context_map[kToken] = std::string(token);
-          }
-        }
-      },
-      protected_auction_input_);
-  return context_map;
-}
-
 void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
   if (request_->auction_config().seller_signals().empty()) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kEmptySellerSignals,
@@ -311,10 +291,25 @@ void SelectAdReactor::Execute() {
   }
 
   grpc::Status decrypt_status = DecryptRequest();
-  log_context_.UpdateContext(GetLoggingContext());
 
-  PS_VLOG(2, log_context_) << "SelectAdRequest:\n"
-                           << request_->ShortDebugString();
+  // Populates the logging context needed for request tracing. should be called
+  // after decrypting and decoding the request.
+  log_context_.Update(
+      std::visit(
+          [this](const auto& protected_input) -> log::ContextImpl::ContextMap {
+            return {
+                {kGenerationId, protected_input.generation_id()},
+                {kSellerDebugId, request_->auction_config().seller_debug_id()}};
+          },
+          protected_auction_input_),
+      std::visit(
+          [](const auto& protected_input) {
+            return protected_input.consented_debug_config();
+          },
+          protected_auction_input_));
+
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdRequest:\n"
+                                    << request_->ShortDebugString();
   PS_VLOG(2, log_context_) << "Headers:\n"
                            << absl::StrJoin(context_->client_metadata(), "\n",
                                             absl::PairFormatter(
@@ -328,7 +323,7 @@ void SelectAdReactor::Execute() {
   }
   std::visit(
       [this](const auto& input) {
-        PS_VLOG(1, log_context_)
+        PS_VLOG(kPlain, log_context_)
             << (is_protected_auction_request_ ? "ProtectedAuctionInput"
                                               : "ProtectedAudienceInput")
             << ":\n"
@@ -377,21 +372,43 @@ void SelectAdReactor::Execute() {
   PS_VLOG(6, log_context_) << "Buyer list size: "
                            << request_->auction_config().buyer_list().size();
 
-  for (const std::string& buyer_ig_owner :
-       request_->auction_config().buyer_list()) {
-    const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
-    if (buyer_input_iterator != buyer_inputs_->end()) {
-      FetchBid(buyer_ig_owner, buyer_input_iterator->second,
-               request_->auction_config().seller());
-    } else {
-      PS_VLOG(2, log_context_)
-          << "No buyer input found for buyer: " << buyer_ig_owner;
+  int num_buyers_solicited = 0;
+  absl::flat_hash_set<absl::string_view> buyer_set(
+      request_->auction_config().buyer_list().begin(),
+      request_->auction_config().buyer_list().end());
 
-      // Pending bids count is set on reactor construction to buyer_list_size().
-      // If no BuyerInput is found for a buyer in buyer_list, must decrement
-      // pending bids count.
+  for (const auto& buyer_ig_owner : request_->auction_config().buyer_list()) {
+    if (buyer_set.erase(buyer_ig_owner) == 0) {
+      PS_VLOG(2, log_context_)
+          << "Duplicate buyer found " << buyer_ig_owner << ", skipping buyer";
       async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      continue;
     }
+
+    if (num_buyers_solicited >= max_buyers_solicited_) {
+      // Skipped buyers should not be left pending.
+      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      PS_VLOG(2, log_context_) << "Exceeded cap of " << max_buyers_solicited_
+                               << " buyers called. Skipping buyer";
+      continue;
+    }
+
+    const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
+    if (buyer_input_iterator == buyer_inputs_->end()) {
+      PS_VLOG(2, log_context_)
+          << "No buyer input found for buyer: " << buyer_ig_owner
+          << ", skipping buyer";
+
+      // Pending bids count is set on reactor construction to
+      // buyer_list_size(). If no BuyerInput is found for a buyer in
+      // buyer_list, must decrement pending bids count.
+      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      continue;
+    }
+
+    FetchBid(buyer_ig_owner, buyer_input_iterator->second,
+             request_->auction_config().seller());
+    num_buyers_solicited++;
   }
   PS_VLOG(5, log_context_)
       << "Finishing execute call, response may be available later";
@@ -461,6 +478,7 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
         CreateGetBidsRequest(seller, buyer_ig_owner, buyer_input);
     auto bfe_request =
         metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get());
+    bfe_request->SetBuyer(buyer_ig_owner);
     bfe_request->SetRequestSize((int)get_bids_request->ByteSizeLong());
     absl::Status execute_result = buyer_client->ExecuteInternal(
         std::move(get_bids_request), buyer_metadata_,
@@ -491,13 +509,19 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
 }
 
 void SelectAdReactor::LogInitiatedRequestErrorMetrics(
-    absl::string_view server_name) {
+    absl::string_view server_name, absl::string_view buyer) {
   LogIfError(metric_context_->AccumulateMetric<
              server_common::metrics::kInitiatedRequestErrorCount>(1));
   LogIfError(
       metric_context_
           ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
               1, server_name));
+  if (server_name == metric::kBfe) {
+    LogIfError(
+        metric_context_
+            ->AccumulateMetric<metric::kSfeInitiatedRequestErrorsCountByBuyer>(
+                1, buyer));
+  }
 }
 
 void SelectAdReactor::OnFetchBidsDone(
@@ -526,7 +550,7 @@ void SelectAdReactor::OnFetchBidsDone(
           });
     }
   } else {
-    LogInitiatedRequestErrorMetrics(metric::kBfe);
+    LogInitiatedRequestErrorMetrics(metric::kBfe, buyer_ig_owner);
     PS_VLOG(1, log_context_) << "GetBidsRequest failed for buyer "
                              << buyer_ig_owner << "\nresponse status: ",
         response.status();
@@ -790,8 +814,8 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
-  PS_VLOG(2, log_context_) << "\nSelectAdResponse:\n"
-                           << response_->DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdResponse:\n"
+                                    << response_->ShortDebugString();
 
   FinishWithOkStatus();
 }

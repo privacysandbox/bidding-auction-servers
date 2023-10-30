@@ -29,10 +29,6 @@ std::string ContextImpl::FormatContext(const ContextMap& context_map) {
   }
   std::vector<std::string> pairs;
   for (const auto& [key, val] : context_map) {
-    if (key == kToken) {
-      // Do not print out consented debug token by default.
-      continue;
-    }
     if (!val.empty()) {
       pairs.emplace_back(absl::StrCat(key, ": ", val));
     }
@@ -41,26 +37,6 @@ std::string ContextImpl::FormatContext(const ContextMap& context_map) {
     return "";
   }
   return absl::StrCat(" (", absl::StrJoin(std::move(pairs), ", "), ") ");
-}
-
-std::string ContextImpl::GetClientToken(const ContextMap& context_map) {
-  if (auto iter = context_map.find(kToken); iter != context_map.end()) {
-    return std::string(TokenWithMinLength(iter->second));
-  }
-  return "";
-}
-
-bool MaybeAddConsentedDebugConfig(const ConsentedDebugConfiguration& config,
-                                  ContextImpl::ContextMap& context_map) {
-  if (!config.is_consented()) {
-    return false;
-  }
-  absl::string_view token = config.token();
-  if (token.empty()) {
-    return false;
-  }
-  context_map[kToken] = std::string(token);
-  return true;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::log

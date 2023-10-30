@@ -47,6 +47,11 @@ struct AuctionServiceRuntimeConfig {
   bool enable_otel_based_logging = false;
   // The secret token for AdTech consented debugging.
   std::string consented_debug_token = "";
+  // The max allowed size of a debug win or loss URL. Default value is 64 KB.
+  int max_allowed_size_debug_url_bytes = 65536;
+  // The max allowed size of all debug win or loss URLs for an auction.
+  // Default value is 3000 kilobytes.
+  int max_allowed_size_all_debug_urls_kb = 3000;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
