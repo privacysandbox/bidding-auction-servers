@@ -41,14 +41,14 @@ void AddAmpersandIfNotFirstQueryParam(std::string* url) {
 }
 
 void AddListItemsAsQueryParamsToUrl(std::string* url, absl::string_view key,
-                                    const std::vector<std::string>& values,
+                                    const UrlKeysSet& values,
                                     bool encode_params) {
   AddAmpersandIfNotFirstQueryParam(url);
   absl::StrAppend(url, key, "=");
   if (encode_params) {
     std::vector<std::string> encoded_values(values.size());
     std::transform(values.cbegin(), values.cend(), encoded_values.begin(),
-                   [](const std::string& str) { return EncodeParam(str); });
+                   [](absl::string_view str) { return EncodeParam(str); });
     absl::StrAppend(url, absl::StrJoin(encoded_values, ","));
   } else {
     absl::StrAppend(url, absl::StrJoin(values, ","));

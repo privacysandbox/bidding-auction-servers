@@ -81,7 +81,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       kv_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
                                                  kBuyerKVMetadata)),
       bidding_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
-                                                      kBiddingKVMetadata)),
+                                                      kBiddingMetadata)),
       bidding_signals_async_provider_(&bidding_signals_async_provider),
       bidding_async_client_(&bidding_async_client),
       protected_app_signals_bidding_async_client_(pas_bidding_async_client),
@@ -91,9 +91,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
         return log::ContextImpl(GetLoggingContext(),
-                                config_.enable_otel_based_logging
-                                    ? config_.consented_debug_token
-                                    : "");
+                                config_.consented_debug_token,
+                                raw_request_.consented_debug_config());
       }()),
       async_task_tracker_(config_.is_protected_app_signals_enabled
                               ? kNumOutboundBiddingCallsWithProtectedAppSignals
@@ -140,8 +139,8 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     return;
   }
 
-  PS_VLOG(2, log_context_) << "GetBidsRawResponse:\n"
-                           << get_bids_raw_response_->DebugString();
+  PS_VLOG(kPlain, log_context_) << "GetBidsRawResponse:\n"
+                                << get_bids_raw_response_->DebugString();
 
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     PS_VLOG(1, log_context_) << "Failed to encrypt the response";
@@ -151,8 +150,8 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     return;
   }
 
-  PS_VLOG(3, log_context_) << "Encrypted GetBidsResponse:\n"
-                           << get_bids_response_->DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsResponse:\n"
+                                    << get_bids_response_->ShortDebugString();
 
   if (!any_successful_bids) {
     PS_VLOG(3, log_context_)
@@ -194,8 +193,8 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   DCHECK(config_.encryption_enabled);
-  PS_VLOG(2, log_context_) << "GetBidsRequest:\n"
-                           << request_->ShortDebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
+                                    << request_->ShortDebugString();
   PS_VLOG(2, log_context_) << "Headers:\n"
                            << absl::StrJoin(context_->client_metadata(), "\n",
                                             absl::PairFormatter(
@@ -209,8 +208,8 @@ void GetBidsUnaryReactor::Execute() {
     return;
   }
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
-  PS_VLOG(1, log_context_) << "GetBidsRawRequest:\n"
-                           << raw_request_.ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest:\n"
+                                << raw_request_.ShortDebugString();
   GetProtectedAudienceBids();
   MayGetProtectedSignalsBids();
 }
@@ -417,14 +416,8 @@ absl::Status GetBidsUnaryReactor::EncryptResponse() {
 
 log::ContextImpl::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
   const auto& log_context = raw_request_.log_context();
-  log::ContextImpl::ContextMap context_map = {
-      {kGenerationId, log_context.generation_id()},
-      {kBuyerDebugId, log_context.adtech_debug_id()}};
-  if (raw_request_.has_consented_debug_config()) {
-    log::MaybeAddConsentedDebugConfig(raw_request_.consented_debug_config(),
-                                      context_map);
-  }
-  return context_map;
+  return {{kGenerationId, log_context.generation_id()},
+          {kBuyerDebugId, log_context.adtech_debug_id()}};
 }
 
 void GetBidsUnaryReactor::FinishWithOkStatus() {

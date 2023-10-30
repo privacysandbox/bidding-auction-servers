@@ -24,10 +24,12 @@
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_format.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 // helper functions to generate random objects for testing
 namespace privacy_sandbox::bidding_auction_servers {
@@ -81,7 +83,7 @@ std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice();
 InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice();
 
 // Build random trusted bidding signals with interest group names.
-std::string MakeRandomTrustedBiddingSignals(
+absl::StatusOr<std::string> MakeRandomTrustedBiddingSignals(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request);
 
 // build_android_signals: If false, will insert random values into
@@ -144,18 +146,15 @@ GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest();
 GetBidsRequest MakeARandomGetBidsRequest();
 
 template <typename T>
-T MakeARandomProtectedAuctionInput() {
-  BuyerInput buyer_input_1;
-  BuyerInput buyer_input_2;
-  auto ig_with_two_ads_1 = MakeAnInterestGroupSentFromDevice();
-  auto ig_with_two_ads_2 = MakeAnInterestGroupSentFromDevice();
-  buyer_input_1.mutable_interest_groups()->AddAllocated(
-      ig_with_two_ads_1.release());
-  buyer_input_2.mutable_interest_groups()->AddAllocated(
-      ig_with_two_ads_2.release());
+T MakeARandomProtectedAuctionInput(int num_buyers = 2) {
   google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
-  buyer_inputs.emplace("ad_tech_A.com", buyer_input_1);
-  buyer_inputs.emplace("ad_tech_B.com", buyer_input_2);
+  for (int i = 0; i < num_buyers; i++) {
+    BuyerInput buyer_input;
+    auto ig_with_two_ads = MakeAnInterestGroupSentFromDevice();
+    buyer_input.mutable_interest_groups()->AddAllocated(
+        ig_with_two_ads.release());
+    buyer_inputs.emplace(absl::StrFormat("ad_tech_%d.com", i), buyer_input);
+  }
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
       GetEncodedBuyerInputMap(buyer_inputs);
   T protected_auction_input;

@@ -68,6 +68,8 @@ constexpr char kDebugReportUrlsPropertyForScoreAd[] = "debugReportUrls";
 constexpr char kAuctionDebugLossUrlPropertyForScoreAd[] = "auctionDebugLossUrl";
 constexpr char kAuctionDebugWinUrlPropertyForScoreAd[] = "auctionDebugWinUrl";
 
+constexpr int kBytesMultiplyer = 1024;
+
 // TODO(b/259610873): Revert hardcoded device signals.
 std::string MakeDeviceSignals(
     absl::string_view publisher_hostname,
@@ -455,14 +457,18 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.enable_seller_debug_url_generation),
       roma_timeout_ms_(runtime_config.roma_timeout_ms),
       log_context_(GetLoggingContext(raw_request_),
-                   runtime_config.enable_otel_based_logging
-                       ? runtime_config.consented_debug_token
-                       : ""),
+                   runtime_config.consented_debug_token,
+                   raw_request_.consented_debug_config()),
       enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
       enable_report_result_url_generation_(
           runtime_config.enable_report_result_url_generation),
       enable_report_win_url_generation_(
-          runtime_config.enable_report_win_url_generation) {
+          runtime_config.enable_report_win_url_generation),
+      max_allowed_size_debug_url_chars_(
+          runtime_config.max_allowed_size_debug_url_bytes),
+      max_allowed_size_all_debug_urls_chars_(
+          kBytesMultiplyer *
+          runtime_config.max_allowed_size_all_debug_urls_kb) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
@@ -473,22 +479,17 @@ ScoreAdsReactor::ScoreAdsReactor(
 log::ContextImpl::ContextMap ScoreAdsReactor::GetLoggingContext(
     const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request) {
   const auto& log_context = score_ads_request.log_context();
-  log::ContextImpl::ContextMap context_map = {
-      {kGenerationId, log_context.generation_id()},
-      {kSellerDebugId, log_context.adtech_debug_id()}};
-  if (score_ads_request.has_consented_debug_config()) {
-    log::MaybeAddConsentedDebugConfig(
-        score_ads_request.consented_debug_config(), context_map);
-  }
-  return context_map;
+  return {{kGenerationId, log_context.generation_id()},
+          {kSellerDebugId, log_context.adtech_debug_id()}};
 }
 
 void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
 
-  PS_VLOG(2, log_context_) << "ScoreAdsRequest:\n" << request_->DebugString();
-  PS_VLOG(1, log_context_) << "ScoreAdsRawRequest:\n"
-                           << raw_request_.DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsRequest:\n"
+                                    << request_->ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "ScoreAdsRawRequest:\n"
+                                << raw_request_.DebugString();
 
   auto ads = raw_request_.ad_bids();
   if (ads.empty()) {
@@ -550,8 +551,19 @@ void ScoreAdsReactor::Execute() {
   }
 }
 
+long DebugReportUrlsLength(const ScoreAdsResponse::AdScore& ad_score) {
+  if (!ad_score.has_debug_report_urls()) {
+    return 0;
+  }
+  return ad_score.debug_report_urls().auction_debug_win_url().length() +
+         ad_score.debug_report_urls().auction_debug_loss_url().length();
+}
+
 ScoreAdsResponse::AdScore ParseScoreAdResponse(
-    const rapidjson::Document& score_ad_resp) {
+    const rapidjson::Document& score_ad_resp,
+    int max_allowed_size_debug_url_chars,
+    long max_allowed_size_all_debug_urls_chars,
+    long current_all_debug_urls_chars) {
   ScoreAdsResponse::AdScore score_ads_response;
   if (score_ad_resp.IsNumber()) {
     score_ads_response.set_desirability(score_ad_resp.GetDouble());
@@ -589,17 +601,30 @@ ScoreAdsResponse::AdScore ParseScoreAdResponse(
           kAuctionDebugWinUrlPropertyForScoreAd) &&
       debug_report_urls_itr->value[kAuctionDebugWinUrlPropertyForScoreAd]
           .IsString()) {
-    debug_report_urls.set_auction_debug_win_url(
+    absl::string_view win_debug_url =
         debug_report_urls_itr->value[kAuctionDebugWinUrlPropertyForScoreAd]
-            .GetString());
+            .GetString();
+    int win_url_length = win_debug_url.length();
+    if (win_url_length <= max_allowed_size_debug_url_chars &&
+        win_url_length + current_all_debug_urls_chars <=
+            max_allowed_size_all_debug_urls_chars) {
+      debug_report_urls.set_auction_debug_win_url(win_debug_url);
+      current_all_debug_urls_chars += win_url_length;
+    }
   }
   if (debug_report_urls_itr->value.HasMember(
           kAuctionDebugLossUrlPropertyForScoreAd) &&
       debug_report_urls_itr->value[kAuctionDebugLossUrlPropertyForScoreAd]
           .IsString()) {
-    debug_report_urls.set_auction_debug_loss_url(
+    absl::string_view loss_debug_url =
         debug_report_urls_itr->value[kAuctionDebugLossUrlPropertyForScoreAd]
-            .GetString());
+            .GetString();
+    int loss_url_length = loss_debug_url.length();
+    if (loss_url_length <= max_allowed_size_debug_url_chars &&
+        loss_url_length + current_all_debug_urls_chars <=
+            max_allowed_size_all_debug_urls_chars) {
+      debug_report_urls.set_auction_debug_loss_url(loss_debug_url);
+    }
   }
   *score_ads_response.mutable_debug_report_urls() = debug_report_urls;
   return score_ads_response;
@@ -708,6 +733,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
   int seller_rejected_bid_count = 0;
   LogIfError(metric_context_->AccumulateMetric<metric::kAuctionTotalBidsCount>(
       total_bid_count));
+  long current_all_debug_urls_chars = 0;
   for (int index = 0; index < responses.size(); index++) {
     if (responses[index].ok()) {
       absl::StatusOr<rapidjson::Document> response_json =
@@ -723,8 +749,12 @@ void ScoreAdsReactor::ScoreAdsCallback(
           ad_data_.at(responses[index].value().id).get();
 
       if (response_json.ok()) {
-        ScoreAdsResponse::AdScore score_ads_response =
-            ParseScoreAdResponse(*response_json);
+        ScoreAdsResponse::AdScore score_ads_response = ParseScoreAdResponse(
+            *response_json, max_allowed_size_debug_url_chars_,
+            max_allowed_size_all_debug_urls_chars_,
+            current_all_debug_urls_chars);
+        current_all_debug_urls_chars +=
+            DebugReportUrlsLength(score_ads_response);
         score_ads_response.set_interest_group_name(ad->interest_group_name());
         score_ads_response.set_interest_group_owner(ad->interest_group_owner());
         score_ads_response.set_buyer_bid(ad->bid());
@@ -965,8 +995,10 @@ void ScoreAdsReactor::PerformDebugReporting(
 }
 
 void ScoreAdsReactor::FinishWithOkStatus() {
-  PS_VLOG(1, log_context_) << "ScoreAdsRawResponse:\n"
-                           << raw_response_.DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsResponse\n"
+                                    << response_->ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "ScoreAdsRawResponse:\n"
+                                << raw_response_.DebugString();
   metric_context_->SetRequestSuccessful();
   Finish(grpc::Status::OK);
 }

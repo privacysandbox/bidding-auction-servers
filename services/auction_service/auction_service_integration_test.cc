@@ -110,6 +110,44 @@ constexpr absl::string_view js_code_with_debug_urls = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_with_very_large_debug_urls = R"JS_CODE(
+  function fibonacci(num) {
+  if (num <= 1) return 1;
+  return fibonacci(num - 1) + fibonacci(num - 2);
+  }
+
+  const generateRandomUrl = (length) => {
+    let result = '';
+    const characters =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const charactersLength = characters.length;
+    const baseUrl = "https://example.com?randomParam=";
+    const lengthOfRandomChars = length - baseUrl.length;
+    for (let i = 0; i < lengthOfRandomChars; i++) {
+      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
+    return baseUrl + result;
+  };
+
+  function scoreAd( ad_metadata,
+                      bid,
+                      auction_config,
+                      scoring_signals,
+                      device_signals,
+                      direct_from_seller_signals
+    ) {
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      forDebuggingOnly.reportAdAuctionLoss(generateRandomUrl(65538));
+      forDebuggingOnly.reportAdAuctionWin(generateRandomUrl(65536));
+      //Reshaped into AdScore
+      return {
+        "desirability": score,
+        "allowComponentAuction": false
+      };
+  }
+  )JS_CODE";
+
 constexpr absl::string_view js_code_with_global_this_debug_urls = R"JS_CODE(
     function fibonacci(num) {
       if (num <= 1) return 1;
@@ -512,6 +550,28 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
   EXPECT_EQ(scoredAd.debug_report_urls().auction_debug_loss_url(),
             "https://example-ssp.com/debugLoss");
   EXPECT_GT(scoredAd.ig_owner_highest_scoring_other_bids_map().size(), 0);
+}
+
+TEST_F(AuctionServiceIntegrationTest, ScoresAdsDoesNotReturnsLargeDebugUrls) {
+  bool enable_seller_debug_url_generation = true;
+  bool enable_debug_reporting = true;
+  ScoreAdsRequest request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting,
+                       1);
+
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(
+      &request, &response, js_code_with_very_large_debug_urls,
+      enable_seller_debug_url_generation, enable_debug_reporting);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+
+  EXPECT_GT(scoredAd.desirability(), 0);
+  EXPECT_TRUE(scoredAd.has_debug_report_urls());
+  EXPECT_GT(scoredAd.debug_report_urls().auction_debug_win_url().length(), 0);
+  EXPECT_EQ(scoredAd.debug_report_urls().auction_debug_loss_url().length(), 0);
 }
 
 TEST_F(AuctionServiceIntegrationTest,

@@ -133,6 +133,10 @@ inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
 
 enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
 
+// log verbosity
+inline constexpr int kPlain = 1;
+inline constexpr int kEncrypted = 4;
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_REQUEST_RESPONSE_CONSTANTS_H_

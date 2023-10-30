@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
@@ -25,7 +26,6 @@
 #include "absl/synchronization/notification.h"
 #include "scp/cc/public/core/interface/execution_result.h"
 #include "scp/cc/public/cpio/interface/instance_client/instance_client_interface.h"
-#include "services/common/loggers/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -120,7 +120,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
       [&](const ExecutionResult& result,
           const GetInstanceDetailsByResourceNameResponse& response) {
         if (result.Successful()) {
-          PS_VLOG(2) << response.DebugString();
+          ABSL_LOG(INFO) << response.DebugString();
           instance_id_ = std::string{response.instance_details().instance_id()};
           operator_ = response.instance_details().labels().at(kOperatorTagName);
           environment_ =

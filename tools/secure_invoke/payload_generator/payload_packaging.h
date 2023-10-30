@@ -76,7 +76,7 @@ PackagePlainTextSelectAdRequest(
     absl::string_view input_json_str,
     ClientType client_type = CLIENT_TYPE_BROWSER,
     absl::string_view public_key = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId);
+    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false);
 
 // This method returns a SelectAdRequest json for testing B&A servers in
 // "test_mode" using the PackagePlainTextSelectAdRequest method.
@@ -84,7 +84,7 @@ std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str,
     ClientType client_type = CLIENT_TYPE_BROWSER,
     absl::string_view public_key = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId);
+    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // TOOLS_PAYLOAD_GENERATOR_PAYLOAD_PACKAGING_H_

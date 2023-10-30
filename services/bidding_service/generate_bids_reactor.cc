@@ -71,19 +71,6 @@ absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
   if (bidding_signals_obj == nullptr) {
     return parsed_trusted_bidding_signals;
   }
-  // Move bidding signals with key name = IG name.
-  rapidjson::Value::MemberIterator ig_name_itr =
-      bidding_signals_obj->FindMember(ig.name().c_str());
-
-  if (ig_name_itr != bidding_signals_obj->MemberEnd()) {
-    rapidjson::Value json_key;
-    // Keep string reference. Assumes safe lifecycle.
-    json_key.SetString(rapidjson::StringRef(ig.name().c_str()));
-    // AddMember moves Values, do not reference them anymore.
-    ig_signals.AddMember(json_key, ig_name_itr->value,
-                         ig_signals.GetAllocator());
-    parsed_trusted_bidding_signals.keys.emplace(ig.name());
-  }
 
   // Copy bidding signals with key name in bidding signal keys.
   for (const auto& key : ig.trusted_bidding_signals_keys()) {
@@ -91,15 +78,16 @@ absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
       // Do not process duplicate keys.
       continue;
     }
-    rapidjson::Value::ConstMemberIterator key_itr =
+    rapidjson::Value::ConstMemberIterator trusted_bidding_signals_key_itr =
         bidding_signals_obj->FindMember(key.c_str());
-    if (key_itr != bidding_signals_obj->MemberEnd()) {
+    if (trusted_bidding_signals_key_itr != bidding_signals_obj->MemberEnd()) {
       rapidjson::Value json_key;
       // Keep string reference. Assumes safe lifecycle.
       json_key.SetString(rapidjson::StringRef(key.c_str()));
       rapidjson::Value json_value;
       // Copy instead of move, could be referenced by multiple IGs.
-      json_value.CopyFrom(key_itr->value, ig_signals.GetAllocator());
+      json_value.CopyFrom(trusted_bidding_signals_key_itr->value,
+                          ig_signals.GetAllocator());
       // AddMember moves Values, do not reference them anymore.
       ig_signals.AddMember(json_key, json_value, ig_signals.GetAllocator());
       parsed_trusted_bidding_signals.keys.emplace(key);
@@ -377,6 +365,39 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   return generate_bid_request;
 }
 
+// Set debug url if within character limit, otherwise clear field parsed from
+// JSON response.
+long SetAndReturnDebugUrlSize(AdWithBid* ad_with_bid,
+                              int max_allowed_size_debug_url_chars,
+                              long max_allowed_size_all_debug_urls_chars,
+                              long current_all_debug_urls_chars) {
+  long current_debug_urls_len = 0;
+  if (!ad_with_bid->has_debug_report_urls()) {
+    return current_debug_urls_len;
+  }
+
+  int win_url_length =
+      ad_with_bid->debug_report_urls().auction_debug_win_url().length();
+  if (win_url_length > max_allowed_size_debug_url_chars ||
+      win_url_length + current_all_debug_urls_chars >
+          max_allowed_size_all_debug_urls_chars) {
+    ad_with_bid->mutable_debug_report_urls()->clear_auction_debug_win_url();
+  } else {
+    current_all_debug_urls_chars += win_url_length;
+    current_debug_urls_len += win_url_length;
+  }
+
+  int loss_url_length =
+      ad_with_bid->debug_report_urls().auction_debug_loss_url().length();
+  if (loss_url_length > max_allowed_size_debug_url_chars ||
+      loss_url_length + current_all_debug_urls_chars >
+          max_allowed_size_all_debug_urls_chars) {
+    ad_with_bid->mutable_debug_report_urls()->clear_auction_debug_loss_url();
+  } else {
+    current_debug_urls_len += loss_url_length;
+  }
+  return current_debug_urls_len;
+}
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
@@ -402,10 +423,10 @@ GenerateBidsReactor::GenerateBidsReactor(
 void GenerateBidsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
 
-  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
-                           << request_->DebugString();
-  PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"
-                           << raw_request_.DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsRequest:\n"
+                                    << request_->ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
+                                << raw_request_.ShortDebugString();
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
 
@@ -494,6 +515,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
   LogIfError(metric_context_->AccumulateMetric<metric::kBiddingTotalBidsCount>(
       total_bid_count));
   int failed_requests = 0;
+  long current_all_debug_urls_chars = 0;
   for (int i = 0; i < output.size(); i++) {
     auto& result = output.at(i);
     bool is_bid_zero = true;
@@ -512,6 +534,15 @@ void GenerateBidsReactor::GenerateBidsCallback(
           generate_bid_response.value(), &bid);
       const std::string interest_group_name = result->id;
       if (valid.ok()) {
+        if (current_all_debug_urls_chars >=
+            max_allowed_size_all_debug_urls_chars_) {
+          bid.clear_debug_report_urls();
+        } else {
+          current_all_debug_urls_chars +=
+              SetAndReturnDebugUrlSize(&bid, max_allowed_size_debug_url_chars_,
+                                       max_allowed_size_all_debug_urls_chars_,
+                                       current_all_debug_urls_chars);
+        }
         if (!IsValidBid(bid)) {
           PS_VLOG(2, log_context_)
               << "Skipping 0 bid for " << interest_group_name << ": "
@@ -548,8 +579,8 @@ void GenerateBidsReactor::GenerateBidsCallback(
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  PS_VLOG(1, log_context_) << "GenerateBidsRawResponse\n"
-                           << raw_response_.DebugString();
+  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse\n"
+                                << raw_response_.DebugString();
 
   DCHECK(encryption_enabled_);
   if (!EncryptResponse()) {
@@ -559,6 +590,8 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
   if (status.error_code() == grpc::StatusCode::OK) {
     metric_context_->SetRequestSuccessful();
   }
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsResponse\n"
+                                    << response_->ShortDebugString();
   Finish(status);
 }
 

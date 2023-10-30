@@ -168,7 +168,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsClientIp) {
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   absl::SetFlag(&FLAGS_host_addr,
                 absl::StrFormat("localhost:%d", start_service_result.port));
-  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId, false),
                "Client IP must be specified");
 }
 
@@ -179,7 +179,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId, false),
                "BFE host address must be specified");
 }
 
@@ -195,7 +195,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty user agent would cause the validation failure.
   absl::SetFlag(&FLAGS_client_user_agent, "");
-  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId, false),
                "User Agent must be specified");
 }
 
@@ -211,7 +211,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty client accept language would cause the validation failure.
   absl::SetFlag(&FLAGS_client_accept_language, "");
-  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId),
+  EXPECT_DEATH(SendRequestToBfe(kDefaultPublicKey, kTestKeyId, false),
                "Accept Language must be specified");
 }
 
@@ -235,7 +235,37 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
   // back. Error is expected because test is not setting up the bidding service.
   auto status = SendRequestToBfe(
       privacy_sandbox::bidding_auction_servers::kDefaultPublicKey,
-      privacy_sandbox::bidding_auction_servers::kTestKeyId, std::move(stub));
+      privacy_sandbox::bidding_auction_servers::kTestKeyId, false,
+      std::move(stub));
+  EXPECT_FALSE(status.ok()) << status;
+  EXPECT_THAT(status.message(),
+              HasSubstr("Failed to create secure client channel"))
+      << status;
+}
+
+TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponseWithDebugReportingEnabled) {
+  BuyerFrontEndService buyer_front_end_service{
+      std::move(bidding_signals_provider_), bidding_service_client_config_,
+      std::move(key_fetcher_manager_), std::move(crypto_client_),
+      std::move(get_bids_config_)};
+
+  auto start_service_result = StartLocalService(&buyer_front_end_service);
+  bool enable_debug_reporting = true;
+  std::unique_ptr<BuyerFrontEnd::StubInterface> stub =
+      CreateServiceStub<BuyerFrontEnd>(start_service_result.port);
+  absl::SetFlag(&FLAGS_host_addr,
+                absl::StrFormat("localhost:%d", start_service_result.port));
+  absl::SetFlag(&FLAGS_client_ip, kClientIp);
+  absl::SetFlag(&FLAGS_client_user_agent, kUserAgent);
+  absl::SetFlag(&FLAGS_client_accept_language, kAcceptLanguage);
+  absl::SetFlag(&FLAGS_json_input_str, kSampleGetBidRequest);
+
+  // Verifies that the encrypted request makes it to BFE and the response comes
+  // back. Error is expected because test is not setting up the bidding service.
+  auto status = SendRequestToBfe(
+      privacy_sandbox::bidding_auction_servers::kDefaultPublicKey,
+      privacy_sandbox::bidding_auction_servers::kTestKeyId,
+      enable_debug_reporting, std::move(stub));
   EXPECT_FALSE(status.ok()) << status;
   EXPECT_THAT(status.message(),
               HasSubstr("Failed to create secure client channel"))
@@ -263,8 +293,9 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {
       "rvJwF4YQi1hZLWMcGbDf9uGN2jQInZvtHPJsgTUewQY=";
   EXPECT_NE(invalid_key,
             privacy_sandbox::bidding_auction_servers::kDefaultPublicKey);
-  EXPECT_DEATH(SendRequestToBfe(invalid_key, kTestKeyId, std::move(stub)),
-               "Encryption Failure.");
+  EXPECT_DEATH(
+      SendRequestToBfe(invalid_key, kTestKeyId, false, std::move(stub)),
+      "Encryption Failure.");
 }
 
 TEST_F(SecureInvokeLib, UsesKeyForBfeEncryption) {
@@ -288,7 +319,8 @@ TEST_F(SecureInvokeLib, UsesKeyForBfeEncryption) {
   const std::string unrecognized_key =
       "aef2701786108b58592d631c19b0dff6e18dda34089d9bed1cf26c81351ec106";
   EXPECT_NE(unrecognized_key, kDefaultPublicKey);
-  auto status = SendRequestToBfe(unrecognized_key, kTestKeyId, std::move(stub));
+  auto status =
+      SendRequestToBfe(unrecognized_key, kTestKeyId, false, std::move(stub));
   EXPECT_FALSE(status.ok()) << status;
   EXPECT_THAT(status.message(), HasSubstr("Malformed request ciphertext"))
       << status;

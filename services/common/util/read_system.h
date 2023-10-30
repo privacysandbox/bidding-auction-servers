@@ -24,8 +24,11 @@ namespace privacy_sandbox::server_common {
 // Read system CPU metric, return map of attribute and value.
 absl::flat_hash_map<std::string, double> GetCpu();
 
-// Read system Memory metric, , return map of attribute and value.
+// Read system Memory metric, return map of attribute and value.
 absl::flat_hash_map<std::string, double> GetMemory();
+
+// Read system Thread metric, return map of attribute and value.
+absl::flat_hash_map<std::string, double> GetThread();
 
 namespace internal {
 struct Utilization {

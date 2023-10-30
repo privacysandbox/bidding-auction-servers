@@ -48,9 +48,9 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
                          {"x-bna-client-ip", "X-BnA-Client-IP"}}};
 
 inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
-    kBiddingKVMetadata = {{{"x-accept-language", "x-accept-language"},
-                           {"x-user-agent", "x-user-agent"},
-                           {"x-bna-client-ip", "x-bna-client-ip"}}};
+    kBiddingMetadata = {{{"x-accept-language", "x-accept-language"},
+                         {"x-user-agent", "x-user-agent"},
+                         {"x-bna-client-ip", "x-bna-client-ip"}}};
 
 // This is a gRPC server reactor that serves a single GetBidsRequest.
 // It stores state relevant to the request and after the

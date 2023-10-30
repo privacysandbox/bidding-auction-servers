@@ -19,10 +19,13 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/btree_set.h"
 #include "absl/strings/str_cat.h"
 
 // Helper methods for building URLs with query params.
 namespace privacy_sandbox::bidding_auction_servers {
+
+using UrlKeysSet = absl::btree_set<absl::string_view>;
 
 /**
  * Adds an ampersand if one is needed, and does nothing if one is not needed.
@@ -42,7 +45,7 @@ void AddAmpersandIfNotFirstQueryParam(std::string* url);
  * method.
  */
 void AddListItemsAsQueryParamsToUrl(std::string* url, absl::string_view key,
-                                    const std::vector<std::string>& values,
+                                    const UrlKeysSet& values,
                                     bool encode_params = false);
 
 /**

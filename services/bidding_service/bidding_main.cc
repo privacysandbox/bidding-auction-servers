@@ -143,14 +143,17 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         BYOS_AD_RETRIEVAL_SERVER);
   config_client.SetFlag(FLAGS_ad_retrieval_timeout_ms, AD_RETRIEVAL_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
-
-  // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  config_client.SetFlag(FLAGS_max_allowed_size_debug_url_bytes,
+                        MAX_ALLOWED_SIZE_DEBUG_URL_BYTES);
+  config_client.SetFlag(FLAGS_max_allowed_size_all_debug_urls_kb,
+                        MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
+  // Set verbosity
+  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
 
   PS_VLOG(1) << "Protected App Signals support enabled for the service: "
              << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -399,7 +402,11 @@ absl::Status RunServer() {
           std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
       .is_protected_app_signals_enabled = is_protected_app_signals_enabled,
       .ad_retrieval_timeout_ms =
-          config_client.GetIntParameter(AD_RETRIEVAL_TIMEOUT_MS)};
+          config_client.GetIntParameter(AD_RETRIEVAL_TIMEOUT_MS),
+      .max_allowed_size_debug_url_bytes =
+          config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
+      .max_allowed_size_all_debug_urls_kb =
+          config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB)};
 
   auto protected_app_signals_generate_bids_reactor_factory =
       [&client](const grpc::CallbackServerContext* context,

@@ -80,7 +80,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest("0", GET_BID_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", SCORE_ADS_RPC_TIMEOUT_MS);
-    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   }
 
@@ -892,6 +892,116 @@ TYPED_TEST(SellerFrontEndServiceTest,
       response.auction_result_ciphertext(), encryption_context);
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
+  const int num_buyers = 3;
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
+  TypeParam protected_auction_input =
+      MakeARandomProtectedAuctionInput<TypeParam>(/*num_buyers=*/num_buyers);
+  SelectAdRequest request =
+      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  *request.mutable_protected_auction_ciphertext() =
+      std::move(encrypted_protected_auction_input);
+
+  // Setup buyer client that throws an error.
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = request.auction_config().buyer_list_size();
+  EXPECT_EQ(client_count, num_buyers);
+  int buyer_input_count = protected_auction_input.buyer_input_size();
+  EXPECT_EQ(buyer_input_count, num_buyers);
+  BuyerBidsResponseMap expected_buyer_bids;
+  int buyer_calls_counter = 0;
+  for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
+    AdWithBid bid =
+        BuildNewAdWithBid(absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
+                          kNonZeroBidValue, kNumAdComponentRenderUrl);
+    GetBidsResponse::GetBidsRawResponse get_bids_response;
+    get_bids_response.mutable_bids()->Add(std::move(bid));
+    SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
+                         /*repeated_get_allowed=*/false,
+                         /*each_call_required=*/false,
+                         /*buyer_calls_counter=*/&buyer_calls_counter);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bids_response));
+  }
+
+  // Scoring signals provider mock.
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  std::optional<std::string> ad_render_urls{kSampleAdRenderUrl};
+  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                           ad_render_urls, /*repeated_get_allowed=*/false,
+                           /*server_error_to_return=*/std::nullopt,
+                           /*expected_num_bids=*/2);
+
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification notification;
+  ScoreAdsResponse::AdScore winner;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce([&notification, &winner](
+                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                        score_ads_request,
+                    const RequestMetadata& metadata,
+                    ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+        ScoreAdsResponse::ScoreAdsRawResponse response;
+        float i = 1;
+        ErrorAccumulator error_accumulator;
+        // Last bid wins.
+        for (const auto& bid : score_ads_request->ad_bids()) {
+          ScoreAdsResponse::AdScore score;
+          EXPECT_FALSE(bid.render().empty());
+          score.set_render(bid.render());
+          score.mutable_component_renders()->CopyFrom(bid.ad_components());
+          EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
+          score.set_desirability(i++);
+          score.set_buyer_bid(i);
+          score.set_interest_group_name(bid.interest_group_name());
+          *response.mutable_ad_score() = score;
+          winner = score;
+        }
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response));
+        notification.Notify();
+        return absl::OkStatus();
+      });
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  ClientRegistry clients{scoring_signals_provider, scoring_client,
+                         buyer_clients, key_fetcher_manager,
+                         std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  SelectAdResponse response;
+  grpc::ClientContext context;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+  notification.WaitForNotification();
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  AuctionResult auction_result = DecryptBrowserAuctionResult(
+      response.auction_result_ciphertext(), encryption_context);
+  ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
+  EXPECT_FALSE(auction_result.is_chaff());
+
+  EXPECT_EQ(buyer_calls_counter, 2);
 }
 
 }  // namespace

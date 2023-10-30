@@ -33,10 +33,9 @@ void HttpScoringSignalsAsyncProvider::Get(
   for (const auto& buyer_get_bid_response_pair :
        scoring_signals_request.buyer_bids_map_) {
     for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
-      request->render_urls.emplace_back(ad.render());
-      request->ad_component_render_urls.insert(
-          request->ad_component_render_urls.end(), ad.ad_components().begin(),
-          ad.ad_components().end());
+      request->render_urls.emplace(ad.render());
+      request->ad_component_render_urls.insert(ad.ad_components().begin(),
+                                               ad.ad_components().end());
     }
   }
   request->client_type = scoring_signals_request.client_type_;

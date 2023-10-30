@@ -105,7 +105,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(context));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_.SetFlagForTest(kFalse, ENABLE_OTEL_BASED_LOGGING);
+    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
@@ -119,8 +119,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         ->Get(&request_);
   }
 
-  void SetupRequestWithTwoBuyers() {
-    protected_auction_input_ = MakeARandomProtectedAuctionInput<T>();
+  void SetupRequest(int num_buyers) {
+    protected_auction_input_ = MakeARandomProtectedAuctionInput<T>(num_buyers);
     request_ = MakeARandomSelectAdRequest(kSellerOriginDomain,
                                           protected_auction_input_);
     auto [encrypted_protected_auction_input, encryption_context] =
@@ -161,7 +161,7 @@ using ProtectedAuctionInputTypes =
 TYPED_TEST_SUITE(SellerFrontEndServiceTest, ProtectedAuctionInputTypes);
 
 TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -195,11 +195,11 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
               diff.Compare(buyer_input, get_values_request->buyer_input()));
           EXPECT_EQ(this->request_.auction_config().auction_signals(),
                     get_values_request->auction_signals());
-          EXPECT_STREQ(this->protected_auction_input_.publisher_name().c_str(),
-                       get_values_request->publisher_name().c_str());
+          EXPECT_EQ(this->protected_auction_input_.publisher_name(),
+                    get_values_request->publisher_name());
           EXPECT_FALSE(this->request_.auction_config().seller().empty());
-          EXPECT_STREQ(this->request_.auction_config().seller().c_str(),
-                       get_values_request->seller().c_str());
+          EXPECT_EQ(this->request_.auction_config().seller(),
+                    get_values_request->seller());
           return absl::OkStatus();
         });
     return buyer;
@@ -231,10 +231,170 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
+TYPED_TEST(SellerFrontEndServiceTest,
+           FetchesThreeBidsGivenThreeBuyersWhenLimitUpped) {
+  // Should only serve two buyers despite having 3 in request.
+  const int num_buyers = 3;
+  this->SetupRequest(num_buyers);
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+
+  // KV Client
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->request_.auction_config().buyer_list_size();
+  EXPECT_EQ(client_count, num_buyers);
+
+  int buyer_input_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(buyer_input_count, num_buyers);
+
+  auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
+    auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
+    EXPECT_CALL(*buyer, ExecuteInternal)
+        .Times(1)
+        .WillOnce([this, &buyer_input](
+                      std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                          get_values_request,
+                      const RequestMetadata& metadata,
+                      GetBidDoneCallback on_done, absl::Duration timeout) {
+          google::protobuf::util::MessageDifferencer diff;
+          std::string diff_output;
+          diff.ReportDifferencesToString(&diff_output);
+          EXPECT_EQ(get_values_request->client_type(),
+                    this->request_.client_type());
+          EXPECT_TRUE(
+              diff.Compare(buyer_input, get_values_request->buyer_input()));
+          EXPECT_EQ(this->request_.auction_config().auction_signals(),
+                    get_values_request->auction_signals());
+          EXPECT_EQ(this->protected_auction_input_.publisher_name(),
+                    get_values_request->publisher_name());
+          EXPECT_FALSE(this->request_.auction_config().seller().empty());
+          EXPECT_EQ(this->request_.auction_config().seller(),
+                    get_values_request->seller());
+          return absl::OkStatus();
+        });
+    return buyer;
+  };
+  int num_buyers_solicited = 0;
+  ErrorAccumulator error_accumulator;
+  for (const auto& buyer_ig_owner :
+       this->request_.auction_config().buyer_list()) {
+    auto decoded_buyer_input = DecodeBuyerInput(
+        buyer_ig_owner,
+        this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
+        error_accumulator);
+    EXPECT_FALSE(error_accumulator.HasErrors());
+    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
+    EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
+        .Times(::testing::AtMost(1))
+        .WillOnce([SetupMockBuyer, buyer_input,
+                   &num_buyers_solicited](absl::string_view hostname) {
+          ++num_buyers_solicited;
+          return SetupMockBuyer(buyer_input);
+        });
+  }
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  // Client Registry
+  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
+                         this->key_fetcher_manager_, std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, /*max_buyers_solicited=*/3);
+  // Hard limit is calling 3 buyers since we upped it.
+  EXPECT_EQ(num_buyers_solicited, 3);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
+  // Should only serve two buyers despite having 3 in request.
+  const int num_buyers = 3;
+  this->SetupRequest(num_buyers);
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+
+  // KV Client
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->request_.auction_config().buyer_list_size();
+  EXPECT_EQ(client_count, num_buyers);
+
+  int buyer_input_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(buyer_input_count, num_buyers);
+
+  auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
+    auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
+    EXPECT_CALL(*buyer, ExecuteInternal)
+        .Times(1)
+        .WillOnce([this, &buyer_input](
+                      std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                          get_values_request,
+                      const RequestMetadata& metadata,
+                      GetBidDoneCallback on_done, absl::Duration timeout) {
+          google::protobuf::util::MessageDifferencer diff;
+          std::string diff_output;
+          diff.ReportDifferencesToString(&diff_output);
+          EXPECT_EQ(get_values_request->client_type(),
+                    this->request_.client_type());
+          EXPECT_TRUE(
+              diff.Compare(buyer_input, get_values_request->buyer_input()));
+          EXPECT_EQ(this->request_.auction_config().auction_signals(),
+                    get_values_request->auction_signals());
+          EXPECT_EQ(this->protected_auction_input_.publisher_name(),
+                    get_values_request->publisher_name());
+          EXPECT_FALSE(this->request_.auction_config().seller().empty());
+          EXPECT_EQ(this->request_.auction_config().seller(),
+                    get_values_request->seller());
+          return absl::OkStatus();
+        });
+    return buyer;
+  };
+  int num_buyers_solicited = 0;
+  ErrorAccumulator error_accumulator;
+  for (const auto& buyer_ig_owner :
+       this->request_.auction_config().buyer_list()) {
+    auto decoded_buyer_input = DecodeBuyerInput(
+        buyer_ig_owner,
+        this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
+        error_accumulator);
+    EXPECT_FALSE(error_accumulator.HasErrors());
+    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
+    EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
+        .Times(::testing::AtMost(1))
+        .WillOnce([SetupMockBuyer, buyer_input,
+                   &num_buyers_solicited](absl::string_view hostname) {
+          ++num_buyers_solicited;
+          return SetupMockBuyer(buyer_input);
+        });
+  }
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  // Client Registry
+  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
+                         this->key_fetcher_manager_, std::move(async_reporter)};
+
+  Response response =
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  // Hard limit is calling 2 buyers.
+  EXPECT_EQ(num_buyers_solicited, 2);
+}
 
 TYPED_TEST(SellerFrontEndServiceTest,
            FetchesBidsFromAllBuyersWithDebugReportingEnabled) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
 
   // Enable debug reporting for this request_.
   this->protected_auction_input_.set_enable_debug_reporting(true);
@@ -303,7 +463,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
 TYPED_TEST(SellerFrontEndServiceTest,
            FetchesScoringSignalsWithBidResponseAdRenderUrls) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   // Expects no calls because we do not finish fetching the decision logic
@@ -347,7 +507,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
   absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
 
@@ -388,14 +548,13 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
             std::string diff_output;
             diff.ReportDifferencesToString(&diff_output);
 
-            EXPECT_STREQ(request->publisher_hostname().data(),
-                         protected_auction_input.publisher_name().data());
+            EXPECT_EQ(request->publisher_hostname(),
+                      protected_auction_input.publisher_name());
             EXPECT_EQ(request->seller_signals(),
                       select_ad_req.auction_config().seller_signals());
             EXPECT_EQ(request->auction_signals(),
                       select_ad_req.auction_config().auction_signals());
-            EXPECT_STREQ(request->scoring_signals().c_str(),
-                         ad_render_urls.c_str());
+            EXPECT_EQ(request->scoring_signals(), ad_render_urls);
             EXPECT_EQ(request->per_buyer_signals().size(), 2);
             for (const auto& actual_ad_with_bid_metadata : request->ad_bids()) {
               AdWithBid actual_ad_with_bid_for_test;
@@ -424,7 +583,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
   absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
 
@@ -735,7 +894,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
-  this->SetupRequestWithTwoBuyers();
+  this->SetupRequest(/*num_buyers=*/2);
   std::string decision_logic = "function scoreAds(){}";
   // Enable Event Level debug reporting for this request.
   this->protected_auction_input_.set_enable_debug_reporting(true);

@@ -78,6 +78,10 @@
       "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."
     },
     "winReportingUrls": { "$ref": "#/$defs/winReportingUrlsDef" },
-    "error": { "$ref": "#/$defs/errorDef" }
+    "error": { "$ref": "#/$defs/errorDef" },
+    "topLevelSeller": {
+      "type": "string",
+      "description": "Optional name/domain for top-level seller in case this is a component auction."
+    }
   }
 }

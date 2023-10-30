@@ -61,9 +61,10 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 SelectAdReactorForWeb::SelectAdReactorForWeb(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool fail_fast)
+    const TrustedServersConfigClient& config_client, bool fail_fast,
+    int max_buyers_solicited)
     : SelectAdReactor(context, request, response, clients, config_client,
-                      fail_fast) {}
+                      fail_fast, max_buyers_solicited) {}
 
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -74,13 +75,13 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
   PS_ASSIGN_OR_RETURN(
       std::string encoded_data,
       Encode(high_score, bidding_group_map, error, error_handler));
-  PS_VLOG(1, log_context_) << "AuctionResult:\n"
-                           << ([&]() {
-                                auto result = CborDecodeAuctionResultToProto(
-                                    encoded_data);
-                                return result.ok() ? result->DebugString()
-                                                   : result.status().ToString();
-                              }());
+  PS_VLOG(kPlain, log_context_)
+      << "AuctionResult:\n"
+      << ([&]() {
+           auto result = CborDecodeAuctionResultToProto(encoded_data);
+           return result.ok() ? result->DebugString()
+                              : result.status().ToString();
+         }());
 
   absl::string_view data_to_compress = absl::string_view(
       reinterpret_cast<char*>(encoded_data.data()), encoded_data.size());

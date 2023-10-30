@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/log/absl_log.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_format.h"
@@ -27,7 +28,6 @@
 #include "scp/cc/core/interface/errors.h"
 #include "scp/cc/public/core/interface/execution_result.h"
 #include "scp/cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
-#include "services/common/loggers/request_context_logger.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterRequest;

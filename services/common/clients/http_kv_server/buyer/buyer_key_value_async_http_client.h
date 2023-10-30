@@ -27,16 +27,20 @@
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/clients/http/http_fetcher_async.h"
+#include "services/common/clients/http_kv_server/util/generate_url.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-inline constexpr std::array<std::string_view, 1> kMandatoryHeaders{
+inline constexpr std::array<absl::string_view, 1> kMandatoryHeaders{
     {"X-BnA-Client-IP"}};
 
 // The data used to build the Buyer KV look url suffix
 struct GetBuyerValuesInput {
   // [DSP] List of keys to query values for, under the namespace keys.
-  std::vector<std::string> keys;
+  UrlKeysSet keys;
+
+  // [DSP] List of interest group names for which to query values.
+  UrlKeysSet interest_group_names;
 
   // [DSP] The browser sets the hostname of the publisher page to be the value.
   std::string hostname;

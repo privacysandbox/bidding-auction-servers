@@ -282,7 +282,7 @@ TEST(GetReportingInput, ReturnsTheInputArgsForReportResult) {
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "");
+  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
   std::vector<std::shared_ptr<std::string>> response_vector = GetReportingInput(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
       auction_config, log_context, {});
@@ -305,7 +305,7 @@ TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "");
+  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
       auction_config, log_context, {});
@@ -331,7 +331,7 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "");
+  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
   const BuyerReportingMetadata buyer_reporting_metadata = {
       .enable_report_win_url_generation = true,
       .buyer_signals = kTestBuyerSignals,

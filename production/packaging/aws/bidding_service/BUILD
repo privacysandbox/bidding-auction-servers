@@ -32,19 +32,8 @@ pkg_files(
     srcs = [
         "bin/init_server_basic",
         "//services/bidding_service:server",
-        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify",
-        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:socket_vendor",
     ],
     attributes = pkg_attributes(mode = "0555"),
-    prefix = "/",
-)
-
-pkg_files(
-    name = "server_bin_libs",
-    srcs = [
-        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxy_preload",
-    ],
-    attributes = pkg_attributes(mode = "0444"),
     prefix = "/",
 )
 
@@ -59,7 +48,6 @@ pkg_files(
 
 server_binaries = [
     ":kmstool_enclave_executable",
-    ":server_bin_libs",
     ":server_executables",
 ]
 
@@ -119,6 +107,7 @@ container_image(
     entrypoint = ["sh"],
     env = LOG_ENV_VARS,
     layers = [
+        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify_layer",
         ":server_binary_layer",
         ":kmstool_enclave_cli_layer",
     ],

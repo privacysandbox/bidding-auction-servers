@@ -91,22 +91,24 @@ module "buyer" {
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
-    PUBLIC_KEY_ENDPOINT                           = "" # Example: "https://publickeyservice-staging-a.gcp.testing.dev/v1alpha/publicKeys"
-    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "" # Example: "https://privatekeyservice-staging-a.gcp.testing.dev/v1alpha/encryptionKeys"
-    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT    = "" # Example: "https://privatekeyservice-staging-b.gcp.testing.dev/v1alpha/encryptionKeys"
-    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY          = "" # Example: "staging-a-opverifiedusr@coordinator1.iam.gserviceaccount.com"
-    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY        = "" # Example: "staging-b-opverifiedusr@coordinator2.iam.gserviceaccount.com"
-    PRIMARY_COORDINATOR_REGION                    = "" # Example: "us-central1"
-    SECONDARY_COORDINATOR_REGION                  = "" # Example: "us-central1"
-    GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER   = "" # Example: "projects/12345/locations/global/workloadIdentityPools/staging-a-opwip/providers/staging-a-opwip-pvdr"
-    GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "" # Example: "projects/78910/locations/global/workloadIdentityPools/staging-b-opwip/providers/staging-b-opwip-pvdr"
-    GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "" # Example: "https://staging-a-us-central1-encryption-key-service-test-uc.a.run.app"
-    GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "" # Example: "https://staging-b-us-central1-encryption-key-service-test-uc.a.run.app"
-    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "" # Example:  "3974400" (46 days)
-    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "" # Example: "20000"
+    PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
+    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "https://privatekeyservice-a.pa-1.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
+    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT    = "https://privatekeyservice-b.pa-2.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
+    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY          = "a-opverifiedusr@ps-pa-coord-prd-gg-wif.iam.gserviceaccount.com"
+    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY        = "b-opverifiedusr@ps-pa-coord-prd-gg-wif.iam.gserviceaccount.com"
+    PRIMARY_COORDINATOR_REGION                    = "us-central1"
+    SECONDARY_COORDINATOR_REGION                  = "us-central1"
+    GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER   = "projects/787276892073/locations/global/workloadIdentityPools/a-opwip/providers/a-opwip-pvdr"
+    GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "projects/787276892073/locations/global/workloadIdentityPools/b-opwip/providers/b-opwip-pvdr"
+    GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "https://a-us-central1-encryption-key-service-cloudfunctio-mik44m5f7q-uc.a.run.app"
+    GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "https://b-us-central1-encryption-key-service-cloudfunctio-amv3tcudsq-uc.a.run.app"
+    PRIVATE_KEY_CACHE_TTL_SECONDS                 = "3974400"
+    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "20000"
 
-    BFE_TLS_KEY  = "" # You can either set this here or via a secrets.auto.tfvars.
-    BFE_TLS_CERT = "" # You can either set this here or via a secrets.auto.tfvars.
+    BFE_TLS_KEY                        = "" # You can either set this here or via a secrets.auto.tfvars.
+    BFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.
+    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
+    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.
@@ -119,7 +121,7 @@ module "buyer" {
   vm_startup_delay_seconds           = 200   # Example: 200
   cpu_utilization_percent            = 0.6   # Example: 0.6
   use_confidential_space_debug_image = false # Example: false
-  tee_impersonate_service_accounts   = "staging-a-opallowedusr@coordinator1.iam.gserviceaccount.com,staging-b-opallowedusr@coordinator2.iam.gserviceaccount.com"
+  tee_impersonate_service_accounts   = "a-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com,b-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com"
   collector_service_port             = 4317
   region_config = {
     # Example config provided for us-central1 and you may add your own regions.

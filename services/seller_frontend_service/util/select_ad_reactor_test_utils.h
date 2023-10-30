@@ -84,7 +84,8 @@ void SetupBuyerClientMock(
     absl::string_view hostname,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
     const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
-    bool repeated_get_allowed = false);
+    bool repeated_get_allowed = false, bool expect_all_buyers_solicited = true,
+    int* num_buyers_solicited = nullptr);
 
 void BuildAdWithBidFromAdWithBidMetadata(
     const ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata& input,
@@ -102,17 +103,20 @@ void SetupScoringProviderMock(
     const BuyerBidsResponseMap& expected_buyer_bids,
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed = false,
-    const std::optional<absl::Status>& server_error_to_return = std::nullopt);
+    const std::optional<absl::Status>& server_error_to_return = std::nullopt,
+    int expected_num_bids = -1);
 
 TrustedServersConfigClient CreateConfig();
 
 template <class T>
 SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
                             const ClientRegistry& clients,
-                            const SelectAdRequest& request) {
+                            const SelectAdRequest& request,
+                            int max_buyers_solicited = 2) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
-  T reactor(&context, &request, &response, clients, config_client);
+  T reactor(&context, &request, &response, clients, config_client,
+            /*fail_fast=*/true, max_buyers_solicited);
   reactor.Execute();
   return response;
 }
@@ -122,7 +126,8 @@ server_common::PrivateKey GetPrivateKey();
 template <typename T>
 BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
     const SelectAdRequest& request, const T& protected_auction_input,
-    const BuyerFrontEndAsyncClientFactoryMock& buyer_clients) {
+    const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
+    bool expect_all_buyers_solicited = true) {
   BuyerBidsResponseMap buyer_bids;
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
@@ -138,7 +143,8 @@ BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
     mutable_bids->Add(std::move(bid));
 
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
+                         /*repeated_get_allowed=*/true,
+                         expect_all_buyers_solicited);
     buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -266,7 +272,8 @@ GetSelectAdRequestAndClientRegistryForTest(
         buyer_front_end_async_client_factory_mock,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
     BuyerBidsResponseMap& expected_buyer_bids,
-    absl::string_view seller_origin_domain) {
+    absl::string_view seller_origin_domain,
+    bool expect_all_buyers_solicited = true) {
   auto encrypted_request_with_context =
       GetSampleSelectAdRequest<T>(client_type, seller_origin_domain);
 
@@ -275,7 +282,7 @@ GetSelectAdRequestAndClientRegistryForTest(
   expected_buyer_bids = GetBuyerClientsAndBidsForReactor(
       encrypted_request_with_context.select_ad_request,
       encrypted_request_with_context.protected_auction_input,
-      buyer_front_end_async_client_factory_mock);
+      buyer_front_end_async_client_factory_mock, expect_all_buyers_solicited);
 
   // Scoring signals provider
   std::string ad_render_urls = "test scoring signals";

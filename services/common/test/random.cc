@@ -16,6 +16,8 @@
 
 #include <string>
 
+#include "absl/strings/str_format.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kTestIgWithTwoAds[] =
@@ -175,31 +177,63 @@ InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice() {
   return ig_for_bidding_from_device;
 }
 
-std::string MakeRandomTrustedBiddingSignals(
+absl::StatusOr<std::string> MakeRandomTrustedBiddingSignals(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request) {
   std::string signals_dest;
+
+  // First add the values for the trusted bidding signals keys for each IG.
   absl::StrAppend(&signals_dest, "{\"keys\":{");
+  // Iterate through all of the IGs.
   for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
-    auto interest_group = raw_request.interest_group_for_bidding().at(i);
+    const auto& interest_group = raw_request.interest_group_for_bidding(i);
+    // Now iterate through all of their trusted bidding signals keys.
+    for (int j = 0; j < interest_group.trusted_bidding_signals_keys_size();
+         j++) {
+      const auto& trusted_bidding_signal_key =
+          interest_group.trusted_bidding_signals_keys(j);
+      std::string raw_random_signals;
+      PS_RETURN_IF_ERROR(google::protobuf::util::MessageToJsonString(
+          MakeARandomListOfStrings(), &raw_random_signals));
+      absl::StrAppend(&signals_dest, absl::StrFormat(R"JSON("%s":%s)JSON",
+                                                     trusted_bidding_signal_key,
+                                                     raw_random_signals));
+      // Add a comma for all but the last signal-value pair in this IG.
+      if (j < interest_group.trusted_bidding_signals_keys_size() - 1) {
+        absl::StrAppend(&signals_dest, ",");
+      }
+    }
+    // Unless we are at the final IG, add the last comma for this IG's key-value
+    // pairs.
+    if (i < raw_request.interest_group_for_bidding_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+
+  // Then add the values for the IG names.
+  absl::StrAppend(&signals_dest, "},\"perInterestGroupData\":{");
+  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
+    const auto& interest_group = raw_request.interest_group_for_bidding(i);
     std::string raw_random_signals;
-    google::protobuf::util::MessageToJsonString(MakeARandomListOfStrings(),
-                                                &raw_random_signals);
-    absl::StrAppend(&signals_dest, "\"", interest_group.name(),
-                    "\":", raw_random_signals);
+    PS_RETURN_IF_ERROR(google::protobuf::util::MessageToJsonString(
+        MakeARandomListOfStrings(), &raw_random_signals));
+    absl::StrAppend(&signals_dest,
+                    absl::StrFormat(R"JSON("%s":%s)JSON", interest_group.name(),
+                                    raw_random_signals));
     if (i < raw_request.interest_group_for_bidding_size() - 1) {
       absl::StrAppend(&signals_dest, ",");
     }
   }
   absl::StrAppend(&signals_dest, "}}");
+
   return signals_dest;
 }
 
 InterestGroupForBidding MakeARandomInterestGroupForBidding(
     bool build_android_signals, bool set_user_bidding_signals_to_empty_struct) {
   InterestGroupForBidding ig_for_bidding;
-  ig_for_bidding.set_name(MakeARandomString());
+  ig_for_bidding.set_name(absl::StrCat("ig_name_random_", MakeARandomString()));
   ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
-      MakeARandomString());
+      absl::StrCat("trusted_bidding_signals_key_random_", MakeARandomString()));
   if (!set_user_bidding_signals_to_empty_struct) {
     // Takes ownership of pointer.
     ig_for_bidding.set_user_bidding_signals(
@@ -208,7 +242,7 @@ InterestGroupForBidding MakeARandomInterestGroupForBidding(
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);
   for (int i = 0; i < ad_render_ids_to_generate; i++) {
     *ig_for_bidding.mutable_ad_render_ids()->Add() =
-        absl::StrCat("ad_render_id_", MakeARandomString());
+        absl::StrCat("ad_render_id_random_", MakeARandomString());
   }
   if (build_android_signals) {
     // Empty message for now.
@@ -443,11 +477,11 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
 std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
     bool build_android_signals) {
   auto interest_group = std::make_unique<BuyerInput::InterestGroup>();
-  interest_group->set_name(MakeARandomString());  // 1
+  interest_group->set_name(absl::StrCat("ig_name_", MakeARandomString()));
   interest_group->mutable_bidding_signals_keys()->Add(
-      MakeARandomString());  // 2
+      absl::StrCat("bidding_signal_key_", MakeARandomString()));
   interest_group->mutable_bidding_signals_keys()->Add(
-      MakeARandomString());  // 2
+      absl::StrCat("bidding_signal_key_", MakeARandomString()));
   interest_group->set_allocated_user_bidding_signals(
       MakeARandomStructJsonString(5).release());
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);

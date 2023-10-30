@@ -202,6 +202,44 @@ constexpr absl::string_view js_code_with_debug_urls_template = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_with_very_large_debug_urls = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    const generateRandomUrl = (length) => {
+      let result = '';
+      const characters =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      const charactersLength = characters.length;
+      const baseUrl = "https://example.com?randomParam=";
+      const lengthOfRandomChars = length - baseUrl.length;
+      for (let i = 0; i < lengthOfRandomChars; i++) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+      }
+      return baseUrl + result;
+    };
+
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Do a random amount of work to generate the price:
+      const bid = fibonacci(Math.floor(Math.random() * 10 + 1));
+      forDebuggingOnly.reportAdAuctionLoss(generateRandomUrl(65538));
+      forDebuggingOnly.reportAdAuctionWin(generateRandomUrl(65536));
+      // Reshaped into an AdWithBid.
+      return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+  )JS_CODE";
+
 constexpr absl::string_view js_code_with_global_this_debug_urls_template =
     R"JS_CODE(
     function fibonacci(num) {
@@ -370,7 +408,8 @@ void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
   ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_blob).ok());
 }
 
-GenerateBidsRequest::GenerateBidsRawRequest BuildGenerateBidsRequestFromBrowser(
+absl::StatusOr<GenerateBidsRequest::GenerateBidsRawRequest>
+BuildGenerateBidsRequestFromBrowser(
     absl::flat_hash_map<std::string, std::vector<std::string>>*
         interest_group_to_ad,
     int desired_bid_count = 5, bool set_enable_debug_reporting = false) {
@@ -385,7 +424,9 @@ GenerateBidsRequest::GenerateBidsRawRequest BuildGenerateBidsRequestFromBrowser(
     *raw_request.mutable_interest_group_for_bidding()->Add() =
         std::move(interest_group);
   }
-  raw_request.set_bidding_signals(MakeRandomTrustedBiddingSignals(raw_request));
+  PS_ASSIGN_OR_RETURN(std::string bidding_signals,
+                      MakeRandomTrustedBiddingSignals(raw_request));
+  raw_request.set_bidding_signals(std::move(bidding_signals));
   return raw_request;
 }
 
@@ -426,8 +467,9 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
-  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
-  request.set_request_ciphertext(raw_request.SerializeAsString());
+  auto req = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  ASSERT_TRUE(req.ok()) << req.status();
+  request.set_request_ciphertext(req->SerializeAsString());
   GenerateBidsResponse response;
 
   auto generate_bids_reactor_factory =
@@ -514,8 +556,9 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
-  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
-  request.set_request_ciphertext(raw_request.SerializeAsString());
+  auto req = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  ASSERT_TRUE(req.ok()) << req.status();
+  request.set_request_ciphertext(req->SerializeAsString());
   GenerateBidsResponse response;
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
@@ -599,7 +642,9 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
-  auto raw_request = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  auto req = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  ASSERT_TRUE(req.ok()) << req.status();
+  auto raw_request = *std::move(req);
   request.set_request_ciphertext(raw_request.SerializeAsString());
   ASSERT_GT(raw_request.bidding_signals().length(), 0);
 
@@ -646,7 +691,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   for (const auto& ad_with_bid : raw_response.bids()) {
     ASSERT_TRUE(ad_with_bid.ad().struct_value().fields().find("tbsLength") !=
                 ad_with_bid.ad().struct_value().fields().end());
-    // One signal key per IG.
+    // One signal key per IG (priority vector not passed to generateBid()).
     EXPECT_EQ(
         ad_with_bid.ad().struct_value().fields().at("tbsLength").number_value(),
         1);
@@ -667,8 +712,9 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
-  GenerateBidsRequest::GenerateBidsRawRequest raw_request =
-      BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  auto req = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  ASSERT_TRUE(req.ok()) << req.status();
+  auto raw_request = *std::move(req);
   request.set_request_ciphertext(raw_request.SerializeAsString());
   ASSERT_GT(raw_request.interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
@@ -842,7 +888,9 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
     // This fails in production, the user Bidding Signals are not being set.
     // use logging to figure out why.
   }
-  raw_request.set_bidding_signals(MakeRandomTrustedBiddingSignals(raw_request));
+  auto sigs = MakeRandomTrustedBiddingSignals(raw_request);
+  ASSERT_TRUE(sigs.ok()) << sigs.status();
+  raw_request.set_bidding_signals(*std::move(sigs));
   GenerateBidsResponse response;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
@@ -917,8 +965,8 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
                                       bool enable_debug_reporting,
                                       bool enable_buyer_debug_url_generation,
                                       bool enable_adtech_code_logging = false,
-                                      absl::string_view wasm_blob = "") {
-  int desired_bid_count = 5;
+                                      absl::string_view wasm_blob = "",
+                                      int desired_bid_count = 5) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
@@ -927,9 +975,10 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
-  auto raw_request = BuildGenerateBidsRequestFromBrowser(
+  auto req = BuildGenerateBidsRequestFromBrowser(
       &interest_group_to_ad, desired_bid_count, enable_debug_reporting);
-  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  ASSERT_TRUE(req.ok()) << req.status();
+  *request.mutable_request_ciphertext() = req->SerializeAsString();
 
   auto generate_bids_reactor_factory =
       [&client](const GenerateBidsRequest* request,
@@ -1040,6 +1089,56 @@ TEST_F(GenerateBidsReactorIntegrationTest,
     EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url(),
               "https://example-dsp.com/debugLoss");
   }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       GeneratesBidsDoesNotReturnLargeDebugReportingUrls) {
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = true;
+  bool enable_buyer_debug_url_generation = true;
+  GenerateBidCodeWrapperTestHelper(
+      &response,
+      absl::StrFormat(js_code_with_very_large_debug_urls,
+                      kAdRenderUrlPrefixForTest),
+      enable_debug_reporting, enable_buyer_debug_url_generation);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
+    EXPECT_TRUE(adWithBid.has_debug_report_urls());
+    EXPECT_GT(adWithBid.debug_report_urls().auction_debug_win_url().length(),
+              0);
+    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url().length(),
+              0);
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       GeneratesBidsReturnDebugReportingUrlsMaxSize) {
+  long debug_urls_max_size = 3000 * 1024;
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = true;
+  bool enable_buyer_debug_url_generation = true;
+  int desired_bid_count = 100;
+  GenerateBidCodeWrapperTestHelper(
+      &response,
+      absl::StrFormat(js_code_with_very_large_debug_urls,
+                      kAdRenderUrlPrefixForTest),
+      enable_debug_reporting, enable_buyer_debug_url_generation, false, "",
+      desired_bid_count);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+
+  EXPECT_GT(raw_response.bids_size(), 0);
+  long actual_debug_urls_size = 0;
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    if (ad_with_bid.has_debug_report_urls()) {
+      actual_debug_urls_size +=
+          ad_with_bid.debug_report_urls().auction_debug_win_url().length() +
+          ad_with_bid.debug_report_urls().auction_debug_loss_url().length();
+    }
+  }
+  EXPECT_GE(debug_urls_max_size, actual_debug_urls_size);
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,

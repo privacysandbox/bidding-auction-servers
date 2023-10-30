@@ -112,6 +112,7 @@ cc_test(
     }),
     deps = [
         ":request_context_impl",
+        "//services/common/test/utils:proto_utils",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",

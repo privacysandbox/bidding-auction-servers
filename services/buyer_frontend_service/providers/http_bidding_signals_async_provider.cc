@@ -34,12 +34,12 @@ void HttpBiddingSignalsAsyncProvider::Get(
   absl::StatusOr<std::unique_ptr<BiddingSignals>> output =
       std::make_unique<BiddingSignals>();
 
-  for (const auto& ca :
+  for (const auto& interest_group :
        bidding_signals_request.get_bids_raw_request_.buyer_input()
            .interest_groups()) {
-    request->keys.emplace_back(ca.name());
-    request->keys.insert(request->keys.end(), ca.bidding_signals_keys().begin(),
-                         ca.bidding_signals_keys().end());
+    request->interest_group_names.emplace(interest_group.name());
+    request->keys.insert(interest_group.bidding_signals_keys().begin(),
+                         interest_group.bidding_signals_keys().end());
   }
 
   http_buyer_kv_async_client_->Execute(

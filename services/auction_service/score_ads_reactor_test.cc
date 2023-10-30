@@ -199,7 +199,7 @@ constexpr char kTestPublisherHostname[] = "publisher_hostname";
 constexpr char kTestDirectFromSellerSignals[] = "{}";
 
 absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
-                         const BatchDispatchDoneCallback& done_callback,
+                         BatchDispatchDoneCallback done_callback,
                          std::vector<std::string> json,
                          const bool call_wrapper_method = false,
                          const bool enable_adtech_code_logging = false) {
@@ -982,7 +982,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
                        &id_to_ad, enable_adtech_code_logging,
                        enable_debug_reporting](
                           std::vector<DispatchRequest>& batch,
-                          const BatchDispatchDoneCallback& done_callback) {
+                          BatchDispatchDoneCallback done_callback) {
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
@@ -1009,7 +1009,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
-        return FakeExecute(batch, done_callback, std::move(response),
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
                            enable_debug_reporting, enable_adtech_code_logging);
       });
   AuctionServiceRuntimeConfig runtime_config = {
@@ -1070,7 +1070,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
                        enable_debug_reporting,
                        enable_report_result_win_generation](
                           std::vector<DispatchRequest>& batch,
-                          const BatchDispatchDoneCallback& done_callback) {
+                          BatchDispatchDoneCallback done_callback) {
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
@@ -1101,7 +1101,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
-        return FakeExecute(batch, done_callback, std::move(response),
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
                            enable_debug_reporting, enable_adtech_code_logging);
       });
   AuctionServiceRuntimeConfig runtime_config = {
@@ -1174,7 +1174,7 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
                        &id_to_ad, enable_adtech_code_logging,
                        enable_debug_reporting](
                           std::vector<DispatchRequest>& batch,
-                          const BatchDispatchDoneCallback& done_callback) {
+                          BatchDispatchDoneCallback done_callback) {
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
@@ -1203,7 +1203,7 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
-        return FakeExecute(batch, done_callback, std::move(response),
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
                            enable_debug_reporting, enable_adtech_code_logging);
       });
   AuctionServiceRuntimeConfig runtime_config = {

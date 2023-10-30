@@ -17,6 +17,7 @@
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_CONFIG_PARAM_PARSER_H_
 
 #include <string>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
@@ -37,6 +38,12 @@ struct BuyerServiceEndpoint {
 // constructor changes, so should ths function.
 absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain);
+
+// Iterate over the above IgOwnerToBfeDomain Map into a span of IgOwners.
+std::vector<std::string> FetchIgOwnerList(
+    const absl::StatusOr<
+        absl::flat_hash_map<std::string, BuyerServiceEndpoint>>&
+        ig_owner_to_bfe_domain_map);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

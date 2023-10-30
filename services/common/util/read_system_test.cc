@@ -27,6 +27,10 @@ TEST(ReadSystem, GetMemory) {
   ABSL_LOG(INFO) << absl::StrJoin(GetMemory(), " ", absl::PairFormatter("->"));
 }
 
+TEST(ReadSystem, GetThread) {
+  ABSL_LOG(INFO) << absl::StrJoin(GetThread(), " ", absl::PairFormatter("->"));
+}
+
 TEST(ReadSystem, ReadCpuTime) {
   EXPECT_THAT(internal::ReadCpuTime({}, {}), testing::FieldsAre(0, 0));
   EXPECT_THAT(internal::ReadCpuTime({1, 1, 1, 1}, {}),

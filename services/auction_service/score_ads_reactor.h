@@ -115,6 +115,8 @@ class ScoreAdsReactor
   bool enable_report_result_url_generation_;
   bool enable_report_win_url_generation_;
   std::string seller_origin_;
+  int max_allowed_size_debug_url_chars_;
+  long max_allowed_size_all_debug_urls_chars_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

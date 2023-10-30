@@ -131,7 +131,7 @@ TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
   ASSERT_EQ(raw_response.bids().size(), 1);
   const auto& generated_bid = raw_response.bids()[0];
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
-  EXPECT_EQ(generated_bid.render(), kTestWinningAdRender);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 }
 
 TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
@@ -242,7 +242,7 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
   ASSERT_EQ(raw_response.bids().size(), 1);
   const auto& generated_bid = raw_response.bids()[0];
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
-  EXPECT_EQ(generated_bid.render(), kTestWinningAdRender);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
@@ -365,7 +365,7 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesCanBePopulated) {
   ASSERT_EQ(raw_response.bids().size(), 1);
   const auto& generated_bid = raw_response.bids()[0];
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
-  EXPECT_EQ(generated_bid.render(), kTestWinningAdRender);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 
   ASSERT_GT(generated_bid.egress_features().size(), 0);
   EXPECT_EQ(absl::BytesToHexString(generated_bid.egress_features()),
@@ -393,7 +393,7 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesGreaterThan3BytesAreFiltered) {
                                    kGenerateBidEntryFunction,
                                    kProtectedAppSignalsGenerateBidBlobVersion,
                                    CreateGenerateBidsUdfResponse(
-                                       kTestWinningAdRender, kTestWinningBid,
+                                       kTestRenderUrl, kTestWinningBid,
                                        kTestEgressFeaturesBiggerThan3Bytes));
         }
       });
@@ -446,7 +446,7 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesGreaterWith24BitSetIsFiltered) {
                                    kGenerateBidEntryFunction,
                                    kProtectedAppSignalsGenerateBidBlobVersion,
                                    CreateGenerateBidsUdfResponse(
-                                       kTestWinningAdRender, kTestWinningBid,
+                                       kTestRenderUrl, kTestWinningBid,
                                        kTestEgressFeaturesBiggerThan23bits));
         }
       });
@@ -499,7 +499,7 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
                                    kGenerateBidEntryFunction,
                                    kProtectedAppSignalsGenerateBidBlobVersion,
                                    CreateGenerateBidsUdfResponse(
-                                       kTestWinningAdRender, /*bid=*/0.0,
+                                       kTestRenderUrl, /*bid=*/0.0,
                                        kTestEgressFeaturesBiggerThan23bits));
         }
       });

@@ -48,8 +48,14 @@ HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
     AddListItemsAsQueryParamsToUrl(&request.url, "keys", client_input->keys,
                                    kEnableEncodeParams);
   }
+  if (!client_input->interest_group_names.empty()) {
+    AddListItemsAsQueryParamsToUrl(&request.url, "interestGroupNames",
+                                   client_input->interest_group_names,
+                                   kEnableEncodeParams);
+  }
 
   request.headers = RequestMetadataToHttpHeaders(metadata, kMandatoryHeaders);
+
   return request;
 }
 

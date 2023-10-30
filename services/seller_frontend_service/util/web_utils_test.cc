@@ -67,7 +67,7 @@ inline constexpr char kTestInteractionUrl3[] = "http://close.com";
 inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
-log::ContextImpl log_context{{}, ""};
+log::ContextImpl log_context{{}, "", ConsentedDebugConfiguration()};
 
 using ErrorVisibility::CLIENT_VISIBLE;
 using BiddingGroupMap =

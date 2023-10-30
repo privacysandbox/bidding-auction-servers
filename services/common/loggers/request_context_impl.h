@@ -42,16 +42,20 @@ class ContextImpl : public RequestContext {
   using ContextMap = absl::btree_map<std::string, std::string>;
 
   ContextImpl(const ContextMap& context_map,
-              absl::string_view server_debug_token)
-      : context_(FormatContext(context_map)),
-        client_debug_token_(GetClientToken(context_map)),
-        server_debug_token_(TokenWithMinLength(server_debug_token)) {}
+              absl::string_view server_debug_token,
+              const ConsentedDebugConfiguration& debug_config)
+      : server_debug_token_(TokenWithMinLength(server_debug_token)) {
+    Update(context_map, debug_config);
+  }
 
   absl::string_view ContextStr() const override { return context_; }
 
-  void UpdateContext(const ContextMap& new_context) {
+  void Update(const ContextMap& new_context,
+              const ConsentedDebugConfiguration& debug_config) {
     context_ = FormatContext(new_context);
-    client_debug_token_ = GetClientToken(new_context);
+    client_debug_token_ = debug_config.is_consented()
+                              ? TokenWithMinLength(debug_config.token())
+                              : "";
   }
 
   bool is_consented() const override {
@@ -105,9 +109,6 @@ class ContextImpl : public RequestContext {
   // Debug token owned by the server.
   std::string server_debug_token_;
 };
-
-bool MaybeAddConsentedDebugConfig(const ConsentedDebugConfiguration& config,
-                                  ContextImpl::ContextMap& context_map);
 
 template <class T>
 struct ParamWithSourceLoc {

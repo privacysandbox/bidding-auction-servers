@@ -93,9 +93,12 @@ cc_test(
         "//services/common/test:random",
         "//services/common/util:json_util",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
+        "//services/seller_frontend_service/util:web_utils",
         "@com_github_google_glog//:glog",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
         "@rapidjson",
     ],
 )

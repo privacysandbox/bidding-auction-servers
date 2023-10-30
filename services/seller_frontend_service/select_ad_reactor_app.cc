@@ -19,6 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
 #include "src/cpp/util/status_macro/status_macros.h"
@@ -119,8 +120,8 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     auction_result.set_is_chaff(true);
   }
 
-  PS_VLOG(1, log_context_) << "AuctionResult:\n"
-                           << auction_result.DebugString();
+  PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
+                                << auction_result.DebugString();
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();
