@@ -802,6 +802,91 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "width": 24,
         "xPos": 24,
         "yPos": 168
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "sfe.error_code [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.error_code\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"error_code\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 187
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "auction.error_code [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/auction.error_code\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"error_code\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 187
       }
     ]
   }

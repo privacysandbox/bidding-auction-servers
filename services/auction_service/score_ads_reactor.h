@@ -84,8 +84,8 @@ class ScoreAdsReactor
       const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score);
-  // Finishes the RPC call with an OK status.
-  void FinishWithOkStatus();
+  // Finishes the RPC call with a status.
+  void FinishWithStatus(const grpc::Status& status);
   void ReportingCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 

@@ -112,8 +112,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // request through the BA services.
   log::ContextImpl::ContextMap GetLoggingContext();
 
-  // Finishes the RPC call with an OK status.
-  void FinishWithOkStatus();
+  // Finishes the RPC call with a status.
+  void FinishWithStatus(const grpc::Status& status);
 
   // References for state, request, response and context from gRPC.
   // Should be released by gRPC
@@ -174,7 +174,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Log metrics for the Initiated requests errors that were initiated by the
   // server
-  void LogInitiatedRequestErrorMetrics(absl::string_view server_name);
+  void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
+                                       const absl::Status& status);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

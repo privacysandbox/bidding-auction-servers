@@ -149,12 +149,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Checks if any ad server visible errors have been observed.
   bool HaveAdServerVisibleErrors();
 
-  // Finishes the RPC call while reporting the error.
-  void FinishWithInternalError(absl::string_view error);
-
-  // Finishes the RPC call when call is cancelled/aborted.
-  void FinishWithAborted();
-
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
   template <typename T>
@@ -300,8 +294,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // client cancels the request.
   void OnCancel() override;
 
-  // Finishes the RPC call with an OK status.
-  void FinishWithOkStatus();
+  // Finishes the RPC call with a status.
+  void FinishWithStatus(const grpc::Status& status);
 
   // Reports an error to the error accumulator object.
   void ReportError(
@@ -378,6 +372,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Log metrics for the Initiated requests errors that were initiated by the
   // server
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
+                                       const absl::Status& status,
                                        absl::string_view buyer = "");
 };
 }  // namespace privacy_sandbox::bidding_auction_servers

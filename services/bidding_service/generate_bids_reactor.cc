@@ -484,6 +484,9 @@ void GenerateBidsReactor::Execute() {
       });
 
   if (!status.ok()) {
+    LogIfError(metric_context_
+                   ->AccumulateMetric<metric::kBiddingErrorCountByErrorCode>(
+                       1, metric::kBiddingGenerateBidsFailedToDispatchCode));
     PS_VLOG(1, log_context_)
         << "Execution request failed for batch: " << raw_request_.DebugString()
         << status.ToString(absl::StatusToStringMode::kWithEverything);
@@ -559,6 +562,9 @@ void GenerateBidsReactor::GenerateBidsCallback(
       }
     } else {
       failed_requests = failed_requests + 1;
+      LogIfError(metric_context_
+                     ->AccumulateMetric<metric::kBiddingErrorCountByErrorCode>(
+                         1, metric::kBiddingGenerateBidsDispatchResponseError));
       PS_VLOG(1, log_context_)
           << "Invalid execution (possibly invalid input): "
           << result.status().ToString(
@@ -589,6 +595,11 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
   }
   if (status.error_code() == grpc::StatusCode::OK) {
     metric_context_->SetRequestSuccessful();
+  } else {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
+            1,
+            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
   }
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsResponse\n"
                                     << response_->ShortDebugString();

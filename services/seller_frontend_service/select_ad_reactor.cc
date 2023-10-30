@@ -316,7 +316,7 @@ void SelectAdReactor::Execute() {
                                                 absl::StreamFormatter(), " : ",
                                                 absl::StreamFormatter()));
   if (!decrypt_status.ok()) {
-    Finish(decrypt_status);
+    FinishWithStatus(decrypt_status);
     PS_VLOG(1, log_context_) << "SelectAdRequest decryption failed:"
                              << server_common::ToAbslStatus(decrypt_status);
     return;
@@ -333,6 +333,9 @@ void SelectAdReactor::Execute() {
   MayLogBuyerInput();
   MayPopulateAdServerVisibleErrors();
   if (HaveAdServerVisibleErrors()) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeSelectAdRequestBadInput));
     PS_VLOG(1, log_context_) << "AdServerVisible errors found, failing now";
 
     // Finish the GRPC request if we have received bad data from the ad tech
@@ -498,6 +501,9 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
         },
         timeout);
     if (!execute_result.ok()) {
+      LogIfError(
+          metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+              1, metric::kSfeGetBidsFailedToCall));
       PS_LOG(ERROR, log_context_) << absl::StrFormat(
           "Failed to make async GetBids call: (buyer: %s, "
           "seller: %s, error: "
@@ -509,13 +515,18 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
 }
 
 void SelectAdReactor::LogInitiatedRequestErrorMetrics(
-    absl::string_view server_name, absl::string_view buyer) {
+    absl::string_view server_name, const absl::Status& status,
+    absl::string_view buyer) {
   LogIfError(metric_context_->AccumulateMetric<
              server_common::metrics::kInitiatedRequestErrorCount>(1));
   LogIfError(
       metric_context_
           ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
               1, server_name));
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByStatus>(
+              1, StatusCodeToString(status.code())));
   if (server_name == metric::kBfe) {
     LogIfError(
         metric_context_
@@ -550,7 +561,11 @@ void SelectAdReactor::OnFetchBidsDone(
           });
     }
   } else {
-    LogInitiatedRequestErrorMetrics(metric::kBfe, buyer_ig_owner);
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeGetBidsResponseError));
+    LogInitiatedRequestErrorMetrics(metric::kBfe, response.status(),
+                                    buyer_ig_owner);
     PS_VLOG(1, log_context_) << "GetBidsRequest failed for buyer "
                              << buyer_ig_owner << "\nresponse status: ",
         response.status();
@@ -562,7 +577,7 @@ void SelectAdReactor::OnFetchBidsDone(
 void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
   if (context_->IsCancelled()) {
     // Early return if request is cancelled. DO NOT move to next step.
-    FinishWithAborted();
+    FinishWithStatus(grpc::Status(grpc::ABORTED, kRequestCancelled));
     return;
   }
 
@@ -571,10 +586,13 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
     PS_VLOG(2, log_context_) << kNoBidsReceived;
 
     if (!any_successful_bids) {
+      LogIfError(
+          metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+              1, metric::kSfeSelectAdNoSuccessfulBid));
       PS_VLOG(3, log_context_)
           << "Finishing the SelectAdRequest RPC with an error";
 
-      FinishWithInternalError(kInternalError);
+      FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
       return;
     }
     // Since no buyers have returned bids, we would still finish the call RPC
@@ -609,7 +627,10 @@ void SelectAdReactor::FetchScoringSignals() {
 void SelectAdReactor::OnFetchScoringSignalsDone(
     absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
   if (!result.ok()) {
-    LogInitiatedRequestErrorMetrics(metric::kKv);
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeScoringSignalsResponseError));
+    LogInitiatedRequestErrorMetrics(metric::kKv, result.status());
     PS_VLOG(1, log_context_)
         << "Scoring signals fetch from key-value server failed: ",
         result.status();
@@ -702,10 +723,13 @@ void SelectAdReactor::ScoreAds() {
       absl::Milliseconds(
           config_client_.GetIntParameter(SCORE_ADS_RPC_TIMEOUT_MS)));
   if (!execute_result.ok()) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeScoreAdsFailedToCall));
     PS_LOG(ERROR, log_context_)
         << absl::StrFormat("Failed to make async ScoreAds call: (error: %s)",
                            execute_result.ToString());
-    Finish(grpc::Status(grpc::INTERNAL, kInternalServerError));
+    FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
   }
 }
 
@@ -736,22 +760,18 @@ BiddingGroupMap SelectAdReactor::GetBiddingGroups() {
   return bidding_groups;
 }
 
-void SelectAdReactor::FinishWithOkStatus() {
+void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
+  if (status.error_code() == grpc::StatusCode::OK) {
+    metric_context_->SetRequestSuccessful();
+  } else {
+    PS_LOG(ERROR, log_context_) << "RPC failed: " << status.error_message();
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
+            1,
+            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+  }
   benchmarking_logger_->End();
-  metric_context_->SetRequestSuccessful();
-  Finish(grpc::Status::OK);
-}
-
-void SelectAdReactor::FinishWithInternalError(absl::string_view error) {
-  PS_LOG(ERROR, log_context_) << "RPC failed: " << error;
-  benchmarking_logger_->End();
-  Finish(grpc::Status(grpc::INTERNAL, kInternalServerError));
-}
-
-void SelectAdReactor::FinishWithAborted() {
-  PS_LOG(ERROR, log_context_) << "RPC aborted: Request Cancelled by Client.";
-  benchmarking_logger_->End();
-  Finish(grpc::Status(grpc::ABORTED, kRequestCancelled));
+  Finish(status);
 }
 
 std::string SelectAdReactor::GetAccumulatedErrorString(
@@ -775,7 +795,7 @@ void SelectAdReactor::OnScoreAdsDone(
         << "Finishing the SelectAdRequest RPC with ad server visible error";
 
     PerformDebugReporting(high_score);
-    Finish(grpc::Status(
+    FinishWithStatus(grpc::Status(
         grpc::StatusCode::INVALID_ARGUMENT,
         GetAccumulatedErrorString(ErrorVisibility::AD_SERVER_VISIBLE)));
     return;
@@ -784,11 +804,15 @@ void SelectAdReactor::OnScoreAdsDone(
   PS_VLOG(2, log_context_) << "ScoreAdsResponse status:" << response.status();
 
   if (!response.ok()) {
-    LogInitiatedRequestErrorMetrics(metric::kAs);
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeScoreAdsResponseError));
+    LogInitiatedRequestErrorMetrics(metric::kAs, response.status());
     PerformDebugReporting(high_score);
     benchmarking_logger_->End();
-    Finish(grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
-                        std::string(response.status().message())));
+    FinishWithStatus(
+        grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
+                     std::string(response.status().message())));
     return;
   }
 
@@ -817,7 +841,7 @@ void SelectAdReactor::OnScoreAdsDone(
   PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdResponse:\n"
                                     << response_->ShortDebugString();
 
-  FinishWithOkStatus();
+  FinishWithStatus(grpc::Status::OK);
 }
 
 DecodedBuyerInputs SelectAdReactor::GetDecodedBuyerinputs(
@@ -834,7 +858,8 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
         "Encryption key not found during response encryption: (key ID: %s)",
         key_context_.key_id);
 
-    Finish(grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
+    FinishWithStatus(
+        grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     return false;
   }
 
@@ -847,7 +872,8 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
         << absl::StrFormat("Error during response encryption/encapsulation: %s",
                            encapsulated_response.status().message());
 
-    Finish(grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
+    FinishWithStatus(
+        grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     return false;
   }
 

@@ -135,7 +135,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   if (context_->IsCancelled()) {
     benchmarking_logger_->End();
-    Finish(grpc::Status(grpc::ABORTED, kRequestCancelled));
+    FinishWithStatus(grpc::Status(grpc::ABORTED, kRequestCancelled));
     return;
   }
 
@@ -145,7 +145,7 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     PS_VLOG(1, log_context_) << "Failed to encrypt the response";
     benchmarking_logger_->End();
-    Finish(
+    FinishWithStatus(
         grpc::Status(grpc::StatusCode::INTERNAL, encryption_status.ToString()));
     return;
   }
@@ -158,12 +158,13 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
         << "Finishing the GetBids RPC with an error, since there are "
            "no successful bids returned by the bidding service";
     benchmarking_logger_->End();
-    Finish(grpc::Status(grpc::INTERNAL, absl::StrJoin(bid_errors_, "; ")));
+    FinishWithStatus(
+        grpc::Status(grpc::INTERNAL, absl::StrJoin(bid_errors_, "; ")));
     return;
   }
 
   benchmarking_logger_->End();
-  FinishWithOkStatus();
+  FinishWithStatus(grpc::Status::OK);
 }
 
 grpc::Status GetBidsUnaryReactor::DecryptRequest() {
@@ -204,7 +205,7 @@ void GetBidsUnaryReactor::Execute() {
   if (!decrypt_status_.ok()) {
     PS_VLOG(1, log_context_) << "Decrypting the request failed:"
                              << server_common::ToAbslStatus(decrypt_status_);
-    Finish(decrypt_status_);
+    FinishWithStatus(decrypt_status_);
     return;
   }
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
@@ -215,13 +216,17 @@ void GetBidsUnaryReactor::Execute() {
 }
 
 void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
-    absl::string_view server_name) {
+    absl::string_view server_name, const absl::Status& status) {
   LogIfError(metric_context_->AccumulateMetric<
              server_common::metrics::kInitiatedRequestErrorCount>(1));
   LogIfError(
       metric_context_
           ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
               1, server_name));
+  LogIfError(
+      metric_context_
+          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByStatus>(
+              1, (StatusCodeToString(status.code()))));
 }
 
 void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
@@ -254,6 +259,10 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                 std::move(raw_response),
                 // Error response handler
                 [this](const absl::Status& status) {
+                  LogIfError(metric_context_->AccumulateMetric<
+                             metric::kBfeErrorCountByErrorCode>(
+                      1, metric::
+                             kBfeGenerateProtectedAppSignalsBidsResponseError));
                   PS_VLOG(1, log_context_)
                       << "Execution of GenerateProtectedAppSignalsBids request "
                          "failed with status: "
@@ -285,6 +294,9 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
           absl::Milliseconds(
               config_.protected_app_signals_generate_bid_timeout_ms));
   if (!execute_result.ok()) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+            1, metric::kBfeGenerateProtectedAppSignalsBidsFailedToCall));
     PS_LOG(ERROR, log_context_)
         << "Failed to make async GenerateProtectedAppInstallBids call: (error: "
         << execute_result.ToString() << ")";
@@ -312,7 +324,10 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
           auto not_used = std::move(kv_request);
         }
         if (!response.ok()) {
-          LogInitiatedRequestErrorMetrics(metric::kKv);
+          LogIfError(metric_context_
+                         ->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+                             1, metric::kBfeBiddingSignalsResponseError));
+          LogInitiatedRequestErrorMetrics(metric::kKv, response.status());
           // Return error to client.
           PS_VLOG(1, log_context_)
               << "GetBiddingSignals request failed with status:"
@@ -369,7 +384,11 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
             std::move(raw_response),
             // Error response handler
             [this](const absl::Status& status) {
-              LogInitiatedRequestErrorMetrics(metric::kBs);
+              LogIfError(
+                  metric_context_
+                      ->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+                          1, metric::kBfeGenerateBidsResponseError));
+              LogInitiatedRequestErrorMetrics(metric::kBs, status);
               PS_VLOG(1, log_context_)
                   << "Execution of GenerateBids request failed with status: "
                   << status;
@@ -394,6 +413,9 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       },
       absl::Milliseconds(config_.generate_bid_timeout_ms));
   if (!execute_result.ok()) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+            1, metric::kBfeGenerateBidsFailedToCall));
     PS_LOG(ERROR, log_context_)
         << "Failed to make async GenerateBids call: (error: "
         << execute_result.ToString() << ")";
@@ -420,9 +442,17 @@ log::ContextImpl::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
           {kBuyerDebugId, log_context.adtech_debug_id()}};
 }
 
-void GetBidsUnaryReactor::FinishWithOkStatus() {
-  metric_context_->SetRequestSuccessful();
-  Finish(grpc::Status::OK);
+void GetBidsUnaryReactor::FinishWithStatus(const grpc::Status& status) {
+  if (status.error_code() == grpc::StatusCode::OK) {
+    metric_context_->SetRequestSuccessful();
+  } else {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
+            1,
+            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+  }
+
+  Finish(status);
 }
 
 // Deletes all data related to this object.

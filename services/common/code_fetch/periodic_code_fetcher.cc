@@ -27,6 +27,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Minimal duration to wait before trying to fetch code blobs again.
+constexpr absl::Duration kMinCodeFetchDuration = absl::Minutes(1);
+
 PeriodicCodeFetcher::PeriodicCodeFetcher(
     std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
     std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
@@ -54,6 +57,8 @@ PeriodicCodeFetcher::PeriodicCodeFetcher(
 void PeriodicCodeFetcher::Start() {
   CHECK_LT(time_out_ms_, fetch_period_ms_)
       << "Timeout must be less than the fetch period.";
+  CHECK_GT(fetch_period_ms_, kMinCodeFetchDuration)
+      << "Too small fetch period is prohibited";
   executor_->Run([this]() { PeriodicCodeFetch(); });
 }
 

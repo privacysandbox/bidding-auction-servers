@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "services/common/metric/error_code.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/reporting_util.h"
 #include "src/cpp/metric/context_map.h"
@@ -37,12 +38,10 @@ inline constexpr absl::string_view kAs = "AS";
 inline constexpr absl::string_view kBs = "BS";
 inline constexpr absl::string_view kKv = "KV";
 inline constexpr absl::string_view kBfe = "BFE";
+inline constexpr absl::string_view kSfe = "SFE";
 
 inline constexpr absl::string_view kServerName[]{
-    kAs,
-    kBfe,
-    kBs,
-    kKv,
+    kAs, kBfe, kBs, kKv, kSfe,
 };
 
 // Metric Definitions that are specific to bidding & auction servers.
@@ -215,6 +214,46 @@ inline constexpr server_common::metrics::Definition<
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
+    kAuctionErrorCountByErrorCode(
+        /*name*/ "auction.error_code",
+        /*description*/
+        "Number of errors in the auction server by error code",
+        /*partition_type*/ "error code",
+        /*public_partitions*/ kAuctionErrorCode);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kBfeErrorCountByErrorCode(
+        /*name*/ "bfe.error_code",
+        /*description*/
+        "Number of errors in the BFE server by error code",
+        /*partition_type*/ "error code",
+        /*public_partitions*/ kBfeErrorCode);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kBiddingErrorCountByErrorCode(
+        /*name*/ "bidding.error_code",
+        /*description*/
+        "Number of errors in the bidding server by error code",
+        /*partition_type*/ "error code",
+        /*public_partitions*/ kBiddingErrorCode);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kSfeErrorCountByErrorCode(
+        /*name*/ "sfe.error_code",
+        /*description*/
+        "Number of errors in the SFE server by error code",
+        /*partition_type*/ "error code",
+        /*public_partitions*/ kSfeErrorCode);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
     kSfeInitiatedRequestErrorsCountByBuyer(
         /*name*/ "sfe.initiated_request.errors_count_by_buyer",
         /*description*/
@@ -262,6 +301,28 @@ inline constexpr server_common::metrics::Definition<
         /*partition_type*/ "buyer",
         /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
 
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kRequestFailedCountByStatus(
+        /*name*/ "request.failed_count_by_status",
+        /*description*/
+        "Total number of requests that resulted in failure partitioned by "
+        "Error Code",
+        /*partition_type*/ "error_status_code",
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInitiatedRequestErrorCountByStatus(
+        /*name*/ "initiated_request.errors_count_by_status",
+        /*description*/
+        "Initiated requests that resulted in failure partitioned by "
+        "Error Code",
+        /*partition_type*/ "error_status_code",
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+
 // API to get `Context` for bidding server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
     kBiddingMetricList[] = {
@@ -270,11 +331,13 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
+        &kRequestFailedCountByStatus,
         &kBiddingTotalBidsCount,
         &kBiddingZeroBidCount,
         &kBiddingZeroBidPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
+        &kBiddingErrorCountByErrorCode,
 };
 inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kBiddingMetricSpan = kBiddingMetricList;
@@ -304,6 +367,8 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kInitiatedRequestTotalDuration,
         &server_common::metrics::kInitiatedRequestByte,
         &server_common::metrics::kInitiatedResponseByte,
+        &kInitiatedRequestErrorCountByStatus,
+        &kRequestFailedCountByStatus,
         &kInitiatedRequestErrorCountByServer,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
@@ -312,6 +377,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInitiatedRequestBiddingSize,
         &kInitiatedResponseKVSize,
         &kInitiatedResponseBiddingSize,
+        &kBfeErrorCountByErrorCode,
 };
 inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kBfeMetricSpan = kBfeMetricList;
@@ -340,6 +406,8 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kInitiatedRequestTotalDuration,
         &server_common::metrics::kInitiatedRequestByte,
         &server_common::metrics::kInitiatedResponseByte,
+        &kInitiatedRequestErrorCountByStatus,
+        &kRequestFailedCountByStatus,
         &kSfeInitiatedRequestErrorsCountByBuyer,
         &kSfeInitiatedRequestDurationByBuyer,
         &kSfeInitiatedRequestCountByBuyer,
@@ -353,6 +421,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInitiatedRequestAuctionSize,
         &kInitiatedResponseKVSize,
         &kInitiatedResponseAuctionSize,
+        &kSfeErrorCountByErrorCode,
 };
 inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kSfeMetricSpan = kSfeMetricList;
@@ -376,11 +445,13 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
+        &kRequestFailedCountByStatus,
         &kAuctionTotalBidsCount,
         &kAuctionBidRejectedCount,
         &kAuctionBidRejectedPercent,
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
+        &kAuctionErrorCountByErrorCode,
 };
 inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
     kAuctionMetricSpan = kAuctionMetricList;
@@ -530,22 +601,45 @@ inline void AddSystemMetric(T* context_map) {
 }
 
 inline void AddBuyerPartition(
-    std::optional<server_common::telemetry::BuildDependentConfig>
-        telemetry_config,
+    server_common::telemetry::BuildDependentConfig& telemetry_config,
     const std::vector<std::string>& buyer_list) {
   std::vector<std::string_view> buyer_list_view = {buyer_list.begin(),
                                                    buyer_list.end()};
-  if (telemetry_config.has_value()) {
-    telemetry_config->SetPartition(
-        metric::kSfeInitiatedRequestErrorsCountByBuyer.name_, buyer_list_view);
-    telemetry_config->SetPartition(
-        metric::kSfeInitiatedRequestCountByBuyer.name_, buyer_list_view);
-    telemetry_config->SetPartition(
-        metric::kSfeInitiatedRequestDurationByBuyer.name_, buyer_list_view);
-    telemetry_config->SetPartition(
-        metric::kSfeInitiatedRequestSizeByBuyer.name_, buyer_list_view);
-    telemetry_config->SetPartition(
-        metric::kSfeInitiatedResponseSizeByBuyer.name_, buyer_list_view);
+  telemetry_config.SetPartition(
+      metric::kSfeInitiatedRequestErrorsCountByBuyer.name_, buyer_list_view);
+  telemetry_config.SetPartition(metric::kSfeInitiatedRequestCountByBuyer.name_,
+                                buyer_list_view);
+  telemetry_config.SetPartition(
+      metric::kSfeInitiatedRequestDurationByBuyer.name_, buyer_list_view);
+  telemetry_config.SetPartition(metric::kSfeInitiatedRequestSizeByBuyer.name_,
+                                buyer_list_view);
+  telemetry_config.SetPartition(metric::kSfeInitiatedResponseSizeByBuyer.name_,
+                                buyer_list_view);
+}
+
+inline std::vector<std::string> GetErrorList() {
+  std::vector<std::string> error_list;
+
+  absl::StatusCode begin = absl::StatusCode::kOk;
+  absl::StatusCode end = absl::StatusCode::kUnauthenticated;
+  for (absl::StatusCode code = begin; code <= end;
+       code = static_cast<absl::StatusCode>(static_cast<int>(code) + 1)) {
+    error_list.push_back(StatusCodeToString(code));
+  }
+  return error_list;
+}
+
+inline void AddErrorTypePartition(
+    server_common::telemetry::BuildDependentConfig& telemetry_config,
+    std::string_view server_name) {
+  std::vector<std::string> error_list = GetErrorList();
+  std::vector<std::string_view> error_list_view = {error_list.begin(),
+                                                   error_list.end()};
+  telemetry_config.SetPartition(metric::kRequestFailedCountByStatus.name_,
+                                error_list_view);
+  if (server_name == metric::kBfe || server_name == metric::kSfe) {
+    telemetry_config.SetPartition(
+        metric::kInitiatedRequestErrorCountByStatus.name_, error_list_view);
   }
 }
 

@@ -17,12 +17,22 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:private"])
 
 cc_library(
+    name = "error_code",
+    hdrs = ["error_code.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "server_definition",
     hdrs = [
         "server_definition.h",
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":error_code",
         "//services/common/util:read_system",
         "//services/common/util:reporting_util",
         "@google_privacysandbox_servers_common//src/cpp/metric:context_map",
