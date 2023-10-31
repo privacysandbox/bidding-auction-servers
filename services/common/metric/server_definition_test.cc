@@ -67,6 +67,25 @@ TEST(Init, AllTypes) {
   }
 }
 
+TEST(GetErrorListTest, ReturnsCorrectErrorList) {
+  std::vector<std::string> error_list = GetErrorList();
+
+  EXPECT_FALSE(error_list.empty()) << "Error list should not be empty";
+
+  int num_status_codes = static_cast<int>(absl::StatusCode::kUnauthenticated) -
+                         static_cast<int>(absl::StatusCode::kOk) + 1;
+  EXPECT_EQ(error_list.size(), num_status_codes)
+      << "Error list size is incorrect";
+
+  absl::StatusCode code = absl::StatusCode::kOk;
+  for (const std::string& error_string : error_list) {
+    EXPECT_EQ(error_string, StatusCodeToString(code))
+        << "Error string for status code " << static_cast<int>(code)
+        << " is incorrect";
+    code = static_cast<absl::StatusCode>(static_cast<int>(code) + 1);
+  }
+}
+
 }  // namespace
 
 }  // namespace privacy_sandbox::bidding_auction_servers::metric

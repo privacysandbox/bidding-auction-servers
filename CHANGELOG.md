@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.6.0 (2023-10-30)
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.49.1
+
 ## 2.5.0 (2023-10-30)
 
 

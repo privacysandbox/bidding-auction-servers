@@ -128,7 +128,7 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   // Encode.
   auto encoded_data =
       Encode(input, expected.bidding_groups(), /*error=*/std::nullopt,
-             [](absl::string_view error) {});
+             [](grpc::Status status) {});
   ASSERT_TRUE(encoded_data.ok()) << encoded_data.status();
 
   // Compress.

@@ -130,7 +130,7 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
   absl::StatusOr<std::string> compressed_data = GzipCompress(serialized_result);
   if (!compressed_data.ok()) {
     std::string error = "Failed to compress the serialized response data\n";
-    FinishWithInternalError(error);
+    FinishWithStatus(grpc::Status(grpc::INTERNAL, error));
     return absl::InternalError("");
   }
 

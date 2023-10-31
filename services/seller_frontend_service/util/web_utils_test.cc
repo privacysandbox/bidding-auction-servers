@@ -394,7 +394,7 @@ TEST(ChromeResponseUtils, VerifyBiddingGroupBuyerOriginOrdering) {
   // Convert the bidding group map to CBOR.
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](absl::string_view err_msg) {};
+  auto err_handler = [](grpc::Status status) {};
   auto result = CborSerializeBiddingGroups(bidding_group_map, err_handler,
                                            *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -511,7 +511,7 @@ TEST(ChromeResponseUtils, CborSerializeWinReportingUrls) {
 
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](absl::string_view err_msg) {};
+  auto err_handler = [](grpc::Status status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -536,7 +536,7 @@ TEST(ChromeResponseUtils, NoCborGeneratedWithEmptyWinReportingUrl) {
   WinReportingUrls win_reporting_urls;
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](absl::string_view err_msg) {};
+  auto err_handler = [](grpc::Status status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -568,7 +568,7 @@ TEST(ChromeResponseUtils, CborWithOnlySellerReprotingUrls) {
 
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](absl::string_view err_msg) {};
+  auto err_handler = [](grpc::Status status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -595,7 +595,7 @@ TEST(ChromeResponseUtils, CborWithNoInteractionReportingUrls) {
       ->set_reporting_url(kTestReportResultUrl);
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](absl::string_view err_msg) {};
+  auto err_handler = [](grpc::Status status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -652,7 +652,7 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
 
   auto response_with_cbor =
       Encode(winner, std::move(bidding_group_map), /*error=*/std::nullopt,
-             [](absl::string_view error) {});
+             [](grpc::Status status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -709,7 +709,7 @@ TEST(ChromeResponseUtils, VerifyCBOREncodedError) {
   error.set_message(kSampleErrorMessage);
   error.set_code(kSampleErrorCode);
   auto response_with_cbor = Encode(winner, std::move(bidding_group_map), error,
-                                   [](absl::string_view error) {});
+                                   [](grpc::Status status) {});
 
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);

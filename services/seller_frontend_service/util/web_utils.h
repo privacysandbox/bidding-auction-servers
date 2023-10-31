@@ -131,7 +131,7 @@ absl::StatusOr<std::string> Encode(
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
     std::optional<AuctionResult::Error> error,
-    const std::function<void(absl::string_view)>& error_handler);
+    const std::function<void(const grpc::Status&)>& error_handler);
 
 // Finds the provided string needle index in the haystack array.
 template <std::size_t Size>
@@ -282,7 +282,7 @@ T Decode(absl::string_view cbor_payload, ErrorAccumulator& error_accumulator,
 absl::Status CborSerializeBiddingGroups(
     const google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>&
         bidding_groups,
-    const std::function<void(absl::string_view)>& error_handler,
+    const std::function<void(const grpc::Status&)>& error_handler,
     cbor_item_t& root);
 
 // Decodes the decompressed but CBOR encoded BuyerInput map to a mapping from
@@ -319,7 +319,7 @@ bool AreFloatsEqual(T a, U b) {
 // Serializes WinReportingUrls for buyer and seller.
 absl::Status CborSerializeWinReportingUrls(
     const WinReportingUrls& win_reporting_urls,
-    const std::function<void(absl::string_view)>& error_handler,
+    const std::function<void(const grpc::Status&)>& error_handler,
     cbor_item_t& root);
 
 // Decodes cbor string input to std::string

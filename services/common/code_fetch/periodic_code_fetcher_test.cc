@@ -35,7 +35,7 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
 
   const std::vector<std::string>& endpoints = {"js.com", "wasm.com"};
-  absl::Duration fetch_period = absl::Milliseconds(3000);
+  absl::Duration fetch_period = absl::Minutes(3);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
   auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
@@ -82,7 +82,7 @@ TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
 
   const std::vector<std::string>& endpoints = {"test.com"};
-  absl::Duration fetch_period = absl::Milliseconds(3000);
+  absl::Duration fetch_period = absl::Minutes(3);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
   auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
@@ -128,7 +128,7 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
 
   const std::vector<std::string>& endpoints = {"test.com"};
-  absl::Duration fetch_period = absl::Milliseconds(3000);
+  absl::Duration fetch_period = absl::Minutes(3);
   auto executor = std::make_unique<MockExecutor>();
   absl::Duration time_out = absl::Milliseconds(1000);
   auto WrapCode = [](const std::vector<std::string>& adtech_code_blobs) {
@@ -210,13 +210,31 @@ TEST(PeriodicCodeFetcherTest, LoadsCodeWithTheCorrectVersion) {
             return absl::OkStatus();
           });
 
-  PeriodicCodeFetcher code_fetcher({"code.com"}, absl::Milliseconds(1000),
-                                   std::move(curl_http_fetcher), dispatcher,
-                                   executor.get(), absl::Milliseconds(100),
-                                   wrap_code, kTestVersion);
+  PeriodicCodeFetcher code_fetcher(
+      {"code.com"}, absl::Minutes(2), std::move(curl_http_fetcher), dispatcher,
+      executor.get(), absl::Milliseconds(100), wrap_code, kTestVersion);
   code_fetcher.Start();
   done.Wait();
   code_fetcher.End();
+}
+
+TEST(PeriodicCodeFetcherTest, LoadFetchFrequencyMustBeGreaterThan1Min) {
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  EXPECT_CALL(*curl_http_fetcher, FetchUrls).Times(0);
+
+  auto executor = std::make_unique<MockExecutor>();
+  EXPECT_CALL(*executor, Run).Times(0);
+
+  MockV8Dispatcher dispatcher;
+  EXPECT_CALL(dispatcher, LoadSync).Times(0);
+
+  PeriodicCodeFetcher code_fetcher(
+      {"fake-test-code-blob.com"}, absl::Minutes(1),
+      std::move(curl_http_fetcher), dispatcher, executor.get(),
+      absl::Milliseconds(100),
+      [](const std::vector<std::string>& ad_tech_code_blobs) { return ""; },
+      /*version_num=*/25);
+  EXPECT_DEATH(code_fetcher.Start(), "");
 }
 
 }  // namespace

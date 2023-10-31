@@ -493,7 +493,8 @@ void ScoreAdsReactor::Execute() {
 
   auto ads = raw_request_.ad_bids();
   if (ads.empty()) {
-    Finish(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kNoAdsToScore));
+    FinishWithStatus(
+        ::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kNoAdsToScore));
     return;
   }
 
@@ -501,7 +502,7 @@ void ScoreAdsReactor::Execute() {
       scoring_signals = BuildTrustedScoringSignals(raw_request_, log_context_);
 
   if (!scoring_signals.ok()) {
-    Finish(server_common::FromAbslStatus(scoring_signals.status()));
+    FinishWithStatus(server_common::FromAbslStatus(scoring_signals.status()));
     return;
   }
 
@@ -525,8 +526,8 @@ void ScoreAdsReactor::Execute() {
   }
 
   if (dispatch_requests_.empty()) {
-    Finish(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                          kNoAdsWithValidScoringSignals));
+    FinishWithStatus(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                    kNoAdsWithValidScoringSignals));
     return;
   }
   absl::Time start_js_execution_time = absl::Now();
@@ -542,12 +543,16 @@ void ScoreAdsReactor::Execute() {
       });
 
   if (!status.ok()) {
+    LogIfError(metric_context_
+                   ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
+                       1, metric::kAuctionScoreAdsFailedToDispatchCode));
     PS_VLOG(1, log_context_)
         << "Execution request failed for batch: " << raw_request_.DebugString()
         << status.ToString(absl::StatusToStringMode::kWithEverything);
     LogIfError(
         metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
-    Finish(grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
+    FinishWithStatus(
+        grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
   }
 }
 
@@ -695,7 +700,7 @@ void ScoreAdsReactor::PerformReporting(
         << "Reporting execution request failed for batch:\n"
         << raw_request_.DebugString() << "\n"
         << status.ToString(absl::StatusToStringMode::kWithEverything);
-    FinishWithOkStatus();
+    FinishWithStatus(grpc::Status::OK);
   }
 }
 
@@ -793,6 +798,9 @@ void ScoreAdsReactor::ScoreAdsCallback(
             << responses[index].value().resp;
       }
     } else {
+      LogIfError(metric_context_
+                     ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
+                         1, metric::kAuctionScoreAdsDispatchResponseError));
       PS_LOG(WARNING, log_context_)
           << "Invalid execution (possibly invalid input): "
           << responses[index].status().ToString(
@@ -851,16 +859,19 @@ void ScoreAdsReactor::ScoreAdsCallback(
       DCHECK(encryption_enabled_);
       EncryptResponse();
       benchmarking_logger_->HandleResponseEnd();
-      FinishWithOkStatus();
+      FinishWithStatus(grpc::Status::OK);
       return;
     }
     PerformReporting(winning_ad.value());
   } else {
+    LogIfError(metric_context_
+                   ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
+                       1, metric::kAuctionScoreAdsNoAdSelected));
     ABSL_LOG(WARNING) << "No ad was selected as most desirable";
     PerformDebugReporting(winning_ad);
     benchmarking_logger_->HandleResponseEnd();
-    Finish(grpc::Status(grpc::StatusCode::NOT_FOUND,
-                        "No ad was selected as most desirable"));
+    FinishWithStatus(grpc::Status(grpc::StatusCode::NOT_FOUND,
+                                  "No ad was selected as most desirable"));
   }
 }
 
@@ -953,7 +964,7 @@ void ScoreAdsReactor::ReportingCallback(
   DCHECK(encryption_enabled_);
   EncryptResponse();
   benchmarking_logger_->HandleResponseEnd();
-  FinishWithOkStatus();
+  FinishWithStatus(grpc::Status::OK);
 }
 
 void ScoreAdsReactor::PerformDebugReporting(
@@ -994,13 +1005,20 @@ void ScoreAdsReactor::PerformDebugReporting(
   }
 }
 
-void ScoreAdsReactor::FinishWithOkStatus() {
-  PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsResponse\n"
-                                    << response_->ShortDebugString();
-  PS_VLOG(kPlain, log_context_) << "ScoreAdsRawResponse:\n"
-                                << raw_response_.DebugString();
-  metric_context_->SetRequestSuccessful();
-  Finish(grpc::Status::OK);
+void ScoreAdsReactor::FinishWithStatus(const grpc::Status& status) {
+  if (status.error_code() == grpc::StatusCode::OK) {
+    PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsResponse\n"
+                                      << response_->ShortDebugString();
+    PS_VLOG(kPlain, log_context_) << "ScoreAdsRawResponse:\n"
+                                  << raw_response_.DebugString();
+    metric_context_->SetRequestSuccessful();
+  } else {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
+            1,
+            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+  }
+  Finish(status);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

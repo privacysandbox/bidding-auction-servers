@@ -198,6 +198,8 @@ absl::Status RunServer() {
   AddBuyerPartition(telemetry_config,
                     FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
                         config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
+
+  AddErrorTypePartition(telemetry_config, metric::kSfe);
   AddSystemMetric(metric::SfeContextMap(
       telemetry_config,
       server_common::ConfigurePrivateMetrics(

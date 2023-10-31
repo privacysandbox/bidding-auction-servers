@@ -71,7 +71,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
   auto error_handler =
-      absl::bind_front(&SelectAdReactorForWeb::FinishWithInternalError, this);
+      absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
   PS_ASSIGN_OR_RETURN(
       std::string encoded_data,
       Encode(high_score, bidding_group_map, error, error_handler));
@@ -90,7 +90,8 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
   if (!compressed_data.ok()) {
     ABSL_LOG(ERROR) << "Failed to compress the CBOR serialized data: "
                     << compressed_data.status().message();
-    FinishWithInternalError("Failed to compress CBOR data");
+    FinishWithStatus(
+        grpc::Status(grpc::INTERNAL, "Failed to compress CBOR data"));
     return absl::InternalError("");
   }
 

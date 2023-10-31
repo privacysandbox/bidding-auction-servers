@@ -263,6 +263,7 @@ absl::Status RunServer() {
                                  collector_endpoint);
   server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
                                  collector_endpoint);
+  AddErrorTypePartition(telemetry_config, metric::kAs);
   AddSystemMetric(metric::AuctionContextMap(
       telemetry_config,
       server_common::ConfigurePrivateMetrics(
