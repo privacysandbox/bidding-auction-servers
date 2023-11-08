@@ -133,3 +133,8 @@ variable "instance_template_waits_for_instances" {
   type        = bool
   default     = true
 }
+
+variable "collector_startup_script" {
+  description = "Script to configure and start the otel collector."
+  type        = string
+}

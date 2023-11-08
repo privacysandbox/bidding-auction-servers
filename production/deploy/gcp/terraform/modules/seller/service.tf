@@ -57,6 +57,7 @@ module "autoscaling" {
   runtime_flags                         = var.runtime_flags
   instance_template_waits_for_instances = var.instance_template_waits_for_instances
   depends_on                            = [module.security, module.networking, resource.google_secret_manager_secret.runtime_flag_secrets, resource.google_secret_manager_secret_version.runtime_flag_secret_values]
+  collector_startup_script              = var.collector_startup_script
 }
 
 module "load_balancing" {

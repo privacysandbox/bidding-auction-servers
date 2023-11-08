@@ -138,7 +138,8 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render, double bid,
-    absl::string_view egress_features_hex_string) {
+    absl::string_view egress_features_hex_string,
+    absl::string_view debug_reporting_urls) {
   std::string base64_encoded_features_bytes;
   absl::Base64Escape(absl::HexStringToBytes(egress_features_hex_string),
                      &base64_encoded_features_bytes);
@@ -148,15 +149,13 @@ std::string CreateGenerateBidsUdfResponse(
         "render": "$0",
         "bid": $1,
         "egress_features": "$2",
-        "debug_report_urls": {
-          "auction_debug_loss_url": "test.com/debugLoss",
-          "auction_debug_win_url": "test.com/debugWin"
-        }
+        "debug_report_urls": $3
       },
       "logs": []
     }
   )JSON",
-                          render, bid, base64_encoded_features_bytes);
+                          render, bid, base64_encoded_features_bytes,
+                          debug_reporting_urls);
 }
 
 void SetupProtectedAppSignalsRomaExpectations(

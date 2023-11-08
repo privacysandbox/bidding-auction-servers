@@ -37,7 +37,7 @@ namespace logs_api = opentelemetry::logs;
 namespace logs_sdk = opentelemetry::sdk::logs;
 namespace logs_exporter = opentelemetry::exporter::logs;
 
-class ContextLogTest : public LogTest {
+class ConsentedLogTest : public LogTest {
  protected:
   void SetUp() override {
     // initialize max verbosity = kMaxV
@@ -78,6 +78,17 @@ class ContextLogTest : public LogTest {
   ConsentedDebugConfiguration matched_token_, mismatched_token_;
 
   const absl::string_view kServerToken = "server_tok";
+};
+
+class DebugResponseTest : public ConsentedLogTest {
+ protected:
+  void SetUp() override {
+    ConsentedLogTest::SetUp();
+    debug_info_config_.set_is_debug_info_in_response(true);
+  }
+
+  SelectAdResponse ad_response_;
+  ConsentedDebugConfiguration debug_info_config_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::log

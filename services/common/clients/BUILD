@@ -118,6 +118,20 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "fake_buyer_key_value_async_http_client_test",
+    srcs = [
+        "http_kv_server/buyer/fake_buyer_key_value_async_http_client_test.cc",
+    ],
+    data = [
+    ],
+    deps = [
+        ":fake_buyer_key_value_async_http_client",
+        "@com_google_absl//absl/log:check",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "seller_key_value_async_http_client",
     srcs = [

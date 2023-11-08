@@ -42,6 +42,9 @@ struct AuctionServiceRuntimeConfig {
   // Seller's domain required as input for reporting url generation.
   std::string seller_origin = "";
 
+  // Enables protected app signals support.
+  bool enable_protected_app_signals = false;
+
   // Whether the OpenTelemetry Logs is enabled. It's used for consented
   // debugging.
   bool enable_otel_based_logging = false;

@@ -220,6 +220,8 @@ TEST(ChromeRequestUtils, Decode_Success) {
                            BuildBoolMapPair(kIsConsented, true)));
   EXPECT_TRUE(cbor_map_add(consented_debug_config_map,
                            BuildStringMapPair(kToken, kConsentedDebugToken)));
+  EXPECT_TRUE(cbor_map_add(consented_debug_config_map,
+                           BuildBoolMapPair(kIsDebugResponse, true)));
   EXPECT_TRUE(cbor_map_add(
       *protected_auction_input,
       {cbor_move(cbor_build_stringn(kConsentedDebugConfig,
@@ -270,6 +272,7 @@ TEST(ChromeRequestUtils, Decode_Success) {
   ConsentedDebugConfiguration consented_debug_config;
   consented_debug_config.set_is_consented(true);
   consented_debug_config.set_token(kConsentedDebugToken);
+  consented_debug_config.set_is_debug_info_in_response(true);
   *expected.mutable_consented_debug_config() =
       std::move(consented_debug_config);
 

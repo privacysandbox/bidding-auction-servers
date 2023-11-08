@@ -270,6 +270,7 @@ function build_service_for_gcp() {
   # shellcheck disable=SC2086
   "${SCRIPT_DIR}"/gcp/build_and_test ${VERBOSE_ARG} \
   --server-image "${docker_image}" \
+  --build-flavor ${BUILD_FLAVOR} \
   --service-path "${service}" \
   --gcp-image-tag "${GCP_IMAGE_TAG}" \
   --e2e "${E2E}" \

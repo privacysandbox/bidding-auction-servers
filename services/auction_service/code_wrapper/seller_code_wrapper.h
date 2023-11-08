@@ -31,6 +31,10 @@ constexpr char kFeatureEnabled[] = "true";
 
 inline constexpr char kReportWinWrapperNamePlaceholder[] =
     "$reportWinWrapperName";
+inline constexpr char kExtraArgs[] = "$extraArgs";
+inline constexpr char kSuffix[] = "$suffix";
+inline constexpr char kProtectedAppSignalsTag[] = "ProtectedAppSignals";
+inline constexpr char kEgressFeaturesTag[] = "egressFeatures";
 inline constexpr char kReportWinCodePlaceholder[] = "$reportWinCode";
 inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
 
@@ -104,7 +108,7 @@ inline constexpr absl::string_view kReportingEntryFunction =
     R"JSCODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
-    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata) {
+    function reportingEntryFunction$suffix(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, $extraArgs) {
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
@@ -144,7 +148,7 @@ inline constexpr absl::string_view kReportingEntryFunction =
       try{
       if(buyerReportingMetadata.enableReportWinUrlGeneration){
         var buyerOrigin = buyerReportingMetadata.buyerOrigin
-        var buyerPrefix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
+        var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
@@ -155,8 +159,15 @@ inline constexpr absl::string_view kReportingEntryFunction =
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
-        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
-                              "directFromSellerSignals, enable_logging)"
+        // Absence of interest group indicates that this is a protected app
+        // signals ad.
+        if (buyerReportingMetadata.enableProtectedAppSignals &&
+            (buyerReportingSignals.interestGroupName === null ||
+             buyerReportingSignals.interestGroupName.trim() === "")) {
+          functionSuffix += "ProtectedAppSignals";
+        }
+        var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
+                              "directFromSellerSignals, enable_logging, $extraArgs)"
         var reportWinResponse = eval(reportWinFunction)
         return {
           reportResultResponse: ps_report_result_response,
@@ -186,7 +197,7 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
     // Handler method to call adTech provided reportWin method and wrap the
     // response with reportWin url and interaction reporting urls.
     function $reportWinWrapperName(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, enable_logging) {
+                              directFromSellerSignals, enable_logging, $extraArgs) {
       var ps_report_win_response = {
         reportWinUrl : "",
         interactionReportingUrls : {},
@@ -226,7 +237,7 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
       }
       try{
       reportWin(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals)
+                              directFromSellerSignals, $extraArgs)
       } catch(ex){
         console.error(ex.message)
       }
@@ -249,6 +260,12 @@ std::string GetSellerWrappedCode(
     absl::string_view seller_js_code, bool enable_report_result_url_generation,
     bool enable_report_win_url_generation,
     const absl::flat_hash_map<std::string, std::string>& buyer_origin_code_map);
+std::string GetSellerWrappedCode(
+    absl::string_view seller_js_code, bool enable_report_result_url_generation,
+    bool enable_protected_app_signals, bool enable_report_win_url_generation,
+    const absl::flat_hash_map<std::string, std::string>& buyer_origin_code_map,
+    const absl::flat_hash_map<std::string, std::string>&
+        protected_app_signals_buyer_origin_code_map);
 
 // Returns a JSON string for feature flags to be used by the wrapper script.
 std::string GetFeatureFlagJson(bool enable_logging,

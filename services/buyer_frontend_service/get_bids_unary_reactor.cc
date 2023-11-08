@@ -43,7 +43,8 @@ void HandleSingleBidCompletion(
     absl::StatusOr<std::unique_ptr<T>> raw_response,
     absl::AnyInvocable<void(const absl::Status&) &&> on_error_response,
     absl::AnyInvocable<void() &&> on_empty_response,
-    absl::AnyInvocable<void(std::unique_ptr<T>) &&> on_successful_response) {
+    absl::AnyInvocable<void(std::unique_ptr<T>) &&> on_successful_response,
+    GetBidsResponse::GetBidsRawResponse& get_bid_raw_response) {
   // Handle errors
   if (!raw_response.ok()) {
     std::move(on_error_response)(raw_response.status());
@@ -51,6 +52,19 @@ void HandleSingleBidCompletion(
   }
 
   auto response = *std::move(raw_response);
+  if (response->has_debug_info()) {
+    DebugInfo& downstream_debug_info =
+        *get_bid_raw_response.mutable_debug_info()->add_downstream_servers();
+    downstream_debug_info = std::move(*response->mutable_debug_info());
+    if constexpr (std::is_same_v<T,
+                                 GenerateProtectedAppSignalsBidsRawResponse>) {
+      downstream_debug_info.set_server_name("app_signal_bid");
+    }
+    if constexpr (std::is_same_v<
+                      T, GenerateBidsResponse::GenerateBidsRawResponse>) {
+      downstream_debug_info.set_server_name("bidding");
+    }
+  }
 
   // Handle empty response
   if (!response->IsInitialized() || response->bids_size() == 0) {
@@ -90,9 +104,10 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       crypto_client_(crypto_client),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
-        return log::ContextImpl(GetLoggingContext(),
-                                config_.consented_debug_token,
-                                raw_request_.consented_debug_config());
+        return log::ContextImpl(
+            GetLoggingContext(), config_.consented_debug_token,
+            raw_request_.consented_debug_config(),
+            [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
       async_task_tracker_(config_.is_protected_app_signals_enabled
                               ? kNumOutboundBiddingCallsWithProtectedAppSignals
@@ -289,7 +304,8 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                             ->mutable_protected_app_signals_bids()
                             ->Swap(response->mutable_bids());
                       });
-                });
+                },
+                *get_bids_raw_response_);
           },
           absl::Milliseconds(
               config_.protected_app_signals_generate_bid_timeout_ms));
@@ -316,10 +332,15 @@ void GetBidsUnaryReactor::GetProtectedAudienceBids() {
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
       [this, kv_request = std::move(kv_request)](
-          absl::StatusOr<std::unique_ptr<BiddingSignals>> response) mutable {
+          absl::StatusOr<std::unique_ptr<BiddingSignals>> response,
+          GetByteSize get_byte_size) mutable {
         {
-          kv_request->SetRequestSize(0);
-          kv_request->SetResponseSize(0);
+          // Only logs KV request and response sizes if fetching signals
+          // succeeds.
+          if (response.ok()) {
+            kv_request->SetRequestSize(get_byte_size.request);
+            kv_request->SetResponseSize(get_byte_size.response);
+          }
           // destruct kv_request, destructor measures request time
           auto not_used = std::move(kv_request);
         }
@@ -409,7 +430,8 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
                     get_bids_raw_response_->mutable_bids()->Swap(
                         response->mutable_bids());
                   });
-            });
+            },
+            *get_bids_raw_response_);
       },
       absl::Milliseconds(config_.generate_bid_timeout_ms));
   if (!execute_result.ok()) {
@@ -436,7 +458,8 @@ absl::Status GetBidsUnaryReactor::EncryptResponse() {
   return absl::OkStatus();
 }
 
-log::ContextImpl::ContextMap GetBidsUnaryReactor::GetLoggingContext() {
+absl::btree_map<std::string, std::string>
+GetBidsUnaryReactor::GetLoggingContext() {
   const auto& log_context = raw_request_.log_context();
   return {{kGenerationId, log_context.generation_id()},
           {kBuyerDebugId, log_context.adtech_debug_id()}};

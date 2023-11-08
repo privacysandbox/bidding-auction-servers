@@ -93,6 +93,7 @@ cc_library(
         ":request_context_logger",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/util:request_response_constants",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:globals",
         "@com_google_absl//absl/log:initialize",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",

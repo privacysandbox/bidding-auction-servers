@@ -232,13 +232,15 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDone(
         return ParseProtectedSignalsGenerateBidsResponse(response);
       },
       [this](const ProtectedAppSignalsAdWithBid& bid) {
-        if (!IsValidBid(bid) || !IsValidEgress(bid.egress_features())) {
+        if (!IsValidBid(bid)) {
           PS_VLOG(2, log_context_) << "Skipping protected app signals bid ("
                                    << GetBidDebugInfo(bid) << ")";
         } else {
           PS_VLOG(3, log_context_)
               << "Successful non-zero protected app signals bid received";
-          *raw_response_.add_bids() = bid;
+          auto* added_bid = raw_response_.add_bids();
+          *added_bid = bid;
+          added_bid->clear_egress_features();
         }
         EncryptResponseAndFinish(grpc::Status::OK);
       });

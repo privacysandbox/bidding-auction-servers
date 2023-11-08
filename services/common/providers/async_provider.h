@@ -23,6 +23,13 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Used by the callback to pass the request and response byte sizes to the
+// caller code of the Get method.
+struct GetByteSize {
+  size_t request;
+  size_t response;
+};
+
 // Classes implementing this template and interface are able to execute
 // asynchronous requests.
 template <typename Params, typename Provision>
@@ -38,7 +45,8 @@ class AsyncProvider {
   // timeout: a timeout value for the request.
   virtual void Get(
       const Params& params,
-      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>) &&>
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>,
+                              GetByteSize) &&>
           on_done,
       absl::Duration timeout) const = 0;
 };

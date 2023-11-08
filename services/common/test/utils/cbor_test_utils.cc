@@ -248,6 +248,9 @@ absl::Status CborSerializeConsentedDebugConfig(
         CborSerializeString(kToken, consented_debug_config.token(),
                             **serialized_consented_debug_config));
   }
+  PS_RETURN_IF_ERROR(CborSerializeBool(
+      kIsDebugResponse, consented_debug_config.is_debug_info_in_response(),
+      **serialized_consented_debug_config));
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(kConsentedDebugConfig,
                                           sizeof(kConsentedDebugConfig) - 1)),

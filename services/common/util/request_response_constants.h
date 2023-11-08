@@ -30,7 +30,7 @@ inline constexpr int kNumRequestRootKeys = 6;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // ConsentedDebugConfig request.
-inline constexpr int kNumConsentedDebugConfigKeys = 2;
+inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
@@ -70,6 +70,7 @@ inline constexpr char kPrevWins[] = "prevWins";
 inline constexpr char kConsentedDebugConfig[] = "consentedDebugConfig";
 inline constexpr char kIsConsented[] = "isConsented";
 inline constexpr char kToken[] = "token";
+inline constexpr char kIsDebugResponse[] = "isDebugInfoInResponse";
 inline constexpr int kRelativeTimeIndex = 0;
 inline constexpr int kAdRenderIdIndex = 1;
 
@@ -105,6 +106,7 @@ inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
     kConsentedDebugConfigKeys = {
         kIsConsented,
         kToken,
+        kIsDebugResponse,
 };
 
 inline constexpr char kTimeoutMs[] = "TimeoutMs";

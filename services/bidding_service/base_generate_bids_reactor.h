@@ -56,9 +56,11 @@ class BaseGenerateBidsReactor
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
         enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
-        log_context_(GetLoggingContext(this->raw_request_),
-                     runtime_config.consented_debug_token,
-                     this->raw_request_.consented_debug_config()),
+        log_context_(
+            GetLoggingContext(this->raw_request_),
+            runtime_config.consented_debug_token,
+            this->raw_request_.consented_debug_config(),
+            [this]() { return this->raw_response_.mutable_debug_info(); }),
         max_allowed_size_debug_url_chars_(
             runtime_config.max_allowed_size_debug_url_bytes),
         max_allowed_size_all_debug_urls_chars_(
@@ -70,7 +72,7 @@ class BaseGenerateBidsReactor
  protected:
   // Gets logging context as key/value pair that is useful for tracking a
   // request through the B&A services.
-  log::ContextImpl::ContextMap GetLoggingContext(
+  absl::btree_map<std::string, std::string> GetLoggingContext(
       const RawRequest& generate_bids_request) {
     const auto& logging_context = generate_bids_request.log_context();
     return {{kGenerationId, logging_context.generation_id()},

@@ -26,7 +26,8 @@ HttpScoringSignalsAsyncProvider::HttpScoringSignalsAsyncProvider(
 
 void HttpScoringSignalsAsyncProvider::Get(
     const ScoringSignalsRequest& scoring_signals_request,
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
+                            GetByteSize) &&>
         on_done,
     absl::Duration timeout) const {
   auto request = std::make_unique<GetSellerValuesInput>();
@@ -44,15 +45,18 @@ void HttpScoringSignalsAsyncProvider::Get(
       [on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
               kv_output) mutable {
+        GetByteSize get_byte_size;
         absl::StatusOr<std::unique_ptr<ScoringSignals>> res;
         if (kv_output.ok()) {
           res = std::make_unique<ScoringSignals>();
           res.value()->scoring_signals =
               std::make_unique<std::string>(kv_output.value()->result);
+          get_byte_size.request = kv_output.value()->request_size;
+          get_byte_size.response = kv_output.value()->response_size;
         } else {
           res = kv_output.status();
         }
-        std::move(on_done)(std::move(res));
+        std::move(on_done)(std::move(res), get_byte_size);
       },
       timeout);
 }

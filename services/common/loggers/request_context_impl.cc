@@ -23,7 +23,8 @@
 
 namespace privacy_sandbox::bidding_auction_servers::log {
 
-std::string ContextImpl::FormatContext(const ContextMap& context_map) {
+std::string FormatContext(
+    const absl::btree_map<std::string, std::string>& context_map) {
   if (context_map.empty()) {
     return "";
   }

@@ -18,6 +18,7 @@ set -o errexit
 export PS5='+\t ' # xtrace prompt
 
 declare -i E2E=0
+declare BUILD_FLAVOR=prod
 START=$(date +%s)
 
 trap _print_runtime EXIT
@@ -36,11 +37,11 @@ function usage() {
 usage:
   $0 <options>
     --server-image <image.tar>   Server docker image tarfile
+    --build-flavor               [REQUIRED] The build flavor of the image tarfile. One of: prod, non_prod
     --service-path               [REQUIRED] One of: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service
     --gcp-image-tag              [REQUIRED] (All lowercase) Custom image tag for GCP image.
     --gcp-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
     --e2e                        Run e2e mode
-
 environment variables (all optional):
     WORKSPACE                    Set the path to the workspace (repo root)
     BAZEL_STARTUP_ARGS           Additional startup arguments to pass to bazel invocations
@@ -74,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       E2E="$2"
       shift 2 || usage
       ;;
+    --build-flavor)
+      BUILD_FLAVOR="$2"
+      shift 2 || usage
+      ;;
     --verbose)
       set -o xtrace
       shift
@@ -92,13 +97,14 @@ mkdir -p "${DIST}"/gcp
 chmod 770 "${DIST}" "${DIST}"/gcp
 
 cp "${WORKSPACE}/${SERVER_IMAGE}" "${DIST}"/gcp
+readonly IMAGE_URI=bazel/production/packaging/gcp/${SERVICE}:server_docker_image
+docker load -i "${WORKSPACE}/${SERVER_IMAGE}"
+docker images --no-trunc --quiet ${IMAGE_URI} > "${DIST}"/gcp/"${SERVICE}"_"${BUILD_FLAVOR}".sha256
 
 if ! [[ -v KOKORO_ARTIFACTS_DIR ]] || [[ ${E2E} -eq 1 ]]; then
   printf "==== Uploading local image to gcloud Artifact Repository us-docker.pkg.dev =====\n"
-  readonly IMAGE_URI=bazel/production/packaging/gcp/${SERVICE}
-  docker load -i "${WORKSPACE}/${SERVER_IMAGE}"
   TAGGED_IMAGE_URI="${GCP_IMAGE_REPO}/${SERVICE}:${GCP_IMAGE_TAG}"
-  docker tag "${IMAGE_URI}:server_docker_image" "${TAGGED_IMAGE_URI}"
+  docker tag "${IMAGE_URI}" "${TAGGED_IMAGE_URI}"
 
   # Note: if the following command fails, double check that the local environment has
   # authenticated to the repo.

@@ -68,7 +68,8 @@ SelectAdReactor::SelectAdReactor(
                                                     kBuyerMetadataKeysMap)),
       is_protected_auction_request_(false),
       log_context_({}, config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN),
-                   ConsentedDebugConfiguration()),
+                   ConsentedDebugConfiguration(),
+                   [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
       fail_fast_(fail_fast),
       is_pas_enabled_(
@@ -296,7 +297,8 @@ void SelectAdReactor::Execute() {
   // after decrypting and decoding the request.
   log_context_.Update(
       std::visit(
-          [this](const auto& protected_input) -> log::ContextImpl::ContextMap {
+          [this](const auto& protected_input)
+              -> absl::btree_map<std::string, std::string> {
             return {
                 {kGenerationId, protected_input.generation_id()},
                 {kSellerDebugId, request_->auction_config().seller_debug_id()}};
@@ -544,7 +546,12 @@ void SelectAdReactor::OnFetchBidsDone(
     auto& found_response = *response;
     PS_VLOG(2, log_context_) << "\nGetBidsResponse:\n"
                              << found_response->DebugString();
-
+    if (found_response->has_debug_info()) {
+      DebugInfo& bfe_log =
+          *response_->mutable_debug_info()->add_downstream_servers();
+      bfe_log = std::move(*found_response->mutable_debug_info());
+      bfe_log.set_server_name(buyer_ig_owner);
+    }
     if (found_response->bids().empty() &&
         (!is_pas_enabled_ ||
          found_response->protected_app_signals_bids().empty())) {
@@ -611,10 +618,16 @@ void SelectAdReactor::FetchScoringSignals() {
   clients_.scoring_signals_async_provider.Get(
       scoring_signals_request,
       [this, kv_request = std::move(kv_request)](
-          absl::StatusOr<std::unique_ptr<ScoringSignals>> result) mutable {
+          absl::StatusOr<std::unique_ptr<ScoringSignals>> result,
+          GetByteSize get_byte_size) mutable {
         {
-          kv_request->SetRequestSize(0);
-          kv_request->SetResponseSize(0);
+          // Only logs KV request and response sizes if fetching signals
+          // succeeds.
+          if (result.ok()) {
+            kv_request->SetRequestSize(static_cast<int>(get_byte_size.request));
+            kv_request->SetResponseSize(
+                static_cast<int>(get_byte_size.response));
+          }
           // destruct kv_request, destructor measures request time
           auto not_used = std::move(kv_request);
         }
@@ -699,6 +712,14 @@ SelectAdReactor::CreateScoreAdsRequest() {
 
 void SelectAdReactor::ScoreAds() {
   auto raw_request = CreateScoreAdsRequest();
+  if (raw_request->ad_bids().empty() &&
+      raw_request->protected_app_signals_ad_bids().empty()) {
+    PS_VLOG(2, log_context_) << "No Protected Audience or Protected App "
+                                "Signals ads to score, sending chaff response";
+    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    return;
+  }
+
   PS_VLOG(2, log_context_) << "\nScoreAdsRawRequest:\n"
                            << raw_request->DebugString();
 
@@ -802,7 +823,8 @@ void SelectAdReactor::OnScoreAdsDone(
   }
 
   PS_VLOG(2, log_context_) << "ScoreAdsResponse status:" << response.status();
-
+  auto scoring_return_code =
+      static_cast<grpc::StatusCode>(response.status().code());
   if (!response.ok()) {
     LogIfError(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
@@ -810,19 +832,32 @@ void SelectAdReactor::OnScoreAdsDone(
     LogInitiatedRequestErrorMetrics(metric::kAs, response.status());
     PerformDebugReporting(high_score);
     benchmarking_logger_->End();
-    FinishWithStatus(
-        grpc::Status(static_cast<grpc::StatusCode>(response.status().code()),
-                     std::string(response.status().message())));
-    return;
+    // Any INTERNAL errors from auction service will be suppressed by SFE and
+    // will cause a chaff to be sent back. Non-INTERNAL errors on the other hand
+    // are propagated back the seller ad service.
+    if (scoring_return_code != grpc::StatusCode::INTERNAL) {
+      FinishWithStatus(grpc::Status(scoring_return_code,
+                                    std::string(response.status().message())));
+      return;
+    }
   }
 
-  const auto& found_response = *response;
-  if (found_response->has_ad_score() &&
-      found_response->ad_score().buyer_bid() > 0) {
-    high_score = found_response->ad_score();
+  BiddingGroupMap bidding_group_map;
+  if (scoring_return_code == grpc::StatusCode::OK) {
+    const auto& found_response = *response;
+    if (found_response->has_ad_score() &&
+        found_response->ad_score().buyer_bid() > 0) {
+      high_score = found_response->ad_score();
+    }
+    if (found_response->has_debug_info()) {
+      DebugInfo& auction_log =
+          *response_->mutable_debug_info()->add_downstream_servers();
+      auction_log = std::move(*found_response->mutable_debug_info());
+      auction_log.set_server_name("auction");
+    }
+    bidding_group_map = GetBiddingGroups();
+    PerformDebugReporting(high_score);
   }
-  BiddingGroupMap bidding_group_map = GetBiddingGroups();
-  PerformDebugReporting(high_score);
 
   std::optional<AuctionResult::Error> error;
   if (HaveClientVisibleErrors()) {

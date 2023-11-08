@@ -458,7 +458,8 @@ ScoreAdsReactor::ScoreAdsReactor(
       roma_timeout_ms_(runtime_config.roma_timeout_ms),
       log_context_(GetLoggingContext(raw_request_),
                    runtime_config.consented_debug_token,
-                   raw_request_.consented_debug_config()),
+                   raw_request_.consented_debug_config(),
+                   [this]() { return raw_response_.mutable_debug_info(); }),
       enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
       enable_report_result_url_generation_(
           runtime_config.enable_report_result_url_generation),
@@ -476,7 +477,7 @@ ScoreAdsReactor::ScoreAdsReactor(
   }()) << "AuctionContextMap()->Get(request) should have been called";
 }
 
-log::ContextImpl::ContextMap ScoreAdsReactor::GetLoggingContext(
+absl::btree_map<std::string, std::string> ScoreAdsReactor::GetLoggingContext(
     const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request) {
   const auto& log_context = score_ads_request.log_context();
   return {{kGenerationId, log_context.generation_id()},
@@ -492,12 +493,6 @@ void ScoreAdsReactor::Execute() {
                                 << raw_request_.DebugString();
 
   auto ads = raw_request_.ad_bids();
-  if (ads.empty()) {
-    FinishWithStatus(
-        ::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kNoAdsToScore));
-    return;
-  }
-
   absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
       scoring_signals = BuildTrustedScoringSignals(raw_request_, log_context_);
 
@@ -526,7 +521,7 @@ void ScoreAdsReactor::Execute() {
   }
 
   if (dispatch_requests_.empty()) {
-    FinishWithStatus(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+    FinishWithStatus(::grpc::Status(grpc::StatusCode::INTERNAL,
                                     kNoAdsWithValidScoringSignals));
     return;
   }
@@ -552,7 +547,7 @@ void ScoreAdsReactor::Execute() {
     LogIfError(
         metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     FinishWithStatus(
-        grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
+        grpc::Status(grpc::StatusCode::UNKNOWN, status.ToString()));
   }
 }
 
@@ -700,7 +695,7 @@ void ScoreAdsReactor::PerformReporting(
         << "Reporting execution request failed for batch:\n"
         << raw_request_.DebugString() << "\n"
         << status.ToString(absl::StatusToStringMode::kWithEverything);
-    FinishWithStatus(grpc::Status::OK);
+    EncryptAndFinishOK();
   }
 }
 
@@ -856,10 +851,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
     *raw_response_.mutable_ad_score() = winning_ad.value();
 
     if (!enable_report_result_url_generation_) {
-      DCHECK(encryption_enabled_);
-      EncryptResponse();
-      benchmarking_logger_->HandleResponseEnd();
-      FinishWithStatus(grpc::Status::OK);
+      EncryptAndFinishOK();
       return;
     }
     PerformReporting(winning_ad.value());
@@ -870,8 +862,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
     ABSL_LOG(WARNING) << "No ad was selected as most desirable";
     PerformDebugReporting(winning_ad);
     benchmarking_logger_->HandleResponseEnd();
-    FinishWithStatus(grpc::Status(grpc::StatusCode::NOT_FOUND,
-                                  "No ad was selected as most desirable"));
+    EncryptAndFinishOK();
   }
 }
 
@@ -961,10 +952,7 @@ void ScoreAdsReactor::ReportingCallback(
     }
   }
 
-  DCHECK(encryption_enabled_);
-  EncryptResponse();
-  benchmarking_logger_->HandleResponseEnd();
-  FinishWithStatus(grpc::Status::OK);
+  EncryptAndFinishOK();
 }
 
 void ScoreAdsReactor::PerformDebugReporting(
@@ -1005,12 +993,19 @@ void ScoreAdsReactor::PerformDebugReporting(
   }
 }
 
+void ScoreAdsReactor::EncryptAndFinishOK() {
+  DCHECK(encryption_enabled_);
+  PS_VLOG(kPlain, log_context_) << "ScoreAdsRawResponse:\n"
+                                << raw_response_.DebugString();
+  EncryptResponse();
+  PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsResponse\n"
+                                    << response_->ShortDebugString();
+  benchmarking_logger_->HandleResponseEnd();
+  FinishWithStatus(grpc::Status::OK);
+}
+
 void ScoreAdsReactor::FinishWithStatus(const grpc::Status& status) {
   if (status.error_code() == grpc::StatusCode::OK) {
-    PS_VLOG(kEncrypted, log_context_) << "Encrypted ScoreAdsResponse\n"
-                                      << response_->ShortDebugString();
-    PS_VLOG(kPlain, log_context_) << "ScoreAdsRawResponse:\n"
-                                  << raw_response_.DebugString();
     metric_context_->SetRequestSuccessful();
   } else {
     LogIfError(

@@ -805,6 +805,81 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
+          "title": "initiated_request.kv.size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\" metric.label.\"service_name\"=\"bfe\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 187
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "initiated_response.kv.size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_response.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\" metric.label.\"service_name\"=\"bfe\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos" : 24,
+        "yPos": 187
+      },
+      {
+        "height": 19,
+        "widget": {
           "title": "bfe.error_code [MEAN]",
           "xyChart": {
             "chartOptions": {},
@@ -842,7 +917,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
           }
         },
         "width": 24,
-        "yPos": 187
+        "yPos": 206
       },
             {
         "height": 19,
@@ -885,7 +960,285 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         },
         "width": 24,
         "xPos": 24,
-        "yPos": 187
+        "yPos": 206
+      },
+  {
+        "height": 19,
+        "widget": {
+          "title": "initiated_request.total_size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.total_size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 225
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "initiated_response.total_size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_response.total_size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 225
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "initiated_request.errors_count_by_server [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.errors_count_by_server\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"server_name\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 244
+      },
+  {
+        "height": 19,
+        "widget": {
+          "title": "initiated_request.errors_count_by_status [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 244
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "request.failed_count_by_status [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/request.failed_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 263
+      },
+  {
+        "height": 19,
+        "widget": {
+          "title": "initiated_response.bidding.size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_response.bidding.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 263
+      },
+{
+        "height": 19,
+        "widget": {
+          "title": "system.thread.count [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"label\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/system.thread.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 282
       }
     ]
   }

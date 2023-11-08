@@ -68,14 +68,20 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   HTTPRequest request = BuildBuyerKeyValueRequest(kv_server_base_address_,
                                                   metadata, std::move(keys));
   PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Request: " << request.url;
-  auto done_callback = [on_done = std::move(on_done)](
+  size_t request_size = 0;
+  for (std::string& header : request.headers) {
+    request_size += header.size();
+  }
+  request_size += request.url.size();
+  auto done_callback = [on_done = std::move(on_done), request_size](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
       PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Success Response:\n"
                  << resultStr.value() << "\n";
+      size_t response_size = resultStr->size();
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
-          std::make_unique<GetBuyerValuesOutput>(
-              GetBuyerValuesOutput({std::move(resultStr.value())}));
+          std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+              {std::move(resultStr.value()), request_size, response_size}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
       PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Failure Response: "

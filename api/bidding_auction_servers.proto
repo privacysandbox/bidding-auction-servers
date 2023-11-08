@@ -454,6 +454,9 @@ message SelectAdResponse {
   // Encrypted AuctionResult from FLEDGE auction. May  contain a real candidate
   // or chaff, depending on ScoreAd() outcomes.
   bytes auction_result_ciphertext = 1;
+
+  // Debug logs for sfe and downstream servers (only in non_prod)
+  DebugInfo debug_info = 2;
 }
 
 // Context useful for logging and debugging requests.
@@ -562,6 +565,9 @@ message GetBidsResponse {
     // Includes ad_render_url and corresponding bid value pairs.
     // Represents a JSON object.
     repeated ProtectedAppSignalsAdWithBid protected_app_signals_bids = 2;
+
+    // Debug logs for bfe and downstream servers (only in non_prod)
+    DebugInfo debug_info = 99;
   }
 
   // Encrypted GetBidsRawResponse.
@@ -749,6 +755,9 @@ message GenerateBidsResponse {
     // IG (CA). Note GenerateBid() per IG returns bid for one ad per IG (though
     // for component auction this would be slightly different).
     repeated AdWithBid bids = 1;
+
+    // Debug logs for bidding servers (only in non_prod)
+    DebugInfo debug_info = 99;
   }
 
   // Encrypted GenerateBidsRawResponse.
@@ -851,6 +860,9 @@ message GenerateProtectedAppSignalsBidsResponse {
   message GenerateProtectedAppSignalsBidsRawResponse {
     // Bids corresponding to ads.
     repeated ProtectedAppSignalsAdWithBid bids = 1;
+
+    // Debug logs for app signal servers (only in non_prod)
+    DebugInfo debug_info = 99;
   }
 
   // Encrypted GenerateProtectedAppSignalsBidsRawResponse.
@@ -1131,6 +1143,9 @@ message ScoreAdsResponse {
   message ScoreAdsRawResponse {
     // Score of the winning ad in the auction.
     AdScore ad_score = 1;
+
+    // Debug logs for auction servers (only in non_prod)
+    DebugInfo debug_info = 99;
   }
 
   // Encrypted ScoreAdsRawResponse.
@@ -1184,4 +1199,17 @@ message ConsentedDebugConfiguration {
 
   // The debug token embedded in the request.
   string token = 2;
+
+  // Whether save debug logs in response (only in non_prod)
+  bool is_debug_info_in_response = 3;
+}
+
+message DebugInfo {
+  string server_name = 1;
+
+  // Debug logs for current server
+  repeated string logs = 2;
+
+  // DebugInfo for downstream servers that receive requests from current server
+  repeated DebugInfo downstream_servers = 3;
 }

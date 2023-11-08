@@ -20,8 +20,10 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/btree_map.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "api/bidding_auction_servers.pb.h"
@@ -37,25 +39,32 @@ inline absl::string_view TokenWithMinLength(absl::string_view token) {
   return token.size() < kTokenMinLength ? "" : token;
 }
 
+// Utility method to format the context provided as key/value pair into a
+// string. Function excludes any empty values from the output string.
+std::string FormatContext(
+    const absl::btree_map<std::string, std::string>& context_map);
+
 class ContextImpl : public RequestContext {
  public:
-  using ContextMap = absl::btree_map<std::string, std::string>;
-
-  ContextImpl(const ContextMap& context_map,
-              absl::string_view server_debug_token,
-              const ConsentedDebugConfiguration& debug_config)
-      : server_debug_token_(TokenWithMinLength(server_debug_token)) {
+  ContextImpl(
+      const absl::btree_map<std::string, std::string>& context_map,
+      absl::string_view server_debug_token,
+      const ConsentedDebugConfiguration& debug_config,
+      absl::AnyInvocable<DebugInfo*()> debug_info = []() { return nullptr; })
+      : debug_response_sink_(std::move(debug_info)),
+        server_debug_token_(TokenWithMinLength(server_debug_token)) {
     Update(context_map, debug_config);
   }
 
   absl::string_view ContextStr() const override { return context_; }
 
-  void Update(const ContextMap& new_context,
+  void Update(const absl::btree_map<std::string, std::string>& new_context,
               const ConsentedDebugConfiguration& debug_config) {
     context_ = FormatContext(new_context);
     client_debug_token_ = debug_config.is_consented()
                               ? TokenWithMinLength(debug_config.token())
                               : "";
+    debug_response_sink_.should_log_ = debug_config.is_debug_info_in_response();
   }
 
   bool is_consented() const override {
@@ -65,17 +74,11 @@ class ContextImpl : public RequestContext {
 
   absl::LogSink* ConsentedSink() override { return &consented_sink; }
 
-  bool is_debug_response() const override { return false; };
+  bool is_debug_response() const override {
+    return debug_response_sink_.ShouldLog();
+  };
 
   absl::LogSink* DebugResponseSink() override { return &debug_response_sink_; };
-
-  // Utility method to format the context provided as key/value pair into a
-  // string. Function excludes any empty values from the output string.
-  static std::string FormatContext(const ContextMap& context_map);
-
-  // Return the client token string if it exists in `context_map`, otherwise
-  // return empty string
-  static std::string GetClientToken(const ContextMap& context_map);
 
  private:
   class ConsentedSinkImpl : public absl::LogSink {
@@ -93,11 +96,22 @@ class ContextImpl : public RequestContext {
     opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger_;
   };
 
-  // To be implemented
   class DebugResponseSinkImpl : public absl::LogSink {
    public:
-    void Send(const absl::LogEntry&) override {}
+    explicit DebugResponseSinkImpl(absl::AnyInvocable<DebugInfo*()> debug_info)
+        : debug_info_(std::move(debug_info)) {}
+
+    void Send(const absl::LogEntry& entry) override {
+      debug_info_()->add_logs(entry.text_message_with_prefix());
+    }
+
+    bool ShouldLog() const { return should_log_; }
+
     void Flush() override {}
+
+    absl::AnyInvocable<DebugInfo*()> debug_info_;
+
+    bool should_log_ = false;
   };
 
   std::string context_;

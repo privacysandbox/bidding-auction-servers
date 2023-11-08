@@ -53,8 +53,8 @@ using GetBidDoneCallback =
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                 GetBidsResponse::GetBidsRawResponse>>) &&>;
 using ScoringSignalsDoneCallback =
-    absl::AnyInvocable<void(
-                           absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
+                            GetByteSize) &&>;
 
 template <typename T>
 class SelectAdReactorForWebTest : public ::testing::Test {
@@ -294,7 +294,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
         auto scoring_signals = std::make_unique<ScoringSignals>();
         scoring_signals->scoring_signals =
             std::make_unique<std::string>(kSampleScoringSignals);
-        std::move(on_done)(std::move(scoring_signals));
+        GetByteSize get_byte_size;
+        std::move(on_done)(std::move(scoring_signals), get_byte_size);
       };
   EXPECT_CALL(scoring_signals_provider, Get)
       .WillRepeatedly(MockScoringSignalsProvider);
@@ -627,7 +628,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
         auto scoring_signals = std::make_unique<ScoringSignals>();
         scoring_signals->scoring_signals =
             std::make_unique<std::string>(kSampleScoringSignals);
-        std::move(on_done)(std::move(scoring_signals));
+        GetByteSize get_byte_size;
+        std::move(on_done)(std::move(scoring_signals), get_byte_size);
       };
   EXPECT_CALL(scoring_signals_provider, Get)
       .WillRepeatedly(MockScoringSignalsProvider);

@@ -77,6 +77,12 @@ constexpr char kTestAdsRetrievalContextualEmbeddingsResponse[] = R"JSON(
     }
 }
 )JSON";
+constexpr char kTestDebugReportingUrls[] = R"JSON(
+{
+  "auction_debug_loss_url": "test.com/debugLoss",
+  "auction_debug_win_url": "test.com/debugWin"
+}
+)JSON";
 
 // Sets up the provided mock so that it could be use to mock the encryption
 // decryption required for TEE communication.
@@ -107,7 +113,8 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 // Creates a mock response from `generateBid` UDF.
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render = kTestRenderUrl, double bid = kTestWinningBid,
-    absl::string_view egress_features_hex_string = kTestEgressFeaturesHex);
+    absl::string_view egress_features_hex_string = kTestEgressFeaturesHex,
+    absl::string_view debug_reporting_urls = kTestDebugReportingUrls);
 
 // Creates a mock response from ads retrieval service.
 absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
