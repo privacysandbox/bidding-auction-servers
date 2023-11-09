@@ -154,6 +154,10 @@ std::string GetBuyerMetadataJson(
       kEnableReportWinUrlGeneration,
       buyer_reporting_metadata.enable_report_win_url_generation,
       buyer_reporting_signals_obj.GetAllocator());
+  buyer_reporting_signals_obj.AddMember(
+      kEnableProtectedAppSignals,
+      buyer_reporting_metadata.enable_protected_app_signals,
+      buyer_reporting_signals_obj.GetAllocator());
   absl::StatusOr<rapidjson::Document> buyer_signals_obj;
   if (!buyer_reporting_metadata.buyer_signals.empty()) {
     buyer_signals_obj = ParseJsonString(buyer_reporting_metadata.buyer_signals);
@@ -169,7 +173,8 @@ std::string GetBuyerMetadataJson(
   buyer_origin.SetString(winning_ad_score.interest_group_owner().c_str(),
                          buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
-      kBuyerOrigin, buyer_origin, buyer_reporting_signals_obj.GetAllocator());
+      kBuyerOriginTag, buyer_origin,
+      buyer_reporting_signals_obj.GetAllocator());
   bool made_highest_scoring_other_bid = false;
   if (winning_ad_score.ig_owner_highest_scoring_other_bids_map().size() == 1 &&
       winning_ad_score.ig_owner_highest_scoring_other_bids_map().contains(
@@ -193,7 +198,7 @@ std::string GetBuyerMetadataJson(
   }
   if (buyer_reporting_metadata.modeling_signals.has_value()) {
     buyer_reporting_signals_obj.AddMember(
-        kModelingSignals, buyer_reporting_metadata.modeling_signals.value(),
+        kModelingSignalsTag, buyer_reporting_metadata.modeling_signals.value(),
         buyer_reporting_signals_obj.GetAllocator());
   }
   rapidjson::Value seller;
@@ -201,7 +206,7 @@ std::string GetBuyerMetadataJson(
     seller.SetString(buyer_reporting_metadata.seller.c_str(),
                      buyer_reporting_signals_obj.GetAllocator());
     buyer_reporting_signals_obj.AddMember(
-        kSeller, seller, buyer_reporting_signals_obj.GetAllocator());
+        kSellerTag, seller, buyer_reporting_signals_obj.GetAllocator());
   }
   rapidjson::Value interest_group_name;
   interest_group_name.SetString(
@@ -211,7 +216,7 @@ std::string GetBuyerMetadataJson(
       kInterestGroupName, interest_group_name,
       buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
-      kAdCost, buyer_reporting_metadata.ad_cost,
+      kAdCostTag, buyer_reporting_metadata.ad_cost,
       buyer_reporting_signals_obj.GetAllocator());
 
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
@@ -274,12 +279,13 @@ DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata) {
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    const std::string& handler_name) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
       .id = winning_ad_score.render(),
       .version_num = kDispatchRequestVersionNumber,
-      .handler_name = kReportingDispatchHandlerFunctionName,
+      .handler_name = handler_name,
       .input = GetReportingInput(winning_ad_score, publisher_hostname,
                                  enable_adtech_code_logging, auction_config,
                                  log_context, buyer_reporting_metadata),

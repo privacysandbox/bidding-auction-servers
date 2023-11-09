@@ -655,6 +655,19 @@ ConsentedDebugConfiguration DecodeConsentedDebugConfig(
         }
         break;
       }
+      case 2: {  // IsDebugResponse.
+        bool is_valid_type =
+            IsTypeValid(&cbor_is_bool, entry.value,
+                        kConsentedDebugConfigIsDebugInfoInResponse, kString,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                              consented_debug_config);
+        if (is_valid_type) {
+          consented_debug_config.set_is_debug_info_in_response(
+              cbor_get_bool(entry.value));
+        }
+        break;
+      }
     }
   }
   return consented_debug_config;

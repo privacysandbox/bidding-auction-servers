@@ -292,15 +292,17 @@ std::unique_ptr<MockBiddingSignalsProvider>
 GetBiddingSignalsProviderErrorMock() {
   auto bidding_signals_async_provider =
       std::make_unique<MockBiddingSignalsProvider>();
-  EXPECT_CALL(
-      *bidding_signals_async_provider,
-      Get(An<const BiddingSignalsRequest&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-          An<absl::Duration>()))
+  EXPECT_CALL(*bidding_signals_async_provider,
+              Get(An<const BiddingSignalsRequest&>(),
+                  An<absl::AnyInvocable<
+                      void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
+                           GetByteSize) &&>>(),
+                  An<absl::Duration>()))
       .WillOnce([](const BiddingSignalsRequest& bidding_signals_request,
                    auto on_done, absl::Duration timeout) {
-        std::move(on_done)(absl::InternalError(kInternalServerError));
+        GetByteSize get_byte_size;
+        std::move(on_done)(absl::InternalError(kInternalServerError),
+                           get_byte_size);
       });
   return bidding_signals_async_provider;
 }

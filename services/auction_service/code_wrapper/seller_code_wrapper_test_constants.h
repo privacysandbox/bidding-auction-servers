@@ -26,6 +26,11 @@ constexpr char kTestReportWinUrl[] =
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "modelingSignals=4&recency=3&joinCount=5";
 
+constexpr absl::string_view kBuyerBaseCodeSimple =
+    R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+})JS_CODE";
+
 constexpr absl::string_view kBuyerBaseCode =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
@@ -59,6 +64,16 @@ constexpr absl::string_view kBuyerBaseCode =
         console.warn("Logging warning from ReportWin")
         sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
+    }
+)JS_CODE";
+
+constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
+    R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, egressFeatures){
+      console.log("Testing Protected App Signals");
+      sendReportTo("http://test.com");
+      registerAdBeacon({"clickEvent":"http://click.com"});
+      return "testSignalsForWinner";
     }
 )JS_CODE";
 
@@ -140,32 +155,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
       }
     }
 
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-      return {
-        desirability: score,
-        allow_component_auction: false
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
-    }
-
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
-    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata) {
+    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
@@ -205,7 +197,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
       try{
       if(buyerReportingMetadata.enableReportWinUrlGeneration){
         var buyerOrigin = buyerReportingMetadata.buyerOrigin
-        var buyerPrefix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
+        var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
@@ -216,8 +208,15 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
-        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
-                              "directFromSellerSignals, enable_logging)"
+        // Absence of interest group indicates that this is a protected app
+        // signals ad.
+        if (buyerReportingMetadata.enableProtectedAppSignals &&
+            (buyerReportingSignals.interestGroupName === null ||
+             buyerReportingSignals.interestGroupName.trim() === "")) {
+          functionSuffix += "ProtectedAppSignals";
+        }
+        var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
+                              "directFromSellerSignals, enable_logging, )"
         var reportWinResponse = eval(reportWinFunction)
         return {
           reportResultResponse: ps_report_result_response,
@@ -244,7 +243,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     // Handler method to call adTech provided reportWin method and wrap the
     // response with reportWin url and interaction reporting urls.
     function reportWinWrapperhttpbuyer1com(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, enable_logging) {
+                              directFromSellerSignals, enable_logging, ) {
       var ps_report_win_response = {
         reportWinUrl : "",
         interactionReportingUrls : {},
@@ -317,7 +316,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
       }
       try{
       reportWin(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals)
+                              directFromSellerSignals, )
       } catch(ex){
         console.error(ex.message)
       }
@@ -327,6 +326,395 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         buyerErrors: ps_buyer_error_logs,
         buyerWarnings: ps_buyer_warning_logs
       }
+    }
+
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
+      return {
+        desirability: score,
+        allow_component_auction: false
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        sendReportTo("http://test.com")
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return "testSignalsForWinner"
+    }
+)JS_CODE";
+
+constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
+    function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
+                                browserSignals, directFromSellerSignals, featureFlags){
+      var ps_logs = [];
+      var ps_errors = [];
+      var ps_warns = [];
+      if(featureFlags.enable_logging){
+        console.log = function(...args) {
+          ps_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_errors.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_warns.push(JSON.stringify(args))
+        }
+      }
+
+      var forDebuggingOnly_auction_loss_url = undefined;
+      var forDebuggingOnly_auction_win_url = undefined;
+      const forDebuggingOnly = {};
+      forDebuggingOnly.reportAdAuctionLoss = function(url){
+        forDebuggingOnly_auction_loss_url = url;
+      }
+      forDebuggingOnly.reportAdAuctionWin = function(url){
+        forDebuggingOnly_auction_win_url = url;
+      }
+      globalThis.forDebuggingOnly = forDebuggingOnly;
+
+      var scoreAdResponse = {};
+      try {
+        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+              trustedScoringSignals, browserSignals, directFromSellerSignals);
+      } catch({error, message}) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
+      } finally {
+        if( featureFlags.enable_debug_url_generation &&
+              (forDebuggingOnly_auction_loss_url
+                  || forDebuggingOnly_auction_win_url)) {
+          scoreAdResponse.debugReportUrls = {
+            auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
+            auctionDebugWinUrl: forDebuggingOnly_auction_win_url
+          }
+        }
+      }
+      return {
+        response: scoreAdResponse,
+        logs: ps_logs,
+        errors: ps_errors,
+        warnings: ps_warns
+      }
+    }
+
+    //Handler method to call adTech provided reportResult method and wrap the
+    // response with reportResult url and interaction reporting urls.
+    function reportingEntryFunctionProtectedAppSignals(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, egressFeatures) {
+    ps_signalsForWinner = ""
+    var ps_report_result_response = {
+        reportResultUrl : "",
+        interactionReportingUrls : {},
+        sendReportToInvoked : false,
+        registerAdBeaconInvoked : false,
+      }
+      var ps_logs = [];
+      var ps_errors = [];
+      var ps_warns = [];
+      if(enable_logging){
+        console.log = function(...args) {
+          ps_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_errors.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_warns.push(JSON.stringify(args))
+        }
+      }
+      globalThis.sendReportTo = function sendReportTo(url){
+        if(ps_report_result_response.sendReportToInvoked) {
+          throw new Error("sendReportTo function invoked more than once");
+        }
+        ps_report_result_response.reportResultUrl = url;
+        ps_report_result_response.sendReportToInvoked = true;
+      }
+      globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
+        if(ps_report_result_response.registerAdBeaconInvoked) {
+          throw new Error("registerAdBeaconInvoked function invoked more than once");
+        }
+        ps_report_result_response.interactionReportingUrls=eventUrlMap;
+        ps_report_result_response.registerAdBeaconInvoked = true;
+      }
+      ps_signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+      try{
+      if(buyerReportingMetadata.enableReportWinUrlGeneration){
+        var buyerOrigin = buyerReportingMetadata.buyerOrigin
+        var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
+        var auctionSignals = auctionConfig.auctionSignals
+        var buyerReportingSignals = sellerReportingSignals
+        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
+        buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
+        buyerReportingSignals.recency = buyerReportingMetadata.recency
+        buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
+        perBuyerSignals = buyerReportingMetadata.perBuyerSignals
+        buyerReportingSignals.seller = buyerReportingMetadata.seller
+        buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        // Absence of interest group indicates that this is a protected app
+        // signals ad.
+        if (buyerReportingMetadata.enableProtectedAppSignals &&
+            (buyerReportingSignals.interestGroupName === null ||
+             buyerReportingSignals.interestGroupName.trim() === "")) {
+          functionSuffix += "ProtectedAppSignals";
+        }
+        var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
+                              "directFromSellerSignals, enable_logging, egressFeatures)"
+        var reportWinResponse = eval(reportWinFunction)
+        return {
+          reportResultResponse: ps_report_result_response,
+          sellerLogs: ps_logs,
+          sellerErrors: ps_errors,
+          sellerWarnings: ps_warns,
+          reportWinResponse: reportWinResponse.response,
+          buyerLogs: reportWinResponse.buyerLogs,
+          buyerErrors: reportWinResponse.buyerErrors,
+          buyerWarnings: reportWinResponse.buyerWarnings,
+      }
+      }
+      } catch(ex){
+        console.error(ex.message)
+      }
+      return {
+        reportResultResponse: ps_report_result_response,
+        sellerLogs: ps_logs,
+        sellerErrors: ps_errors,
+        sellerWarnings: ps_warns,
+      }
+    }
+
+    // Handler method to call adTech provided reportWin method and wrap the
+    // response with reportWin url and interaction reporting urls.
+    function reportWinWrapperhttpbuyer1comProtectedAppSignals(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, enable_logging, egressFeatures) {
+      var ps_report_win_response = {
+        reportWinUrl : "",
+        interactionReportingUrls : {},
+        sendReportToInvoked : false,
+        registerAdBeaconInvoked : false,
+      }
+      var ps_buyer_logs = [];
+      var ps_buyer_error_logs = [];
+      var ps_buyer_warning_logs = [];
+      if(enable_logging){
+        console.log = function(...args) {
+          ps_buyer_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_buyer_error_logs.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_buyer_warning_logs.push(JSON.stringify(args))
+        }
+      }
+      globalThis.sendReportTo = function sendReportTo(url){
+        if(ps_report_win_response.sendReportToInvoked) {
+          throw new Error("sendReportTo function invoked more than once");
+        }
+        ps_report_win_response.reportWinUrl = url;
+        ps_report_win_response.sendReportToInvoked = true;
+      }
+      globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
+        if(ps_report_win_response.registerAdBeaconInvoked) {
+          throw new Error("registerAdBeaconInvoked function invoked more than once");
+        }
+        ps_report_win_response.interactionReportingUrls = eventUrlMap;
+        ps_report_win_response.registerAdBeaconInvoked = true;
+      }
+      {
+      reportWinProtectedAppSignals = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, egressFeatures){
+      console.log("Testing Protected App Signals");
+      sendReportTo("http://test.com");
+      registerAdBeacon({"clickEvent":"http://click.com"});
+      return "testSignalsForWinner";
+    }
+
+      }
+      try{
+      reportWinProtectedAppSignals(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, egressFeatures)
+      } catch(ex){
+        console.error(ex.message)
+      }
+      return {
+        response: ps_report_win_response,
+        buyerLogs: ps_buyer_logs,
+        buyerErrors: ps_buyer_error_logs,
+        buyerWarnings: ps_buyer_warning_logs
+      }
+    }
+
+    //Handler method to call adTech provided reportResult method and wrap the
+    // response with reportResult url and interaction reporting urls.
+    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
+    ps_signalsForWinner = ""
+    var ps_report_result_response = {
+        reportResultUrl : "",
+        interactionReportingUrls : {},
+        sendReportToInvoked : false,
+        registerAdBeaconInvoked : false,
+      }
+      var ps_logs = [];
+      var ps_errors = [];
+      var ps_warns = [];
+      if(enable_logging){
+        console.log = function(...args) {
+          ps_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_errors.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_warns.push(JSON.stringify(args))
+        }
+      }
+      globalThis.sendReportTo = function sendReportTo(url){
+        if(ps_report_result_response.sendReportToInvoked) {
+          throw new Error("sendReportTo function invoked more than once");
+        }
+        ps_report_result_response.reportResultUrl = url;
+        ps_report_result_response.sendReportToInvoked = true;
+      }
+      globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
+        if(ps_report_result_response.registerAdBeaconInvoked) {
+          throw new Error("registerAdBeaconInvoked function invoked more than once");
+        }
+        ps_report_result_response.interactionReportingUrls=eventUrlMap;
+        ps_report_result_response.registerAdBeaconInvoked = true;
+      }
+      ps_signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+      try{
+      if(buyerReportingMetadata.enableReportWinUrlGeneration){
+        var buyerOrigin = buyerReportingMetadata.buyerOrigin
+        var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
+        var auctionSignals = auctionConfig.auctionSignals
+        var buyerReportingSignals = sellerReportingSignals
+        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
+        buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
+        buyerReportingSignals.recency = buyerReportingMetadata.recency
+        buyerReportingSignals.modelingSignals = buyerReportingMetadata.modelingSignals
+        perBuyerSignals = buyerReportingMetadata.perBuyerSignals
+        buyerReportingSignals.seller = buyerReportingMetadata.seller
+        buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        // Absence of interest group indicates that this is a protected app
+        // signals ad.
+        if (buyerReportingMetadata.enableProtectedAppSignals &&
+            (buyerReportingSignals.interestGroupName === null ||
+             buyerReportingSignals.interestGroupName.trim() === "")) {
+          functionSuffix += "ProtectedAppSignals";
+        }
+        var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
+                              "directFromSellerSignals, enable_logging, )"
+        var reportWinResponse = eval(reportWinFunction)
+        return {
+          reportResultResponse: ps_report_result_response,
+          sellerLogs: ps_logs,
+          sellerErrors: ps_errors,
+          sellerWarnings: ps_warns,
+          reportWinResponse: reportWinResponse.response,
+          buyerLogs: reportWinResponse.buyerLogs,
+          buyerErrors: reportWinResponse.buyerErrors,
+          buyerWarnings: reportWinResponse.buyerWarnings,
+      }
+      }
+      } catch(ex){
+        console.error(ex.message)
+      }
+      return {
+        reportResultResponse: ps_report_result_response,
+        sellerLogs: ps_logs,
+        sellerErrors: ps_errors,
+        sellerWarnings: ps_warns,
+      }
+    }
+
+    // Handler method to call adTech provided reportWin method and wrap the
+    // response with reportWin url and interaction reporting urls.
+    function reportWinWrapperhttpbuyer1com(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, enable_logging, ) {
+      var ps_report_win_response = {
+        reportWinUrl : "",
+        interactionReportingUrls : {},
+        sendReportToInvoked : false,
+        registerAdBeaconInvoked : false,
+      }
+      var ps_buyer_logs = [];
+      var ps_buyer_error_logs = [];
+      var ps_buyer_warning_logs = [];
+      if(enable_logging){
+        console.log = function(...args) {
+          ps_buyer_logs.push(JSON.stringify(args))
+        }
+        console.error = function(...args) {
+          ps_buyer_error_logs.push(JSON.stringify(args))
+        }
+        console.warn = function(...args) {
+          ps_buyer_warning_logs.push(JSON.stringify(args))
+        }
+      }
+      globalThis.sendReportTo = function sendReportTo(url){
+        if(ps_report_win_response.sendReportToInvoked) {
+          throw new Error("sendReportTo function invoked more than once");
+        }
+        ps_report_win_response.reportWinUrl = url;
+        ps_report_win_response.sendReportToInvoked = true;
+      }
+      globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
+        if(ps_report_win_response.registerAdBeaconInvoked) {
+          throw new Error("registerAdBeaconInvoked function invoked more than once");
+        }
+        ps_report_win_response.interactionReportingUrls = eventUrlMap;
+        ps_report_win_response.registerAdBeaconInvoked = true;
+      }
+      {
+      reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+}
+      }
+      try{
+      reportWin(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals, )
+      } catch(ex){
+        console.error(ex.message)
+      }
+      return {
+        response: ps_report_win_response,
+        buyerLogs: ps_buyer_logs,
+        buyerErrors: ps_buyer_error_logs,
+        buyerWarnings: ps_buyer_warning_logs
+      }
+    }
+
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
+      return {
+        desirability: score,
+        allow_component_auction: false
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        sendReportTo("http://test.com")
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return "testSignalsForWinner"
     }
 )JS_CODE";
 
@@ -383,32 +771,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
       }
     }
 
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-      return {
-        desirability: score,
-        allow_component_auction: false
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
-    }
-
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
-    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata) {
+    function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
     ps_signalsForWinner = ""
     var ps_report_result_response = {
         reportResultUrl : "",
@@ -448,7 +813,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
       try{
       if(buyerReportingMetadata.enableReportWinUrlGeneration){
         var buyerOrigin = buyerReportingMetadata.buyerOrigin
-        var buyerPrefix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
+        var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
@@ -459,8 +824,15 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
-        var reportWinFunction = "reportWinWrapper"+buyerPrefix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
-                              "directFromSellerSignals, enable_logging)"
+        // Absence of interest group indicates that this is a protected app
+        // signals ad.
+        if (buyerReportingMetadata.enableProtectedAppSignals &&
+            (buyerReportingSignals.interestGroupName === null ||
+             buyerReportingSignals.interestGroupName.trim() === "")) {
+          functionSuffix += "ProtectedAppSignals";
+        }
+        var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
+                              "directFromSellerSignals, enable_logging, )"
         var reportWinResponse = eval(reportWinFunction)
         return {
           reportResultResponse: ps_report_result_response,
@@ -482,6 +854,29 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         sellerErrors: ps_errors,
         sellerWarnings: ps_warns,
       }
+    }
+
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
+      return {
+        desirability: score,
+        allow_component_auction: false
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        sendReportTo("http://test.com")
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return "testSignalsForWinner"
     }
 )JS_CODE";
 

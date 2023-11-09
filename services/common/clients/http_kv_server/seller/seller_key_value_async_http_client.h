@@ -44,9 +44,13 @@ struct GetSellerValuesInput {
   ClientType client_type{CLIENT_TYPE_UNKNOWN};
 };
 
-// Response from Seller Key Value server as JSON string.
+// Response from Seller Key Value server.
 struct GetSellerValuesOutput {
+  // Response JSON string.
   std::string result;
+  // Used for instrumentation purposes in upper layers.
+  size_t request_size;
+  size_t response_size;
 };
 
 // This class fetches Key/Value pairs from a Seller Key/Value Server instance

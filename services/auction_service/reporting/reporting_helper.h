@@ -48,16 +48,20 @@ inline constexpr char kBuyerWarnings[] = "buyerWarnings";
 inline constexpr int kReportingArgSize = 5;
 inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
+inline constexpr char kReportingProtectedAppSignalsFunctionName[] =
+    "reportingEntryFunctionProtectedAppSignals";
 inline constexpr int kDispatchRequestVersionNumber = 1.0;
 inline constexpr char kEnableReportWinUrlGeneration[] =
     "enableReportWinUrlGeneration";
-inline constexpr char kModelingSignals[] = "modelingSignals";
+inline constexpr char kEnableProtectedAppSignals[] =
+    "enableProtectedAppSignals";
+inline constexpr char kModelingSignalsTag[] = "modelingSignals";
 inline constexpr char kReportWinResponse[] = "reportWinResponse";
 inline constexpr char kReportWinUrl[] = "reportWinUrl";
 inline constexpr char kBuyerSignals[] = "perBuyerSignals";
-inline constexpr char kBuyerOrigin[] = "buyerOrigin";
-inline constexpr char kSeller[] = "seller";
-inline constexpr char kAdCost[] = "adCost";
+inline constexpr char kBuyerOriginTag[] = "buyerOrigin";
+inline constexpr char kSellerTag[] = "seller";
+inline constexpr char kAdCostTag[] = "adCost";
 inline constexpr char kMadeHighestScoringOtherBid[] =
     "madeHighestScoringOtherBid";
 inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
@@ -77,6 +81,7 @@ inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
 
 struct BuyerReportingMetadata {
   bool enable_report_win_url_generation = false;
+  bool enable_protected_app_signals = false;
   std::string buyer_signals;
   std::optional<int> join_count;
   std::optional<long> recency;
@@ -112,7 +117,8 @@ DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata);
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    const std::string& handler_name = kReportingDispatchHandlerFunctionName);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

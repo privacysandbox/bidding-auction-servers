@@ -47,7 +47,8 @@ class HttpBiddingSignalsAsyncProvider final
   void Get(const BiddingSignalsRequest& get_bids_raw_request,
            absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
 
-                                       BiddingSignals>>) &&>
+                                       BiddingSignals>>,
+                                   GetByteSize) &&>
                on_done,
            absl::Duration timeout) const override;
 

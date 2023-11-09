@@ -69,7 +69,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
   BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {},
+      [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
+         GetByteSize get_byte_size) {},
       absl::Milliseconds(100));
   notification.WaitForNotification();
 }
@@ -128,7 +129,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
   BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {},
+      [](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
+         GetByteSize get_byte_size) {},
       absl::Milliseconds(100));
   notification.WaitForNotification();
 }
@@ -162,7 +164,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
   BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [&notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {
+      [&notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
+                      GetByteSize get_byte_size) {
         EXPECT_EQ(signals.status().code(), absl::StatusCode::kInternal);
         notification.Notify();
       },
@@ -207,8 +210,9 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
   BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [&expected_output,
-       &notification](absl::StatusOr<std::unique_ptr<BiddingSignals>> signals) {
+      [&expected_output, &notification](
+          absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
+          GetByteSize get_byte_size) {
         EXPECT_EQ(*(signals.value()->trusted_signals), expected_output);
         notification.Notify();
       },

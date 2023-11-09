@@ -29,10 +29,33 @@ TEST(GetSellerWrappedCode, GeneratesCompleteFinalCode) {
   bool enable_report_win_url_generation = true;
   absl::flat_hash_map<std::string, std::string> buyer_code_map;
   buyer_code_map.try_emplace(kBuyerOrigin, kBuyerBaseCode);
-  EXPECT_EQ(
+  std::string observed =
       GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
-                           enable_report_win_url_generation, buyer_code_map),
-      kExpectedFinalCode);
+                           enable_report_win_url_generation, buyer_code_map);
+  EXPECT_EQ(observed, kExpectedFinalCode) << "Observed:\n"
+                                          << observed << "\n\n"
+                                          << "Expected: " << kExpectedFinalCode;
+}
+
+TEST(GetSellerWrappedCode, GeneratesCompleteFinalCodeWithProtectedAppSignals) {
+  bool enable_report_result_url_generation = true;
+  bool enable_report_win_url_generation = true;
+  absl::flat_hash_map<std::string, std::string> buyer_code_map;
+  buyer_code_map.try_emplace(kBuyerOrigin, kBuyerBaseCodeSimple);
+
+  absl::flat_hash_map<std::string, std::string>
+      protected_app_signals_buyer_code_map;
+  protected_app_signals_buyer_code_map.try_emplace(
+      kBuyerOrigin, kProtectedAppSignalsBuyerBaseCode);
+
+  std::string observed = GetSellerWrappedCode(
+      kSellerBaseCode, enable_report_result_url_generation,
+      /*enable_protected_app_signals=*/true, enable_report_win_url_generation,
+      buyer_code_map, protected_app_signals_buyer_code_map);
+  EXPECT_EQ(observed, kExpectedProtectedAppSignalsFinalCode)
+      << "Observed:\n"
+      << observed << "\n\n"
+      << "Expected: " << kExpectedProtectedAppSignalsFinalCode;
 }
 
 TEST(GetSellerWrappedCode, CodeWithReportWinDisabled) {

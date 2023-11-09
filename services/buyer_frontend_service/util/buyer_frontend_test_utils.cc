@@ -48,18 +48,21 @@ void SetupBiddingProviderMock(
       [bidding_signals_value, server_error_to_return](
           const BiddingSignalsRequest& bidding_signals_request,
           absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>
+              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
+                   GetByteSize) &&>
               on_done,
           absl::Duration timeout) {
+        GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {
-          std::move(on_done)(std::move(server_error_to_return.value()));
+          std::move(on_done)(std::move(server_error_to_return.value()),
+                             get_byte_size);
         } else {
           auto bidding_signals = std::make_unique<BiddingSignals>();
           if (bidding_signals_value.has_value()) {
             bidding_signals->trusted_signals =
                 std::make_unique<std::string>(bidding_signals_value.value());
           }
-          std::move(on_done)(std::move(bidding_signals));
+          std::move(on_done)(std::move(bidding_signals), get_byte_size);
         }
       };
   if (match_any_params_any_times) {
@@ -67,20 +70,20 @@ void SetupBiddingProviderMock(
         .Times(AnyNumber())
         .WillOnce(MockBiddingSignalsProvider);
   } else if (repeated_get_allowed) {
-    EXPECT_CALL(
-        provider,
-        Get(An<const BiddingSignalsRequest&>(),
-            An<absl::AnyInvocable<
-                void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-            An<absl::Duration>()))
+    EXPECT_CALL(provider,
+                Get(An<const BiddingSignalsRequest&>(),
+                    An<absl::AnyInvocable<
+                        void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
+                             GetByteSize) &&>>(),
+                    An<absl::Duration>()))
         .WillRepeatedly(MockBiddingSignalsProvider);
   } else {
-    EXPECT_CALL(
-        provider,
-        Get(An<const BiddingSignalsRequest&>(),
-            An<absl::AnyInvocable<
-                void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>>(),
-            An<absl::Duration>()))
+    EXPECT_CALL(provider,
+                Get(An<const BiddingSignalsRequest&>(),
+                    An<absl::AnyInvocable<
+                        void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
+                             GetByteSize) &&>>(),
+                    An<absl::Duration>()))
         .WillOnce(MockBiddingSignalsProvider);
   }
 }

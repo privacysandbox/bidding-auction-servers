@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <grpcpp/server.h>
 
@@ -39,10 +40,24 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+using AdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
+constexpr char kInterestGroupOwner[] = "test_ig_owner";
+constexpr char kTestBuyerSignals[] = "{\"test_key\":\"test_value\"}";
+constexpr char kTestRenderUrl[] = "http://test-render-url";
+constexpr char kTestSellerSignals[] =
+    R"json({"seller_signal": "test_seller_signals"})json";
+constexpr char kTestAuctionSignals[] =
+    R"json({"auction_signal": "test_auction_signals"})json";
+constexpr char kTestPublisherHostname[] = "test_publisher_hostname";
+constexpr char kRomaTestError[] = "roma_test_error";
+constexpr char kReportingDispatchHandlerFunctionName[] =
+    "reportingEntryFunction";
 
 using ::testing::AnyNumber;
+using ::testing::HasSubstr;
 
 struct LocalAuctionStartResult {
   int port;
@@ -83,6 +98,7 @@ class AuctionServiceTest : public ::testing::Test {
     metric::AuctionContextMap(
         server_common::telemetry::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
+    log::PS_VLOG_IS_ON(0, 10);
   }
 
   void SetupMockCryptoClientWrapper() {
@@ -158,7 +174,64 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
   delete mock;
 }
 
-TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
+ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest() {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  raw_request.mutable_per_buyer_signals()->try_emplace(kInterestGroupOwner,
+                                                       kTestBuyerSignals);
+
+  AdWithBidMetadata ad_with_bid_metadata;
+  ad_with_bid_metadata.mutable_ad()->mutable_struct_value()->MergeFrom(
+      MakeAnAd(kTestRenderUrl, "test_metadata", 1));
+  ad_with_bid_metadata.set_render(kTestRenderUrl);
+  ad_with_bid_metadata.set_bid(10.10);
+  ad_with_bid_metadata.set_interest_group_name("test_interest_group");
+  ad_with_bid_metadata.set_interest_group_owner(kInterestGroupOwner);
+  std::string scoring_signals = absl::StrFormat(R"JSON(
+  {
+    "renderUrls": {
+      "%s": [
+          123
+        ]
+    }
+  })JSON",
+                                                kTestRenderUrl);
+
+  *raw_request.add_ad_bids() = std::move(ad_with_bid_metadata);
+  raw_request.set_seller_signals(kTestSellerSignals);
+  raw_request.set_auction_signals(kTestAuctionSignals);
+  raw_request.set_scoring_signals(std::move(scoring_signals));
+  raw_request.set_publisher_hostname(kTestPublisherHostname);
+  return raw_request;
+}
+
+TEST_F(AuctionServiceTest, SendsEmptyResponseIfNoAdIsDesirable) {
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        std::vector<absl::StatusOr<DispatchResponse>> responses;
+        for (const auto request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportingDispatchHandlerFunctionName) != 0) {
+            responses.emplace_back(DispatchResponse{
+                .id = request.id,
+                .resp = R"({
+                  "response" : {
+                    "desirability" : 0,
+                    "allowComponentAuction" : false
+                  },
+                  "logs":[]
+                })",
+            });
+          } else {
+            responses.emplace_back(DispatchResponse{
+                .id = request.id,
+                .resp = "{}",
+            });
+          }
+        }
+        done_callback(responses);
+        return absl::OkStatus();
+      });
   auto score_ads_reactor_factory =
       [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -171,8 +244,8 @@ TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
       };
   config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
-  auto key_fetcher_manager = CreateKeyFetcherManager(
-      config_client_, /* public_key_fetcher= */ nullptr);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
   auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
@@ -183,10 +256,59 @@ TEST_F(AuctionServiceTest, AbortsIfMissingAds) {
   std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
 
   grpc::ClientContext context;
+  request_.set_key_id(kKeyId);
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request = BuildScoreAdsRawRequest();
+  *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kNoAdsToScore);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::OK)
+      << status.error_message();
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_FALSE(raw_response.has_ad_score());
+}
+
+TEST_F(AuctionServiceTest, RomaExecutionErrorIsPropagated) {
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        return absl::InternalError(kRomaTestError);
+      });
+  auto score_ads_reactor_factory =
+      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+             server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+             CryptoClientWrapperInterface* crypto_client_,
+             const AuctionServiceRuntimeConfig& runtime_config) {
+        return std::make_unique<ScoreAdsReactor>(
+            dispatcher_, request_, response_,
+            std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
+            crypto_client_, async_reporter_.get(), runtime_config);
+      };
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.encryption_enabled = true;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_), auction_service_runtime_config);
+
+  LocalAuctionStartResult result = StartLocalAuction(&service);
+  std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
+
+  grpc::ClientContext context;
+  request_.set_key_id(kKeyId);
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request = BuildScoreAdsRawRequest();
+  *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  grpc::Status status = stub->ScoreAds(&context, request_, &response_);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::UNKNOWN)
+      << status.error_message();
+  EXPECT_THAT(status.error_message(), HasSubstr(kRomaTestError));
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_FALSE(raw_response.has_ad_score());
 }
 
 TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
@@ -220,8 +342,8 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kNoTrustedScoringSignals);
+  EXPECT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.error_message(), kNoTrustedScoringSignals);
 }
 
 TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
@@ -258,7 +380,7 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
   grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
   ASSERT_EQ(status.error_message(), kNoAdsWithValidScoringSignals);
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

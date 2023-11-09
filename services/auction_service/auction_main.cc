@@ -145,6 +145,39 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   return config_client;
 }
 
+inline void CollectBuyerOriginEndpoints(
+    const google::protobuf::Map<std::string, std::string>&
+        buyer_reporting_code_url,
+    std::vector<std::string>& buyer_origins,
+    std::vector<std::string>& endpoints) {
+  for (const auto& [buyer_origin, report_win_url] : buyer_reporting_code_url) {
+    buyer_origins.push_back(buyer_origin);
+    endpoints.push_back(report_win_url);
+  }
+}
+
+// Gets code blob mapping from buyer origin => code blob fetched using the code
+// fetcher. Note: Caller needs to ensure that the `buyer_origins` and
+// `ad_tech_code_blobs` are in sync with each other and the `first` and `last`
+// indices are in bound.
+absl::flat_hash_map<std::string, std::string> GetCodeBlobMap(
+    int first, int last, const std::vector<std::string>& buyer_origins,
+    const std::vector<std::string>& ad_tech_code_blobs,
+    absl::string_view data_type) {
+  absl::flat_hash_map<std::string, std::string> code_blob_map;
+  for (unsigned int ind = first; ind < last; ind++) {
+    if (auto [unused_it, inserted] = code_blob_map.try_emplace(
+            buyer_origins[ind], ad_tech_code_blobs[ind]);
+        !inserted) {
+      PS_VLOG(0) << "Malformed config for '" << data_type
+                 << "': Possible duplicate entries for buyer: "
+                 << buyer_origins[ind]
+                 << ", existing map size: " << code_blob_map.size();
+    }
+  }
+  return code_blob_map;
+}
+
 // Brings up the gRPC AuctionService on FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
@@ -193,40 +226,57 @@ absl::Status RunServer() {
       code_fetch_proto.enable_report_result_url_generation();
   bool enable_report_win_url_generation =
       code_fetch_proto.enable_report_win_url_generation();
-  std::string js_url = code_fetch_proto.auction_js_url();
-  auto buyer_report_win_js_urls = code_fetch_proto.buyer_report_win_js_urls();
-  std::vector<std::string> endpoints = {js_url};
-  std::vector<std::string> buyer_origins = {};
-  for (const auto& key_value : buyer_report_win_js_urls) {
-    endpoints.push_back(key_value.second);
-    buyer_origins.push_back(key_value.first);
+  std::vector<std::string> endpoints;
+  std::vector<std::string> buyer_origins;
+  CollectBuyerOriginEndpoints(code_fetch_proto.buyer_report_win_js_urls(),
+                              buyer_origins, endpoints);
+  const int num_protected_audience_endpoints = buyer_origins.size();
+  const bool enable_protected_app_signals =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  if (enable_protected_app_signals) {
+    CollectBuyerOriginEndpoints(
+        code_fetch_proto.protected_app_signals_buyer_report_win_js_urls(),
+        buyer_origins, endpoints);
   }
 
   // Starts periodic code blob fetching from an arbitrary url only if js_url is
   // specified
+  std::string js_url = code_fetch_proto.auction_js_url();
   if (!js_url.empty()) {
+    endpoints.push_back(js_url);
     auto wrap_code =
-        [enable_seller_debug_url_generation,
+        [num_protected_audience_endpoints, enable_protected_app_signals,
          enable_report_result_url_generation, enable_report_win_url_generation,
-         buyer_origins](const std::vector<std::string>& adtech_code_blobs) {
-          absl::flat_hash_map<std::string, std::string> buyer_origin_code_map;
-          CHECK(buyer_origins.size() == adtech_code_blobs.size() - 1)
+         buyer_origins](const std::vector<std::string>& ad_tech_code_blobs) {
+          CHECK(buyer_origins.size() == ad_tech_code_blobs.size() - 1)
               << "Error fetching code blobs from buyer. Buyer size:"
               << buyer_origins.size()
-              << " and blobs count:" << adtech_code_blobs.size();
-          for (int i = 0; i < buyer_origins.size(); i++) {
-            buyer_origin_code_map.try_emplace(buyer_origins.at(i),
-                                              adtech_code_blobs.at(i + 1));
+              << " and blobs count:" << ad_tech_code_blobs.size();
+          // Collect code blobs for protected audience.
+          auto buyer_origin_code_map = GetCodeBlobMap(
+              /*start=*/0, num_protected_audience_endpoints, buyer_origins,
+              ad_tech_code_blobs, "buyer_report_win_js_urls");
+          // Collect code blobs for protected app signals.
+          absl::flat_hash_map<std::string, std::string>
+              protected_app_signals_buyer_origin_code_map;
+          if (enable_protected_app_signals) {
+            protected_app_signals_buyer_origin_code_map = GetCodeBlobMap(
+                num_protected_audience_endpoints, buyer_origins.size(),
+                buyer_origins, ad_tech_code_blobs,
+                "protected_app_signals_buyer_report_win_js_urls");
           }
           return GetSellerWrappedCode(
-              adtech_code_blobs.at(0), enable_report_result_url_generation,
-              enable_report_win_url_generation, buyer_origin_code_map);
+              ad_tech_code_blobs.at(ad_tech_code_blobs.size() - 1),
+              enable_report_result_url_generation, enable_protected_app_signals,
+              enable_report_win_url_generation, buyer_origin_code_map,
+              protected_app_signals_buyer_origin_code_map);
         };
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
         endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
         std::move(http_fetcher), dispatcher, executor.get(),
-        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()), wrap_code);
+        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()),
+        std::move(wrap_code));
 
     code_fetcher->Start();
   } else if (!code_fetch_proto.auction_js_path().empty()) {
@@ -303,6 +353,8 @@ absl::Status RunServer() {
       .enable_report_win_url_generation = enable_report_win_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
+      .enable_protected_app_signals =
+          config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
       .enable_otel_based_logging =
           config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
       .consented_debug_token =

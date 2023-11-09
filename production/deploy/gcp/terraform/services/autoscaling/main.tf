@@ -381,11 +381,8 @@ resource "google_compute_instance_template" "collector" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
   metadata = {
-    operator = var.operator
-    user-data = templatefile("${path.module}/collector_startup.tftpl", {
-      collector_port           = var.collector_service_port,
-      otel_collector_image_uri = var.otel_collector_image_uri
-    })
+    operator  = var.operator
+    user-data = var.collector_startup_script
   }
 
   lifecycle {

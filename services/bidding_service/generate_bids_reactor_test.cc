@@ -132,8 +132,8 @@ class GenerateBidsReactorTest : public testing::Test {
     GenerateBidsResponse::GenerateBidsRawResponse expected_raw_response;
     expected_raw_response.ParseFromString(
         expected_response.response_ciphertext());
-    EXPECT_TRUE(diff.Compare(expected_raw_response, raw_response));
-    EXPECT_EQ(diff_output, "");
+    EXPECT_TRUE(diff.Compare(expected_raw_response, raw_response))
+        << diff_output;
   }
 
   Request request_;

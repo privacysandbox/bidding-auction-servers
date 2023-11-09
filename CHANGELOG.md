@@ -2,8 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.7.0 (2023-11-08)
+
+
+### Features
+
+* add debug info in sfe response
+* Add reporting support for PAS
+* Instrument KV request and response sizes
+* Parameterize the collector startup script
+* write docker sha256 image digest to file for GCP releases
+
+
+### Bug Fixes
+
+* Send chaff when no desirable ad is found
+
 ## 2.6.0 (2023-10-30)
 
+### Features
+
+* Add common error count by error code as a sever monitoring metric
 
 ### Dependencies
 

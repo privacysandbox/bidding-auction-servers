@@ -44,8 +44,8 @@ using GetBidDoneCallback =
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using ScoringSignalsDoneCallback =
-    absl::AnyInvocable<void(
-                           absl::StatusOr<std::unique_ptr<ScoringSignals>>) &&>;
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
+                            GetByteSize) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 using ::testing::AnyNumber;
@@ -199,16 +199,20 @@ void SetupScoringProviderMock(
               [&diff,
                actual = actual_get_bids_raw_response.get()](auto& expected) {
                 return diff.Compare(*actual, *expected.second);
-              }));
+              }))
+              << diff_output;
         }
+
+        GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {
-          std::move(on_done)(std::move(server_error_to_return.value()));
+          std::move(on_done)(std::move(server_error_to_return.value()),
+                             get_byte_size);
         } else {
           auto scoring_signals = std::make_unique<ScoringSignals>();
           if (scoring_signals_value.has_value()) {
             scoring_signals->scoring_signals =
                 std::make_unique<std::string>(scoring_signals_value.value());
-            std::move(on_done)(std::move(scoring_signals));
+            std::move(on_done)(std::move(scoring_signals), get_byte_size);
           }
         }
       };

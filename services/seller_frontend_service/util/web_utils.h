@@ -96,6 +96,8 @@ inline constexpr char kConsentedDebugConfigIsConsented[] =
     "consentedDebugConfig.isConsented";
 inline constexpr char kConsentedDebugConfigToken[] =
     "consentedDebugConfig.token";
+inline constexpr char kConsentedDebugConfigIsDebugInfoInResponse[] =
+    "consentedDebugConfig.isDebugInfoInResponse";
 
 // Constants for data types in CBOR payload
 inline constexpr char kString[] = "string";

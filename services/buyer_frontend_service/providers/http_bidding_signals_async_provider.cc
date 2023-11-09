@@ -23,7 +23,8 @@ HttpBiddingSignalsAsyncProvider::HttpBiddingSignalsAsyncProvider(
 
 void HttpBiddingSignalsAsyncProvider::Get(
     const BiddingSignalsRequest& bidding_signals_request,
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<BiddingSignals>>) &&>
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
+                            GetByteSize) &&>
         on_done,
     absl::Duration timeout) const {
   auto request = std::make_unique<GetBuyerValuesInput>();
@@ -47,14 +48,17 @@ void HttpBiddingSignalsAsyncProvider::Get(
       [res = std::move(output), on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               buyer_kv_output) mutable {
+        GetByteSize get_byte_size;
         if (buyer_kv_output.ok()) {
           // TODO(b/258281777): Add ads and buyer signals from KV.
           res.value()->trusted_signals =
               std::make_unique<std::string>(buyer_kv_output.value()->result);
+          get_byte_size.request = buyer_kv_output.value()->request_size;
+          get_byte_size.response = buyer_kv_output.value()->response_size;
         } else {
           res = buyer_kv_output.status();
         }
-        std::move(on_done)(std::move(res));
+        std::move(on_done)(std::move(res), get_byte_size);
       },
       timeout);
 }

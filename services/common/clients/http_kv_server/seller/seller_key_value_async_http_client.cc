@@ -62,14 +62,20 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
   for (const auto& header : request.headers) {
     PS_VLOG(2) << header;
   }
-  auto done_callback = [on_done = std::move(on_done)](
+  size_t request_size = 0;
+  for (std::string& header : request.headers) {
+    request_size += header.size();
+  }
+  request_size += request.url.size();
+  auto done_callback = [on_done = std::move(on_done), request_size](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
       PS_VLOG(2) << "SellerKeyValueAsyncHttpClient Response: "
                  << resultStr.value();
+      size_t response_size = resultStr->size();
       std::unique_ptr<GetSellerValuesOutput> resultUPtr =
-          std::make_unique<GetSellerValuesOutput>(
-              GetSellerValuesOutput({std::move(resultStr.value())}));
+          std::make_unique<GetSellerValuesOutput>(GetSellerValuesOutput(
+              {std::move(resultStr.value()), request_size, response_size}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
       PS_VLOG(2) << "SellerKeyValueAsyncHttpClients Response: "

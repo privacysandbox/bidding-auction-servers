@@ -42,7 +42,8 @@ class HttpScoringSignalsAsyncProvider final
   void Get(const ScoringSignalsRequest& scoring_signals_request,
            absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
 
-                                       ScoringSignals>>) &&>
+                                       ScoringSignals>>,
+                                   GetByteSize) &&>
                on_done,
            absl::Duration timeout) const override;
 

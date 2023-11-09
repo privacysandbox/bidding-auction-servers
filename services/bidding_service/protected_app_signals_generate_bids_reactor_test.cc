@@ -333,7 +333,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
   ASSERT_EQ(num_roma_dispatches, 2);
 }
 
-TEST_F(GenerateBidsReactorTest, EgressFeaturesCanBePopulated) {
+TEST_F(GenerateBidsReactorTest, EgressFeaturesAreNotPopulated) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
@@ -367,116 +367,7 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesCanBePopulated) {
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
   EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 
-  ASSERT_GT(generated_bid.egress_features().size(), 0);
-  EXPECT_EQ(absl::BytesToHexString(generated_bid.egress_features()),
-            kTestEgressFeaturesHex)
-      << generated_bid.DebugString();
-}
-
-TEST_F(GenerateBidsReactorTest, EgressFeaturesGreaterThan3BytesAreFiltered) {
-  int num_roma_dispatches = 0;
-  EXPECT_CALL(dispatcher_, BatchExecute)
-      .WillRepeatedly([&num_roma_dispatches](
-                          std::vector<DispatchRequest>& batch,
-                          BatchDispatchDoneCallback batch_callback) {
-        ++num_roma_dispatches;
-
-        if (num_roma_dispatches == 1) {
-          // First dispatch happens for `prepareDataForAdRetrieval` UDF.
-          return MockRomaExecution(batch, std::move(batch_callback),
-                                   kPrepareDataForAdRetrievalEntryFunction,
-                                   kPrepareDataForAdRetrievalBlobVersion,
-                                   CreatePrepareDataForAdsRetrievalResponse());
-        } else {
-          // Second dispatch happens for `generateBid` UDF.
-          return MockRomaExecution(batch, std::move(batch_callback),
-                                   kGenerateBidEntryFunction,
-                                   kProtectedAppSignalsGenerateBidBlobVersion,
-                                   CreateGenerateBidsUdfResponse(
-                                       kTestRenderUrl, kTestWinningBid,
-                                       kTestEgressFeaturesBiggerThan3Bytes));
-        }
-      });
-
-  EXPECT_CALL(ad_retrieval_client_, Execute)
-      .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
-             const RequestMetadata& metadata,
-             absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
-                 on_done,
-             absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
-            EXPECT_TRUE(response.ok()) << response.status();
-            std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
-            return absl::OkStatus();
-          });
-
-  auto raw_request = CreateRawProtectedAppSignalsRequest(
-      kTestAuctionSignals, kTestBuyerSignals,
-      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
-  auto raw_response = RunReactorWithRequest(raw_request);
-
-  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
-  // is expected.
-  ASSERT_EQ(num_roma_dispatches, 2);
-
-  ASSERT_EQ(raw_response.bids().size(), 0);
-}
-
-TEST_F(GenerateBidsReactorTest, EgressFeaturesGreaterWith24BitSetIsFiltered) {
-  int num_roma_dispatches = 0;
-  EXPECT_CALL(dispatcher_, BatchExecute)
-      .WillRepeatedly([&num_roma_dispatches](
-                          std::vector<DispatchRequest>& batch,
-                          BatchDispatchDoneCallback batch_callback) {
-        ++num_roma_dispatches;
-
-        if (num_roma_dispatches == 1) {
-          // First dispatch happens for `prepareDataForAdRetrieval` UDF.
-          return MockRomaExecution(batch, std::move(batch_callback),
-                                   kPrepareDataForAdRetrievalEntryFunction,
-                                   kPrepareDataForAdRetrievalBlobVersion,
-                                   CreatePrepareDataForAdsRetrievalResponse());
-        } else {
-          // Second dispatch happens for `generateBid` UDF.
-          return MockRomaExecution(batch, std::move(batch_callback),
-                                   kGenerateBidEntryFunction,
-                                   kProtectedAppSignalsGenerateBidBlobVersion,
-                                   CreateGenerateBidsUdfResponse(
-                                       kTestRenderUrl, kTestWinningBid,
-                                       kTestEgressFeaturesBiggerThan23bits));
-        }
-      });
-
-  EXPECT_CALL(ad_retrieval_client_, Execute)
-      .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
-             const RequestMetadata& metadata,
-             absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
-                 on_done,
-             absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
-            EXPECT_TRUE(response.ok()) << response.status();
-            std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
-            return absl::OkStatus();
-          });
-
-  auto raw_request = CreateRawProtectedAppSignalsRequest(
-      kTestAuctionSignals, kTestBuyerSignals,
-      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
-  auto raw_response = RunReactorWithRequest(raw_request);
-
-  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
-  // is expected.
-  ASSERT_EQ(num_roma_dispatches, 2);
-
-  ASSERT_EQ(raw_response.bids().size(), 0);
+  ASSERT_EQ(generated_bid.egress_features().size(), 0);
 }
 
 TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
@@ -495,12 +386,13 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
                                    CreatePrepareDataForAdsRetrievalResponse());
         } else {
           // Second dispatch happens for `generateBid` UDF.
-          return MockRomaExecution(batch, std::move(batch_callback),
-                                   kGenerateBidEntryFunction,
-                                   kProtectedAppSignalsGenerateBidBlobVersion,
-                                   CreateGenerateBidsUdfResponse(
-                                       kTestRenderUrl, /*bid=*/0.0,
-                                       kTestEgressFeaturesBiggerThan23bits));
+          return MockRomaExecution(
+              batch, std::move(batch_callback), kGenerateBidEntryFunction,
+              kProtectedAppSignalsGenerateBidBlobVersion,
+              CreateGenerateBidsUdfResponse(
+                  kTestRenderUrl, /*bid=*/0.0,
+                  /*egress_features_hex_string=*/"",
+                  /*debug_reporting_urls=*/"RJSON({})JSON"));
         }
       });
 

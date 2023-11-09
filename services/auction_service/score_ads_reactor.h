@@ -76,7 +76,7 @@ class ScoreAdsReactor
   void ScoreAdsCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& output);
 
-  log::ContextImpl::ContextMap GetLoggingContext(
+  absl::btree_map<std::string, std::string> GetLoggingContext(
       const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request);
 
   // Performs debug reporting for all scored ads by the seller.
@@ -84,8 +84,13 @@ class ScoreAdsReactor
       const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score);
+
   // Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);
+
+  // Encrypt response and Finishes the RPC call with an OK status.
+  void EncryptAndFinishOK();
+
   void ReportingCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 

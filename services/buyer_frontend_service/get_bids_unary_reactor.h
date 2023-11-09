@@ -110,7 +110,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Gets logging context (as a key/val pair) that can help debug/trace a
   // request through the BA services.
-  log::ContextImpl::ContextMap GetLoggingContext();
+  absl::btree_map<std::string, std::string> GetLoggingContext();
 
   // Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);

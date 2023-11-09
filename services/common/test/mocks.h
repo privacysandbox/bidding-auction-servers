@@ -461,7 +461,8 @@ class MockAsyncProvider : public AsyncProvider<Params, Provision> {
   MOCK_METHOD(
       void, Get,
       (const Params& params,
-       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>) &&>
+       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>,
+                               GetByteSize) &&>
            on_done,
        absl::Duration timeout),
       (const, override));
