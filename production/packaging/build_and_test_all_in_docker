@@ -50,6 +50,7 @@ declare -i NO_PLATFORM_BUILD=0
 declare -a AMI_REGIONS
 declare GCP_IMAGE_TAG
 declare GCP_IMAGE_REPO
+declare -i GCP_SKIP_IMAGE_UPLOAD=0
 declare -a BUILD_TARGETS=(
   "//tools/secure_invoke/..."
 )
@@ -68,7 +69,7 @@ usage:
     --instance                   [REQUIRED] Recognized values: local, aws
     --platform                   [REQUIRED] Recognized values: gcp, aws
     --e2e                        Run e2e mode
-    --build-flavor               Recognized values: prod, non_prod. Default: prod
+    --build-flavor               Recognized values: prod, non_prod, inference_non_prod. Default: prod
                                    Use non_prod to enable verbose logging.
     --precommit-only             Run precommit then exit
     --no-precommit               Skip precommit checks
@@ -80,8 +81,9 @@ usage:
     --verbose                    Enable verbose output
 
 If platform is gcp:
-    --gcp-image-tag              [REQUIRED] (All lowercase) Custom image tag for GCP image.
-    --gcp-image-repo             [REQUIRED] Used to identify the target repo for TEE image upload. Exmample: us-docker.pkg.dev/my-project-id/services
+    --gcp-skip-image-upload       Skip GCP image upload (and sha256 recording).
+    --gcp-image-tag              [REQUIRED if no --gcp-skip-image-upload] (All lowercase) Custom image tag for GCP image.
+    --gcp-image-repo             [REQUIRED if no --gcp-skip-image-upload] The target repo for TEE image upload. Ex: us-docker.pkg.dev/my-project-id/services
 
 environment variables (all optional):
     WORKSPACE                    Set the path to the workspace (repo root)
@@ -104,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --e2e)
       E2E=1
+      shift
+      ;;
+    --gcp-skip-image-upload)
+      GCP_SKIP_IMAGE_UPLOAD=1
       shift
       ;;
     --no-platform-build)
@@ -164,13 +170,15 @@ if [[ -z ${INSTANCE} ]]; then
   usage
 fi
 if [[ ${PLATFORM} = gcp ]]; then
-  if [[ -z ${GCP_IMAGE_TAG} ]]; then
-    printf "Error: --gcp-image-tag must be specified\n" &>/dev/stderr
-    usage
-  fi
-  if [[ -z ${GCP_IMAGE_REPO} ]]; then
-    printf "Error: --gcp-image-repo must be specified\n" &>/dev/stderr
-    usage
+  if [[ ${GCP_SKIP_IMAGE_UPLOAD} -eq 0 ]]; then
+    if [[ -z ${GCP_IMAGE_TAG} ]]; then
+      printf "Error: --gcp-image-tag must be specified\n" &>/dev/stderr
+      usage
+    fi
+    if [[ -z ${GCP_IMAGE_REPO} ]]; then
+      printf "Error: --gcp-image-repo must be specified\n" &>/dev/stderr
+      usage
+    fi
   fi
 fi
 if [[ -n ${AMI_REGIONS[0]} ]]; then
@@ -184,9 +192,11 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   fi
 fi
 
-BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --//:build_flavor=${BUILD_FLAVOR}"
+BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --config=${BUILD_FLAVOR}"
+if [[ ${E2E} -eq 1 ]]; then
+  BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --//:build_for_test=e2e"
+fi
 CBUILD_ARGS="${CBUILD_ARGS} --seccomp-unconfined"
-declare -r DIST="${WORKSPACE}"/dist
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 readonly SCRIPT_DIR
 
@@ -267,14 +277,17 @@ function build_service_for_gcp() {
     printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
     exit 1
   fi
-  # shellcheck disable=SC2086
-  "${SCRIPT_DIR}"/gcp/build_and_test ${VERBOSE_ARG} \
-  --server-image "${docker_image}" \
-  --build-flavor ${BUILD_FLAVOR} \
-  --service-path "${service}" \
-  --gcp-image-tag "${GCP_IMAGE_TAG}" \
-  --e2e "${E2E}" \
-  --gcp-image-repo "${GCP_IMAGE_REPO}"
+  create_gcp_dist "${docker_image}"
+  if [[ ${GCP_SKIP_IMAGE_UPLOAD} -eq 1 ]]; then
+    printf "==== Skipping default repo image upload. No image_digest will be recorded.  =====\n"
+  else
+    upload_image_to_repo \
+    "${service}" \
+    "${docker_image}" \
+    "${GCP_IMAGE_REPO}" \
+    "${GCP_IMAGE_TAG}" \
+    "${BUILD_FLAVOR}"
+  fi
 }
 
 function load_service_image() {
@@ -306,6 +319,7 @@ if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
       done
       ;;
     gcp)
+      source  "${SCRIPT_DIR}"/gcp/lib_gcp_artifacts.sh
       for svc in "${SERVICES[@]}"; do
         build_service_for_gcp "${svc}"
       done
@@ -321,6 +335,7 @@ else
   done
 fi
 
+declare -r DIST="${WORKSPACE}"/dist
 if [[ -d ${DIST} ]]; then
   printf "build artifacts:\n"
   ls -lhR "${DIST}"

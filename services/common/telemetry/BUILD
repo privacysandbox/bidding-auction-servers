@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = [
     "//services:__subpackages__",
@@ -20,15 +20,25 @@ package(default_visibility = [
 
 cc_library(
     name = "configure_telemetry",
-    srcs = [
-        "configure_telemetry.cc",
-    ],
     hdrs = [
         "configure_telemetry.h",
     ],
     deps = [
+        "//services/common/clients/config:config_client",
         "//services/common/clients/config:config_client_util",
+        "//services/common/constants:common_service_flags",
+        "//services/common/metric:server_definition",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
         "@io_opentelemetry_cpp//sdk/src/resource",
+    ],
+)
+
+cc_test(
+    name = "configure_telemetry_test",
+    timeout = "short",
+    srcs = ["configure_telemetry_test.cc"],
+    deps = [
+        ":configure_telemetry",
+        "@com_google_googletest//:gtest_main",
     ],
 )

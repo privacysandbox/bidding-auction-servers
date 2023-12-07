@@ -75,14 +75,13 @@ std::string GetBuyerWrappedCode(absl::string_view ad_tech_js,
       ad_tech_js);
 }
 
-std::string GetGenericBuyerWrappedCode(absl::string_view ad_tech_js,
-                                       absl::string_view ad_tech_wasm,
-                                       absl::string_view function_name,
-                                       absl::string_view args) {
-  return absl::StrCat(
-      WasmBytesToJavascript(ad_tech_wasm),
-      absl::Substitute(kGenericBuyerEntryFunction, function_name, args),
-      ad_tech_js);
+std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
+    absl::string_view ad_tech_js, absl::string_view ad_tech_wasm,
+    absl::string_view function_name, absl::string_view args) {
+  return absl::StrCat(WasmBytesToJavascript(ad_tech_wasm),
+                      absl::Substitute(kPrepareDataForAdRetrievalEntryFunction,
+                                       function_name, args),
+                      ad_tech_js);
 }
 
 std::string GetFeatureFlagJson(bool enable_logging,

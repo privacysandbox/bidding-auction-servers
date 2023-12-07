@@ -127,12 +127,23 @@ inline constexpr auto kComparator = [](absl::string_view a,
     return to_return;                                                         \
   }
 
-// Encodes the data into a CBOR-serialized AuctionResult response.
+// Encodes the data into a CBOR-serialized AuctionResult response for single
+// seller auction.
 absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
-    std::optional<AuctionResult::Error> error,
+    const std::optional<AuctionResult::Error>& error,
+    const std::function<void(const grpc::Status&)>& error_handler);
+
+// Encodes the data into a CBOR-serialized AuctionResult response for component
+// seller auction.
+absl::StatusOr<std::string> EncodeComponent(
+    absl::string_view top_level_seller,
+    const std::optional<ScoreAdsResponse::AdScore>& high_score,
+    const ::google::protobuf::Map<
+        std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
+    const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler);
 
 // Finds the provided string needle index in the haystack array.
@@ -341,7 +352,9 @@ inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
         kInterestGroupOwner,  // 6
         kAdComponents,        // 7
         kError,               // 8
-        kWinReportingUrls     // 9
+        kWinReportingUrls,    // 9
+        kAdMetadata,          // 10
+        kTopLevelSeller       // 11
 };
 
 template <std::size_t Size>

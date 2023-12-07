@@ -20,20 +20,19 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr char kTags[] = "tags";
+inline constexpr char kData[] = "data";
 inline constexpr char kKeyList[] = "keyList";
 inline constexpr char kKeyValues[] = "keyValues";
 inline constexpr char kProtectedSignals[] = "protectedSignals";
 inline constexpr char kContextualSignals[] = "contextualSignals";
-inline constexpr char kProtectedEmbeddings[] = "protectedEmbeddings";
+inline constexpr char kRetrievalData[] = "protectedEmbeddings";
 inline constexpr char kAcceptLanguage[] = "X-Accept-Language";
 inline constexpr char kUserAgent[] = "X-User-Agent";
 inline constexpr char kClientIp[] = "X-BnA-Client-IP";
 inline constexpr char kDeviceMetadata[] = "deviceMetadata";
 inline constexpr char kPartitions[] = "partitions";
 inline constexpr char kKeyGroupOutputs[] = "keyGroupOutputs";
-inline constexpr char kId[] = "id";
-inline constexpr char kKeyGroups[] = "keyGroups";
-inline constexpr int kPartitionIdValue = 0;
+inline constexpr char kArguments[] = "arguments";
 inline constexpr int kPreWarmRequestTimeout = 60000;
 inline constexpr char kKeyValDelimiter[] = ": ";
 inline constexpr char kApplicationJsonHeader[] =

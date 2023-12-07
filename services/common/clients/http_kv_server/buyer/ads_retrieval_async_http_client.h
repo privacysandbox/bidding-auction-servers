@@ -38,9 +38,8 @@ struct DeviceMetadata {
 
 // Data used to build the body of the ad retrieval lookup request.
 struct AdRetrievalInput {
-  std::string protected_signals;
+  std::string retrieval_data;
   std::string contextual_signals;
-  std::string protected_embeddings;
   DeviceMetadata device_metadata;
 
   absl::StatusOr<std::string> ToJson();
@@ -50,9 +49,6 @@ struct AdRetrievalInput {
 struct AdRetrievalOutput {
   // A serialized JSON list containing ads and related metadata information.
   std::string ads;
-
-  // A serialized JSON list containing contextual embeddings.
-  std::string contextual_embeddings;
 
   // Returns an instance of this struct that is parsed from the input json
   // string.

@@ -71,7 +71,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 : grpc_event_engine::experimental::GetDefaultEventEngine())),
         scoring_signals_async_provider_(
             std::make_unique<HttpScoringSignalsAsyncProvider>(
-                CreateKVClient())),
+                CreateKVClient(), config_client_.GetBooleanParameter(
+                                      ENABLE_PROTECTED_APP_SIGNALS))),
         scoring_(std::make_unique<ScoringAsyncGrpcClient>(
             key_fetcher_manager_.get(), crypto_client_.get(),
             AuctionServiceClientConfig{

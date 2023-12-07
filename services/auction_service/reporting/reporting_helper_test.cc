@@ -31,6 +31,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
+constexpr char kTestEgressFeatures[] = "testEgressFeatures";
+
 rapidjson::Document GetReportWinJsonObj(const ReportingResponse& response) {
   rapidjson::Document document;
   document.SetObject();
@@ -184,7 +186,9 @@ void TestResponse(const ReportingResponse& response,
 
 void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
               absl::string_view enable_adtech_code_logging,
-              const BuyerReportingMetadata& expected_buyer_metadata = {}) {
+              const BuyerReportingMetadata& expected_buyer_metadata = {},
+              absl::string_view test_buyer_metadata = kTestBuyerMetadata,
+              absl::string_view expected_egress_features = "") {
   EXPECT_EQ(
       *(response_vector[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
       kTestAuctionConfig);
@@ -204,7 +208,12 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
   } else {
     EXPECT_EQ(*(response_vector[ReportingArgIndex(
                   ReportingArgs::kBuyerReportingMetadata)]),
-              kTestBuyerMetadata);
+              test_buyer_metadata);
+  }
+  if (expected_buyer_metadata.enable_protected_app_signals) {
+    EXPECT_EQ(
+        *(response_vector[ReportingArgIndex(ReportingArgs::kEgressFeatures)]),
+        expected_egress_features);
   }
 }
 
@@ -340,7 +349,8 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
       .modeling_signals = kTestModelingSignals,
       .seller = kTestSeller,
       .interest_group_name = kTestInterestGroupName,
-      .ad_cost = kTestAdCost};
+      .ad_cost = kTestAdCost,
+      .enable_report_win_input_noising = kTestEnableReportWinInputNoisingTrue};
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
       auction_config, log_context, buyer_reporting_metadata);
@@ -348,6 +358,47 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
            buyer_reporting_metadata);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
+  EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
+}
+
+TEST(GetReportingDispatchRequest,
+     ReturnsDispatchRequestWithReportWinForProtectedAppSignals) {
+  ScoreAdsResponse::AdScore winning_ad_score;
+  winning_ad_score.set_buyer_bid(kTestBuyerBid);
+  winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
+  winning_ad_score.set_interest_group_name(kTestInterestGroupName);
+  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
+      ->try_emplace(kTestInterestGroupOwner, google::protobuf::ListValue());
+  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
+      ->at(kTestInterestGroupOwner)
+      .add_values()
+      ->set_number_value(kTestHighestScoringOtherBid);
+  winning_ad_score.set_desirability(kTestDesirability);
+  winning_ad_score.set_render(kTestRender);
+  bool enable_adtech_code_logging = true;
+  std::shared_ptr<std::string> auction_config =
+      std::make_shared<std::string>(kTestAuctionConfig);
+  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
+  const BuyerReportingMetadata buyer_reporting_metadata = {
+      .enable_report_win_url_generation = true,
+      .enable_protected_app_signals = true,
+      .buyer_signals = kTestBuyerSignals,
+      .join_count = kTestJoinCount,
+      .recency = kTestRecency,
+      .modeling_signals = kTestModelingSignals,
+      .seller = kTestSeller,
+      .interest_group_name = kTestInterestGroupName,
+      .ad_cost = kTestAdCost,
+      .enable_report_win_input_noising = kTestEnableReportWinInputNoisingTrue};
+  DispatchRequest request = GetReportingDispatchRequest(
+      winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
+      auction_config, log_context, buyer_reporting_metadata,
+      kReportingProtectedAppSignalsFunctionName, kTestEgressFeatures);
+  TestArgs(request.input, kEnableAdtechCodeLoggingTrue,
+           buyer_reporting_metadata, kTestBuyerMetadataWithProtectedAppSignals,
+           kTestEgressFeatures);
+  EXPECT_EQ(request.id, kTestRender);
+  EXPECT_EQ(request.handler_name, kReportingProtectedAppSignalsFunctionName);
   EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
 }
 }  // namespace

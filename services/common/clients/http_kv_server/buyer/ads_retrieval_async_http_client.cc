@@ -14,9 +14,15 @@
 
 #include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
 
+#include <google/protobuf/util/json_util.h>
+
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "public/applications/pas/retrieval_request_builder.h"
+#include "public/applications/pas/retrieval_response_parser.h"
+#include "public/query/cpp/client_utils.h"
+#include "public/query/v2/get_values_v2.pb.h"
 #include "services/common/clients/http_kv_server/buyer/ad_retrieval_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -81,116 +87,24 @@ void PopulateMetadataKeyGroup(const DeviceMetadata& device_metadata,
 }  // namespace
 
 absl::StatusOr<std::string> AdRetrievalInput::ToJson() {
-  rapidjson::Document key_groups_array(rapidjson::kArrayType);
-
-  if (!protected_signals.empty()) {
-    PopulateKeyGroup({kProtectedSignals}, {protected_signals},
-                     key_groups_array);
-  }
-
-  if (!contextual_signals.empty()) {
-    PopulateKeyGroup({kContextualSignals}, {contextual_signals},
-                     key_groups_array);
-  }
-
-  if (!protected_embeddings.empty()) {
-    PopulateKeyGroup({kProtectedEmbeddings}, {protected_embeddings},
-                     key_groups_array);
-  }
-
-  PopulateMetadataKeyGroup(device_metadata, key_groups_array);
-
-  rapidjson::Document partition_entry(rapidjson::kObjectType);
-  partition_entry.AddMember(kKeyGroups, key_groups_array,
-                            partition_entry.GetAllocator());
-  partition_entry.AddMember(kId, kPartitionIdValue,
-                            partition_entry.GetAllocator());
-
-  rapidjson::Document partitions_array(rapidjson::kArrayType);
-  partitions_array.PushBack(partition_entry, partitions_array.GetAllocator());
-
-  rapidjson::Document request(rapidjson::kObjectType);
-  request.AddMember(kPartitions, partitions_array, request.GetAllocator());
-
-  return SerializeJsonDoc(request);
+  return kv_server::ToJson(kv_server::application_pas::BuildRetrievalRequest(
+      retrieval_data,
+      {{kClientIp, device_metadata.client_ip},
+       {kAcceptLanguage, device_metadata.accept_language},
+       {kUserAgent, device_metadata.user_agent}},
+      contextual_signals, /*ad_ids=*/{}));
 }
 
 absl::StatusOr<AdRetrievalOutput> AdRetrievalOutput::FromJson(
     absl::string_view response_json) {
-  PS_ASSIGN_OR_RETURN(rapidjson::Document document,
-                      ParseJsonString(response_json));
+  kv_server::v2::GetValuesResponse get_values_response;
+  PS_RETURN_IF_ERROR(google::protobuf::util::JsonStringToMessage(
+      response_json, &get_values_response));
 
   AdRetrievalOutput ad_retrieval_output;
-  DCHECK(document.IsObject());
-  auto partitions_array_it = document.FindMember(kPartitions);
-  if (partitions_array_it == document.MemberEnd()) {
-    PS_VLOG(4) << "No partitions found in the ad retrieval response";
-    return ad_retrieval_output;
-  }
-
-  const auto& partitions_array = partitions_array_it->value;
-  if (partitions_array.Size() != 1) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        kUnexpectedPartitions,
-        "Expected exactly one partition, got: ", partitions_array.Size()));
-  }
-
-  const auto& partition = partitions_array[0];
-  DCHECK(partition.IsObject());
-  auto key_group_output_it = partition.FindMember(kKeyGroupOutputs);
-  if (key_group_output_it == partition.MemberEnd()) {
-    PS_VLOG(4) << "No " << kKeyGroupOutputs
-               << " found in ad retrieval response";
-    return ad_retrieval_output;
-  }
-
-  const auto& key_group_outputs = key_group_output_it->value;
-  DCHECK(key_group_outputs.IsArray());
-  const auto& key_group_outputs_array = key_group_outputs.GetArray();
-  if (key_group_outputs_array.Empty()) {
-    PS_VLOG(4) << kKeyGroupOutputs << " is empty in ad retrieval response";
-    return ad_retrieval_output;
-  }
-
-  bool found_ads = false;
-  bool found_contextual_embeddings = false;
-  for (const auto& tags_key_values : key_group_outputs_array) {
-    DCHECK(tags_key_values.HasMember(kTags));
-    DCHECK(tags_key_values.HasMember(kKeyValues));
-
-    const auto& tags_array = tags_key_values[kTags];
-    if (tags_array.Size() != 1) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          kUnexpectedTags,
-          " Expected only one tag to be present, found: ", tags_array.Size()));
-    }
-
-    const auto& tag = tags_array[0];
-    DCHECK(tag.IsString());
-    if (tag == kAds) {
-      // Expect only one ads keyGroupOutput.
-      DCHECK(!found_ads);
-      found_ads = true;
-      PS_ASSIGN_OR_RETURN(ad_retrieval_output.ads,
-                          SerializeJsonDoc(tags_key_values[kKeyValues]),
-                          _ << " while serializing retrieved ads");
-    } else if (tag == kContextualEmbeddings) {
-      // Expect only one contextual embeddings keyGroupOutput.
-      DCHECK(!found_contextual_embeddings);
-      found_contextual_embeddings = true;
-      PS_ASSIGN_OR_RETURN(
-          ad_retrieval_output.contextual_embeddings,
-          SerializeJsonDoc(tags_key_values[kKeyValues]),
-          _ << " while serializing retrieved contextual embeddings");
-    }
-  }
-  if (!found_ads) {
-    PS_VLOG(2) << "No ads found in the ads retrieval response";
-  }
-  if (!found_contextual_embeddings) {
-    PS_VLOG(2)
-        << "No contextual embeddings found in the ads retrieval response";
-  }
+  PS_ASSIGN_OR_RETURN(
+      ad_retrieval_output.ads,
+      kv_server::application_pas::GetRetrievalOutput(get_values_response));
   return ad_retrieval_output;
 }
 
@@ -225,6 +139,8 @@ absl::Status AdsRetrievalAsyncHttpClient::Execute(
   HTTPRequest request = {.url = kv_server_base_address_,
                          .headers = {kApplicationJsonHeader}};
   PS_ASSIGN_OR_RETURN(request.body, keys->ToJson());
+  PS_VLOG(3) << "Sending the following to ads retrieval service: "
+             << request.body;
 
   // Setup a callback for the returned data from server.
   auto done_callback = [on_done = std::move(on_done)](
@@ -236,8 +152,16 @@ absl::Status AdsRetrievalAsyncHttpClient::Execute(
       return;
     }
 
+    PS_VLOG(3) << "AdsRetrievalKeyValueAsyncHttpClient Response string: "
+               << *result_json;
+    auto parsed_ad_retrieval_output = AdRetrievalOutput::FromJson(*result_json);
+    if (!parsed_ad_retrieval_output.ok()) {
+      std::move(on_done)(parsed_ad_retrieval_output.status());
+      return;
+    }
+
     std::move(on_done)(std::make_unique<AdRetrievalOutput>(
-        AdRetrievalOutput({*std::move(result_json)})));
+        *std::move(parsed_ad_retrieval_output)));
   };
 
   PS_VLOG(3) << "\n\nAds Retrieval Request Url:\n"

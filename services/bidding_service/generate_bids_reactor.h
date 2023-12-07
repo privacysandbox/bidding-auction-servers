@@ -33,6 +33,16 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// See GenerateBidInput for more detail on each field.
+enum class GenerateBidArgs : int {
+  kInterestGroup = 0,
+  kAuctionSignals,
+  kBuyerSignals,
+  kTrustedBiddingSignals,
+  kDeviceSignals,
+  kFeatureFlags
+};
+
 //  This is a gRPC reactor that serves a single GenerateBidsRequest.
 //  It stores state relevant to the request and after the
 //  response is finished being served, GenerateBidsReactor cleans up all
@@ -54,6 +64,7 @@ class GenerateBidsReactor
   void Execute() override;
 
  private:
+  enum class AuctionScope : int { kSingleSeller, kDeviceComponentSeller };
   // Cleans up and deletes the GenerateBidsReactor. Called by the grpc library
   // after the response has finished.
   void OnDone() override;
@@ -76,6 +87,11 @@ class GenerateBidsReactor
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;
+
+  // Specifies whether this is a single seller or component auction.
+  // Impacts the creation of generateBid input params and
+  // parsing of generateBid output.
+  AuctionScope auction_scope_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

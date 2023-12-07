@@ -88,9 +88,10 @@ module "buyer" {
     ENABLE_OTEL_BASED_LOGGING = "" # Example: "false"
     CONSENTED_DEBUG_TOKEN     = "" # Example: "<unique_id>"
 
-    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    # Coordinator-based attestation flags.
+    # These flags are production-ready and you do not need to change them.
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
-    # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "https://privatekeyservice-a.pa-1.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
     SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT    = "https://privatekeyservice-b.pa-2.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"

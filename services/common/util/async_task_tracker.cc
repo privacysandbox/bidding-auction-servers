@@ -87,6 +87,19 @@ void AsyncTaskTracker::TaskCompleted(
   }
 }
 
+void AsyncTaskTracker::SetNumTasksToTrack(int num_tasks_to_track) {
+  num_tasks_to_track_ = num_tasks_to_track;
+  pending_tasks_count_ = num_tasks_to_track;
+  successful_tasks_count_ = 0;
+  empty_tasks_count_ = 0;
+  skipped_tasks_count_ = 0;
+  error_tasks_count_ = 0;
+  PS_VLOG(3, log_context_) << "Reset of task tracker to track: "
+                           << num_tasks_to_track
+                           << " number of tasks done. New tracker: "
+                           << ToString();
+}
+
 bool AsyncTaskTracker::AnyTaskSuccessfullyCompleted() {
   const int sum_tasks_count = skipped_tasks_count_ + successful_tasks_count_ +
                               error_tasks_count_ + empty_tasks_count_ +

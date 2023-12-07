@@ -14,9 +14,6 @@
 # Tar files
 *.tar
 
-# Specifically excluding presubmit.sh, though including its two versions
-ci/local/presubmit.sh
-
 # Terraform gitignore entries are taken from
 #  https://github.com/github/gitignore/blob/main/Terraform.gitignore
 

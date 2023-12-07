@@ -33,6 +33,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/ohttp_utils.h"
 #include "services/common/test/utils/service_utils.h"
+#include "tools/secure_invoke/flags.h"
 
 using ::testing::HasSubstr;
 constexpr char kSfe[] = "SFE";
@@ -68,43 +69,6 @@ constexpr char kSampleGetBidRequest[] = R"JSON({
    "seller" : "https://securepubads.g.doubleclick.net"
 })JSON";
 
-ABSL_FLAG(std::string, input_file, "",
-          "The full path to the unencrypted input request");
-
-ABSL_FLAG(std::string, input_format, "JSON",
-          "The format of the input specified in the input file");
-
-ABSL_FLAG(std::string, json_input_str, "{}",
-          "The unencrypted JSON request to be used");
-
-ABSL_FLAG(std::string, op, "",
-          "The operation to be performed - invoke/encrypt.");
-
-ABSL_FLAG(std::string, host_addr, "",
-          "The Address for the SellerFrontEnd server to be invoked.");
-
-ABSL_FLAG(std::string, client_ip, "",
-          "The IP for the B&A client to be forwarded to KV servers.");
-
-ABSL_FLAG(std::string, client_accept_language, kAcceptLanguage,
-          "The accept-language header for the B&A client to be forwarded to KV "
-          "servers.");
-
-ABSL_FLAG(
-    std::string, client_user_agent, kUserAgent,
-    "The user-agent header for the B&A client to be forwarded to KV servers.");
-
-ABSL_FLAG(std::string, client_type, "",
-          "Client type (browser or android) to use for request (defaults to "
-          "browser)");
-
-ABSL_FLAG(bool, insecure, false,
-          "Set to true to send a request to an SFE server running with "
-          "insecure credentials");
-
-ABSL_FLAG(std::string, target_service, kSfe,
-          "Service name to which the request must be sent to.");
-
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
@@ -121,9 +85,10 @@ using ::testing::HasSubstr;
 class SecureInvokeLib : public testing::Test {
  protected:
   void SetUp() override {
+    absl::SetFlag(&FLAGS_json_input_str, "{}");
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BfeContextMap(
+    metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 

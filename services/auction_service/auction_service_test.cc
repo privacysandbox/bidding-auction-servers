@@ -27,9 +27,11 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/auction_service/score_ads_reactor.h"
+#include "services/auction_service/score_ads_reactor_test_util.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
@@ -42,8 +44,13 @@ namespace {
 
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
+using ::testing::AnyNumber;
+using ::testing::HasSubstr;
+using ::testing::InSequence;
+
 constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
+constexpr char kTestUrl[] = "https://test-ads-url.com";
 constexpr char kInterestGroupOwner[] = "test_ig_owner";
 constexpr char kTestBuyerSignals[] = "{\"test_key\":\"test_value\"}";
 constexpr char kTestRenderUrl[] = "http://test-render-url";
@@ -55,9 +62,6 @@ constexpr char kTestPublisherHostname[] = "test_publisher_hostname";
 constexpr char kRomaTestError[] = "roma_test_error";
 constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
-
-using ::testing::AnyNumber;
-using ::testing::HasSubstr;
 
 struct LocalAuctionStartResult {
   int port;
@@ -95,10 +99,12 @@ class AuctionServiceTest : public ::testing::Test {
   void SetUp() override {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::AuctionContextMap(
+    metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
     log::PS_VLOG_IS_ON(0, 10);
+
+    request_.set_key_id(kKeyId);
   }
 
   void SetupMockCryptoClientWrapper() {
@@ -169,9 +175,9 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
   grpc::CallbackServerContext context;
-  auto mock = service.ScoreAds(&context, &request_, &response_);
+  std::unique_ptr<grpc::ServerUnaryReactor> reactor(
+      service.ScoreAds(&context, &request_, &response_));
   init_pending.Wait();
-  delete mock;
 }
 
 ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest() {
@@ -379,8 +385,96 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
-  ASSERT_EQ(status.error_message(), kNoAdsWithValidScoringSignals);
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
+  EXPECT_EQ(status.error_message(), kNoAdsWithValidScoringSignals);
+  EXPECT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
 }
+
+TEST_F(AuctionServiceTest, ScoresProtectedAppSignals) {
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher_, BatchExecute)
+        .WillOnce([](std::vector<DispatchRequest>& batch,
+                     BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          DispatchResponse response;
+          auto incoming_bid =
+              request.input[static_cast<int>(ScoreAdArgs::kBid)];
+          float bid;
+          EXPECT_TRUE(absl::SimpleAtof(*incoming_bid, &bid))
+              << "Failed to convert bid to float: " << *incoming_bid;
+          response.resp = absl::StrFormat(
+              R"JSON(
+          {
+          "response": {
+            "desirability":10,
+            "bid":%f
+          },
+          "logs":["test log"]
+          }
+        )JSON",
+              bid);
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher_, BatchExecute)
+        .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                           BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name,
+                    kReportingProtectedAppSignalsFunctionName);
+          DispatchResponse response;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  auto score_ads_reactor_factory =
+      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+             server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+             CryptoClientWrapperInterface* crypto_client_,
+             const AuctionServiceRuntimeConfig& runtime_config) {
+        return std::make_unique<ScoreAdsReactor>(
+            dispatcher_, request_, response_,
+            std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
+            crypto_client_, async_reporter_.get(), runtime_config);
+      };
+  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client_, /* public_key_fetcher=*/nullptr);
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client_),
+      {.encryption_enabled = true, .enable_protected_app_signals = true});
+
+  LocalAuctionStartResult result = StartLocalAuction(&service);
+  std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
+
+  grpc::ClientContext context;
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  *raw_request.mutable_protected_app_signals_ad_bids()->Add() =
+      GetProtectedAppSignalsAdWithBidMetadata(kTestUrl);
+  raw_request.set_scoring_signals(
+      R"json({"renderUrls":{"https://test-ads-url.com":[123]}})json");
+  *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  grpc::Status status = stub->ScoreAds(&context, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response_.response_ciphertext());
+  ABSL_LOG(INFO) << "Scored ad is:\n" << raw_response.DebugString();
+  const auto& ad_score = raw_response.ad_score();
+  EXPECT_EQ(ad_score.ad_type(), AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
+  EXPECT_EQ(ad_score.interest_group_owner(), kTestProtectedAppSignalsAdOwner);
+  EXPECT_EQ(ad_score.interest_group_name(), "");
+  EXPECT_EQ(ad_score.desirability(), 10);
+  EXPECT_EQ(ad_score.render(), kTestUrl);
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

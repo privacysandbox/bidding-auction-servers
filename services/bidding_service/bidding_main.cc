@@ -28,7 +28,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
@@ -46,7 +45,6 @@
 #include "services/common/code_fetch/periodic_code_fetcher.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-#include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/signal_handler.h"
@@ -224,7 +222,7 @@ absl::Status StartProtectedAppSignalsUdfFetching(
           [](const std::vector<std::string>& ad_tech_code_blobs) {
             DCHECK_GE(ad_tech_code_blobs.size(), kMinNumCodeBlobs);
             DCHECK_LE(ad_tech_code_blobs.size(), kMaxNumCodeBlobs);
-            return GetGenericBuyerWrappedCode(
+            return GetProtectedAppSignalsGenericBuyerWrappedCode(
                 /*ad_tech_js=*/ad_tech_code_blobs[0],
                 /*ad_tech_wasm=*/
                 ad_tech_code_blobs.size() == 2 ? ad_tech_code_blobs[1] : "",
@@ -330,30 +328,7 @@ absl::Status RunServer() {
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
 
-  server_common::telemetry::BuildDependentConfig telemetry_config(
-      config_client
-          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
-              TELEMETRY_CONFIG)
-          .server_config);
-  std::string collector_endpoint =
-      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
-  server_common::InitTelemetry(
-      config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      telemetry_config.LogsAllowed() &&
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  AddErrorTypePartition(telemetry_config, metric::kBs);
-  AddSystemMetric(metric::BiddingContextMap(
-      telemetry_config,
-      server_common::ConfigurePrivateMetrics(
-          CreateSharedAttributes(&config_util),
-          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
-          collector_endpoint),
-      config_util.GetService(), kOpenTelemetryVersion.data()));
+  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs);
 
   auto generate_bids_reactor_factory =
       [&client, enable_bidding_service_benchmark](

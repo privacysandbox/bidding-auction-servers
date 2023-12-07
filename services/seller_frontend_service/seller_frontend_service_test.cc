@@ -24,6 +24,7 @@
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
@@ -74,7 +75,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::SfeContextMap(
+    metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
     config_.SetFlagForTest(kEmptyValue, ENABLE_ENCRYPTION);
@@ -122,8 +123,18 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
   ASSERT_EQ(status.error_message(), kEmptyProtectedAuctionCiphertextError);
 }
 
-TYPED_TEST(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
   this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
+  SelectAdRequest request =
+      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
+  request.set_client_type(CLIENT_TYPE_BROWSER);
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  *request.mutable_protected_auction_ciphertext() =
+      std::move(encrypted_protected_auction_input);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -145,15 +156,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInternalErrorOnKeyNotFound) {
   auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
 
   grpc::ClientContext context;
-  SelectAdRequest request;
-  request.set_client_type(CLIENT_TYPE_ANDROID);
-  // Set ciphertext to any non-null value for this test.
-  request.set_protected_auction_ciphertext("q");
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kMissingPrivateKey);
+  ASSERT_EQ(status.error_message(),
+            absl::StrFormat(kMissingPrivateKey, absl::StrCat(kTestKeyId)));
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
@@ -1168,6 +1176,56 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   ASSERT_EQ(status.error_code(), grpc::RESOURCE_EXHAUSTED);
   ASSERT_THAT(status.error_message(), HasSubstr(kErrorIntendedForAdServer));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
+  const int num_buyers = 1;
+  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
+  TypeParam protected_auction_input =
+      MakeARandomProtectedAuctionInput<TypeParam>(/*num_buyers=*/1);
+  SelectAdRequest request =
+      MakeARandomSelectAdRequest(kSampleSellerDomain, protected_auction_input);
+  request.set_client_type(CLIENT_TYPE_ANDROID);
+  request.mutable_auction_config()->set_top_level_seller("foo");
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  *request.mutable_protected_auction_ciphertext() =
+      std::move(encrypted_protected_auction_input);
+
+  // Setup buyer client.
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+
+  // Scoring signals provider mock.
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  ClientRegistry clients{scoring_signals_provider, scoring_client,
+                         buyer_clients, key_fetcher_manager,
+                         std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  SelectAdResponse response;
+  grpc::ClientContext context;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_TRUE(absl::StrContains(status.error_message(),
+                                kDeviceComponentAuctionWithAndroid));
 }
 
 }  // namespace

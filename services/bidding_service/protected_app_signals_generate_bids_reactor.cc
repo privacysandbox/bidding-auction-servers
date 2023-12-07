@@ -129,11 +129,10 @@ absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
 
 std::unique_ptr<AdRetrievalInput>
 ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalRequest(
-    const ProtectedEmbeddingsResponse& protected_embeddings) {
+    const std::string& prepare_data_for_ads_retrieval_response) {
   return std::make_unique<AdRetrievalInput>(AdRetrievalInput{
-      .protected_signals = protected_embeddings.decoded_protected_signals,
+      .retrieval_data = prepare_data_for_ads_retrieval_response,
       .contextual_signals = raw_request_.buyer_signals(),
-      .protected_embeddings = protected_embeddings.protected_embeddings,
       .device_metadata = {.client_ip = metadata_[kClientIpKey],
                           .user_agent = metadata_[kUserAgentKey],
                           .accept_language = metadata_[kAcceptLanguageKey]},
@@ -141,22 +140,22 @@ ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalRequest(
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
-    const ProtectedEmbeddingsResponse& protected_embeddings) {
+    const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__;
   auto status = http_ad_retrieval_async_client_->Execute(
-      CreateAdsRetrievalRequest(protected_embeddings), {},
-      [this, decoded_protected_app_signals =
-                 protected_embeddings.decoded_protected_signals](
+      CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response), {},
+      [this, prepare_data_for_ads_retrieval_response](
           AdsRetrievalResult ad_retrieval_kv_output) {
         if (!ad_retrieval_kv_output.ok()) {
           PS_VLOG(2, log_context_) << "Ad retrieval request failed: "
                                    << ad_retrieval_kv_output.status();
           EncryptResponseAndFinish(grpc::Status(
               grpc::INTERNAL, ad_retrieval_kv_output.status().ToString()));
+          return;
         }
 
         OnFetchAdsDone(*std::move(ad_retrieval_kv_output),
-                       decoded_protected_app_signals);
+                       prepare_data_for_ads_retrieval_response);
       },
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
@@ -170,26 +169,19 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
 DispatchRequest
 ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
     std::unique_ptr<AdRetrievalOutput> result,
-    absl::string_view decoded_protected_app_signals) {
+    absl::string_view prepare_data_for_ads_retrieval_response) {
   std::vector<std::shared_ptr<std::string>> input(
       kNumGenerateBidsUdfArgs, std::make_shared<std::string>());
   PopulateArgInRomaRequest(result->ads, ArgIndex(GenerateBidsUdfArgs::kAds),
-                           input);
-  PopulateArgInRomaRequest(decoded_protected_app_signals,
-                           ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignals),
                            input);
   PopulateArgInRomaRequest(raw_request_.auction_signals(),
                            ArgIndex(GenerateBidsUdfArgs::kAuctionSignals),
                            input);
   PopulateArgInRomaRequest(raw_request_.buyer_signals(),
                            ArgIndex(GenerateBidsUdfArgs::kBuyerSignals), input);
-  PopulateArgInRomaRequest(result->contextual_embeddings,
-                           ArgIndex(GenerateBidsUdfArgs::kContextualEmbeddings),
-                           input);
-  // TODO: Check to see if ads retrieval service is returning any bidding
-  // signals.
-  PopulateArgInRomaRequest("", ArgIndex(GenerateBidsUdfArgs::kBiddingSignals),
-                           input);
+  PopulateArgInRomaRequest(
+      prepare_data_for_ads_retrieval_response,
+      ArgIndex(GenerateBidsUdfArgs::kPreProcessedDataForRetrieval), input);
   PopulateArgInRomaRequest(
       GetFeatureFlagJson(enable_adtech_code_logging_,
                          enable_buyer_debug_url_generation_ &&
@@ -222,10 +214,19 @@ ProtectedAppSignalsGenerateBidsReactor::
 
 void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDone(
     std::unique_ptr<AdRetrievalOutput> result,
-    absl::string_view decoded_protected_app_signals) {
+    const std::string& prepare_data_for_ads_retrieval_response) {
+  PS_VLOG(8, log_context_) << __func__
+                           << "Ads data returned by the ad retrieval service: "
+                           << result->ads;
+  if (result->ads.empty()) {
+    PS_VLOG(4, log_context_) << "No ads data returned by the ad retrieval "
+                                "service, finishing RPC";
+    EncryptResponseAndFinish(grpc::Status::OK);
+    return;
+  }
+
   dispatch_requests_.emplace_back(CreateGenerateBidsRequest(
-      std::move(result), decoded_protected_app_signals));
-  PS_VLOG(8, log_context_) << __func__;
+      std::move(result), prepare_data_for_ads_retrieval_response));
   ExecuteRomaRequests<ProtectedAppSignalsAdWithBid>(
       dispatch_requests_, kDispatchHandlerFunctionNameWithCodeWrapper,
       [this](const std::string& response) {
@@ -247,12 +248,16 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDone(
 }
 
 DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
-    CreateProtectedEmbeddingsRetrievalRequest() {
+    CreatePrepareDataForAdsRetrievalRequest() {
   PS_VLOG(8, log_context_) << __func__;
   std::vector<std::shared_ptr<std::string>> input(
       kNumPrepareDataForRetrievalUdfArgs, std::make_shared<std::string>());
   PopulateArgInRomaRequest(
-      raw_request_.protected_app_signals().app_install_signals(),
+      absl::StrCat(
+          "\"",
+          absl::BytesToHexString(
+              raw_request_.protected_app_signals().app_install_signals()),
+          "\""),
       ArgIndex(PrepareDataForRetrievalUdfArgs::kProtectedAppSignals), input);
   PopulateArgInRomaRequest(
       absl::StrCat(raw_request_.protected_app_signals().encoding_version()),
@@ -270,49 +275,37 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
       .version_num = kPrepareDataForAdRetrievalBlobVersion,
-      .handler_name = kPrepareDataForAdRetrievalEntryFunction,
+      .handler_name = kPrepareDataForAdRetrievalEntryFunctionName,
       .input = std::move(input),
   };
+  if (log::PS_VLOG_IS_ON(3)) {
+    for (const auto& i : request.input) {
+      PS_VLOG(3, log_context_)
+          << "Roma request input to prepared data for ads retrieval: " << *i;
+    }
+  }
   request.tags[kTimeoutMs] = roma_timeout_ms_;
   return request;
 }
 
-absl::StatusOr<ProtectedEmbeddingsResponse>
-ProtectedAppSignalsGenerateBidsReactor::ParseProtectedEmbeddingsResponse(
-    const std::string& response) {
+void ProtectedAppSignalsGenerateBidsReactor::GetPreparedDataForAdsRetrieval() {
   PS_VLOG(8, log_context_) << __func__;
-  PS_ASSIGN_OR_RETURN(auto document_str,
-                      ParseAndGetResponseJson(enable_adtech_code_logging_,
-                                              response, log_context_),
-                      _ << "Failed to parse prepareDataForAdRetrieval JSON "
-                           "response from Roma");
-  PS_ASSIGN_OR_RETURN(auto document, ParseJsonString(document_str));
-  ProtectedEmbeddingsResponse output;
-  PS_ASSIGN_OR_RETURN(output.decoded_protected_signals,
-                      GetStringMember(document, kProtectedAppSignals));
-  PS_ASSIGN_OR_RETURN(output.protected_embeddings,
-                      GetStringMember(document, kProtectedEmbeddings));
-  return output;
-}
-
-void ProtectedAppSignalsGenerateBidsReactor::
-    GetProtectedEmbeddingsForRetrieval() {
-  PS_VLOG(8, log_context_) << __func__;
-  embeddings_requests_.emplace_back(
-      CreateProtectedEmbeddingsRetrievalRequest());
-  ExecuteRomaRequests<ProtectedEmbeddingsResponse>(
+  embeddings_requests_.emplace_back(CreatePrepareDataForAdsRetrievalRequest());
+  ExecuteRomaRequests<std::string>(
       embeddings_requests_, kPrepareDataForAdRetrievalHandler,
-      [this](const std::string& response) {
-        return ParseProtectedEmbeddingsResponse(response);
+      [](const std::string& response) -> absl::StatusOr<std::string> {
+        PS_ASSIGN_OR_RETURN(rapidjson::Document document,
+                            ParseJsonString(response));
+        return SerializeJsonDoc(document["response"]);
       },
-      [this](const ProtectedEmbeddingsResponse& parsed_response) {
+      [this](const std::string& parsed_response) {
         FetchAds(parsed_response);
       });
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::Execute() {
   PS_VLOG(8) << __func__;
-  PS_VLOG(2, log_context_) << "nGenerateBidsRequest:\n"
+  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
                            << request_->DebugString();
   PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"
                            << raw_request_.DebugString();
@@ -322,7 +315,7 @@ void ProtectedAppSignalsGenerateBidsReactor::Execute() {
   // 2. Fetch top-k ads and metadata using the embeddings retrieved in 1.
   // 3. Run the `generateBid` UDF for Protected App Signals and return the
   //    response back to BFE.
-  GetProtectedEmbeddingsForRetrieval();
+  GetPreparedDataForAdsRetrieval();
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::OnDone() { delete this; }

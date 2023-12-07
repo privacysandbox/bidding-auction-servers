@@ -63,7 +63,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::SfeContextMap(
+    metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
@@ -664,6 +664,78 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, VerifyComponentAuctionCborEncoding) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true,
+          kTestTopLevelSellerOriginDomain);
+
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = DecryptEncapsulatedResponse(
+      response_with_cbor.auction_result_ciphertext(),
+      request_with_context.context);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+  EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << base64_response;
+
+  absl::StatusOr<AuctionResult> deserialized_auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  EXPECT_TRUE(deserialized_auction_result.ok());
+  EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
+
+  // Validate that the bidding groups data is present.
+  EXPECT_EQ(deserialized_auction_result->bidding_groups().size(), 1);
+  const auto& [observed_buyer, interest_groups] =
+      *deserialized_auction_result->bidding_groups().begin();
+  EXPECT_EQ(observed_buyer, kSampleBuyer);
+  EXPECT_EQ(deserialized_auction_result->top_level_seller(),
+            kTestTopLevelSellerOriginDomain);
+  std::set<int> observed_interest_group_indices(interest_groups.index().begin(),
+                                                interest_groups.index().end());
+  std::set<int> expected_interest_group_indices = {0};
+  std::set<int> unexpected_interest_group_indices;
+  absl::c_set_difference(
+      observed_interest_group_indices, expected_interest_group_indices,
+      std::inserter(unexpected_interest_group_indices,
+                    unexpected_interest_group_indices.begin()));
+  EXPECT_TRUE(unexpected_interest_group_indices.empty());
 }
 
 }  // namespace

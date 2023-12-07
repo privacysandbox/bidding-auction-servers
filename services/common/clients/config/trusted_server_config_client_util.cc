@@ -136,20 +136,6 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   done.WaitForNotification();
 }
 
-std::string TrustedServerConfigUtil::GetInstanceId() noexcept {
-  return instance_id_;
-}
-
-std::string TrustedServerConfigUtil::GetEnvironment() noexcept {
-  return environment_;
-}
-
-std::string TrustedServerConfigUtil::GetOperator() noexcept {
-  return operator_;
-}
-
-std::string TrustedServerConfigUtil::GetService() noexcept { return service_; }
-
 // Returns the string to preprend the names of all keys/flags fetched from the
 // Parameter Store. The prepended string follows the format
 // "{operator}-{environment}-" where {operator} and {environment} are values for

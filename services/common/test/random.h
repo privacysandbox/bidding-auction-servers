@@ -60,8 +60,9 @@ void ProtoToJson(const google::protobuf::Message& proto,
 
 std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields);
 
-google::protobuf::Struct MakeAnAd(std::string render_url,
-                                  std::string metadata_key, int metadata_value);
+google::protobuf::Struct MakeAnAd(absl::string_view render_url,
+                                  absl::string_view metadata_key,
+                                  int metadata_value);
 
 // Consistent to aid latency benchmarking.
 std::string MakeAFixedSetOfUserBiddingSignals(int num_ads);

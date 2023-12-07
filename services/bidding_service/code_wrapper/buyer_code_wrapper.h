@@ -46,10 +46,9 @@ std::string GetBuyerWrappedCode(
 // This enables:
 // - Exporting console.logs from the AdTech execution.
 // - wasmHelper added to device_signals
-std::string GetGenericBuyerWrappedCode(absl::string_view ad_tech_js,
-                                       absl::string_view ad_tech_wasm,
-                                       absl::string_view function_name,
-                                       absl::string_view args);
+std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
+    absl::string_view ad_tech_js, absl::string_view ad_tech_wasm,
+    absl::string_view function_name, absl::string_view args);
 
 // Returns a JSON string for feature flags to be used by the wrapper script.
 std::string GetFeatureFlagJson(bool enable_logging = true,
@@ -104,7 +103,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
         }
       }
       return {
-        response: generateBidResponse,
+        response: generateBidResponse !== undefined ? generateBidResponse : {},
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns
@@ -116,8 +115,9 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 // This wrapper supports the features below:
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
-inline constexpr absl::string_view kGenericBuyerEntryFunction = R"JS_CODE(
-    function $0EntryFunction($1, featureFlags){
+inline constexpr absl::string_view kPrepareDataForAdRetrievalEntryFunction =
+    R"JS_CODE(
+    function $0EntryFunction(onDeviceEncodedSignalsHexString, $1, featureFlags){
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -132,14 +132,12 @@ inline constexpr absl::string_view kGenericBuyerEntryFunction = R"JS_CODE(
           ps_warns.push(JSON.stringify(args))
         }
       }
-      var response = {};
-      try {
-        response = $0($1);
-      } catch({error, message}) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-      }
+      const convertToUint8Array =
+        (encodedOnDeviceSignalsIn) =>
+          Uint8Array.from(encodedOnDeviceSignalsIn.match(/.{1,2}/g).map((byte) =>
+            parseInt(byte, 16)));
       return {
-        response: response,
+        response: $0(convertToUint8Array(onDeviceEncodedSignalsHexString), $1),
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns

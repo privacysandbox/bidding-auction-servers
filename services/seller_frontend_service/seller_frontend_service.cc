@@ -32,30 +32,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
-
-void LogMetrics(const SelectAdRequest* request, SelectAdResponse* response) {
-  auto& metric_context = metric::SfeContextMap()->Get(request);
-  LogIfError(
-      metric_context
-          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
-  LogIfError(
-      metric_context
-          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
-              [start = absl::Now()]() -> int {
-                return (absl::Now() - start) / absl::Milliseconds(1);
-              }));
-  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
-      (int)request->ByteSizeLong()));
-  LogIfError(metric_context
-                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
-                     [response]() -> int { return response->ByteSizeLong(); }));
-  LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metrics::kTotalRequestFailedCount>(
-      [&metric_context]() -> int {
-        return metric_context.is_request_successful() ? 0 : 1;
-      }));
-}
-
 // Factory method to get a reactor based on the request type.
 std::unique_ptr<SelectAdReactor> GetReactorForRequest(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
@@ -94,7 +70,7 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     SelectAdResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("SelectAd"));
-  LogMetrics(request, response);
+  LogCommonMetric(request, response);
   auto reactor = GetReactorForRequest(context, request, response, clients_,
                                       config_client_);
   reactor->Execute();

@@ -129,7 +129,9 @@ container_image(
         ":server_binary_layer",
         ":envoy_distroless_layer",
         ":envoy_config_layer",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
     # Envoy, SFE, and SFE Non-TLS Healthcheck ports, respectively:
     ports = [
         "51052",

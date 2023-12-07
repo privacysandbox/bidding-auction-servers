@@ -46,6 +46,7 @@ constexpr int kGenerateBidExecutionTimeSeconds = 2;
 constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
 constexpr char kAdRenderUrlPrefixForTest[] = "https://advertising.net/ad?";
+constexpr char kTopLevelSeller[] = "top_level_seller";
 
 // While Roma demands JSON input and enforces it strictly, we follow the
 // javascript style guide for returning objects here, so object keys are
@@ -332,6 +333,38 @@ constexpr absl::string_view js_code_with_logs_template = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view kJsCodeWithTopLevelSeller = R"JS_CODE(
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Reshaped into an AdWithBid.
+      return {
+        render: "test",
+        ad: { "topLevelSeller" : device_signals["topLevelSeller"] },
+        bid: 11,
+        allowComponentAuction: true
+      };
+    }
+  )JS_CODE";
+
+constexpr absl::string_view kJsCodeWithComponentBidNotAllowed = R"JS_CODE(
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Reshaped into an AdWithBid.
+      return {
+        render: "test",
+        ad: { "topLevelSeller" : device_signals["topLevelSeller"] },
+        bid: 11,
+        allowComponentAuction: false
+      };
+    }
+  )JS_CODE";
+
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
       .Times(testing::AnyNumber())
@@ -436,7 +469,7 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BiddingContextMap(
+    metric::MetricContextMap<GenerateBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
 
     TrustedServersConfigClient config_client({});
@@ -960,13 +993,11 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
-void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
-                                      absl::string_view js_blob,
-                                      bool enable_debug_reporting,
-                                      bool enable_buyer_debug_url_generation,
-                                      bool enable_adtech_code_logging = false,
-                                      absl::string_view wasm_blob = "",
-                                      int desired_bid_count = 5) {
+void GenerateBidCodeWrapperTestHelper(
+    GenerateBidsResponse* response, absl::string_view js_blob,
+    bool enable_debug_reporting, bool enable_buyer_debug_url_generation,
+    bool enable_adtech_code_logging = false, absl::string_view wasm_blob = "",
+    int desired_bid_count = 5, bool component_auction = false) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
@@ -978,6 +1009,9 @@ void GenerateBidCodeWrapperTestHelper(GenerateBidsResponse* response,
   auto req = BuildGenerateBidsRequestFromBrowser(
       &interest_group_to_ad, desired_bid_count, enable_debug_reporting);
   ASSERT_TRUE(req.ok()) << req.status();
+  if (component_auction) {
+    req.value().set_top_level_seller(kTopLevelSeller);
+  }
   *request.mutable_request_ciphertext() = req->SerializeAsString();
 
   auto generate_bids_reactor_factory =
@@ -1231,6 +1265,37 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   for (const auto& adWithBid : raw_response.bids()) {
     EXPECT_EQ(adWithBid.bid(), 1);
   }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest, ParsesFieldsForComponentAuction) {
+  GenerateBidsResponse response;
+  GenerateBidCodeWrapperTestHelper(&response, kJsCodeWithTopLevelSeller, false,
+                                   false, false, "", 5,
+                                   /* component_auction = */ true);
+
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_EQ(ad_with_bid.allow_component_auction(), true);
+    const auto& top_level_seller_it =
+        ad_with_bid.ad().struct_value().fields().find("topLevelSeller");
+    ASSERT_TRUE(top_level_seller_it !=
+                ad_with_bid.ad().struct_value().fields().end());
+    EXPECT_EQ(top_level_seller_it->second.string_value(), kTopLevelSeller);
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       FiltersUnallowedAdsForComponentAuction) {
+  GenerateBidsResponse response;
+  GenerateBidCodeWrapperTestHelper(&response, kJsCodeWithComponentBidNotAllowed,
+                                   false, false, false, "", 5,
+                                   /* component_auction = */ true);
+
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_EQ(raw_response.bids_size(), 0);
 }
 
 }  // namespace

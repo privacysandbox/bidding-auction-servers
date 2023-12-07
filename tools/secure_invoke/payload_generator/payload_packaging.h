@@ -76,7 +76,8 @@ PackagePlainTextSelectAdRequest(
     absl::string_view input_json_str,
     ClientType client_type = CLIENT_TYPE_BROWSER,
     absl::string_view public_key = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false);
+    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false,
+    absl::string_view protected_app_signals_json = "");
 
 // This method returns a SelectAdRequest json for testing B&A servers in
 // "test_mode" using the PackagePlainTextSelectAdRequest method.

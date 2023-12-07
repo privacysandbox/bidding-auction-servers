@@ -31,6 +31,7 @@ export SERVER_START_CMD=$(cat << END
 --telemetry_config="mode: EXPERIMENT" \
 --enable_encryption="true" \
 --roma_timeout_ms="120000" \
+--enable_report_win_input_noising="false" \
 --seller_code_fetch_config='{
       "auctionJsPath": "",
       "auctionJsUrl": "https://pubads.g.doubleclick.net/td/sjs",
@@ -41,7 +42,7 @@ export SERVER_START_CMD=$(cat << END
       "enableReportResultUrlGeneration": true,
       "enableReportWinUrlGeneration": true,
       "buyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"},
-      "protectedAppSignalsBuyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"}
+      "protectedAppSignalsBuyerReportWinJsUrls": {"https://td.doubleclick.net":"https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js"}
     }' \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \

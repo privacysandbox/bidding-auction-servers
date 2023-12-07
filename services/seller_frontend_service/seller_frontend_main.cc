@@ -28,18 +28,15 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-#include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/signal_handler.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
-#include "services/seller_frontend_service/util/config_param_parser.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 #include "src/cpp/util/status_macro/status_macros.h"
@@ -178,35 +175,10 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
-  server_common::telemetry::BuildDependentConfig telemetry_config(
-      config_client
-          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
-              TELEMETRY_CONFIG)
-          .server_config);
-
-  std::string collector_endpoint =
-      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
-  server_common::InitTelemetry(
-      config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      telemetry_config.LogsAllowed() &&
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  AddBuyerPartition(telemetry_config,
-                    FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
-                        config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
-
-  AddErrorTypePartition(telemetry_config, metric::kSfe);
-  AddSystemMetric(metric::SfeContextMap(
-      telemetry_config,
-      server_common::ConfigurePrivateMetrics(
-          CreateSharedAttributes(&config_util),
-          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
-          collector_endpoint),
-      config_util.GetService(), kOpenTelemetryVersion.data()));
+  InitTelemetry<SelectAdRequest>(
+      config_util, config_client, metric::kSfe,
+      FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
+          config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
 
   std::string server_address =
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));

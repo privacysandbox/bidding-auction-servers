@@ -1,11 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-### Git Submodules
-local_repository(
-    name = "google_privacysandbox_functionaltest_system",
-    path = "testing/functionaltest-system",
-)
-
 ### register Python toolchain -- note this toolchain defines the path to a specific version of python
 load("//builders/bazel:deps.bzl", "python_deps")
 
@@ -13,10 +7,11 @@ python_deps("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    sha256 = "2a00867b1d58f007f6aa26a8af3cda0b07f13976686775e468d997e8a5f9d2d3",
-    strip_prefix = "data-plane-shared-libraries-092c2f39d29144b6bd69e8ececb238e63fc7a82b",
+    # commit 5adea70 2023-11-27
+    sha256 = "307527d32534b2b77a70eff78ce405bcc749a31b90e4fbe4ca867634bcd6b2ca",
+    strip_prefix = "data-plane-shared-libraries-5adea7007167fc0bbff27f58217530e9f84ba333",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/092c2f39d29144b6bd69e8ececb238e63fc7a82b.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/5adea7007167fc0bbff27f58217530e9f84ba333.zip",
     ],
 )
 
@@ -47,35 +42,10 @@ load("//third_party:container_deps.bzl", "container_deps")
 
 container_deps()
 
-load("@google_privacysandbox_servers_common//scp/build_defs/shared:rpm.bzl", rpmpack_repositories = "rpm")
-
-rpmpack_repositories()
-
 load("@com_github_google_rpmpack//:deps.bzl", "rpmpack_dependencies")
 
 rpmpack_dependencies()
 
-# Load the googleapis dependency.
-http_archive(
-    name = "com_google_googleapis",
-    build_file = "//third_party:googleapis.BUILD",
-    patch_args = ["-p1"],
-    # Scaffolding for patching googleapis after download. For example:
-    #   patches = ["googleapis.patch"]
-    # NOTE: This should only be used while developing with a new
-    # protobuf message. No changes to `patches` should ever be
-    # committed to the main branch.
-    patch_tool = "patch",
-    patches = [],
-    sha256 = "3e48e5833fcd2e1fcb8b6a5b7a88e18503b670e8636b868cdb5ac32e00fbdafb",
-    strip_prefix = "googleapis-2da477b6a72168c65fdb4245530cfa702cc4b029",
-    urls = [
-        "https://storage.googleapis.com/cloud-cpp-community-archive/com_google_googleapis/2da477b6a72168c65fdb4245530cfa702cc4b029.tar.gz",
-        "https://github.com/googleapis/googleapis/archive/2da477b6a72168c65fdb4245530cfa702cc4b029.tar.gz",
-    ],
-)
-
-# libcbor
 http_archive(
     name = "libcbor",
     build_file = "//third_party:libcbor.BUILD",
@@ -87,17 +57,10 @@ http_archive(
 )
 
 http_archive(
-    name = "com_google_differential_privacy",
-    sha256 = "b2e9afb2ea9337bb7c6302545b72e938707e8cdb3558ef38ce5cdd12fe2f182c",
-    strip_prefix = "differential-privacy-2.1.0",
-    url = "https://github.com/google/differential-privacy/archive/refs/tags/v2.1.0.tar.gz",
-)
-
-http_archive(
-    name = "com_google_cc_differential_privacy",
-    patch_args = ["-p1"],
-    patches = ["//third_party:differential_privacy.patch"],
-    sha256 = "b2e9afb2ea9337bb7c6302545b72e938707e8cdb3558ef38ce5cdd12fe2f182c",
-    strip_prefix = "differential-privacy-2.1.0/cc",
-    urls = ["https://github.com/google/differential-privacy/archive/refs/tags/v2.1.0.tar.gz"],
+    name = "service_value_key_fledge_privacysandbox",
+    # commit 1eee8e79e44f3ca735cfab0b716e57f81d95bd46 2023-10-26
+    strip_prefix = "fledge-key-value-service-1eee8e79e44f3ca735cfab0b716e57f81d95bd46",
+    urls = [
+        "https://github.com/privacysandbox/fledge-key-value-service/archive/1eee8e79e44f3ca735cfab0b716e57f81d95bd46.zip",
+    ],
 )

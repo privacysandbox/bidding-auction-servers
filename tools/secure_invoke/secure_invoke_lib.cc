@@ -31,22 +31,9 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
+#include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
-
-ABSL_DECLARE_FLAG(std::string, input_file);
-ABSL_DECLARE_FLAG(std::string, input_format);
-ABSL_DECLARE_FLAG(std::string, json_input_str);
-ABSL_DECLARE_FLAG(std::string, op);
-ABSL_DECLARE_FLAG(std::string, host_addr);
-ABSL_DECLARE_FLAG(std::string, client_ip);
-ABSL_DECLARE_FLAG(std::string, client_accept_language);
-ABSL_DECLARE_FLAG(std::string, client_user_agent);
-ABSL_DECLARE_FLAG(std::string, client_type);
-ABSL_DECLARE_FLAG(bool, insecure);
-ABSL_DECLARE_FLAG(std::string, target_service);
-ABSL_DECLARE_FLAG(std::string, public_key);
-ABSL_DECLARE_FLAG(std::string, key_id);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -100,7 +87,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
           raw_select_ad_request_json, client_type, public_key, key_id,
-          enable_debug_reporting);
+          enable_debug_reporting, absl::GetFlag(FLAGS_pas_buyer_input_json));
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -283,7 +270,7 @@ std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
           std::make_unique<GetBidsRequest::GetBidsRawRequest>(
               get_bids_raw_request),
           *crypto_client, *key_fetcher_manager,
-          server_common::CloudPlatform::GCP);
+          server_common::CloudPlatform::kGcp);
   CHECK(secret_request.ok()) << secret_request.status();
   std::string get_bids_request_json;
   auto get_bids_request_json_status =

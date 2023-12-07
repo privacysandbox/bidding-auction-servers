@@ -45,8 +45,6 @@ using ScoreAdsRawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 using AdScore = ScoreAdsResponse::AdScore;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
-using BiddingGroupMap =
-    ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using ErrorVisibility::CLIENT_VISIBLE;
@@ -75,6 +73,9 @@ SelectAdReactor::SelectAdReactor(
       is_pas_enabled_(
           config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)),
       max_buyers_solicited_(max_buyers_solicited),
+      auction_scope_(request_->auction_config().top_level_seller().empty()
+                         ? AuctionScope::kSingleSeller
+                         : AuctionScope::kDeviceComponentSeller),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -162,8 +163,20 @@ grpc::Status SelectAdReactor::DecryptRequest() {
              << (is_protected_auction_request_ ? "auction" : "audience")
              << " ciphertext: " << absl::Base64Escape(encapsulated_req);
 
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request =
+          server_common::ParseEncapsulatedRequest(encapsulated_req);
+  if (!parsed_encapsulated_request.ok()) {
+    PS_VLOG(2) << "Error while parsing encapsulated request: "
+               << parsed_encapsulated_request.status();
+    return {grpc::StatusCode::INVALID_ARGUMENT,
+            parsed_encapsulated_request.status().message().data()};
+  }
+
   // Parse the encapsulated request for the key ID.
-  absl::StatusOr<uint8_t> key_id = server_common::ParseKeyId(encapsulated_req);
+  absl::StatusOr<uint8_t> key_id = quiche::ObliviousHttpHeaderKeyConfig::
+      ParseKeyIdFromObliviousHttpRequestPayload(
+          parsed_encapsulated_request->request_payload);
   if (!key_id.ok()) {
     PS_VLOG(2) << "Parsed key id error status: " << key_id.status().message();
     return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidOhttpKeyIdError};
@@ -176,14 +189,16 @@ grpc::Status SelectAdReactor::DecryptRequest() {
 
   if (!private_key.has_value()) {
     PS_VLOG(2) << "Unable to retrieve private key for key ID: " << str_key_id;
-    return {grpc::StatusCode::INVALID_ARGUMENT, kMissingPrivateKey};
+    return {grpc::StatusCode::INVALID_ARGUMENT,
+            absl::StrFormat(kMissingPrivateKey, str_key_id)};
   }
 
   PS_VLOG(3) << "Private Key Id: " << private_key->key_id << ", Key Hex: "
              << absl::BytesToHexString(private_key->private_key);
   // Decrypt the ciphertext.
   absl::StatusOr<quiche::ObliviousHttpRequest> ohttp_request =
-      server_common::DecryptEncapsulatedRequest(*private_key, encapsulated_req);
+      server_common::DecryptEncapsulatedRequest(*private_key,
+                                                *parsed_encapsulated_request);
   if (!ohttp_request.ok()) {
     PS_VLOG(2) << "Unable to decrypt the ciphertext. Reason: "
                << ohttp_request.status().message();
@@ -202,7 +217,7 @@ grpc::Status SelectAdReactor::DecryptRequest() {
       KeyContext{str_key_id,
                  std::make_unique<quiche::ObliviousHttpRequest::Context>(
                      std::move(ohttp_context)),
-                 *private_key};
+                 *private_key, parsed_encapsulated_request->request_label};
   if (is_protected_auction_request_) {
     protected_auction_input_ =
         GetDecodedProtectedAuctionInput(ohttp_request->GetPlaintextData());
@@ -262,6 +277,13 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
   if (request_->client_type() == CLIENT_TYPE_UNKNOWN) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kUnknownClientType,
                 ErrorCode::CLIENT_SIDE);
+  }
+
+  // Device Component Auction not allowed with Android client type.
+  if (request_->client_type() == CLIENT_TYPE_ANDROID &&
+      auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+    ReportError(ErrorVisibility::AD_SERVER_VISIBLE,
+                kDeviceComponentAuctionWithAndroid, ErrorCode::CLIENT_SIDE);
   }
 }
 
@@ -353,7 +375,8 @@ void SelectAdReactor::Execute() {
 
     std::visit(
         [this](const auto& protected_auction_input) {
-          ValidateProtectedAuctionInput(protected_auction_input);
+          ValidateProtectedAuctionInput(protected_auction_input,
+                                        auction_scope_);
         },
         protected_auction_input_);
   }
@@ -411,8 +434,7 @@ void SelectAdReactor::Execute() {
       continue;
     }
 
-    FetchBid(buyer_ig_owner, buyer_input_iterator->second,
-             request_->auction_config().seller());
+    FetchBid(buyer_ig_owner, buyer_input_iterator->second);
     num_buyers_solicited++;
   }
   PS_VLOG(5, log_context_)
@@ -420,12 +442,11 @@ void SelectAdReactor::Execute() {
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-SelectAdReactor::CreateGetBidsRequest(absl::string_view seller,
-                                      const std::string& buyer_ig_owner,
+SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
                                       const BuyerInput& buyer_input) {
   auto get_bids_request = std::make_unique<GetBidsRequest::GetBidsRawRequest>();
   get_bids_request->set_is_chaff(false);
-  get_bids_request->set_seller(seller);
+  get_bids_request->set_seller(request_->auction_config().seller());
   get_bids_request->set_client_type(request_->client_type());
   get_bids_request->set_auction_signals(
       request_->auction_config().auction_signals());
@@ -441,6 +462,8 @@ SelectAdReactor::CreateGetBidsRequest(absl::string_view seller,
     }
   }
   *get_bids_request->mutable_buyer_input() = buyer_input;
+  get_bids_request->set_top_level_seller(
+      request_->auction_config().top_level_seller());
   std::visit(
       [&get_bids_request,
        &buyer_debug_id](const auto& protected_auction_input) {
@@ -461,8 +484,7 @@ SelectAdReactor::CreateGetBidsRequest(absl::string_view seller,
 }
 
 void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
-                               const BuyerInput& buyer_input,
-                               absl::string_view seller) {
+                               const BuyerInput& buyer_input) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("FetchBid"));
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
@@ -479,8 +501,7 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
       timeout =
           absl::Milliseconds(request_->auction_config().buyer_timeout_ms());
     }
-    auto get_bids_request =
-        CreateGetBidsRequest(seller, buyer_ig_owner, buyer_input);
+    auto get_bids_request = CreateGetBidsRequest(buyer_ig_owner, buyer_input);
     auto bfe_request =
         metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get());
     bfe_request->SetBuyer(buyer_ig_owner);
@@ -510,7 +531,8 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
           "Failed to make async GetBids call: (buyer: %s, "
           "seller: %s, error: "
           "%s)",
-          buyer_ig_owner, seller, execute_result.ToString());
+          buyer_ig_owner, request_->auction_config().seller(),
+          execute_result.ToString());
       async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
     }
   }
@@ -519,21 +541,26 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
 void SelectAdReactor::LogInitiatedRequestErrorMetrics(
     absl::string_view server_name, const absl::Status& status,
     absl::string_view buyer) {
-  LogIfError(metric_context_->AccumulateMetric<
-             server_common::metrics::kInitiatedRequestErrorCount>(1));
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
-              1, server_name));
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByStatus>(
-              1, StatusCodeToString(status.code())));
-  if (server_name == metric::kBfe) {
+  if (server_name == metric::kAs) {
+    LogIfError(metric_context_->AccumulateMetric<
+               metric::kInitiatedRequestAuctionErrorCountByStatus>(
+        1, StatusCodeToString(status.code())));
+
+  } else if (server_name == metric::kKv) {
+    LogIfError(
+        metric_context_
+            ->AccumulateMetric<metric::kInitiatedRequestKVErrorCountByStatus>(
+                1, StatusCodeToString(status.code())));
+
+  } else if (server_name == metric::kBfe) {
     LogIfError(
         metric_context_
             ->AccumulateMetric<metric::kSfeInitiatedRequestErrorsCountByBuyer>(
                 1, buyer));
+    LogIfError(
+        metric_context_
+            ->AccumulateMetric<metric::kInitiatedRequestBfeErrorCountByStatus>(
+                1, StatusCodeToString(status.code())));
   }
 }
 
@@ -679,6 +706,8 @@ SelectAdReactor::CreateScoreAdsRequest() {
       request_->auction_config().auction_signals();
   *raw_request->mutable_seller_signals() =
       request_->auction_config().seller_signals();
+  raw_request->set_top_level_seller(
+      request_->auction_config().top_level_seller());
   if (scoring_signals_ != nullptr) {
     // Ad scoring signals cannot be used after this.
     raw_request->set_allocated_scoring_signals(
@@ -722,6 +751,13 @@ void SelectAdReactor::ScoreAds() {
 
   PS_VLOG(2, log_context_) << "\nScoreAdsRawRequest:\n"
                            << raw_request->DebugString();
+  if (raw_request->ad_bids().empty() &&
+      raw_request->protected_app_signals_ad_bids().empty()) {
+    PS_VLOG(2, log_context_) << "No Protected Audience or Protected App "
+                                "Signals ads to score, sending chaff response";
+    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+    return;
+  }
 
   auto auction_request =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
@@ -754,42 +790,12 @@ void SelectAdReactor::ScoreAds() {
   }
 }
 
-BiddingGroupMap SelectAdReactor::GetBiddingGroups() {
-  BiddingGroupMap bidding_groups;
-  for (const auto& [buyer, ad_with_bids] : shared_buyer_bids_map_) {
-    // Mapping from buyer to interest groups that are associated with non-zero
-    // bids.
-    absl::flat_hash_set<absl::string_view> buyer_interest_groups;
-    for (const auto& ad_with_bid : ad_with_bids->bids()) {
-      if (ad_with_bid.bid() > 0) {
-        buyer_interest_groups.insert(ad_with_bid.interest_group_name());
-      }
-    }
-    const auto& buyer_input = buyer_inputs_->at(buyer);
-    AuctionResult::InterestGroupIndex ar_interest_group_index;
-    int ig_index = 0;
-    for (const auto& interest_group : buyer_input.interest_groups()) {
-      // If the interest group name is one of the groups returned by the bidding
-      // service then record its index.
-      if (buyer_interest_groups.contains(interest_group.name())) {
-        ar_interest_group_index.add_index(ig_index);
-      }
-      ig_index++;
-    }
-    bidding_groups.try_emplace(buyer, std::move(ar_interest_group_index));
-  }
-  return bidding_groups;
-}
-
 void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
   if (status.error_code() == grpc::StatusCode::OK) {
     metric_context_->SetRequestSuccessful();
   } else {
     PS_LOG(ERROR, log_context_) << "RPC failed: " << status.error_message();
-    LogIfError(
-        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
-            1,
-            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
   }
   benchmarking_logger_->End();
   Finish(status);
@@ -842,7 +848,6 @@ void SelectAdReactor::OnScoreAdsDone(
     }
   }
 
-  BiddingGroupMap bidding_group_map;
   if (scoring_return_code == grpc::StatusCode::OK) {
     const auto& found_response = *response;
     if (found_response->has_ad_score() &&
@@ -855,7 +860,6 @@ void SelectAdReactor::OnScoreAdsDone(
       auction_log = std::move(*found_response->mutable_debug_info());
       auction_log.set_server_name("auction");
     }
-    bidding_group_map = GetBiddingGroups();
     PerformDebugReporting(high_score);
   }
 
@@ -863,8 +867,8 @@ void SelectAdReactor::OnScoreAdsDone(
   if (HaveClientVisibleErrors()) {
     error = std::move(error_);
   }
-  absl::StatusOr<std::string> non_encrypted_response = GetNonEncryptedResponse(
-      high_score, std::move(bidding_group_map), std::move(error));
+  absl::StatusOr<std::string> non_encrypted_response =
+      GetNonEncryptedResponse(high_score, std::move(error));
   if (!non_encrypted_response.ok()) {
     return;
   }
@@ -901,7 +905,7 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
   absl::StatusOr<std::string> encapsulated_response =
       server_common::EncryptAndEncapsulateResponse(
           std::move(plaintext_response), key_context_.private_key,
-          *key_context_.context);
+          *key_context_.context, key_context_.request_label);
   if (!encapsulated_response.ok()) {
     PS_VLOG(4, log_context_)
         << absl::StrFormat("Error during response encryption/encapsulation: %s",

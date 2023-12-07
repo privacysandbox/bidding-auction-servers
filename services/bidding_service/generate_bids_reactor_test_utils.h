@@ -41,32 +41,16 @@ constexpr char kSecret[] = "secret";
 constexpr char kTestRenderUrl[] = "https://adTech.com/ad?id=123";
 constexpr int kTestEncodingVersion = 2;
 constexpr char kTestAppInstallSignals[] = "test_app_install_signals";
-constexpr char kTestDecodedAppInstallSignals[] =
-    "test_decoded_app_install_signals";
+constexpr char kTestDecodedAppInstallSignals[] = "deadbead";
 constexpr char kGenerateBidEntryFunction[] = "generateBidEntryFunction";
 constexpr char kTestProtectedAppSignals[] = "test_protected_app_signals";
-constexpr char kTestProtectedEmbeddings[] = "test_protected_embeddings";
+constexpr char kTestRetrievalData[] = "test_retrieval_data";
 constexpr double kTestWinningBid = 1.25;
 constexpr int kTestAdRetrievalTimeoutMs = 100000;
 constexpr char kTestEgressFeaturesHex[] = "bccd";
 constexpr char kTestEgressFeaturesBiggerThan3Bytes[] = "deadbeef";
 constexpr char kTestEgressFeaturesBiggerThan23bits[] = "f01020";
-constexpr char kTestAdsRetrievalAdsResponse[] = R"JSON(
-{
-  "adId123": {
-      "value": {
-          "url": "https://example.com/ad123",
-          "adEmbeddings": "ZXhhbXBsZQ=="
-      }
-  },
-  "adId456": {
-      "value": {
-          "url": "https://example.com/ad456",
-          "adEmbeddings": "YW5vdGhlciBleGFtcGxl"
-      }
-  }
-}
-)JSON";
+constexpr char kTestAdsRetrievalAdsResponse[] = "Ads Data And Metadata";
 constexpr char kTestAdsRetrievalContextualEmbeddingsResponse[] = R"JSON(
 {
     "contextualEmbeddings1": {
@@ -108,7 +92,7 @@ ProtectedAppSignals CreateProtectedAppSignals(
 // Creates a mock response from `prepareDataForAdRetrieval` UDF.
 std::string CreatePrepareDataForAdsRetrievalResponse(
     absl::string_view protected_app_signals = kTestDecodedAppInstallSignals,
-    absl::string_view protected_embeddings = kTestProtectedEmbeddings);
+    absl::string_view protected_embeddings = kTestRetrievalData);
 
 // Creates a mock response from `generateBid` UDF.
 std::string CreateGenerateBidsUdfResponse(
@@ -118,9 +102,7 @@ std::string CreateGenerateBidsUdfResponse(
 
 // Creates a mock response from ads retrieval service.
 absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
-    absl::string_view ads = kTestAdsRetrievalAdsResponse,
-    absl::string_view contextual_embeddings =
-        kTestAdsRetrievalContextualEmbeddingsResponse);
+    absl::string_view ads = kTestAdsRetrievalAdsResponse);
 
 // Mocks the request dispatch to Roma using the provided expected_json_response.
 // Also verifies expectations on the input request using the expected fields

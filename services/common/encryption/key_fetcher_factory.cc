@@ -66,11 +66,11 @@ CreatePublicKeyFetcher(TrustedServersConfigClient& config_client) {
   std::vector<std::string> endpoints = {public_key_endpoint.data()};
 
   server_common::CloudPlatform cloud_platform =
-      server_common::CloudPlatform::LOCAL;
+      server_common::CloudPlatform::kLocal;
 #if defined(CLOUD_PLATFORM_AWS)
-  cloud_platform = server_common::CloudPlatform::AWS;
+  cloud_platform = server_common::CloudPlatform::kAws;
 #elif defined(CLOUD_PLATFORM_GCP)
-  cloud_platform = server_common::CloudPlatform::GCP;
+  cloud_platform = server_common::CloudPlatform::kGcp;
 #endif
 
   PlatformToPublicKeyServiceEndpointMap per_platform_endpoints = {

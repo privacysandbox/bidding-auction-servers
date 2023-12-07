@@ -51,11 +51,11 @@ class DefaultAsyncGrpcClient
         crypto_client_(crypto_client),
         encryption_enabled_(encryption_enabled) {
 #if defined(CLOUD_PLATFORM_AWS)
-    cloud_platform_ = server_common::CloudPlatform::AWS;
+    cloud_platform_ = server_common::CloudPlatform::kAws;
 #elif defined(CLOUD_PLATFORM_GCP)
-    cloud_platform_ = server_common::CloudPlatform::GCP;
+    cloud_platform_ = server_common::CloudPlatform::kGcp;
 #else
-    cloud_platform_ = server_common::CloudPlatform::LOCAL;
+    cloud_platform_ = server_common::CloudPlatform::kLocal;
 #endif
   }
 

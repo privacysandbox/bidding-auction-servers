@@ -74,7 +74,6 @@ SelectAdReactorForApp::SelectAdReactorForApp(
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
   AuctionResult auction_result;
   if (error.has_value()) {
@@ -112,7 +111,6 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
           ->mutable_interaction_reporting_urls()
           ->try_emplace(event, url);
     }
-    *auction_result.mutable_bidding_groups() = std::move(bidding_group_map);
     *auction_result.mutable_ad_component_render_urls() =
         high_score->component_renders();
     auction_result.set_ad_type(high_score->ad_type());
@@ -198,9 +196,14 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
     return;
   }
 
-  if (!get_bids_raw_request->buyer_input().has_protected_app_signals()) {
+  if (!get_bids_raw_request->buyer_input().has_protected_app_signals() ||
+      get_bids_raw_request->buyer_input()
+          .protected_app_signals()
+          .app_install_signals()
+          .empty()) {
     PS_VLOG(8, log_context_)
         << "No protected app signals in buyer inputs from client";
+    get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
     return;
   }
 
@@ -215,11 +218,10 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-SelectAdReactorForApp::CreateGetBidsRequest(absl::string_view seller,
-                                            const std::string& buyer_ig_owner,
+SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
                                             const BuyerInput& buyer_input) {
-  auto request = SelectAdReactor::CreateGetBidsRequest(seller, buyer_ig_owner,
-                                                       buyer_input);
+  auto request =
+      SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
   MayPopulateProtectedAppSignalsBuyerInput(request.get());
   return request;
 }

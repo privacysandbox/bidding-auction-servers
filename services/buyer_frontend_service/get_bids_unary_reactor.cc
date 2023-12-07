@@ -36,7 +36,6 @@ using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
 inline constexpr int kNumDefaultOutboundBiddingCalls = 1;
-inline constexpr int kNumOutboundBiddingCallsWithProtectedAppSignals = 2;
 
 template <typename T>
 void HandleSingleBidCompletion(
@@ -109,10 +108,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
             raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
-      async_task_tracker_(config_.is_protected_app_signals_enabled
-                              ? kNumOutboundBiddingCallsWithProtectedAppSignals
-                              : kNumDefaultOutboundBiddingCalls,
-                          log_context_, [this](bool any_successful_bid) {
+      async_task_tracker_(kNumDefaultOutboundBiddingCalls, log_context_,
+                          [this](bool any_successful_bid) {
                             OnAllBidsDone(any_successful_bid);
                           }) {
   if (enable_benchmarking) {
@@ -206,6 +203,20 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   return grpc::Status::OK;
 }
 
+int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
+  int num_expected_calls = 0;
+  if (raw_request_.buyer_input().interest_groups_size() > 0) {
+    PS_VLOG(5, log_context_) << "Interest groups found in the request";
+    ++num_expected_calls;
+  }
+  if (config_.is_protected_app_signals_enabled &&
+      raw_request_.has_protected_app_signals_buyer_input()) {
+    PS_VLOG(5, log_context_) << "Protected app signals found in the request";
+    ++num_expected_calls;
+  }
+  return num_expected_calls;
+}
+
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   DCHECK(config_.encryption_enabled);
@@ -226,22 +237,35 @@ void GetBidsUnaryReactor::Execute() {
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
   PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
-  GetProtectedAudienceBids();
+
+  const int num_bidding_calls = GetNumberOfBiddingCalls();
+  if (num_bidding_calls == 0) {
+    // This is unlikely to happen since we already have this check in place
+    // in SFE.
+    PS_VLOG(3, log_context_) << "No protected audience or protected app "
+                                "signals input found in the request";
+    benchmarking_logger_->End();
+    FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT, kMissingInputs));
+    return;
+  }
+
+  async_task_tracker_.SetNumTasksToTrack(num_bidding_calls);
+  MayGetProtectedAudienceBids();
   MayGetProtectedSignalsBids();
 }
 
 void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
     absl::string_view server_name, const absl::Status& status) {
-  LogIfError(metric_context_->AccumulateMetric<
-             server_common::metrics::kInitiatedRequestErrorCount>(1));
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByServer>(
-              1, server_name));
-  LogIfError(
-      metric_context_
-          ->AccumulateMetric<metric::kInitiatedRequestErrorCountByStatus>(
-              1, (StatusCodeToString(status.code()))));
+  if (server_name == metric::kKv) {
+    LogIfError(
+        metric_context_
+            ->AccumulateMetric<metric::kInitiatedRequestKVErrorCountByStatus>(
+                1, (StatusCodeToString(status.code()))));
+  } else if (server_name == metric::kBs) {
+    LogIfError(metric_context_->AccumulateMetric<
+               metric::kInitiatedRequestBiddingErrorCountByStatus>(
+        1, (StatusCodeToString(status.code()))));
+  }
 }
 
 void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
@@ -256,7 +280,6 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
     PS_VLOG(3, log_context_)
         << "No protected app buyer signals input found, skipping fetching bids "
            "for protected app signals";
-    async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
     return;
   }
 
@@ -323,7 +346,13 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   }
 }
 
-void GetBidsUnaryReactor::GetProtectedAudienceBids() {
+void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
+  if (raw_request_.buyer_input().interest_groups().empty()) {
+    PS_VLOG(3, log_context_)
+        << "No interest groups found, skipping bidding for protected audience";
+    return;
+  }
+
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
@@ -469,10 +498,7 @@ void GetBidsUnaryReactor::FinishWithStatus(const grpc::Status& status) {
   if (status.error_code() == grpc::StatusCode::OK) {
     metric_context_->SetRequestSuccessful();
   } else {
-    LogIfError(
-        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
-            1,
-            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
   }
 
   Finish(status);

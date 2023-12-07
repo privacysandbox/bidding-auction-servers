@@ -27,6 +27,7 @@ cc_library(
     srcs = ["secure_invoke_lib.cc"],
     hdrs = ["secure_invoke_lib.h"],
     deps = [
+        ":flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/clients/seller_frontend_server:async_client",
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
@@ -85,6 +86,7 @@ cc_test(
         "flaky",
     ],
     deps = [
+        ":flags",
         ":secure_invoke_lib",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/buyer_frontend_service",
@@ -98,5 +100,16 @@ cc_test(
         "@com_google_absl//absl/flags:parse",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "flags",
+    testonly = True,
+    srcs = ["flags.cc"],
+    hdrs = ["flags.h"],
+    deps = [
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
     ],
 )

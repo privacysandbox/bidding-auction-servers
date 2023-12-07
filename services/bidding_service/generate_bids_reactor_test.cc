@@ -42,8 +42,9 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 // Bidding signals must be contained in "keys" in root object.
-constexpr char testBiddingSignals[] =
+constexpr char kTestBiddingSignals[] =
     R"json({"keys":{"trusted_bidding_signal_key": "some_trusted_bidding_signal_value"}})json";
+constexpr char kTopLevelSeller[] = "https://www.example-top-ssp.com";
 
 using ::google::protobuf::TextFormat;
 
@@ -55,7 +56,7 @@ using IGForBidding =
 
 absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
                          BatchDispatchDoneCallback batch_callback,
-                         const std::string& response_json) {
+                         absl::string_view response_json) {
   std::vector<absl::StatusOr<DispatchResponse>> responses;
   for (const auto& request : batch) {
     EXPECT_EQ(request.handler_name, "generateBidEntryFunction");
@@ -68,7 +69,7 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
   return absl::OkStatus();
 }
 
-std::string GetTestResponse(const std::string& render, float bid) {
+std::string GetTestResponse(absl::string_view render, float bid) {
   return absl::Substitute(R"JSON({
     "response": {
       "render": "$0",
@@ -81,6 +82,21 @@ std::string GetTestResponse(const std::string& render, float bid) {
                           render, bid);
 }
 
+std::string GetComponentAuctionResponse(absl::string_view render, float bid,
+                                        bool allow_component_auction) {
+  return absl::Substitute(R"JSON({
+    "response": {
+      "render": "$0",
+      "bid": $1,
+      "allowComponentAuction": $2
+    },
+    "logs": ["test log"],
+    "errors": ["test.error"],
+    "warnings":["test.warn"]
+  })JSON",
+                          render, bid, allow_component_auction);
+}
+
 // TODO(b/257649113): Incorporate new fields in InterestGroupForBidding.
 class GenerateBidsReactorTest : public testing::Test {
  public:
@@ -91,7 +107,7 @@ class GenerateBidsReactorTest : public testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BiddingContextMap(
+    metric::MetricContextMap<GenerateBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
@@ -165,8 +181,8 @@ IGForBidding GetIGForBiddingFoo() {
   return interest_group;
 }
 
-constexpr char foo_browser_signals[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092,"prevWins":[[1,"1689"],[1,"1776"]]})json";
+constexpr char kComponentBrowserSignals[] =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092,"prevWins":[[1,"1689"],[1,"1776"]]})json";
 
 IGForBidding GetIGForBiddingBar(bool make_browser_signals = true) {
   IGForBidding interest_group;
@@ -188,7 +204,7 @@ IGForBidding GetIGForBiddingBar(bool make_browser_signals = true) {
 }
 
 constexpr char bar_browser_signals[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093,"prevWins":[[1,"1868"],[1,"1954"]]})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093,"prevWins":[[1,"1868"],[1,"1954"]]})json";
 
 // Allows re-serialization.
 void CheckForAndReplaceUBSWithEmptyString(
@@ -204,43 +220,40 @@ void CheckForAndReplaceUBSWithEmptyString(
   ABSL_LOG(INFO) << "\nDebugging test: After:\n" << serialized_ig;
 }
 
-void CheckCorrectnessOfBar(std::string& serialized_actual_bar) {
-  CheckForAndReplaceUBSWithEmptyString(serialized_actual_bar,
-                                       kUserBiddingSignals);
-  IGForBidding reconstituted_actual_bar;
+void CheckCorrectnessOfIg(std::string& serialized_actual,
+                          IGForBidding expected) {
+  CheckForAndReplaceUBSWithEmptyString(serialized_actual, kUserBiddingSignals);
+  IGForBidding reconstituted_actual_ig;
   // Re-create a Message to run the rest of the checking on (since fields may be
   // serialized in non-deterministic orders).
-  google::protobuf::util::JsonStringToMessage(serialized_actual_bar,
-                                              &reconstituted_actual_bar);
-  reconstituted_actual_bar.clear_user_bidding_signals();
-  // Make the expected IG as well to compare to.
-  auto expected_bar = GetIGForBiddingBar();
-  // Expected ig_name_Bar needs device signals cleared since they will not be in
+  CHECK_OK(google::protobuf::util::JsonStringToMessage(
+      serialized_actual, &reconstituted_actual_ig))
+      << "Could not reconstitute IG: " << serialized_actual;
+  // Expected IG needs device signals cleared since they will not be in
   // the actual bar.
-  expected_bar.clear_DeviceSignals();
+  expected.clear_DeviceSignals();
   // Since UBS will not be equal after re-serialization, clear those as well in
   // both.
-  expected_bar.clear_user_bidding_signals();
+  reconstituted_actual_ig.clear_user_bidding_signals();
+  expected.clear_user_bidding_signals();
   bool match = google::protobuf::util::MessageDifferencer::Equals(
-      expected_bar, reconstituted_actual_bar);
+      expected, reconstituted_actual_ig);
   EXPECT_TRUE(match);
   if (!match) {
-    std::string expected_bar_as_str, actual_for_comparison_as_str;
-    google::protobuf::util::MessageToJsonString(expected_bar,
-                                                &expected_bar_as_str);
-    google::protobuf::util::MessageToJsonString(reconstituted_actual_bar,
+    std::string expected_as_str, actual_for_comparison_as_str;
+    google::protobuf::util::MessageToJsonString(expected, &expected_as_str);
+    google::protobuf::util::MessageToJsonString(reconstituted_actual_ig,
                                                 &actual_for_comparison_as_str);
     ABSL_LOG(INFO) << "\nExpected:\n"
-                   << expected_bar_as_str << "\nActual:\n"
+                   << expected_as_str << "\nActual:\n"
                    << actual_for_comparison_as_str;
   }
 }
 
 void BuildRawRequest(const std::vector<IGForBidding>& interest_groups_to_add,
-                     const std::string& auction_signals,
-                     const std::string& buyer_signals,
-                     const std::string& bidding_signals,
-                     RawRequest& raw_request,
+                     absl::string_view auction_signals,
+                     absl::string_view buyer_signals,
+                     absl::string_view bidding_signals, RawRequest& raw_request,
                      bool enable_debug_reporting = false) {
   for (int i = 0; i < interest_groups_to_add.size(); i++) {
     *raw_request.mutable_interest_group_for_bidding()->Add() =
@@ -254,6 +267,16 @@ void BuildRawRequest(const std::vector<IGForBidding>& interest_groups_to_add,
   raw_request.set_publisher_name(kPublisherName);
 }
 
+void BuildRawRequestForComponentAuction(
+    const std::vector<IGForBidding>& interest_groups_to_add,
+    absl::string_view auction_signals, absl::string_view buyer_signals,
+    absl::string_view bidding_signals, RawRequest& raw_request,
+    bool enable_debug_reporting = false) {
+  BuildRawRequest(interest_groups_to_add, auction_signals, buyer_signals,
+                  bidding_signals, raw_request, enable_debug_reporting);
+  raw_request.set_top_level_seller(kTopLevelSeller);
+}
+
 TEST_F(GenerateBidsReactorTest, DoesNotGenerateBidsForIGWithNoAds) {
   Response ads;
   RawRequest raw_request;
@@ -262,7 +285,7 @@ TEST_F(GenerateBidsReactorTest, DoesNotGenerateBidsForIGWithNoAds) {
   std::vector<IGForBidding> igs;
   igs.push_back(std::move(baz));
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
 
   EXPECT_CALL(dispatcher_, BatchExecute).Times(0);
   CheckGenerateBids(raw_request, ads);
@@ -276,7 +299,7 @@ TEST_F(GenerateBidsReactorTest, DoesNotGenerateBidsForIGWithNoBiddingSignals) {
   std::vector<IGForBidding> igs;
   igs.push_back(ig_for_bidding_foo);
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
 
   EXPECT_CALL(dispatcher_, BatchExecute).Times(0);
   CheckGenerateBids(raw_request, ads);
@@ -303,10 +326,10 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
                                 BatchDispatchDoneCallback batch_callback) {
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, rawRequest, enable_debug_reporting);
-  CheckGenerateBids(rawRequest, ads, enable_buyer_debug_url_generation,
+                  kTestBiddingSignals, raw_request, enable_debug_reporting);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation,
                     enable_adtech_code_logging);
 }
 
@@ -346,7 +369,7 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidForSingleIGForBidding) {
   std::vector<IGForBidding> igs;
   igs.push_back(GetIGForBiddingFoo());
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   CheckGenerateBids(raw_request, ads);
 }
 
@@ -385,7 +408,7 @@ TEST_F(GenerateBidsReactorTest, IGSerializationLatencyBenchmark) {
   RawRequest raw_request;
 
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   CheckGenerateBids(raw_request, ads);
 }
 
@@ -420,7 +443,7 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidsForMultipleIGForBiddings) {
   igs.push_back(GetIGForBiddingBar());
   igs.push_back(GetIGForBiddingFoo());
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   CheckGenerateBids(raw_request, ads);
 }
 
@@ -461,7 +484,7 @@ TEST_F(GenerateBidsReactorTest, FiltersBidsWithZeroBidPrice) {
   igs.push_back(GetIGForBiddingBar());
   igs.push_back(GetIGForBiddingFoo());
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   CheckGenerateBids(raw_request, ads);
 }
 
@@ -485,7 +508,7 @@ TEST_F(GenerateBidsReactorTest, CreatesGenerateBidInputsInCorrectOrder) {
         auto input = batch.at(0).input;
         EXPECT_EQ(input.size(), 6);
         if (input.size() == 6) {
-          CheckCorrectnessOfBar(*input[0]);
+          CheckCorrectnessOfIg(*input[0], GetIGForBiddingBar());
           EXPECT_EQ(*input[1], R"JSON({"auction_signal": "test 1"})JSON");
           EXPECT_EQ(*input[2], R"JSON({"buyer_signal": "test 2"})JSON");
           EXPECT_EQ(
@@ -495,10 +518,104 @@ TEST_F(GenerateBidsReactorTest, CreatesGenerateBidInputsInCorrectOrder) {
         }
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, rawRequest);
-  CheckGenerateBids(rawRequest, ads);
+                  kTestBiddingSignals, raw_request);
+  CheckGenerateBids(raw_request, ads);
+}
+
+TEST_F(GenerateBidsReactorTest,
+       CreatesGenerateBidInputsCorrectlyForComponentAuction) {
+  std::string json = GetComponentAuctionResponse(
+      kTestRenderUrl, /*bid=*/1, /*allow_component_auction=*/true);
+  auto ig = GetIGForBiddingFoo();
+  AdWithBid bid;
+  bid.set_render(kTestRenderUrl);
+  bid.set_bid(1);
+  bid.set_interest_group_name(ig.name());
+  bid.set_allow_component_auction(true);
+  Response ads;
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = bid;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs{ig};
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([&json, &ig](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback batch_callback) {
+        // Test setup check.
+        CHECK_EQ(batch.size(), 1)
+            << absl::InternalError("Test setup error. Batch size must be 1.");
+        auto input = batch.at(0).input;
+        CHECK_EQ(batch.size(), 1)
+            << absl::InternalError("Test setup error. Input size must be 6.");
+        CheckCorrectnessOfIg(*input[ArgIndex(GenerateBidArgs::kInterestGroup)],
+                             ig);
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kAuctionSignals)],
+                  R"JSON({"auction_signal": "test 1"})JSON");
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kBuyerSignals)],
+                  R"JSON({"buyer_signal": "test 2"})JSON");
+        EXPECT_EQ(
+            *input[ArgIndex(GenerateBidArgs::kTrustedBiddingSignals)],
+            R"JSON({"trusted_bidding_signal_key":"some_trusted_bidding_signal_value"})JSON");
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kDeviceSignals)],
+                  kComponentBrowserSignals);
+        return FakeExecute(batch, std::move(batch_callback), json);
+      });
+  RawRequest raw_request;
+  BuildRawRequestForComponentAuction(igs, kTestAuctionSignals,
+                                     kTestBuyerSignals, kTestBiddingSignals,
+                                     raw_request);
+  CheckGenerateBids(raw_request, ads);
+}
+
+TEST_F(GenerateBidsReactorTest,
+       ParsesAllowComponentAuctionFieldForComponentAuction) {
+  std::string json = GetComponentAuctionResponse(
+      kTestRenderUrl, /*bid=*/1, /*allow_component_auction=*/true);
+  auto ig = GetIGForBiddingFoo();
+  AdWithBid bid;
+  bid.set_render(kTestRenderUrl);
+  bid.set_bid(1);
+  bid.set_interest_group_name(ig.name());
+  bid.set_allow_component_auction(true);
+  Response ads;
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = bid;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs{ig};
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([json](std::vector<DispatchRequest>& batch,
+                       BatchDispatchDoneCallback batch_callback) {
+        return FakeExecute(batch, std::move(batch_callback), json);
+      });
+  RawRequest raw_request;
+  BuildRawRequestForComponentAuction(igs, kTestAuctionSignals,
+                                     kTestBuyerSignals, kTestBiddingSignals,
+                                     raw_request);
+  CheckGenerateBids(raw_request, ads);
+}
+
+TEST_F(GenerateBidsReactorTest, SkipsUnallowedAdForComponentAuction) {
+  std::string json = GetComponentAuctionResponse(
+      kTestRenderUrl, /*bid=*/1, /*allow_component_auction=*/false);
+  auto ig = GetIGForBiddingFoo();
+  Response ads;
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs{ig};
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([json](std::vector<DispatchRequest>& batch,
+                       BatchDispatchDoneCallback batch_callback) {
+        return FakeExecute(batch, std::move(batch_callback), json);
+      });
+  RawRequest raw_request;
+  BuildRawRequestForComponentAuction(igs, kTestAuctionSignals,
+                                     kTestBuyerSignals, kTestBiddingSignals,
+                                     raw_request);
+  CheckGenerateBids(raw_request, ads);
 }
 
 TEST_F(GenerateBidsReactorTest,
@@ -517,8 +634,7 @@ TEST_F(GenerateBidsReactorTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = bid;
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
-  std::vector<IGForBidding> igs;
-  igs.push_back(GetIGForBiddingBar());
+  std::vector<IGForBidding> igs{GetIGForBiddingBar()};
 
   std::string response_json = GetTestResponse(kTestRenderUrl, bid_val);
   EXPECT_CALL(dispatcher_, BatchExecute)
@@ -530,10 +646,10 @@ TEST_F(GenerateBidsReactorTest,
         EXPECT_EQ(*input[3], expected_signals);
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals, in_signals,
-                  rawRequest);
-  CheckGenerateBids(rawRequest, ads, false);
+                  raw_request);
+  CheckGenerateBids(raw_request, ads, false);
 }
 
 // TODO (b/288954720): Once android signals message is defined and signals are
@@ -567,10 +683,10 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         EXPECT_EQ(*input[4], R"JSON("")JSON");
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals, in_signals,
-                  rawRequest);
-  CheckGenerateBids(rawRequest, ads, false);
+                  raw_request);
+  CheckGenerateBids(raw_request, ads, false);
 }
 
 TEST_F(GenerateBidsReactorTest, HandlesDuplicateKeysInBiddingSignalsKeys) {
@@ -604,10 +720,10 @@ TEST_F(GenerateBidsReactorTest, HandlesDuplicateKeysInBiddingSignalsKeys) {
         EXPECT_EQ(*input[3], expected_signals);
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals, in_signals,
-                  rawRequest);
-  CheckGenerateBids(rawRequest, ads, false);
+                  raw_request);
+  CheckGenerateBids(raw_request, ads, false);
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
@@ -648,10 +764,10 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
                                 BatchDispatchDoneCallback batch_callback) {
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, rawRequest, enable_debug_reporting);
-  CheckGenerateBids(rawRequest, ads, enable_buyer_debug_url_generation);
+                  kTestBiddingSignals, raw_request, enable_debug_reporting);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithoutDebugUrls) {
@@ -675,10 +791,10 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithoutDebugUrls) {
                                 BatchDispatchDoneCallback batch_callback) {
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  RawRequest rawRequest;
+  RawRequest raw_request;
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, rawRequest, enable_debug_reporting);
-  CheckGenerateBids(rawRequest, ads, enable_buyer_debug_url_generation);
+                  kTestBiddingSignals, raw_request, enable_debug_reporting);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
 }
 
 TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {
@@ -688,7 +804,7 @@ TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {
   igs.push_back(GetIGForBiddingFoo());
   std::string response_json = GetTestResponse(kTestRenderUrl, 1);
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   absl::Notification notification;
   // Verify that serialized IG contains trustedBiddingSignalKeys.
@@ -735,7 +851,7 @@ TEST_F(GenerateBidsReactorTest,
   std::vector<IGForBidding> igs;
   igs.push_back(GetIGForBiddingFoo());
   BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
-                  testBiddingSignals, raw_request);
+                  kTestBiddingSignals, raw_request);
   request_.set_request_ciphertext(raw_request.SerializeAsString());
 
   absl::Notification notification;

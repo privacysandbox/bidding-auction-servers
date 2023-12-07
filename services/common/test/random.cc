@@ -67,8 +67,8 @@ std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields) {
   return json_output;
 }
 
-google::protobuf::Struct MakeAnAd(std::string render_url,
-                                  std::string metadata_key,
+google::protobuf::Struct MakeAnAd(absl::string_view render_url,
+                                  absl::string_view metadata_key,
                                   int metadata_value) {
   google::protobuf::Struct ad;
   google::protobuf::Value ad_render_url;

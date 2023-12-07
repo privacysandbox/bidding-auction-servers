@@ -42,6 +42,7 @@ constexpr char kSecret[] = "secret";
 constexpr bool kEnableReportResultUrlGenerationFalse = false;
 constexpr bool kEnableReportResultWinGenerationFalse = false;
 constexpr char kTestSeller[] = "http://seller.com";
+constexpr char kTopLevelSeller[] = "http://top-level-seller.com";
 constexpr char kTestInterestGroupName[] = "testInterestGroupName";
 constexpr double kTestAdCost = 2.0;
 constexpr long kTestRecency = 3;
@@ -49,6 +50,7 @@ constexpr int kTestModelingSignals = 4;
 constexpr int kTestJoinCount = 5;
 constexpr char kTestBuyerSignals[] = R"([1,"test",[2]])";
 constexpr char kTestAuctionSignals[] = R"([[3,"test",[4]]])";
+constexpr char kTestConsentToken[] = "testConsentToken";
 constexpr char kTestReportWinUrlWithSignals[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
@@ -275,7 +277,7 @@ void BuildScoreAdsRequest(
     ScoreAdsRequest* request,
     absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
     bool enable_debug_reporting = false, int desired_ad_count = 90,
-    const std::string& seller = kTestSeller) {
+    absl::string_view seller = kTestSeller, bool component_auction = false) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
@@ -298,15 +300,28 @@ void BuildScoreAdsRequest(
     raw_request.set_enable_debug_reporting(enable_debug_reporting);
   }
   raw_request.set_seller(seller);
+  if (component_auction) {
+    raw_request.set_top_level_seller(kTopLevelSeller);
+  }
   *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
   request->set_key_id(kKeyId);
+}
+
+void BuildComponentScoreAdsRequest(
+    ScoreAdsRequest* request,
+    absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
+    bool enable_debug_reporting = false, int desired_ad_count = 90,
+    absl::string_view seller = kTestSeller) {
+  BuildScoreAdsRequest(request, interest_group_to_ad, enable_debug_reporting,
+                       desired_ad_count, seller, /*component_auction=*/true);
 }
 
 void BuildScoreAdsRequestForReporting(
     ScoreAdsRequest* request,
     absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
     const TestBuyerReportingSignals& test_buyer_reporting_signals,
-    bool enable_debug_reporting = false, int desired_ad_count = 90) {
+    bool enable_debug_reporting = false, int desired_ad_count = 90,
+    const bool is_consented = false) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
@@ -336,6 +351,8 @@ void BuildScoreAdsRequestForReporting(
   }
   raw_request.set_seller(test_buyer_reporting_signals.seller);
   raw_request.set_auction_signals(test_buyer_reporting_signals.auction_signals);
+  raw_request.mutable_consented_debug_config()->set_is_consented(is_consented);
+  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
   *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
   request->set_key_id(kKeyId);
 }
@@ -347,7 +364,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeDecrypt)
       .Times(AnyNumber())
       .WillRepeatedly([](const server_common::PrivateKey& private_key,
-                         const std::string& ciphertext) {
+                         absl::string_view ciphertext) {
         google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
             hpke_decrypt_response;
         hpke_decrypt_response.set_payload(ciphertext);
@@ -360,7 +377,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, AeadEncrypt)
       .Times(AnyNumber())
       .WillRepeatedly(
-          [](const std::string& plaintext_payload, const std::string& secret) {
+          [](absl::string_view plaintext_payload, absl::string_view secret) {
             google::cmrt::sdk::crypto_service::v1::AeadEncryptedData data;
             data.set_ciphertext(plaintext_payload);
             google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse
@@ -375,7 +392,7 @@ class AuctionServiceIntegrationTest : public ::testing::Test {
   void SetUp() override {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::AuctionContextMap(
+    metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
   }
 };
@@ -460,7 +477,8 @@ void SellerCodeWrappingTestHelper(
     bool enable_debug_reporting, bool enable_adtech_code_logging = false,
     bool enable_report_result_url_generation = false,
     bool enable_report_win_url_generation = false,
-    bool enable_protected_app_signals = false) {
+    bool enable_protected_app_signals = false,
+    bool enable_report_win_input_noising = false) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
@@ -519,7 +537,9 @@ void SellerCodeWrappingTestHelper(
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
       .enable_report_win_url_generation = enable_report_win_url_generation,
-      .enable_protected_app_signals = enable_protected_app_signals};
+      .enable_protected_app_signals = enable_protected_app_signals,
+      .enable_report_win_input_noising = enable_report_win_input_noising,
+      .consented_debug_token = kTestConsentToken};
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -700,16 +720,20 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
+  int desired_ad_count = 90;
+  bool enable_report_win_input_noising = true;
   TestBuyerReportingSignals test_buyer_reporting_signals;
   ScoreAdsRequest request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_buyer_reporting_signals);
+  BuildScoreAdsRequestForReporting(
+      &request, &interest_group_to_ad, test_buyer_reporting_signals,
+      enable_debug_reporting, desired_ad_count, enable_adtech_code_logging);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
       enable_debug_reporting, enable_adtech_code_logging,
-      enable_report_result_url_generation, enable_report_win_url_generation);
+      enable_report_result_url_generation, enable_report_win_url_generation,
+      enable_report_win_input_noising);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scoredAd = raw_response.ad_score();
@@ -901,6 +925,36 @@ TEST_F(AuctionServiceIntegrationTest, CapturesRejectionReasonForRejectedAds) {
     EXPECT_EQ(ad_rejection_reason.rejection_reason(),
               interest_group_to_rejection_reason.at(interest_group_name));
   }
+}
+
+TEST_F(AuctionServiceIntegrationTest, PopulatesOutputForComponentAuction) {
+  ScoreAdsRequest request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  BuildComponentScoreAdsRequest(&request, &interest_group_to_ad);
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(&request, &response, kComponentAuctionCode,
+                               /*enable_seller_debug_url_generation=*/false,
+                               /*enable_debug_reporting=*/false);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_EQ(scoredAd.desirability(), 1);
+  EXPECT_EQ(scoredAd.bid(), 2);
+  EXPECT_TRUE(scoredAd.allow_component_auction());
+  EXPECT_EQ(scoredAd.ad_metadata(), kTopLevelSeller);
+}
+
+TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
+  ScoreAdsRequest request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  BuildComponentScoreAdsRequest(&request, &interest_group_to_ad);
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(&request, &response, kSkipAdComponentAuctionCode,
+                               /*enable_seller_debug_url_generation=*/false,
+                               /*enable_debug_reporting=*/false);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_FALSE(raw_response.has_ad_score());
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

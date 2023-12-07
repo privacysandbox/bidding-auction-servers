@@ -79,6 +79,10 @@
     },
     "winReportingUrls": { "$ref": "#/$defs/winReportingUrlsDef" },
     "error": { "$ref": "#/$defs/errorDef" },
+    "adMetadata": {
+      "type": "string",
+      "description": "Arbitrary metadata to pass to the top-level seller."
+    },
     "topLevelSeller": {
       "type": "string",
       "description": "Optional name/domain for top-level seller in case this is a component auction."
