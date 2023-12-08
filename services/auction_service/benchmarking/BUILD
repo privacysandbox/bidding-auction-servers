@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 cc_library(
     name = "score_ads_benchmarking_logger",
@@ -36,5 +36,25 @@ cc_library(
         "//services/common/loggers:timer",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_binary(
+    name = "score_ads_reactor_benchmarks",
+    testonly = True,
+    srcs = [
+        "score_ads_reactor_benchmarks.cc",
+    ],
+    deps = [
+        "//services/auction_service:score_ads_reactor",
+        "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "@google_benchmark//:benchmark",
+        "@google_benchmark//:benchmark_main",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 2.8.0 (2023-12-07)
+
+
+### Features
+
+* [reporting] Add noiser and bucketer for noising reporting inputs
+* [reporting] Pass  modeling signals through noiser before being input to reportWin
+* Add ps verbosity tf var
+* Add scoring support for PAS
+* Add support for new OHTTP request format.
+* build PyTorch from source for B&A inference server.
+* Collector script for performance testing
+* **component auction:** Auction server passes top-level seller to scoreAd
+* **component auction:** Auction service parses output and skips allowComponentAuctions = false ads
+* **component auction:** Bidding server passes top-level seller to generateBid
+* **component auction:** Bidding service parses output and skips allowComponentAuctions = false bids
+* **component auction:** BuyerFrontEnd Service accepts and forwards top level seller
+* **component auction:** Return error for Android device orchestrated component auctions
+* **component auction:** SellerFrontEnd service accepts and forwards top level seller
+* **component auction:** SFE service parses output cbor encodes for chrome
+* includes git info tag for gcp docker images
+* monitor key fetch metrics for B&A servers
+* Partition request fail metric by the status message
+* Upgrade functionaltest-system to v0.11.0
+
+
+### Bug Fixes
+
+* Add check for correct key ID in select_ad_reactor tests.
+* consented logger memory leak
+* Fixes test failures in select ad app reactor
+* log missing key id in grpc status
+* match copybara strip style for PyTorch build from source
+* refactor gcp artifact build scripts to be more modular
+* Remove local platform for common repo and update CloudPlatform
+* Remove unnecessary reporting flags in gcp config
+* update GCP build to write image_digest, not image id
+
+
+### Dependencies
+
+* **deps:** Upgrade data-plane-shared to commit 115edb3 2023-11-16
+
 ## 2.7.0 (2023-11-08)
 
 

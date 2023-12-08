@@ -42,6 +42,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kAuctionHost[] = "auction-server.com";
 constexpr char kSellerOriginDomain[] = "seller.com";
+constexpr char kTestTopLevelSellerOriginDomain[] = "top-level-seller.com";
 constexpr double kAdCost = 1.0;
 constexpr int kModelingSignals = 0;
 constexpr int kDefaultNumAdComponents = 3;
@@ -65,6 +66,7 @@ inline constexpr char kTestInteractionUrl[] = "http://click.com";
 inline constexpr char kTestTopLevelSellerReportingUrl[] =
     "http://reportResult.com";
 inline constexpr char kTestBuyerReportingUrl[] = "http://reportWin.com";
+inline constexpr char kTestAdMetadata[] = "testAdMetadata";
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -85,7 +87,8 @@ void SetupBuyerClientMock(
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
     const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
     bool repeated_get_allowed = false, bool expect_all_buyers_solicited = true,
-    int* num_buyers_solicited = nullptr);
+    int* num_buyers_solicited = nullptr,
+    absl::string_view top_level_seller = "");
 
 void BuildAdWithBidFromAdWithBidMetadata(
     const ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata& input,
@@ -177,7 +180,7 @@ GetProtoEncodedEncryptedInputAndOhttpContext(const T& protected_auction_input) {
 template <typename T>
 EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
     ClientType client_type, absl::string_view seller_origin_domain,
-    bool is_consented_debug = false) {
+    bool is_consented_debug = false, absl::string_view top_level_seller = "") {
   BuyerInput buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
@@ -253,6 +256,10 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
         *request.mutable_protected_audience_ciphertext() =
             std::move(encrypted_request);
       }
+      if (!top_level_seller.empty()) {
+        request.mutable_auction_config()->set_top_level_seller(
+            top_level_seller);
+      }
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
@@ -273,9 +280,11 @@ GetSelectAdRequestAndClientRegistryForTest(
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
     BuyerBidsResponseMap& expected_buyer_bids,
     absl::string_view seller_origin_domain,
-    bool expect_all_buyers_solicited = true) {
-  auto encrypted_request_with_context =
-      GetSampleSelectAdRequest<T>(client_type, seller_origin_domain);
+    bool expect_all_buyers_solicited = true,
+    absl::string_view top_level_seller = "") {
+  auto encrypted_request_with_context = GetSampleSelectAdRequest<T>(
+      client_type, seller_origin_domain,
+      /*is_consented_debug=*/false, top_level_seller);
 
   // Sets up buyer client while populating the expected buyer bids that can then
   // be used to setup the scoring signals provider.
@@ -299,7 +308,7 @@ GetSelectAdRequestAndClientRegistryForTest(
   // Sets up scoring Client
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
-          [bid_value, client_type](
+          [bid_value, client_type, top_level_seller](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
               absl::Duration timeout) {
@@ -329,6 +338,10 @@ GetSelectAdRequestAndClientRegistryForTest(
                   ->mutable_buyer_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(kTestEvent, kTestInteractionUrl);
+              if (!top_level_seller.empty()) {
+                score->set_ad_metadata(kTestAdMetadata);
+                score->set_allow_component_auction(true);
+              }
               if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }

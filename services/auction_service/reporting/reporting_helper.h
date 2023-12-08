@@ -46,6 +46,7 @@ inline constexpr char kBuyerLogs[] = "buyerLogs";
 inline constexpr char kBuyerErrors[] = "buyerErrors";
 inline constexpr char kBuyerWarnings[] = "buyerWarnings";
 inline constexpr int kReportingArgSize = 5;
+inline constexpr int kReportingArgSizeWithProtectedAppSignals = 6;
 inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
 inline constexpr char kReportingProtectedAppSignalsFunctionName[] =
@@ -72,7 +73,8 @@ enum class ReportingArgs : int {
   kSellerReportingSignals,
   kDirectFromSellerSignals,
   kEnableAdTechCodeLogging,
-  kBuyerReportingMetadata
+  kBuyerReportingMetadata,
+  kEgressFeatures
 };
 
 inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
@@ -89,6 +91,7 @@ struct BuyerReportingMetadata {
   std::string seller;
   std::string interest_group_name;
   double ad_cost;
+  bool enable_report_win_input_noising;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
@@ -110,15 +113,17 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata);
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    absl::string_view egress_features = "");
 
 // Creates the DispatchRequest for calling reportingEntryFunction in Roma
 DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname, bool enable_adtech_code_logging,
+    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
-    const std::string& handler_name = kReportingDispatchHandlerFunctionName);
+    const std::string& handler_name = kReportingDispatchHandlerFunctionName,
+    absl::string_view egress_features = "");
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

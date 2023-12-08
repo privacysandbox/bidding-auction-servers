@@ -132,7 +132,7 @@ TEST(StartupParamParserTest, ParseSingleBuyerMap) {
   EXPECT_NE(it, output.value().end());
   if (it != output.value().end()) {
     EXPECT_EQ(it->second.endpoint, "dns:///bfe-dev.bidding1.com:443");
-    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::GCP);
+    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::kGcp);
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
@@ -150,7 +150,7 @@ TEST(StartupParamParserTest, ParseSingleLocalhostBuyerMap) {
   EXPECT_NE(it, output.value().end());
   if (it != output.value().end()) {
     EXPECT_EQ(it->second.endpoint, "localhost:50051");
-    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::LOCAL);
+    EXPECT_EQ(it->second.cloud_platform, CloudPlatform::kLocal);
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
@@ -180,7 +180,7 @@ TEST(StartupParamParserTest, ParseMultiBuyerMap) {
             absl::StrCat("dns:///bfe-dev.buyer", std::to_string(buyer_number),
                          "-frontend.com:443");
         CloudPlatform platform =
-            (buyer_number % 2 == 0) ? CloudPlatform::GCP : CloudPlatform::AWS;
+            (buyer_number % 2 == 0) ? CloudPlatform::kGcp : CloudPlatform::kAws;
         EXPECT_EQ(it->second.endpoint, url);
         EXPECT_EQ(it->second.cloud_platform, platform);
         actual_buyer_async_client = class_under_test.Get(current_ig_owner);

@@ -28,6 +28,13 @@ cc_library(
 )
 
 cc_library(
+    name = "auction_constants",
+    hdrs = [
+        "auction_constants.h",
+    ],
+)
+
+cc_library(
     name = "seller_adtech_reporting_wrapper",
     hdrs = [
         "seller_adtech_reporting_wrapper.h",
@@ -82,6 +89,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":auction_constants",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
@@ -115,7 +123,9 @@ cc_test(
     size = "small",
     srcs = ["score_ads_reactor_test.cc"],
     deps = [
+        ":auction_constants",
         ":score_ads_reactor",
+        ":score_ads_reactor_test_util",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
         "//services/auction_service/reporting:reporting_helper_test",
@@ -141,6 +151,7 @@ cc_test(
     srcs = ["auction_service_test.cc"],
     deps = [
         ":auction_service",
+        ":score_ads_reactor_test_util",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
@@ -250,5 +261,16 @@ sh_test(
     tags = [
         "local",  # local precludes remote caching
         "smoke",
+    ],
+)
+
+cc_library(
+    name = "score_ads_reactor_test_util",
+    testonly = True,
+    srcs = ["score_ads_reactor_test_util.cc"],
+    hdrs = ["score_ads_reactor_test_util.h"],
+    deps = [
+        "//services/common/test:random",
+        "@com_google_absl//absl/strings",
     ],
 )

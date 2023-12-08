@@ -58,17 +58,6 @@ std::string GetReportWinFunctionName(absl::string_view buyer_origin) {
                       std::regex_replace(buyer_prefix, re, ""));
 }
 
-void ReplacePlaceholders(std::string& report_win_wrapper_template,
-                         absl::string_view report_win_wrapper_name,
-                         absl::string_view report_win_code) {
-  report_win_wrapper_template.replace(
-      report_win_wrapper_template.find(kReportWinWrapperNamePlaceholder),
-      strlen(kReportWinWrapperNamePlaceholder), report_win_wrapper_name);
-  report_win_wrapper_template.replace(
-      report_win_wrapper_template.find(kReportWinCodePlaceholder),
-      strlen(kReportWinCodePlaceholder), report_win_code);
-}
-
 std::string GetProtectedAppSignalsReportWinFunctionName(
     absl::string_view buyer_origin) {
   return absl::StrCat(GetReportWinFunctionName(buyer_origin),

@@ -55,6 +55,8 @@ class AsyncTaskTracker {
       int num_tasks_to_track, log::ContextImpl& log_context,
       absl::AnyInvocable<void(bool) &&> on_all_tasks_done);
 
+  AsyncTaskTracker(AsyncTaskTracker& other) = default;
+
   // Updates the stats. If all bids have been completed, then the registered
   // callback is called.
   void TaskCompleted(TaskStatus task_status) ABSL_LOCKS_EXCLUDED(mu_);
@@ -67,6 +69,9 @@ class AsyncTaskTracker {
       std::optional<absl::AnyInvocable<void()>> on_single_task_done)
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Sets the number of tasks to track.
+  void SetNumTasksToTrack(int num_tasks_to_track);
+
  private:
   // Indicates whether any bid was successful or if no buyer returned an empty
   // bid so that we should send a chaff back. This should be called after all
@@ -75,7 +80,7 @@ class AsyncTaskTracker {
 
   std::string ToString() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  const int num_tasks_to_track_;
+  int num_tasks_to_track_;
   absl::Mutex mu_;
   int pending_tasks_count_ ABSL_GUARDED_BY(mu_);
   int successful_tasks_count_ ABSL_GUARDED_BY(mu_);

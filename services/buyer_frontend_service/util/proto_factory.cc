@@ -127,6 +127,8 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
   generate_bids_raw_request->set_publisher_name(
       get_bids_raw_request.publisher_name());
   generate_bids_raw_request->set_seller(get_bids_raw_request.seller());
+  generate_bids_raw_request->set_top_level_seller(
+      get_bids_raw_request.top_level_seller());
 
   // 6. Set logging context.
   if (!log_context.adtech_debug_id().empty()) {

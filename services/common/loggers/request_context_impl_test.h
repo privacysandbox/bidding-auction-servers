@@ -43,11 +43,11 @@ class ConsentedLogTest : public LogTest {
     // initialize max verbosity = kMaxV
     PS_VLOG_IS_ON(0, kMaxV);
 
-    logs_api::Provider::SetLoggerProvider(
-        logs_sdk::LoggerProviderFactory::Create(
-            logs_sdk::SimpleLogRecordProcessorFactory::Create(
-                std::make_unique<logs_exporter::OStreamLogRecordExporter>(
-                    GetSs()))));
+    logger_ = logs_sdk::LoggerProviderFactory::Create(
+        logs_sdk::SimpleLogRecordProcessorFactory::Create(
+            std::make_unique<logs_exporter::OStreamLogRecordExporter>(
+                GetSs())));
+    logger_private = logger_->GetLogger("default").get();
 
     mismatched_token_ = ParseTextOrDie<ConsentedDebugConfiguration>(R"pb(
       is_consented: true
@@ -68,12 +68,16 @@ class ConsentedLogTest : public LogTest {
 
   std::string ReadSs() {
     // Shut down reader now to avoid concurrent access of Ss.
-    { auto not_used = std::move(test_instance_); }
+    {
+      auto not_used = std::move(test_instance_);
+      logger_ = nullptr;
+    }
     std::string output = GetSs().str();
     GetSs().str("");
     return output;
   }
 
+  std::unique_ptr<logs_api::LoggerProvider> logger_;
   std::unique_ptr<ContextImpl> test_instance_;
   ConsentedDebugConfiguration matched_token_, mismatched_token_;
 

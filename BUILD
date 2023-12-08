@@ -133,3 +133,20 @@ config_setting(
     },
     visibility = ["//visibility:public"],
 )
+
+string_flag(
+    name = "build_for_test",
+    build_setting_default = "non_test",
+    values = [
+        "non_test",
+        "e2e",
+    ],
+)
+
+config_setting(
+    name = "e2e_build",
+    flag_values = {
+        ":build_for_test": "e2e",
+    },
+    visibility = ["//visibility:public"],
+)

@@ -22,40 +22,13 @@
 #include "src/cpp/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-namespace {
-
-void LogMetrics(const GenerateBidsRequest* request,
-                GenerateBidsResponse* response) {
-  auto& metric_context = metric::BiddingContextMap()->Get(request);
-  LogIfError(
-      metric_context
-          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
-  LogIfError(
-      metric_context
-          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
-              [start = absl::Now()]() -> int {
-                return (absl::Now() - start) / absl::Milliseconds(1);
-              }));
-  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
-      (int)request->ByteSizeLong()));
-  LogIfError(metric_context
-                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
-                     [response]() -> int { return response->ByteSizeLong(); }));
-  LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metrics::kTotalRequestFailedCount>(
-      [&metric_context]() -> int {
-        return metric_context.is_request_successful() ? 0 : 1;
-      }));
-}
-
-}  // namespace
 
 grpc::ServerUnaryReactor* BiddingService::GenerateBids(
     grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
     GenerateBidsResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan(kGenerateBids));
-  LogMetrics(request, response);
+  LogCommonMetric(request, response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = generate_bids_reactor_factory_(
       request, response, key_fetcher_manager_.get(), crypto_client_.get(),

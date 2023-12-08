@@ -34,8 +34,6 @@ void SelectAdReactorInvalidClient::Execute() {
 absl::StatusOr<std::string>
 SelectAdReactorInvalidClient::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>&
-        bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
   return "";
 }

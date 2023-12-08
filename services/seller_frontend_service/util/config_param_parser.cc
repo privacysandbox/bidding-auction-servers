@@ -84,11 +84,11 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
         std::string cloud_platform,
         GetStringMember(buyer_service_endpoint_value, "cloudPlatform"));
     if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::GCP;
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kGcp;
     } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::AWS;
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kAws;
     } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::LOCAL;
+      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kLocal;
     } else {
       return absl::InvalidArgumentError(absl::StrCat(
           "Invalid value for BFE endpoint cloud platform: ", cloud_platform));

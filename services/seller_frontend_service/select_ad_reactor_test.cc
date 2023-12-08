@@ -109,12 +109,16 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
-        .WillRepeatedly(Return(GetPrivateKey()));
+        .WillRepeatedly(
+            [](const google::scp::cpio::PublicPrivateKeyPairId& key_id) {
+              EXPECT_EQ(key_id, std::to_string(kTestKeyId));
+              return GetPrivateKey();
+            });
 
     // Initialization for telemetry.
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::SfeContextMap(
+    metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
   }
@@ -231,6 +235,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
+
 TYPED_TEST(SellerFrontEndServiceTest,
            FetchesThreeBidsGivenThreeBuyersWhenLimitUpped) {
   // Should only serve two buyers despite having 3 in request.
@@ -973,6 +978,74 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.Wait();
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ForwardsTopLevelSellertoBuyerAndAuctionServer) {
+  absl::string_view top_level_seller = "top_level_seller";
+  this->SetupRequest(/*num_buyers=*/2);
+  this->request_.mutable_auction_config()->set_top_level_seller(
+      top_level_seller);
+  absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  absl::flat_hash_map<AdUrl, AdWithBid> bids;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    AdUrl url = buyer_to_ad_url.at(buyer);
+    GetBidsResponse::GetBidsRawResponse response =
+        BuildGetBidsResponseWithSingleAd(url);
+    bids.insert_or_assign(url, response.bids().at(0));
+    SetupBuyerClientMock(buyer, buyer_clients, response,
+                         /*repeated_get_allowed = */ false,
+                         /*expect_all_buyers_solicited =*/true,
+                         /*num_buyers_solicited =*/nullptr, top_level_seller);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // Scoring signals must be nonzero for scoring to be attempted.
+  std::string scoring_signals_value =
+      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
+  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                           scoring_signals_value);
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce([&scoring_done, &top_level_seller](
+                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                        score_ads_request,
+                    const RequestMetadata& metadata,
+                    ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+        EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+        scoring_done.Notify();
+        return absl::OkStatus();
+      });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  // Client Registry
+  ClientRegistry clients{scoring_signals_provider, scoring_client,
+                         buyer_clients, this->key_fetcher_manager_,
+                         std::move(async_reporter)};
+  Response response =
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  scoring_done.WaitForNotification();
 }
 
 }  // namespace

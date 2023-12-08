@@ -108,21 +108,32 @@ constexpr char kJoinCount[] = "joinCount";
 constexpr char kBidCount[] = "bidCount";
 constexpr char kRecency[] = "recency";
 constexpr char kPrevWins[] = "prevWins";
+constexpr char kJsonStringEnd[] = R"JSON(",")JSON";
+constexpr char kJsonStringValueStart[] = R"JSON(":")JSON";
+constexpr char kJsonValueStart[] = R"JSON(":)JSON";
+constexpr char kJsonValueEnd[] = R"JSON(,")JSON";
+constexpr char kJsonEmptyString[] = R"JSON("")JSON";
 
 std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
                                         absl::string_view seller,
-                                        BrowserSignals browser_signals) {
-  return absl::StrCat(
-      R"JSON({")JSON", kTopWindowHostname, R"JSON(":")JSON", publisher_name,
-      R"JSON(",")JSON", kSeller, R"JSON(":")JSON", seller, R"JSON(",")JSON",
-      kTopLevelSeller, R"JSON(":")JSON", seller, R"JSON(",")JSON", kJoinCount,
-      R"JSON(":)JSON", browser_signals.join_count(), R"JSON(,")JSON", kBidCount,
-      R"JSON(":)JSON", browser_signals.bid_count(), R"JSON(,")JSON", kRecency,
-      R"JSON(":)JSON", browser_signals.recency(), R"JSON(,")JSON", kPrevWins,
-      R"JSON(":)JSON",
-      browser_signals.prev_wins().empty() ? R"JSON("")JSON"
+                                        absl::string_view top_level_seller,
+                                        const BrowserSignals& browser_signals) {
+  std::string device_signals_str = absl::StrCat(
+      R"JSON({")JSON", kTopWindowHostname, kJsonStringValueStart,
+      publisher_name, kJsonStringEnd, kSeller, kJsonStringValueStart, seller);
+  if (!top_level_seller.empty()) {
+    absl::StrAppend(&device_signals_str, kJsonStringEnd, kTopLevelSeller,
+                    kJsonStringValueStart, top_level_seller);
+  }
+  absl::StrAppend(
+      &device_signals_str, kJsonStringEnd, kJoinCount, kJsonValueStart,
+      browser_signals.join_count(), kJsonValueEnd, kBidCount, kJsonValueStart,
+      browser_signals.bid_count(), kJsonValueEnd, kRecency, kJsonValueStart,
+      browser_signals.recency(), kJsonValueEnd, kPrevWins, kJsonValueStart,
+      browser_signals.prev_wins().empty() ? kJsonEmptyString
                                           : browser_signals.prev_wins(),
       "}");
+  return device_signals_str;
 }
 
 absl::StatusOr<std::string> SerializeRepeatedStringField(
@@ -232,16 +243,6 @@ absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
   return per_ig_signals_map;
 }
 
-// See GenerateBidInput for more detail on each field.
-enum class GenerateBidArgs : int {
-  kInterestGroup = 0,
-  kAuctionSignals,
-  kBuyerSignals,
-  kTrustedBiddingSignals,
-  kDeviceSignals,
-  kFeatureFlags
-};
-
 // Builds a vector containing commonly shared inputs, following the description
 // here:
 // https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#generatebids
@@ -314,7 +315,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(MakeBrowserSignalsForScript(
             raw_request.publisher_name(), raw_request.seller(),
-            interest_group.browser_signals()));
+            raw_request.top_level_seller(), interest_group.browser_signals()));
   } else if (interest_group.has_android_signals() &&
              interest_group.android_signals().IsInitialized() &&
              !differencer.Equals(AndroidSignals::default_instance(),
@@ -412,7 +413,10 @@ GenerateBidsReactor::GenerateBidsReactor(
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>(
           dispatcher, runtime_config, request, response, key_fetcher_manager,
           crypto_client),
-      benchmarking_logger_(std::move(benchmarking_logger)) {
+      benchmarking_logger_(std::move(benchmarking_logger)),
+      auction_scope_(raw_request_.top_level_seller().empty()
+                         ? AuctionScope::kSingleSeller
+                         : AuctionScope::kDeviceComponentSeller) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
@@ -550,6 +554,14 @@ void GenerateBidsReactor::GenerateBidsCallback(
           PS_VLOG(2, log_context_)
               << "Skipping 0 bid for " << interest_group_name << ": "
               << bid.DebugString();
+        } else if (
+            // If this is a component auction and bid is not allowed, skip it.
+            auction_scope_ == AuctionScope::kDeviceComponentSeller &&
+            !bid.allow_component_auction()) {
+          // TODO(b/311234165): Add metric for rejected component ads.
+          PS_VLOG(1, log_context_)
+              << "Skipping component bid as it is not allowed for "
+              << interest_group_name << ": " << bid.DebugString();
         } else {
           bid.set_interest_group_name(interest_group_name);
           *raw_response_.add_bids() = bid;
@@ -596,10 +608,7 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
   if (status.error_code() == grpc::StatusCode::OK) {
     metric_context_->SetRequestSuccessful();
   } else {
-    LogIfError(
-        metric_context_->AccumulateMetric<metric::kRequestFailedCountByStatus>(
-            1,
-            (StatusCodeToString(server_common::ToAbslStatus(status).code()))));
+    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
   }
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsResponse\n"
                                     << response_->ShortDebugString();

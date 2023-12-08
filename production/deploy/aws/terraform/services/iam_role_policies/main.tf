@@ -41,7 +41,7 @@ data "aws_iam_policy_document" "instance_policy_doc" {
   }
   statement {
     sid       = "AllowInstancesToReadParameters"
-    actions   = ["ssm:GetParameters"]
+    actions   = ["ssm:GetParameter"]
     effect    = "Allow"
     resources = ["*"]
   }

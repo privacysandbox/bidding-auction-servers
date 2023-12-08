@@ -21,8 +21,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 HttpScoringSignalsAsyncProvider::HttpScoringSignalsAsyncProvider(
     std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
-        http_seller_kv_async_client)
-    : http_seller_kv_async_client_(std::move(http_seller_kv_async_client)) {}
+        http_seller_kv_async_client,
+    bool enable_protected_app_signals)
+    : http_seller_kv_async_client_(std::move(http_seller_kv_async_client)),
+      enable_protected_app_signals_(enable_protected_app_signals) {}
 
 void HttpScoringSignalsAsyncProvider::Get(
     const ScoringSignalsRequest& scoring_signals_request,
@@ -31,12 +33,17 @@ void HttpScoringSignalsAsyncProvider::Get(
         on_done,
     absl::Duration timeout) const {
   auto request = std::make_unique<GetSellerValuesInput>();
-  for (const auto& buyer_get_bid_response_pair :
+  for (const auto& [unused_buyer, get_bids_response] :
        scoring_signals_request.buyer_bids_map_) {
-    for (const auto& ad : buyer_get_bid_response_pair.second->bids()) {
+    for (const auto& ad : get_bids_response->bids()) {
       request->render_urls.emplace(ad.render());
       request->ad_component_render_urls.insert(ad.ad_components().begin(),
                                                ad.ad_components().end());
+    }
+    if (enable_protected_app_signals_) {
+      for (const auto& ad : get_bids_response->protected_app_signals_bids()) {
+        request->render_urls.emplace(ad.render());
+      }
     }
   }
   request->client_type = scoring_signals_request.client_type_;

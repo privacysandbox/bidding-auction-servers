@@ -24,6 +24,13 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Custom media types for B&A. Used as input to request decryption/response
+// encryption.
+inline constexpr absl::string_view kBiddingAuctionOhttpRequestLabel =
+    "message/auction request";
+inline constexpr absl::string_view kBiddingAuctionOhttpResponseLabel =
+    "message/auction response";
+
 // Hardcoded test id for OHTTP key Config.
 constexpr uint8_t kTestKeyId = 64;
 

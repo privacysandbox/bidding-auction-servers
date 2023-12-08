@@ -37,8 +37,8 @@ inline constexpr char kMissingGenerationId[] =
 inline constexpr char kMissingPublisherName[] =
     "Request is missing publisher name";
 inline constexpr char kMissingBuyerInputs[] = "Request is missing buyer inputs";
-inline constexpr char kMissingInterestGroups[] =
-    "Request is missing interest groups for buyer: %s";
+inline constexpr char kMissingInterestGroupsAndProtectedSignals[] =
+    "Request is missing interest groups and protected signals for buyer: %s";
 inline constexpr char kEmptyInterestGroupOwner[] =
     "One or more interest group owner name is empty in buyer inputs";
 inline constexpr char kNonEmptyBuyerInputMalformed[] =

@@ -17,6 +17,7 @@
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "rapidjson/document.h"
 #include "services/common/util/json_util.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
@@ -97,8 +98,40 @@ ProtectedAuctionInput GetProtectedAuctionInput(
   return protected_auction_input;
 }
 
+void MayAddProtectedAppSignals(
+    google::protobuf::Map<std::string, BuyerInput>& buyer_input) {}
+
+absl::flat_hash_map<std::string, BuyerInput> GetProtectedAppSignals(
+    ClientType client_type, absl::string_view protected_app_signals_json) {
+  if (client_type == ClientType::CLIENT_TYPE_BROWSER ||
+      protected_app_signals_json.empty()) {
+    return {};
+  }
+
+  auto protected_app_signals_obj = ParseJsonString(protected_app_signals_json);
+  CHECK_OK(protected_app_signals_obj);
+
+  absl::flat_hash_map<std::string, BuyerInput> protected_app_signals_map;
+  google::protobuf::json::ParseOptions parse_options;
+  parse_options.ignore_unknown_fields = true;
+  for (auto it = protected_app_signals_obj->MemberBegin();
+       it != protected_app_signals_obj->MemberEnd(); ++it) {
+    BuyerInput buyer_input_proto;
+    auto serialized_buyer_input = SerializeJsonDoc(it->value.GetObject());
+    CHECK_OK(serialized_buyer_input);
+    auto buyer_input_parse = google::protobuf::util::JsonStringToMessage(
+        *serialized_buyer_input, &buyer_input_proto, parse_options);
+    CHECK_OK(buyer_input_parse);
+    protected_app_signals_map.emplace(it->name.GetString(),
+                                      std::move(buyer_input_proto));
+  }
+
+  return protected_app_signals_map;
+}
+
 google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
-    rapidjson::Document* input_json) {
+    ClientType client_type, rapidjson::Document* input_json,
+    absl::string_view protected_app_signals_json) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
   CHECK(input_json->HasMember(kProtectedAuctionInputField))
       << "Input Must have field " << kProtectedAuctionInputField;
@@ -110,6 +143,8 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
       (*input_json)[kProtectedAuctionInputField][kBuyerInputMapField];
 
   absl::flat_hash_map<std::string, BuyerInput> buyer_input_map;
+  absl::flat_hash_map<std::string, BuyerInput> protected_app_signals =
+      GetProtectedAppSignals(client_type, protected_app_signals_json);
   for (auto& buyer_input : buyer_map_json.GetObject()) {
     std::string buyer_input_json = ValueToJson(&buyer_input.value);
 
@@ -120,10 +155,19 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
         buyer_input_json, &buyer_input_proto, parse_options);
     CHECK(buyer_input_parse.ok()) << buyer_input_parse;
 
+    auto protected_app_signals_it =
+        protected_app_signals.find(buyer_input.name.GetString());
+    if (protected_app_signals_it != protected_app_signals.end()) {
+      buyer_input_proto.set_allocated_protected_app_signals(
+          protected_app_signals_it->second.release_protected_app_signals());
+      protected_app_signals.erase(protected_app_signals_it);
+    }
+
     buyer_input_map.try_emplace(buyer_input.name.GetString(),
                                 std::move(buyer_input_proto));
   }
 
+  buyer_input_map.merge(protected_app_signals);
   return google::protobuf::Map<std::string, BuyerInput>(buyer_input_map.begin(),
                                                         buyer_input_map.end());
 }
@@ -135,10 +179,11 @@ std::pair<std::unique_ptr<SelectAdRequest>,
 PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 ClientType client_type,
                                 absl::string_view public_key, uint8_t key_id,
-                                bool enable_debug_reporting) {
+                                bool enable_debug_reporting,
+                                absl::string_view protected_app_signals_json) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
-      GetBuyerInputMap(&input_json);
+      GetBuyerInputMap(client_type, &input_json, protected_app_signals_json);
   // Encode buyer map.
   absl::StatusOr<google::protobuf::Map<std::string, std::string>>
       encoded_buyer_map;

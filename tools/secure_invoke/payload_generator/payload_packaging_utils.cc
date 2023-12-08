@@ -60,7 +60,10 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
   PS_ASSIGN_OR_RETURN((quiche::ObliviousHttpRequest ohttp_request),
                       CreateValidEncryptedRequest(std::move(encoded_request),
                                                   public_key, key_id));
-  std::string encrypted_request = ohttp_request.EncapsulateAndSerialize();
+  // Prepend with a zero byte to follow the new B&A request format that uses
+  // custom media types for request encryption/request decryption.
+  std::string encrypted_request =
+      '\0' + ohttp_request.EncapsulateAndSerialize();
   auto context = std::move(ohttp_request).ReleaseContext();
   return absl::StatusOr<
       std::pair<std::string, quiche::ObliviousHttpRequest::Context>>(

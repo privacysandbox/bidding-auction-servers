@@ -30,12 +30,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// Parsed response from the `prepareDataForAdsRetrieval`.
-struct ProtectedEmbeddingsResponse {
-  std::string decoded_protected_signals;
-  std::string protected_embeddings;
-};
-
 class ProtectedAppSignalsGenerateBidsReactor
     : public BaseGenerateBidsReactor<
           GenerateProtectedAppSignalsBidsRequest,
@@ -71,24 +65,22 @@ class ProtectedAppSignalsGenerateBidsReactor
   void OnDone() override;
   void OnCancel() override;
 
-  DispatchRequest CreateProtectedEmbeddingsRetrievalRequest();
+  DispatchRequest CreatePrepareDataForAdsRetrievalRequest();
 
-  void GetProtectedEmbeddingsForRetrieval();
+  void GetPreparedDataForAdsRetrieval();
 
   std::unique_ptr<AdRetrievalInput> CreateAdsRetrievalRequest(
-      const ProtectedEmbeddingsResponse& protected_embeddings);
+      const std::string& prepare_data_for_ads_retrieval_response);
 
-  absl::StatusOr<ProtectedEmbeddingsResponse> ParseProtectedEmbeddingsResponse(
-      const std::string& response);
-
-  void FetchAds(const ProtectedEmbeddingsResponse& protected_embeddings);
+  void FetchAds(const std::string& prepare_data_for_ads_retrieval_response);
 
   DispatchRequest CreateGenerateBidsRequest(
       std::unique_ptr<AdRetrievalOutput> result,
-      absl::string_view decoded_protected_app_signals);
+      absl::string_view prepare_data_for_ads_retrieval_response);
 
-  void OnFetchAdsDone(std::unique_ptr<AdRetrievalOutput> result,
-                      absl::string_view decoded_protected_app_signals);
+  void OnFetchAdsDone(
+      std::unique_ptr<AdRetrievalOutput> result,
+      const std::string& prepare_data_for_ads_retrieval_response);
 
   void EncryptResponseAndFinish(grpc::Status status);
 
@@ -108,11 +100,11 @@ class ProtectedAppSignalsGenerateBidsReactor
     auto status = dispatcher_.BatchExecute(
         requests,
         [this, roma_entry_function, parse_response = std::move(parse_response),
-         on_successful_response = std::move(on_successful_response)](
+         on_successful_response = std::move(on_successful_response), requests](
             const std::vector<absl::StatusOr<DispatchResponse>>& result) {
           if (auto status = ValidateRomaResponse(result); !status.ok()) {
             PS_VLOG(2, log_context_)
-                << "Invalid Response from UDF: " << roma_entry_function
+                << "Failed to run UDF: " << roma_entry_function
                 << ". Error: " << status;
             EncryptResponseAndFinish(
                 grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));

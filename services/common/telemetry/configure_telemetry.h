@@ -17,27 +17,84 @@
 #ifndef CONFIGURE_TELEMETRY_H_
 #define CONFIGURE_TELEMETRY_H_
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/resource/semantic_conventions.h"
+#include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
+#include "services/common/constants/common_service_flags.h"
+#include "services/common/loggers/request_context_impl.h"
+#include "services/common/metric/server_definition.h"
+#include "src/cpp/telemetry/flag/telemetry_flag.h"
 #include "src/cpp/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 // TODO (b/278899152): get version dynamically
-constexpr std::string_view kOpenTelemetryVersion = "1.8.2";
+inline constexpr std::string_view kOpenTelemetryVersion = "1.9.1";
 
-// Creates the attributes that all metrics/traces, regardless of the context
-// they are emitted, will have assigned.
-// config_util: the B&A configuration utility
-opentelemetry::sdk::resource::Resource CreateSharedAttributes(
-    TrustedServerConfigUtil* config_util);
+template <typename T>
+void InitTelemetry(const TrustedServerConfigUtil& config_util,
+                   const TrustedServersConfigClient& config_client,
+                   absl::string_view server,
+                   const std::vector<std::string>& buyer_list = {}) {
+  using ::opentelemetry::logs::LoggerProvider;
+  using ::opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions;
+  using ::opentelemetry::sdk::resource::Resource;
+  using ::opentelemetry::sdk::resource::ResourceAttributes;
+  namespace semantic_conventions =
+      ::opentelemetry::sdk::resource::SemanticConventions;
 
-// Creates the metrics collection options for OpenTelemtry configuration.
-opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions
-CreateMetricsOptions(int export_interval_millis);
+  server_common::telemetry::BuildDependentConfig telemetry_config(
+      config_client
+          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+              TELEMETRY_CONFIG)
+          .server_config);
+  std::string collector_endpoint =
+      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
+  server_common::InitTelemetry(
+      config_util.GetService().data(), kOpenTelemetryVersion.data(),
+      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
+      telemetry_config.LogsAllowed() &&
+          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
+  Resource server_info = Resource::Create(ResourceAttributes{
+      {semantic_conventions::kServiceName, config_util.GetService().data()},
+      {semantic_conventions::kDeploymentEnvironment,
+       config_util.GetEnvironment().data()},
+      {semantic_conventions::kServiceInstanceId,
+       config_util.GetInstanceId().data()}});
+
+  server_common::ConfigureTracer(server_info, collector_endpoint);
+  static LoggerProvider* log_provider =
+      server_common::ConfigurePrivateLogger(server_info, collector_endpoint)
+          .release();
+  log::logger_private =
+      log_provider->GetLogger(config_util.GetService().data()).get();
+
+  auto metric_export_interval =
+      std::chrono::milliseconds(telemetry_config.metric_export_interval_ms());
+  auto* context_map = metric::MetricContextMap<T>(
+      telemetry_config,
+      server_common::ConfigurePrivateMetrics(
+          server_info,
+          PeriodicExportingMetricReaderOptions{
+              metric_export_interval,
+              // use half of export interval for export_timeout_millis
+              metric_export_interval / 2},
+          collector_endpoint),
+      config_util.GetService(), kOpenTelemetryVersion);
+  AddSystemMetric(context_map);
+
+  if constexpr (std::is_same_v<T, SelectAdRequest>) {
+    AddBuyerPartition(context_map->metric_config(), buyer_list);
+  }
+  AddErrorTypePartition(context_map->metric_config(), server);
+}
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

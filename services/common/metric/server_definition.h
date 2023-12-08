@@ -24,12 +24,13 @@
 #include "services/common/util/read_system.h"
 #include "services/common/util/reporting_util.h"
 #include "src/cpp/metric/context_map.h"
+#include "src/cpp/metric/key_fetch.h"
 
 // Defines API used by Bidding auction servers, and B&A specific metrics.
 namespace privacy_sandbox::bidding_auction_servers {
 namespace metric {
 
-inline constexpr server_common::metrics::PrivacyBudget server_total_budget{
+inline constexpr server_common::metrics::PrivacyBudget kServerTotalBudget{
     /*epsilon*/ 5};
 
 inline constexpr double kPercentHistogram[] = {0.06, 0.12, 0.25, 0.5, 1};
@@ -79,17 +80,6 @@ inline constexpr server_common::metrics::Definition<
         "initiated_request.auction.duration_ms",
         "Total duration request takes to get response back from Auction server",
         server_common::metrics::kTimeHistogram);
-
-inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
-    server_common::metrics::Instrument::kPartitionedCounter>
-    kInitiatedRequestErrorCountByServer(
-        /*name*/ "initiated_request.errors_count_by_server",
-        /*description*/
-        "Total number of errors occurred for the requests initiated by the "
-        "server partitioned by outgoing server",
-        /*partition_type*/ "server name",
-        /* public_partitions*/ kServerName);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
@@ -315,19 +305,64 @@ inline constexpr server_common::metrics::Definition<
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
-    kInitiatedRequestErrorCountByStatus(
-        /*name*/ "initiated_request.errors_count_by_status",
+    kInitiatedRequestKVErrorCountByStatus(
+        /*name*/ "initiated_request.kv.errors_count_by_status",
         /*description*/
-        "Initiated requests that resulted in failure partitioned by "
+        "Initiated requests by KV that resulted in failure partitioned by "
         "Error Code",
         /*partition_type*/ "error_status_code",
         /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInitiatedRequestAuctionErrorCountByStatus(
+        /*name*/ "initiated_request.auction.errors_count_by_status",
+        /*description*/
+        "Initiated requests by auction that resulted in failure partitioned by "
+        "Error Code",
+        /*partition_type*/ "error_status_code",
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInitiatedRequestBiddingErrorCountByStatus(
+        /*name*/ "initiated_request.bidding.errors_count_by_status",
+        /*description*/
+        "Initiated requests by KV that resulted in failure partitioned by "
+        "Error Code",
+        /*partition_type*/ "error_status_code",
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInitiatedRequestBfeErrorCountByStatus(
+        /*name*/ "initiated_request.bfe.errors_count_by_status",
+        /*description*/
+        "Initiated requests by KV that resulted in failure partitioned by "
+        "Error Code",
+        /*partition_type*/ "error_status_code",
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition);
+
+template <typename RequestT>
+struct RequestMetric;
+
+template <typename RequestT>
+inline auto* MetricContextMap(
+    std::optional<server_common::telemetry::BuildDependentConfig> config =
+        std::nullopt,
+    std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
+    absl::string_view service = "", absl::string_view version = "") {
+  return server_common::metrics::GetContextMap<const RequestT,
+                                               RequestMetric<RequestT>::kList>(
+      std::move(config), std::move(provider), service, version,
+      kServerTotalBudget);
+}
 
 // API to get `Context` for bidding server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
     kBiddingMetricList[] = {
         &server_common::metrics::kTotalRequestCount,
-        &server_common::metrics::kTotalRequestFailedCount,
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
@@ -339,37 +374,29 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kJSExecutionErrorCount,
         &kBiddingErrorCountByErrorCode,
 };
-inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
-    kBiddingMetricSpan = kBiddingMetricList;
-inline auto* BiddingContextMap(
-    std::optional<server_common::telemetry::BuildDependentConfig> config =
-        std::nullopt,
-    std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
-    absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metrics::GetContextMap<const GenerateBidsRequest,
-                                               kBiddingMetricSpan>(
-      std::move(config), std::move(provider), service, version,
-      server_total_budget);
+
+template <>
+struct RequestMetric<GenerateBidsRequest> {
+  static constexpr absl::Span<
+      const server_common::metrics::DefinitionName* const>
+      kList = kBiddingMetricList;
+  using ContextType = server_common::metrics::ServerContext<kList>;
+};
+inline auto* BiddingContextMap() {
+  return MetricContextMap<GenerateBidsRequest>();
 }
-using BiddingContext =
-    server_common::metrics::ServerContext<kBiddingMetricSpan>;
+using BiddingContext = RequestMetric<GenerateBidsRequest>::ContextType;
 
 // API to get `Context` for BFE server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
     kBfeMetricList[] = {
         &server_common::metrics::kTotalRequestCount,
-        &server_common::metrics::kTotalRequestFailedCount,
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
-        &server_common::metrics::kInitiatedRequestCount,
-        &server_common::metrics::kInitiatedRequestErrorCount,
-        &server_common::metrics::kInitiatedRequestTotalDuration,
-        &server_common::metrics::kInitiatedRequestByte,
-        &server_common::metrics::kInitiatedResponseByte,
-        &kInitiatedRequestErrorCountByStatus,
+        &kInitiatedRequestKVErrorCountByStatus,
+        &kInitiatedRequestBiddingErrorCountByStatus,
         &kRequestFailedCountByStatus,
-        &kInitiatedRequestErrorCountByServer,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestBiddingDuration,
@@ -379,41 +406,33 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInitiatedResponseBiddingSize,
         &kBfeErrorCountByErrorCode,
 };
-inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
-    kBfeMetricSpan = kBfeMetricList;
-inline auto* BfeContextMap(
-    std::optional<server_common::telemetry::BuildDependentConfig> config =
-        std::nullopt,
-    std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
-    absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metrics::GetContextMap<const GetBidsRequest,
-                                               kBfeMetricSpan>(
-      std::move(config), std::move(provider), service, version,
-      server_total_budget);
-}
-using BfeContext = server_common::metrics::ServerContext<kBfeMetricSpan>;
+
+template <>
+struct RequestMetric<GetBidsRequest> {
+  static constexpr absl::Span<
+      const server_common::metrics::DefinitionName* const>
+      kList = kBfeMetricList;
+  using ContextType = server_common::metrics::ServerContext<kList>;
+};
+inline auto* BfeContextMap() { return MetricContextMap<GetBidsRequest>(); }
+using BfeContext = RequestMetric<GetBidsRequest>::ContextType;
 
 // API to get `Context` for SFE server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
     kSfeMetricList[] = {
         &server_common::metrics::kTotalRequestCount,
-        &server_common::metrics::kTotalRequestFailedCount,
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
-        &server_common::metrics::kInitiatedRequestCount,
-        &server_common::metrics::kInitiatedRequestErrorCount,
-        &server_common::metrics::kInitiatedRequestTotalDuration,
-        &server_common::metrics::kInitiatedRequestByte,
-        &server_common::metrics::kInitiatedResponseByte,
-        &kInitiatedRequestErrorCountByStatus,
+        &kInitiatedRequestKVErrorCountByStatus,
+        &kInitiatedRequestAuctionErrorCountByStatus,
+        &kInitiatedRequestBfeErrorCountByStatus,
         &kRequestFailedCountByStatus,
         &kSfeInitiatedRequestErrorsCountByBuyer,
         &kSfeInitiatedRequestDurationByBuyer,
         &kSfeInitiatedRequestCountByBuyer,
         &kSfeInitiatedResponseSizeByBuyer,
         &kSfeInitiatedRequestSizeByBuyer,
-        &kInitiatedRequestErrorCountByServer,
         &kInitiatedRequestKVDuration,
         &kInitiatedRequestCountByServer,
         &kInitiatedRequestAuctionDuration,
@@ -423,25 +442,21 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInitiatedResponseAuctionSize,
         &kSfeErrorCountByErrorCode,
 };
-inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
-    kSfeMetricSpan = kSfeMetricList;
-inline auto* SfeContextMap(
-    std::optional<server_common::telemetry::BuildDependentConfig> config =
-        std::nullopt,
-    std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
-    absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metrics::GetContextMap<const SelectAdRequest,
-                                               kSfeMetricSpan>(
-      std::move(config), std::move(provider), service, version,
-      server_total_budget);
-}
-using SfeContext = server_common::metrics::ServerContext<kSfeMetricSpan>;
+
+template <>
+struct RequestMetric<SelectAdRequest> {
+  static constexpr absl::Span<
+      const server_common::metrics::DefinitionName* const>
+      kList = kSfeMetricList;
+  using ContextType = server_common::metrics::ServerContext<kList>;
+};
+inline auto* SfeContextMap() { return MetricContextMap<SelectAdRequest>(); }
+using SfeContext = RequestMetric<SelectAdRequest>::ContextType;
 
 // API to get `Context` for Auction server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
     kAuctionMetricList[] = {
         &server_common::metrics::kTotalRequestCount,
-        &server_common::metrics::kTotalRequestFailedCount,
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
@@ -453,20 +468,16 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kJSExecutionErrorCount,
         &kAuctionErrorCountByErrorCode,
 };
-inline constexpr absl::Span<const server_common::metrics::DefinitionName* const>
-    kAuctionMetricSpan = kAuctionMetricList;
-inline auto* AuctionContextMap(
-    std::optional<server_common::telemetry::BuildDependentConfig> config =
-        std::nullopt,
-    std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
-    absl::string_view service = "", absl::string_view version = "") {
-  return server_common::metrics::GetContextMap<const ScoreAdsRequest,
-                                               kAuctionMetricSpan>(
-      std::move(config), std::move(provider), service, version,
-      server_total_budget);
-}
-using AuctionContext =
-    server_common::metrics::ServerContext<kAuctionMetricSpan>;
+
+template <>
+struct RequestMetric<ScoreAdsRequest> {
+  static constexpr absl::Span<
+      const server_common::metrics::DefinitionName* const>
+      kList = kAuctionMetricList;
+  using ContextType = server_common::metrics::ServerContext<kList>;
+};
+inline auto* AuctionContextMap() { return MetricContextMap<ScoreAdsRequest>(); }
+using AuctionContext = RequestMetric<ScoreAdsRequest>::ContextType;
 
 }  // namespace metric
 
@@ -507,19 +518,10 @@ class InitiatedRequest {
 
   void LogMetrics() {
     int initiated_request_ms = (absl::Now() - start_) / absl::Milliseconds(1);
-    LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metrics::kInitiatedRequestCount>(1));
     LogIfError(
         metric_context_
             .template AccumulateMetric<metric::kInitiatedRequestCountByServer>(
                 1, destination_));
-    LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metrics::kInitiatedRequestTotalDuration>(
-        initiated_request_ms));
-    LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metrics::kInitiatedRequestByte>(request_size_));
-    LogIfError(metric_context_.template AccumulateMetric<
-               server_common::metrics::kInitiatedResponseByte>(response_size_));
 
     if (destination_ == metric::kBfe) {
       if constexpr (std::is_same_v<ContextT, SfeContext>) {
@@ -598,6 +600,15 @@ inline void AddSystemMetric(T* context_map) {
   context_map->AddObserverable(server_common::metrics::kMemoryKB,
                                server_common::GetMemory);
   context_map->AddObserverable(metric::kThreadCount, server_common::GetThread);
+  context_map->AddObserverable(
+      server_common::metrics::kKeyFetchFailureCount,
+      server_common::KeyFetchResultCounter::GetKeyFetchFailureCount);
+  context_map->AddObserverable(
+      server_common::metrics::kNumKeysParsedOnRecentFetch,
+      server_common::KeyFetchResultCounter::GetNumKeysParsedOnRecentFetch);
+  context_map->AddObserverable(
+      server_common::metrics::kNumKeysCachedAfterRecentFetch,
+      server_common::KeyFetchResultCounter::GetNumKeysCachedAfterRecentFetch);
 }
 
 inline void AddBuyerPartition(
@@ -635,12 +646,50 @@ inline void AddErrorTypePartition(
   std::vector<std::string> error_list = GetErrorList();
   std::vector<std::string_view> error_list_view = {error_list.begin(),
                                                    error_list.end()};
-  telemetry_config.SetPartition(metric::kRequestFailedCountByStatus.name_,
-                                error_list_view);
-  if (server_name == metric::kBfe || server_name == metric::kSfe) {
+  if (server_name == metric::kBfe) {
     telemetry_config.SetPartition(
-        metric::kInitiatedRequestErrorCountByStatus.name_, error_list_view);
+        metric::kInitiatedRequestKVErrorCountByStatus.name_, error_list_view);
+    telemetry_config.SetPartition(
+        metric::kInitiatedRequestBiddingErrorCountByStatus.name_,
+        error_list_view);
   }
+  if (server_name == metric::kSfe) {
+    telemetry_config.SetPartition(
+        metric::kInitiatedRequestKVErrorCountByStatus.name_, error_list_view);
+    telemetry_config.SetPartition(
+        metric::kInitiatedRequestBfeErrorCountByStatus.name_, error_list_view);
+    telemetry_config.SetPartition(
+        metric::kInitiatedRequestAuctionErrorCountByStatus.name_,
+        error_list_view);
+  }
+}
+
+template <typename RequestT, typename ResponseT>
+void LogCommonMetric(const RequestT* request, const ResponseT* response) {
+  auto& metric_context = metric::MetricContextMap<RequestT>()->Get(request);
+  LogIfError(metric_context.template LogUpDownCounter<
+             server_common::metrics::kTotalRequestCount>(1));
+  LogIfError(metric_context.template LogHistogramDeferred<
+             server_common::metrics::kServerTotalTimeMs>(
+      [start = absl::Now()]() -> int {
+        return (absl::Now() - start) / absl::Milliseconds(1);
+      }));
+  LogIfError(metric_context
+                 .template LogHistogram<server_common::metrics::kRequestByte>(
+                     (int)request->ByteSizeLong()));
+  LogIfError(
+      metric_context
+          .template LogHistogramDeferred<server_common::metrics::kResponseByte>(
+              [response]() -> int { return response->ByteSizeLong(); }));
+  LogIfError(metric_context.template LogUpDownCounterDeferred<
+             metric::kRequestFailedCountByStatus>(
+      [&metric_context]() -> absl::flat_hash_map<std::string, int> {
+        const absl::Status& result = metric_context.request_result();
+        if (result.ok()) {
+          return {};
+        }
+        return {{result.ToString(), 1}};
+      }));
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -20,6 +20,7 @@
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "rapidjson/document.h"
+#include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/util/json_util.h"
@@ -185,21 +186,46 @@ std::string GetBuyerMetadataJson(
       kMadeHighestScoringOtherBid, made_highest_scoring_other_bid,
       buyer_reporting_signals_obj.GetAllocator());
   if (buyer_reporting_metadata.join_count.has_value()) {
+    int join_count = buyer_reporting_metadata.join_count.value();
+    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+      absl::StatusOr<int> noised_join_count =
+          NoiseAndBucketJoinCount(join_count);
+      if (noised_join_count.ok()) {
+        join_count = noised_join_count.value();
+      }
+    }
     buyer_reporting_signals_obj.AddMember(
-        kJoinCount, buyer_reporting_metadata.join_count.value(),
-        buyer_reporting_signals_obj.GetAllocator());
+        kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
   if (buyer_reporting_metadata.recency.has_value()) {
     PS_VLOG(1, log_context) << "BuyerReportingMetadata: Recency:"
                             << buyer_reporting_metadata.recency.value();
+    long recency = buyer_reporting_metadata.recency.value();
+    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+      absl::StatusOr<long> noised_recency = NoiseAndBucketRecency(recency);
+      if (noised_recency.ok()) {
+        recency = noised_recency.value();
+      }
+    }
     buyer_reporting_signals_obj.AddMember(
-        kRecency, buyer_reporting_metadata.recency.value(),
-        buyer_reporting_signals_obj.GetAllocator());
+        kRecency, recency, buyer_reporting_signals_obj.GetAllocator());
   }
   if (buyer_reporting_metadata.modeling_signals.has_value()) {
-    buyer_reporting_signals_obj.AddMember(
-        kModelingSignalsTag, buyer_reporting_metadata.modeling_signals.value(),
-        buyer_reporting_signals_obj.GetAllocator());
+    int modeling_signals = buyer_reporting_metadata.modeling_signals.value();
+    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+      absl::StatusOr<int> noised_modeling_signals =
+          NoiseAndMaskModelingSignals(modeling_signals);
+      if (noised_modeling_signals.ok()) {
+        modeling_signals = noised_modeling_signals.value();
+        buyer_reporting_signals_obj.AddMember(
+            kModelingSignalsTag, modeling_signals,
+            buyer_reporting_signals_obj.GetAllocator());
+      }
+    } else {
+      buyer_reporting_signals_obj.AddMember(
+          kModelingSignalsTag, modeling_signals,
+          buyer_reporting_signals_obj.GetAllocator());
+    }
   }
   rapidjson::Value seller;
   if (!buyer_reporting_metadata.seller.empty()) {
@@ -232,9 +258,10 @@ std::string GetBuyerMetadataJson(
 
 std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname, bool enable_adtech_code_logging,
+    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata) {
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    absl::string_view egress_features) {
   absl::StatusOr<std::string> seller_reporting_signals =
       GetSellerReportingSignals(winning_ad_score, publisher_hostname);
   if (!seller_reporting_signals.ok()) {
@@ -243,7 +270,9 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
     return {};
   }
   std::vector<std::shared_ptr<std::string>> input(
-      kReportingArgSize);  // ReportingArgs size
+      buyer_reporting_metadata.enable_protected_app_signals
+          ? kReportingArgSizeWithProtectedAppSignals
+          : kReportingArgSize);  // ReportingArgs size
 
   input[ReportingArgIndex(ReportingArgs::kAuctionConfig)] = auction_config;
   input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)] =
@@ -254,11 +283,15 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
       std::make_shared<std::string>("{}");
   input[ReportingArgIndex(ReportingArgs::kEnableAdTechCodeLogging)] =
       std::make_shared<std::string>(
-          absl::StrFormat("%v", enable_adtech_code_logging));
+          absl::StrFormat("%v", enable_ad_tech_code_logging));
   std::string buyer_reporting_metadata_json = GetBuyerMetadataJson(
       buyer_reporting_metadata, log_context, winning_ad_score);
   input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)] =
       std::make_shared<std::string>(buyer_reporting_metadata_json);
+  if (buyer_reporting_metadata.enable_protected_app_signals) {
+    input[ReportingArgIndex(ReportingArgs::kEgressFeatures)] =
+        std::make_shared<std::string>(egress_features);
+  }
 
   PS_VLOG(2, log_context)
       << "\n\nReporting Input Args:"
@@ -277,18 +310,19 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
 
 DispatchRequest GetReportingDispatchRequest(
     const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname, bool enable_adtech_code_logging,
+    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
-    const std::string& handler_name) {
+    const std::string& handler_name, absl::string_view egress_features) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
       .id = winning_ad_score.render(),
       .version_num = kDispatchRequestVersionNumber,
       .handler_name = handler_name,
       .input = GetReportingInput(winning_ad_score, publisher_hostname,
-                                 enable_adtech_code_logging, auction_config,
-                                 log_context, buyer_reporting_metadata),
+                                 enable_ad_tech_code_logging, auction_config,
+                                 log_context, buyer_reporting_metadata,
+                                 egress_features),
   };
 }
 

@@ -113,14 +113,16 @@ cc_test(
 cc_test(
     name = "bidding_service_integration_test",
     size = "large",
-    srcs = ["bidding_service_integration_test.cc"],
+    srcs = [
+        "bidding_service_integration_test.cc",
+    ],
     deps = [
         ":bidding_service",
         ":generate_bids_reactor",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
-        "//services/bidding_service/code_wrapper:buyer_code_wrapper_test",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper_test_constants",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
@@ -177,6 +179,9 @@ cc_proto_library(
 cc_binary(
     name = "server",
     srcs = ["bidding_main.cc"],
+    defines = select({
+        "//conditions:default": [],
+    }),
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],

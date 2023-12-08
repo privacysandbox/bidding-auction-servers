@@ -21,6 +21,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "include/gmock/gmock.h"
 #include "include/gtest/gtest.h"
+#include "services/common/compression/gzip.h"
 #include "services/common/test/random.h"
 #include "services/common/util/json_util.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
@@ -34,6 +35,14 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr char kSellerOriginDomain[] = "seller.com";
+constexpr char kTestProtectedAppSignals[] = R"JSON({
+   "ad_tech_A" : {
+      "protected_app_signals" : {
+         "app_install_signals" : "/gH/AQ==",
+         "encoding_version" : 0
+      }
+   }
+})JSON";
 
 rapidjson::Document ProtoToDocument(const google::protobuf::Message& message) {
   std::string json_string;
@@ -200,13 +209,19 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
                                                 enable_debug_reporting))
           .first;
 
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request = server_common::ParseEncapsulatedRequest(
+          select_ad_reqcurrent_all_debug_urls_chars
+              ->protected_auction_ciphertext());
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
   // Decrypt.
   server_common::PrivateKey private_key;
   private_key.key_id = std::to_string(kTestKeyId);
   private_key.private_key = GetHpkePrivateKey(kDefaultPrivateKey);
   auto decrypted_response = server_common::DecryptEncapsulatedRequest(
-      private_key, select_ad_reqcurrent_all_debug_urls_chars
-                       ->protected_auction_ciphertext());
+      private_key, *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   absl::StatusOr<server_common::DecodedRequest> decoded_request =
@@ -222,6 +237,98 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
 
   EXPECT_TRUE(actual.value().enable_debug_reporting());
 }
+
+TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
+  log::PS_VLOG_IS_ON(0, 10);
+  auto input = R"JSON(
+    {
+       "auction_config" : {
+          "auction_signals" : "{\"a\":\"1\"}",
+          "buyer_list" : [
+             "ad_tech_A"
+          ],
+          "buyer_timeout_ms" : 1,
+          "per_buyer_config" : {
+             "ad_tech_A" : {
+                "buyer_debug_id" : "buyer_debug_id",
+                "buyer_signals" : "{\"h3\": \"1\"}"
+             }
+          },
+          "seller" : "ad_tech_B",
+          "seller_debug_id" : "seller_debug_id",
+          "seller_signals" : "[10137]"
+       },
+       "client_type" : "CLIENT_TYPE_ANDROID",
+       "raw_protected_audience_input" : {
+          "enable_debug_reporting" : true,
+          "generation_id" : "1",
+          "publisher_name" : "test.com",
+          "raw_buyer_input" : {
+            "ad_tech_A": {
+            "interest_groups": [
+               {
+                "ad_render_ids": [
+                 "1"
+                ],
+                "bidding_signals_keys": [
+                 "2"
+                ],
+                "name": "3",
+                "user_bidding_signals": "[4]"
+               }
+              ]
+            }
+          }
+       }
+    })JSON";
+  auto select_ad_req =
+      std::move(PackagePlainTextSelectAdRequest(
+                    input, CLIENT_TYPE_ANDROID, kDefaultPublicKey, kTestKeyId,
+                    /*enable_debug_reporting=*/true, kTestProtectedAppSignals)
+                    .first);
+
+  auto parsed_encapsulated_request = server_common::ParseEncapsulatedRequest(
+      select_ad_req->protected_auction_ciphertext());
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
+  // Decrypt.
+  server_common::PrivateKey private_key;
+  private_key.key_id = std::to_string(kTestKeyId);
+  private_key.private_key = GetHpkePrivateKey(kDefaultPrivateKey);
+  auto decrypted_response = server_common::DecryptEncapsulatedRequest(
+      private_key, *parsed_encapsulated_request);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  absl::StatusOr<server_common::DecodedRequest> decoded_request =
+      server_common::DecodeRequestPayload(
+          decrypted_response->GetPlaintextData());
+  ASSERT_TRUE(decoded_request.ok()) << decoded_request.status();
+
+  // Decode.
+  ProtectedAuctionInput protected_auction_input;
+  ASSERT_TRUE(protected_auction_input.ParseFromArray(
+      decoded_request->compressed_data.data(),
+      decoded_request->compressed_data.size()));
+
+  const auto& buyer_input = protected_auction_input.buyer_input();
+  ASSERT_NE(buyer_input.find("ad_tech_A"), buyer_input.end())
+      << protected_auction_input.DebugString();
+  const auto& found_buyer_input = buyer_input.at("ad_tech_A");
+  absl::StatusOr<std::string> decompressed_buyer_input =
+      GzipDecompress(found_buyer_input);
+  ASSERT_TRUE(decompressed_buyer_input.ok())
+      << decompressed_buyer_input.status();
+  BuyerInput decoded_buyer_input;
+  ASSERT_TRUE(decoded_buyer_input.ParseFromArray(
+      decompressed_buyer_input->data(), decompressed_buyer_input->size()))
+      << protected_auction_input.DebugString();
+  EXPECT_TRUE(decoded_buyer_input.has_protected_app_signals());
+  EXPECT_TRUE(!decoded_buyer_input.protected_app_signals()
+                   .app_install_signals()
+                   .empty());
+}
+
 }  // namespace
 
 }  // namespace privacy_sandbox::bidding_auction_servers

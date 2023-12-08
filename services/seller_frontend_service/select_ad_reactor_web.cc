@@ -66,15 +66,48 @@ SelectAdReactorForWeb::SelectAdReactorForWeb(
     : SelectAdReactor(context, request, response, clients, config_client,
                       fail_fast, max_buyers_solicited) {}
 
+BiddingGroupsMap SelectAdReactorForWeb::GetBiddingGroups() {
+  BiddingGroupsMap bidding_groups;
+  for (const auto& [buyer, ad_with_bids] : shared_buyer_bids_map_) {
+    // Mapping from buyer to interest groups that are associated with non-zero
+    // bids.
+    absl::flat_hash_set<absl::string_view> buyer_interest_groups;
+    for (const auto& ad_with_bid : ad_with_bids->bids()) {
+      if (ad_with_bid.bid() > 0) {
+        buyer_interest_groups.insert(ad_with_bid.interest_group_name());
+      }
+    }
+    const auto& buyer_input = buyer_inputs_->at(buyer);
+    AuctionResult::InterestGroupIndex ar_interest_group_index;
+    int ig_index = 0;
+    for (const auto& interest_group : buyer_input.interest_groups()) {
+      // If the interest group name is one of the groups returned by the bidding
+      // service then record its index.
+      if (buyer_interest_groups.contains(interest_group.name())) {
+        ar_interest_group_index.add_index(ig_index);
+      }
+      ig_index++;
+    }
+    bidding_groups.try_emplace(buyer, std::move(ar_interest_group_index));
+  }
+  return bidding_groups;
+}
+
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const BiddingGroupsMap& bidding_group_map,
     const std::optional<AuctionResult::Error>& error) {
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
-  PS_ASSIGN_OR_RETURN(
-      std::string encoded_data,
-      Encode(high_score, bidding_group_map, error, error_handler));
+  std::string encoded_data;
+  if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+    PS_ASSIGN_OR_RETURN(
+        encoded_data,
+        EncodeComponent(request_->auction_config().top_level_seller(),
+                        high_score, GetBiddingGroups(), error, error_handler));
+  } else {
+    PS_ASSIGN_OR_RETURN(encoded_data, Encode(high_score, GetBiddingGroups(),
+                                             error, error_handler));
+  }
   PS_VLOG(kPlain, log_context_)
       << "AuctionResult:\n"
       << ([&]() {

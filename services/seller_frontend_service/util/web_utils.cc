@@ -376,6 +376,42 @@ absl::Status CborSerializeScoreAdResponse(
   return absl::OkStatus();
 }
 
+absl::Status CborSerializeComponentScoreAdResponse(
+    absl::string_view top_level_seller,
+    const ScoreAdsResponse::AdScore& ad_score,
+    const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
+    cbor_item_t& root) {
+  // Replace bid if modified bid is present for a device component auction.
+  if (ad_score.bid() == 0.0f) {
+    PS_RETURN_IF_ERROR(
+        CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
+  } else {
+    PS_RETURN_IF_ERROR(
+        CborSerializeFloat(kBid, ad_score.bid(), error_handler, root));
+  }
+  PS_RETURN_IF_ERROR(
+      CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(kAdMetadata, ad_score.ad_metadata(),
+                                         error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
+      kAdComponents, ad_score.component_renders(), error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
+                                         error_handler, root));
+  PS_RETURN_IF_ERROR(
+      CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(kTopLevelSeller, top_level_seller,
+                                         error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeWinReportingUrls(
+      ad_score.win_reporting_urls(), error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kInterestGroupName, ad_score.interest_group_name(), error_handler, root));
+  PS_RETURN_IF_ERROR(CborSerializeString(kInterestGroupOwner,
+                                         ad_score.interest_group_owner(),
+                                         error_handler, root));
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> GetCborSerializedAuctionResult(
     ErrorHandler error_handler, cbor_item_t& cbor_data_root) {
   // Serialize the payload to CBOR.
@@ -898,7 +934,8 @@ absl::Status CborSerializeInteractionReportingUrls(
 absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupMap& bidding_group_map,
-    std::optional<AuctionResult::Error> error, ErrorHandler error_handler) {
+    const std::optional<AuctionResult::Error>& error,
+    ErrorHandler error_handler) {
   // CBOR data's root handle. When serializing the auction result to CBOR, we
   // use this handle to keep the temporary data.
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
@@ -910,6 +947,32 @@ absl::StatusOr<std::string> Encode(
   } else if (high_score.has_value()) {
     PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
         *high_score, bidding_group_map, error_handler, *cbor_internal));
+  } else {
+    PS_RETURN_IF_ERROR(
+        CborSerializeBool(kChaff, true, error_handler, *cbor_internal));
+  }
+
+  return GetCborSerializedAuctionResult(error_handler, *cbor_internal);
+}
+
+absl::StatusOr<std::string> EncodeComponent(
+    absl::string_view top_level_seller,
+    const std::optional<ScoreAdsResponse::AdScore>& high_score,
+    const BiddingGroupMap& bidding_group_map,
+    const std::optional<AuctionResult::Error>& error,
+    ErrorHandler error_handler) {
+  // CBOR data's root handle. When serializing the auction result to CBOR, we
+  // use this handle to keep the temporary data.
+  ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
+  auto* cbor_internal = cbor_data_root.get();
+
+  if (error.has_value()) {
+    PS_RETURN_IF_ERROR(
+        CborSerializeError(*error, error_handler, *cbor_internal));
+  } else if (high_score.has_value()) {
+    PS_RETURN_IF_ERROR(CborSerializeComponentScoreAdResponse(
+        top_level_seller, *high_score, bidding_group_map, error_handler,
+        *cbor_internal));
   } else {
     PS_RETURN_IF_ERROR(
         CborSerializeBool(kChaff, true, error_handler, *cbor_internal));
@@ -1255,6 +1318,20 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         PS_RETURN_IF_ERROR(
             CborDecodeReportingUrlsToProto(kv.value, auction_result))
             << absl::StrFormat("Error decoding winReportingUrls");
+      } break;
+      case 10: {  // kAdMetadata
+        if (!cbor_isa_string(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected AdMetadata value to be a string");
+        }
+        auction_result.set_ad_metadata(CborDecodeString(kv.value));
+      } break;
+      case 11: {  // kTopLevelSeller
+        if (!cbor_isa_string(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected Top Level Seller value to be a string");
+        }
+        auction_result.set_top_level_seller(CborDecodeString(kv.value));
       } break;
       default:
         // Unexpected key in the auction result CBOR

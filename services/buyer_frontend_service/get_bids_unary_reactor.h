@@ -115,6 +115,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);
 
+  // Gets the number of outbound bidding requests to the bidding service.
+  int GetNumberOfBiddingCalls();
+
   // References for state, request, response and context from gRPC.
   // Should be released by gRPC
   // https://github.com/grpc/grpc/blob/dbc45208e2bfe14f01b1cbb06d0cd7c01077debb/include/grpcpp/server_context.h#L604
@@ -164,7 +167,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   void MayLogRawRequest();
 
   // Gets Protected Audience Bids.
-  void GetProtectedAudienceBids();
+  void MayGetProtectedAudienceBids();
 
   // Gets Protected App Signals bid from bidding if the feature is enabled.
   void MayGetProtectedSignalsBids();

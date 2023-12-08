@@ -22,6 +22,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/test/utils/ohttp_utils.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_utils.h"
+#include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/secure_invoke_lib.h"
 
@@ -33,64 +34,6 @@ constexpr char kProtoFormat[] = "PROTO";
 
 using ::privacy_sandbox::bidding_auction_servers::ClientType;
 using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
-
-ABSL_FLAG(
-    std::string, input_file, "",
-    "Complete path to the file containing unencrypted request"
-    "The file may contain JSON or protobuf based GetBidsRequest payload.");
-
-ABSL_FLAG(std::string, input_format, kJsonFormat,
-          "Format of request in the input file. Valid values: JSON, PROTO "
-          "(Note: for SelectAdRequest to BFE only JSON is supported)");
-
-ABSL_FLAG(std::string, json_input_str, "",
-          "The unencrypted JSON request to be used. If provided, this will be "
-          "used to send request rather than loading it from an input file");
-
-ABSL_FLAG(std::string, op, "",
-          "The operation to be performed - invoke/encrypt.");
-
-ABSL_FLAG(std::string, host_addr, "",
-          "The Address for the SellerFrontEnd server to be invoked.");
-
-ABSL_FLAG(std::string, client_ip, "",
-          "The IP for the B&A client to be forwarded to KV servers.");
-
-ABSL_FLAG(std::string, client_accept_language, "en-US,en;q=0.9",
-          "The accept-language header for the B&A client to be forwarded to KV "
-          "servers.");
-
-ABSL_FLAG(
-    std::string, client_user_agent,
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-    "The user-agent header for the B&A client to be forwarded to KV servers.");
-
-ABSL_FLAG(std::string, client_type, "",
-          "Client type (browser or android) to use for request (defaults to "
-          "browser)");
-
-ABSL_FLAG(bool, insecure, false,
-          "Set to true to send a request to an SFE server running with "
-          "insecure credentials");
-
-ABSL_FLAG(std::string, target_service, kSfe,
-          "Service name to which the request must be sent to.");
-
-// Coordinator key defaults correspond to defaults in
-// https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h#L29C34-L29C34
-ABSL_FLAG(std::string, public_key,
-          "87ey8XZPXAd+/+ytKv2GFUWW5j9zdepSJ2G4gebDwyM=",
-          "Use exact output from the coordinator. Public key. Must be base64.");
-ABSL_FLAG(std::string, key_id, "4000000000000000",
-          "Use exact output from the coordinator. Hexadecimal key id string "
-          "with trailing zeros.");
-
-ABSL_FLAG(bool, enable_debug_reporting, false,
-          "Set to true to send a request to an SFE server with "
-          "debug reporting enabled for this request");
-
-namespace {}  // namespace
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);

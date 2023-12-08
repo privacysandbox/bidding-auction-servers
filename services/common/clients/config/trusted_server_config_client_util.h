@@ -17,6 +17,8 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 class TrustedServerConfigUtil {
@@ -26,13 +28,14 @@ class TrustedServerConfigUtil {
   explicit TrustedServerConfigUtil(bool init_config_client);
 
   // Returns the server instance id.
-  std::string GetInstanceId() noexcept;
+  absl::string_view GetInstanceId() const { return instance_id_; }
   // Returns the configured environment.
-  std::string GetEnvironment() noexcept;
+  absl::string_view GetEnvironment() const { return environment_; }
   // Returns the service that is running.
-  std::string GetOperator() noexcept;
+  absl::string_view GetOperator() const { return operator_; }
   // Returns the component that is running.
-  std::string GetService() noexcept;
+  absl::string_view GetService() const { return service_; }
+
   // Returns a config param prefix that is to be prepended to all keys fetched
   // from the metadata store.
   std::string GetConfigParameterPrefix() noexcept;

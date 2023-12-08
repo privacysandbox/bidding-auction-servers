@@ -218,6 +218,19 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
   }
 }
 
+TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
+  GetBidsRequest::GetBidsRawRequest input;
+  input.set_top_level_seller(MakeARandomString());
+
+  auto raw_output = CreateGenerateBidsRawRequest(
+      input, input.buyer_input(), std::make_unique<BiddingSignals>(),
+      LogContext{});
+
+  EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
+}
+
 TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForBrowserIG) {
   GetBidsRequest::GetBidsRawRequest input;
 

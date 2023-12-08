@@ -24,20 +24,20 @@ namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr uint64_t kProtectedAudienceGenerateBidBlobVersion = 1;
 inline constexpr uint64_t kProtectedAppSignalsGenerateBidBlobVersion = 2;
 inline constexpr uint64_t kPrepareDataForAdRetrievalBlobVersion = 3;
-inline constexpr char kProtectedAppSignals[] = "protectedAppSignals";
-inline constexpr char kProtectedEmbeddings[] = "protectedEmbeddings";
+inline constexpr char kDecodedSignals[] = "decodedSignals";
+inline constexpr char kRetrievalData[] = "retrievalData";
 inline constexpr char kPrepareDataForAdRetrievalHandler[] =
     "prepareDataForAdRetrieval";
-inline constexpr char kPrepareDataForAdRetrievalEntryFunction[] =
+inline constexpr char kPrepareDataForAdRetrievalEntryFunctionName[] =
     "prepareDataForAdRetrievalEntryFunction";
 inline constexpr char kPrepareDataForAdRetrievalArgs[] =
-    "encodedOnDeviceSignals, encodedOnDeviceSignalsVersion, "
+    "encodedOnDeviceSignalsVersion, "
     "sellerAuctionSignals, contextualSignals";
 constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
     "interest_group, auction_signals, buyer_signals, trusted_bidding_signals, "
     "device_signals";
 constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
-    "ads, onDeviceDecodedSignals, sellerAuctionSignals, buyerSignals, "
+    "ads, sellerAuctionSignals, buyerSignals, "
     "preprocessedDataForRetrieval";
 
 // Params related to the UDF that can be used to retrieve the protected
@@ -56,11 +56,9 @@ enum class PrepareDataForRetrievalUdfArgs {
 inline constexpr int kNumGenerateBidsUdfArgs = 7;
 enum class GenerateBidsUdfArgs {
   kAds = 0,
-  kProtectedAppSignals,
   kAuctionSignals,
   kBuyerSignals,
-  kContextualEmbeddings,
-  kBiddingSignals,
+  kPreProcessedDataForRetrieval,
   kFeatureFlags,
 };
 

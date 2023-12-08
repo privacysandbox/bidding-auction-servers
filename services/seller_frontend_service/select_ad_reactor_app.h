@@ -44,8 +44,6 @@ class SelectAdReactorForApp : public SelectAdReactor {
  private:
   absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const google::protobuf::Map<
-          std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
       const std::optional<AuctionResult::Error>& error) override;
 
   [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
@@ -71,7 +69,7 @@ class SelectAdReactorForApp : public SelectAdReactor {
   // specified PAS, then the created GetBid request will have separate PA and
   // PAS buyer inputs populated properly.
   std::unique_ptr<GetBidsRequest::GetBidsRawRequest> CreateGetBidsRequest(
-      absl::string_view seller, const std::string& buyer_ig_owner,
+      const std::string& buyer_ig_owner,
       const BuyerInput& buyer_input) override;
 
   // Populates PAS bids in the scoring request to be sent to auction service.

@@ -32,6 +32,7 @@ cc_library(
     hdrs = ["reporting_helper.h"],
     visibility = ["//visibility:public"],
     deps = [
+        ":noiser_and_bucketer",
         ":reporting_response",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
@@ -46,6 +47,19 @@ cc_library(
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
+    ],
+)
+
+cc_library(
+    name = "noiser_and_bucketer",
+    srcs = ["noiser_and_bucketer.cc"],
+    hdrs = ["noiser_and_bucketer.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/random",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
 
@@ -70,5 +84,23 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "noiser_and_bucketer_test",
+    size = "small",
+    srcs = [
+        "noiser_and_bucketer_test.cc",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":noiser_and_bucketer",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
     ],
 )

@@ -80,13 +80,17 @@ void SetupBuyerClientMock(
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
     const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
     bool repeated_get_allowed, bool expect_all_buyers_solicited,
-    int* num_buyers_solicited) {
+    int* num_buyers_solicited, absl::string_view top_level_seller) {
   auto MockGetBids =
-      [bid, num_buyers_solicited](
+      [bid, num_buyers_solicited, top_level_seller](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
           const RequestMetadata& metadata, GetBidDoneCallback on_done,
           absl::Duration timeout) {
         ABSL_LOG(INFO) << "Returning mock bids";
+        // Check top level seller is populated for component auctions.
+        if (!top_level_seller.empty()) {
+          EXPECT_EQ(get_values_request->top_level_seller(), top_level_seller);
+        }
         if (bid.has_value()) {
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid));
@@ -246,7 +250,8 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
   auto ohttp_request = CreateValidEncryptedRequest(std::move(*framed_request));
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
-  std::string encrypted_request = ohttp_request->EncapsulateAndSerialize();
+  std::string encrypted_request =
+      '\0' + ohttp_request->EncapsulateAndSerialize();
   auto context = std::move(*ohttp_request).ReleaseContext();
   return {std::move(encrypted_request), std::move(context)};
 }

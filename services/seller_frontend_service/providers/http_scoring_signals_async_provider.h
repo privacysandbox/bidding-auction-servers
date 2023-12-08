@@ -27,8 +27,8 @@ class HttpScoringSignalsAsyncProvider final
     : public ScoringSignalsAsyncProvider {
  public:
   explicit HttpScoringSignalsAsyncProvider(
-      std::unique_ptr<
-          AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>);
+      std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>,
+      bool enable_protected_app_signals = false);
 
   // HttpScoringSignalsAsyncProvider is neither copyable nor movable.
   HttpScoringSignalsAsyncProvider(const HttpScoringSignalsAsyncProvider&) =
@@ -50,6 +50,7 @@ class HttpScoringSignalsAsyncProvider final
  private:
   std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
       http_seller_kv_async_client_;
+  const bool enable_protected_app_signals_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

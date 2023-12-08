@@ -277,8 +277,12 @@ message AuctionResult {
   // Type of the winning ad.
   AdType ad_type = 14;
 
-  // Top level seller name/domain returned for component auctions.
+  // Optional name/domain for top-level seller in case this
+  // is a component auction.
   string top_level_seller = 15;
+
+  // Arbitrary metadata to pass to the top-level seller.
+  string ad_metadata = 16;
 }
 
 // SellerFrontEnd service (also known as SFE) operated by SSP / Seller.

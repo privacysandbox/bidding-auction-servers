@@ -66,7 +66,7 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
   // initialize
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-  metric::BiddingContextMap(
+  metric::MetricContextMap<GenerateBidsRequest>(
       server_common::telemetry::BuildDependentConfig(config_proto));
   std::unique_ptr<NiceMock<MockCryptoClientWrapper>> crypto_client =
       std::make_unique<NiceMock<MockCryptoClientWrapper>>();
@@ -275,7 +275,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
                    BatchDispatchDoneCallback batch_callback) {
         // First dispatch happens for `prepareDataForAdRetrieval` UDF.
         return MockRomaExecution(batch, std::move(batch_callback),
-                                 kPrepareDataForAdRetrievalEntryFunction,
+                                 kPrepareDataForAdRetrievalEntryFunctionName,
                                  kPrepareDataForAdRetrievalBlobVersion,
                                  CreatePrepareDataForAdsRetrievalResponse());
       });
@@ -315,7 +315,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadGenerateBidResponseFinishesRpc) {
         if (num_roma_requests_ == 1) {
           // First dispatch happens for `prepareDataForAdRetrieval` UDF.
           return MockRomaExecution(batch, std::move(batch_callback),
-                                   kPrepareDataForAdRetrievalEntryFunction,
+                                   kPrepareDataForAdRetrievalEntryFunctionName,
                                    kPrepareDataForAdRetrievalBlobVersion,
                                    CreatePrepareDataForAdsRetrievalResponse());
         } else if (num_roma_requests_ == 2) {

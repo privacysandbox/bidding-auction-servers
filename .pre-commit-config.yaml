@@ -51,9 +51,7 @@ repos:
   hooks:
   - id: git-check
   - id: script-must-not-have-extension
-    exclude: '(?x)^(
-        ci/local/presubmit_for_(local|docker)_bazel/presubmit.sh
-        )$'
+    exclude: production/packaging/gcp/build_and_test.sh
   - id: script-must-have-extension
   - id: require-ascii
     exclude: ^(CHANGELOG|.*RELEASE)\.md$

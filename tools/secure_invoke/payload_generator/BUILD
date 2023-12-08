@@ -90,6 +90,7 @@ cc_test(
     ],
     deps = [
         ":payload_packaging_lib",
+        "//services/common/compression:gzip",
         "//services/common/test:random",
         "//services/common/util:json_util",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",

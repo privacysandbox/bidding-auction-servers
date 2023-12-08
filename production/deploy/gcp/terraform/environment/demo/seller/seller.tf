@@ -81,22 +81,22 @@ module "seller" {
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
-    JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
-    JS_WORKER_QUEUE_LEN       = "" # Example: "200".
-    ROMA_TIMEOUT_MS           = "" # Example: "10000"
-    TELEMETRY_CONFIG          = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT        = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
-    ENABLE_OTEL_BASED_LOGGING = "" # Example: "false"
-    CONSENTED_DEBUG_TOKEN     = "" # Example: "<unique_id>"
-
-    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
+    JS_NUM_WORKERS                  = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    JS_WORKER_QUEUE_LEN             = "" # Example: "200".
+    ROMA_TIMEOUT_MS                 = "" # Example: "10000"
+    TELEMETRY_CONFIG                = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
+    ENABLE_OTEL_BASED_LOGGING       = "" # Example: "false"
+    CONSENTED_DEBUG_TOKEN           = "" # Example: "<unique_id>"
+    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "false"
+    # Coordinator-based attestation flags.
+    # These flags are production-ready and you do not need to change them.
+    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
-    # Coordinator-based attestation flags:
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
     SFE_PUBLIC_KEYS_ENDPOINTS                     = <<EOF
     "{
         "GCP": "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
-        "AWS": "https://publickeyservice-staging-a.aws.testing.dev/v1alpha/publicKeys"
     }"
     EOF
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
@@ -112,9 +112,6 @@ module "seller" {
     GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "https://b-us-central1-encryption-key-service-cloudfunctio-amv3tcudsq-uc.a.run.app"
     PRIVATE_KEY_CACHE_TTL_SECONDS                 = "3974400"
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "20000"
-
-    ENABLE_REPORT_RESULT_URL_GENERATION = "" # Example: "false"
-    ENABLE_REPORT_WIN_URL_GENERATION    = "" # Example: "false"
 
     SFE_TLS_KEY                        = "" # You can either set this here or via a secrets.auto.tfvars.
     SFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.

@@ -102,6 +102,28 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
     }
 )JS_CODE";
 
+constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      return {
+        ad: device_signals["topLevelSeller"],
+        desirability: 1,
+        bid: 2,
+        allowComponentAuction: true
+      }
+    }
+)JS_CODE";
+
+constexpr absl::string_view kSkipAdComponentAuctionCode = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      return {
+        ad: device_signals["topLevelSeller"],
+        desirability: 1,
+        bid: 2,
+        allowComponentAuction: false
+      }
+    }
+)JS_CODE";
+
 constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){

@@ -55,7 +55,8 @@ inline constexpr char kInvalidOhttpKeyIdError[] =
     "Invalid key ID provided in OHTTP encapsulated request for "
     "protected_audience_ciphertext.";
 inline constexpr char kMissingPrivateKey[] =
-    "Unable to get private key for the key ID in OHTTP encapsulated request.";
+    "Unable to get private key for the key ID in OHTTP encapsulated request. "
+    "Key ID: %s";
 inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
 inline constexpr char kMalformedEncapsulatedRequest[] =
     "Malformed OHTTP encapsulated request provided for "
@@ -78,6 +79,8 @@ inline constexpr char kWrongSellerDomain[] =
     "Seller domain passed in request does not match this server's domain";
 inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
     "One or more buyer keys are empty in per buyer config map";
+inline constexpr char kDeviceComponentAuctionWithAndroid[] =
+    "Device orchestrated Component Auctions not supported for Android";
 
 inline constexpr char kNoBidsReceived[] = "No bids received.";
 
@@ -90,6 +93,9 @@ struct KeyContext {
   std::unique_ptr<quiche::ObliviousHttpRequest::Context> context;
 
   server_common::PrivateKey private_key;
+
+  // Media type used to encrypt the SelectAdRequest.
+  absl::string_view request_label;
 };
 
 // This is a gRPC reactor that serves a single GenerateBidsRequest.
@@ -105,18 +111,19 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
                            const TrustedServersConfigClient& config_client,
                            bool fail_fast = true, int max_buyers_solicited = 2);
 
-  // Initiate the asynchronous execution of the SelectingWinningAdRequest.
+  // Initiate the asynchronous execution of the SelectAdRequest.
   virtual void Execute();
 
  protected:
   using ErrorHandlerSignature = const std::function<void(absl::string_view)>&;
+  using AuctionConfig = SelectAdRequest::AuctionConfig;
+  // Todo(b/306038754): Move this to B&A API
+  enum class AuctionScope : int { kSingleSeller, kDeviceComponentSeller };
 
   // Gets a string representing the response to be returned to the client. This
   // data will be encrypted before it is sent back to the client.
   virtual absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const google::protobuf::Map<
-          std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
       const std::optional<AuctionResult::Error>& error) = 0;
 
   // Decodes the plaintext payload and returns a `ProtectedAudienceInput` proto.
@@ -136,8 +143,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
                             encoded_buyer_inputs) = 0;
 
   virtual std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-  CreateGetBidsRequest(absl::string_view seller,
-                       const std::string& buyer_ig_owner,
+  CreateGetBidsRequest(const std::string& buyer_ig_owner,
                        const BuyerInput& buyer_input);
 
   virtual std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
@@ -152,7 +158,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
   template <typename T>
-  void ValidateProtectedAuctionInput(const T& protected_auction_input) {
+  void ValidateProtectedAuctionInput(const T& protected_auction_input,
+                                     AuctionScope auction_scope) {
     if (protected_auction_input.generation_id().empty()) {
       ReportError(ErrorVisibility::CLIENT_VISIBLE, kMissingGenerationId,
                   ErrorCode::CLIENT_SIDE);
@@ -176,10 +183,22 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
           observed_errors.insert(kEmptyInterestGroupOwner);
           any_error = true;
         }
-        if (buyer_input.interest_groups().empty()) {
-          observed_errors.insert(
-              absl::StrFormat(kMissingInterestGroups, buyer));
+        if (buyer_input.interest_groups().empty() &&
+            !buyer_input.has_protected_app_signals()) {
+          observed_errors.insert(absl::StrFormat(
+              kMissingInterestGroupsAndProtectedSignals, buyer));
           any_error = true;
+        }
+        if (!buyer_input.protected_app_signals()
+                 .app_install_signals()
+                 .empty() &&
+            auction_scope == AuctionScope::kDeviceComponentSeller) {
+          // Invalid input. Device component auctions can't contain PAS
+          // audience. This path should not be possible since app install
+          // signals will not be created for web reactor and
+          // kDeviceComponentSeller cannot be conducted for app reactor.
+          PS_VLOG(2, log_context_)
+              << "Device component auctions can't contain PAS audience";
         }
         if (any_error) {
           continue;
@@ -227,7 +246,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // buyer: a string representing the buyer, identified as an IG owner.
   // buyer_input: input for bidding.
   void FetchBid(const std::string& buyer_ig_owner,
-                const BuyerInput& buyer_input, absl::string_view seller);
+                const BuyerInput& buyer_input);
   // Handles recording the fetched bid to state.
   // This is called by the grpc buyer client when the request is finished,
   // and will subsequently call update pending bids state which will update how
@@ -273,10 +292,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   void OnScoreAdsDone(
       absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
           status);
-
-  // Gets the bidding groups after scoring is done.
-  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
-  GetBiddingGroups();
 
   // Sends debug reporting pings to buyers for the interest groups.
   void PerformDebugReporting(
@@ -362,6 +377,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
+
+  // Scope for current auction (single seller, top level or component)
+  const AuctionScope auction_scope_;
 
  private:
   // Keeps track of how many buyer bids were expected initially and how many

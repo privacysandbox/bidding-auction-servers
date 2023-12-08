@@ -46,7 +46,8 @@ absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
       GetOhttpKeyConfig(key_id, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
                         EVP_HPKE_HKDF_SHA256, EVP_HPKE_AES_256_GCM);
   return quiche::ObliviousHttpRequest::CreateClientObliviousRequest(
-      std::move(plaintext_payload), GetHpkePublicKey(public_key_hex), config);
+      std::move(plaintext_payload), GetHpkePublicKey(public_key_hex), config,
+      kBiddingAuctionOhttpRequestLabel);
 }
 
 absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(
@@ -58,8 +59,9 @@ absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(
                         EVP_HPKE_HKDF_SHA256, EVP_HPKE_AES_256_GCM);
   const auto http_client = quiche::ObliviousHttpClient::Create(
       GetHpkePublicKey(public_key_hex), config);
-  return http_client->DecryptObliviousHttpResponse(
-      absl::StrCat(encapsulated_response), oblivious_request_context);
+  return quiche::ObliviousHttpResponse::CreateClientObliviousResponse(
+      absl::StrCat(encapsulated_response), oblivious_request_context,
+      kBiddingAuctionOhttpResponseLabel);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

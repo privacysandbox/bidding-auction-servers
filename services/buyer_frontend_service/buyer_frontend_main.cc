@@ -26,7 +26,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
 #include "services/buyer_frontend_service/buyer_frontend_service.h"
 #include "services/buyer_frontend_service/providers/http_bidding_signals_async_provider.h"
@@ -39,7 +38,6 @@
 #include "services/common/clients/http_kv_server/buyer/fake_buyer_key_value_async_http_client.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-#include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/signal_handler.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -200,30 +198,8 @@ absl::Status RunServer() {
         buyer_kv_server_addr,
         std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
   }
-  server_common::telemetry::BuildDependentConfig telemetry_config(
-      config_client
-          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
-              TELEMETRY_CONFIG)
-          .server_config);
-  std::string collector_endpoint =
-      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
-  server_common::InitTelemetry(
-      config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      telemetry_config.LogsAllowed() &&
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  AddErrorTypePartition(telemetry_config, metric::kBfe);
-  AddSystemMetric(metric::BfeContextMap(
-      telemetry_config,
-      server_common::ConfigurePrivateMetrics(
-          CreateSharedAttributes(&config_util),
-          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
-          collector_endpoint),
-      config_util.GetService(), kOpenTelemetryVersion.data()));
+
+  InitTelemetry<GetBidsRequest>(config_util, config_client, metric::kBfe);
 
   BuyerFrontEndService buyer_frontend_service(
       std::make_unique<HttpBiddingSignalsAsyncProvider>(

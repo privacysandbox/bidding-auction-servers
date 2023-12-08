@@ -34,7 +34,7 @@ inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-inline constexpr int kNumAuctionResultKeys = 10;
+inline constexpr int kNumAuctionResultKeys = 12;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // WinReportingUrls response.
@@ -83,6 +83,8 @@ inline constexpr char kBiddingGroups[] = "biddingGroups";
 inline constexpr char kInterestGroupName[] = "interestGroupName";
 inline constexpr char kInterestGroupOwner[] = "interestGroupOwner";
 inline constexpr char kWinReportingUrls[] = "winReportingURLs";
+inline constexpr char kAdMetadata[] = "adMetadata";
+inline constexpr char kTopLevelSeller[] = "topLevelSeller";
 
 inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
     kRequestRootKeys = {

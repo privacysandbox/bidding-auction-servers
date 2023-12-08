@@ -36,9 +36,9 @@ TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
   ASSERT_TRUE(map.ok());
   EXPECT_EQ(map->size(), 2);
 
-  EXPECT_EQ((*map)[server_common::CloudPlatform::GCP][0],
+  EXPECT_EQ((*map)[server_common::CloudPlatform::kGcp][0],
             "https://publickeyservice.foo/v1alpha/publicKeys");
-  EXPECT_EQ((*map)[server_common::CloudPlatform::AWS][0],
+  EXPECT_EQ((*map)[server_common::CloudPlatform::kAws][0],
             "https://publickeyservice.cloudfront.net/v1alpha/publicKeys");
 }
 

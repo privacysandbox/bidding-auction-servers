@@ -29,7 +29,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest, GetCachesClientObjects) {
   std::string ig_owner = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
   BuyerServiceEndpoint endpoint = {bfe_lb_url,
-                                   server_common::CloudPlatform::GCP};
+                                   server_common::CloudPlatform::kGcp};
 
   absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
   host_addr_map.emplace(ig_owner, endpoint);
@@ -44,7 +44,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest, GetReturnsNonNullClient) {
   std::string ig_owner = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
   BuyerServiceEndpoint endpoint = {bfe_lb_url,
-                                   server_common::CloudPlatform::GCP};
+                                   server_common::CloudPlatform::kGcp};
 
   absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
   host_addr_map.emplace(ig_owner, endpoint);
@@ -62,7 +62,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest,
   std::string ig_owner_2 = MakeARandomString();
   std::string bfe_lb_url = MakeARandomString();
   BuyerServiceEndpoint endpoint = {bfe_lb_url,
-                                   server_common::CloudPlatform::GCP};
+                                   server_common::CloudPlatform::kGcp};
 
   absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
   host_addr_map.emplace(ig_owner_1, endpoint);

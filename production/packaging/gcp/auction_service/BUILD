@@ -73,7 +73,9 @@ container_image(
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
     ports = ["50051"],
 )
 

@@ -47,8 +47,6 @@ class SelectAdReactorInvalidClient : public SelectAdReactor {
  private:
   absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const google::protobuf::Map<
-          std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
       const std::optional<AuctionResult::Error>& error) override;
 
   [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(

@@ -132,7 +132,7 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
           "$2": "$3"
         }
       })JSON",
-      kProtectedAppSignals, protected_app_signals, kProtectedEmbeddings,
+      kDecodedSignals, protected_app_signals, kRetrievalData,
       protected_embeddings);
 }
 
@@ -148,8 +148,8 @@ std::string CreateGenerateBidsUdfResponse(
       "response": {
         "render": "$0",
         "bid": $1,
-        "egress_features": "$2",
-        "debug_report_urls": $3
+        "egressFeatures": "$2",
+        "debugReportUrls": $3
       },
       "logs": []
     }
@@ -174,7 +174,7 @@ void SetupProtectedAppSignalsRomaExpectations(
           // First dispatch happens for `prepareDataForAdRetrieval` UDF.
           return MockRomaExecution(
               batch, std::move(batch_callback),
-              kPrepareDataForAdRetrievalEntryFunction,
+              kPrepareDataForAdRetrievalEntryFunctionName,
               kPrepareDataForAdRetrievalBlobVersion,
               prepare_data_for_ad_retrieval_udf_response.has_value()
                   ? *prepare_data_for_ad_retrieval_udf_response
@@ -192,31 +192,15 @@ void SetupProtectedAppSignalsRomaExpectations(
 }
 
 absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
-    absl::string_view ads, absl::string_view contextual_embeddings) {
+    absl::string_view ads) {
   return AdRetrievalOutput::FromJson(absl::Substitute(R"JSON(
   {
-    "partitions": [
-        {
-            "id": 0,
-            "keyGroupOutputs": [
-                {
-                    "tags": [
-                        "ads"
-                    ],
-                    "keyValues": $0
-                },
-                {
-                    "tags": [
-                        "contextualEmbeddings"
-                    ],
-                    "keyValues": $1
-                }
-            ]
-        }
-    ]
+    "singlePartition": {
+      "id": 0,
+      "stringOutput": "$0"
+    }
   })JSON",
-                                                      ads,
-                                                      contextual_embeddings));
+                                                      ads));
 }
 
 void SetupAdRetrievalClientExpectations(

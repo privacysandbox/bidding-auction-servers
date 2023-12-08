@@ -34,6 +34,18 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "buyer_code_wrapper_test_constants",
+    srcs = ["buyer_code_wrapper.cc"],
+    hdrs = [
+        "buyer_code_wrapper_test_constants.h",
+    ],
+    deps = [
+        ":buyer_code_wrapper",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
 cc_test(
     name = "buyer_code_wrapper_test",
     size = "small",

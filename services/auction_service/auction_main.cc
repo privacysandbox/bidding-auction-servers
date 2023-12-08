@@ -30,7 +30,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "opentelemetry/metrics/provider.h"
 #include "public/cpio/interface/cpio.h"
 #include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_service.h"
@@ -45,7 +44,6 @@
 #include "services/common/code_fetch/periodic_code_fetcher.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-#include "services/common/metric/server_definition.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/signal_handler.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -71,6 +69,8 @@ ABSL_FLAG(
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
+ABSL_FLAG(std::optional<bool>, enable_report_win_input_noising, std::nullopt,
+          "Enables noising and bucketing of the inputs to reportWin");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -121,6 +121,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         SELLER_CODE_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
+  config_client.SetFlag(FLAGS_enable_report_win_input_noising,
+                        ENABLE_REPORT_WIN_INPUT_NOISING);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
                         ENABLE_OTEL_BASED_LOGGING);
@@ -297,30 +299,8 @@ absl::Status RunServer() {
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
 
-  server_common::telemetry::BuildDependentConfig telemetry_config(
-      config_client
-          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
-              TELEMETRY_CONFIG)
-          .server_config);
-  std::string collector_endpoint =
-      config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
-  server_common::InitTelemetry(
-      config_util.GetService(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      telemetry_config.LogsAllowed() &&
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
-  server_common::ConfigureTracer(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  server_common::ConfigureLogger(CreateSharedAttributes(&config_util),
-                                 collector_endpoint);
-  AddErrorTypePartition(telemetry_config, metric::kAs);
-  AddSystemMetric(metric::AuctionContextMap(
-      telemetry_config,
-      server_common::ConfigurePrivateMetrics(
-          CreateSharedAttributes(&config_util),
-          CreateMetricsOptions(telemetry_config.metric_export_interval_ms()),
-          collector_endpoint),
-      config_util.GetService(), kOpenTelemetryVersion.data()));
+  InitTelemetry<ScoreAdsRequest>(config_util, config_client, metric::kAs);
+
   std::unique_ptr<AsyncReporter> async_reporter =
       std::make_unique<AsyncReporter>(
           std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
@@ -359,6 +339,8 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
       .consented_debug_token =
           std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
+      .enable_report_win_input_noising =
+          config_client.GetBooleanParameter(ENABLE_REPORT_WIN_INPUT_NOISING),
       .max_allowed_size_debug_url_bytes =
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
       .max_allowed_size_all_debug_urls_kb =

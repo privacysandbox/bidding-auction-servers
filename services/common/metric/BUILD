@@ -36,6 +36,7 @@ cc_library(
         "//services/common/util:read_system",
         "//services/common/util:reporting_util",
         "@google_privacysandbox_servers_common//src/cpp/metric:context_map",
+        "@google_privacysandbox_servers_common//src/cpp/metric:key_fetch",
     ],
 )
 

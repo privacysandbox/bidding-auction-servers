@@ -147,7 +147,7 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
   void SetUp() override {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BfeContextMap(
+    metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
@@ -676,6 +676,40 @@ TEST_F(BuyerFrontEndServiceTest,
   raw_response.ParseFromString(response_.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 1);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       RPCErrorsWhenProtectedAppSignalsAndProtectedAudienceNotProvided) {
+  auto bidding_signals_async_provider = std::make_unique<
+      MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>();
+  EXPECT_CALL(*bidding_signals_async_provider, Get).Times(0);
+  auto bidding_async_client = std::make_unique<BiddingAsyncClientMock>();
+  EXPECT_CALL(
+      *bidding_async_client,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                         GenerateBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(0);
+  auto protected_app_signals_bidding_async_client =
+      GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          std::move(bidding_signals_async_provider),
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client)),
+      CreateGetBidsConfig());
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
+                                  /*add_protected_audience_input=*/false);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
+  EXPECT_THAT(status.error_message(), HasSubstr(kMissingInputs));
 }
 
 }  // namespace

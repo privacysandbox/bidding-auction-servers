@@ -74,7 +74,9 @@ container_image(
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
     # BFE and BFE Non-TLS Healthcheck ports, respectively:
     ports = [
         "50051",

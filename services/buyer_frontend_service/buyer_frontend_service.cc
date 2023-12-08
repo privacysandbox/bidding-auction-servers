@@ -26,32 +26,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-namespace {
-void LogMetrics(const GetBidsRequest* request, GetBidsResponse* response) {
-  auto& metric_context = metric::BfeContextMap()->Get(request);
-  LogIfError(
-      metric_context
-          .LogUpDownCounter<server_common::metrics::kTotalRequestCount>(1));
-  LogIfError(
-      metric_context
-          .LogHistogramDeferred<server_common::metrics::kServerTotalTimeMs>(
-              [start = absl::Now()]() -> int {
-                return (absl::Now() - start) / absl::Milliseconds(1);
-              }));
-  LogIfError(metric_context.LogHistogram<server_common::metrics::kRequestByte>(
-      (int)request->ByteSizeLong()));
-
-  LogIfError(metric_context
-                 .LogHistogramDeferred<server_common::metrics::kResponseByte>(
-                     [response]() -> int { return response->ByteSizeLong(); }));
-  LogIfError(metric_context.LogUpDownCounterDeferred<
-             server_common::metrics::kTotalRequestFailedCount>(
-      [&metric_context]() -> int {
-        return metric_context.is_request_successful() ? 0 : 1;
-      }));
-}
-}  // namespace
-
 BuyerFrontEndService::BuyerFrontEndService(
     std::unique_ptr<BiddingSignalsAsyncProvider> bidding_signals_async_provider,
     const BiddingServiceClientConfig& client_config,
@@ -97,7 +71,7 @@ grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
     GetBidsResponse* response) {
   auto scope = opentelemetry::trace::Scope(
       server_common::GetTracer()->StartSpan("GetBids"));
-  LogMetrics(request, response);
+  LogCommonMetric(request, response);
 
   // Will be deleted in onDone
   auto reactor = std::make_unique<GetBidsUnaryReactor>(

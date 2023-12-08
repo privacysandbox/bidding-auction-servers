@@ -56,9 +56,15 @@ TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
       PackagePayload(expected, CLIENT_TYPE_BROWSER, kDefaultPublicKey);
   ASSERT_TRUE(output.ok()) << output.status();
 
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request =
+          server_common::ParseEncapsulatedRequest(output->first);
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
   // Decrypt.
   auto decrypted_response = server_common::DecryptEncapsulatedRequest(
-      GetPrivateKey(kDefaultPrivateKey), output->first);
+      GetPrivateKey(kDefaultPrivateKey), *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   absl::StatusOr<server_common::DecodedRequest> decoded_request =
@@ -149,7 +155,7 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
           *std::move(framed_data), GetPrivateKey(kDefaultPrivateKey),
-          input_ctxt_pair->second);
+          input_ctxt_pair->second, kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
   absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(
@@ -169,10 +175,16 @@ TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
       output = PackagePayload(expected, CLIENT_TYPE_ANDROID, kDefaultPublicKey);
   ASSERT_TRUE(output.ok()) << output.status();
 
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request =
+          server_common::ParseEncapsulatedRequest(output->first);
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
   // Decrypt.
   absl::StatusOr<quiche::ObliviousHttpRequest> decrypted_response =
       server_common::DecryptEncapsulatedRequest(
-          GetPrivateKey(kDefaultPrivateKey), output->first);
+          GetPrivateKey(kDefaultPrivateKey), *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decode.
@@ -239,7 +251,7 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
           *std::move(encoded_response), GetPrivateKey(kDefaultPrivateKey),
-          input_ctxt_pair->second);
+          input_ctxt_pair->second, kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
   absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(

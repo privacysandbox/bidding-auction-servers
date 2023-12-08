@@ -39,6 +39,8 @@ inline absl::string_view TokenWithMinLength(absl::string_view token) {
   return token.size() < kTokenMinLength ? "" : token;
 }
 
+ABSL_CONST_INIT inline opentelemetry::logs::Logger* logger_private = nullptr;
+
 // Utility method to format the context provided as key/value pair into a
 // string. Function excludes any empty values from the output string.
 std::string FormatContext(
@@ -83,17 +85,13 @@ class ContextImpl : public RequestContext {
  private:
   class ConsentedSinkImpl : public absl::LogSink {
    public:
-    ConsentedSinkImpl()
-        : logger_(opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger(
-              "default")) {}
+    ConsentedSinkImpl() {}
 
     void Send(const absl::LogEntry& entry) override {
-      logger_->EmitLogRecord(
+      logger_private->EmitLogRecord(
           entry.text_message_with_prefix_and_newline_c_str());
     }
     void Flush() override {}
-
-    opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger_;
   };
 
   class DebugResponseSinkImpl : public absl::LogSink {

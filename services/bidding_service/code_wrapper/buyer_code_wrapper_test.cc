@@ -46,6 +46,14 @@ TEST(GetBuyerWrappedCode, GeneratesCompleteFinalJavascriptWithWasm) {
   EXPECT_EQ(GetBuyerWrappedCode(kBuyerBaseCode_template, "test"), expected);
 }
 
+TEST(GetBuyerWrappedCode, GeneratesCompleteProtectedAppSignalsFinalJavaScript) {
+  EXPECT_EQ(
+      GetBuyerWrappedCode(kBuyerBaseCode_template, /*ad_tech_wasm=*/"",
+                          AuctionType::kProtectedAppSignals,
+                          /*auction_specific_setup=*/"// No additional setup."),
+      kExpectedProtectedAppSignalsGenerateBidCodeTemplate);
+}
+
 void GenerateFeatureFlagsTestHelper(bool is_logging_enabled,
                                     bool is_debug_url_generation_enabled) {
   std::string actual_json =
@@ -70,11 +78,11 @@ TEST(GetBuyerWrappedCode, GenerateFeatureFlagsAllConbinations) {
 }
 
 TEST(GetBuyerWrappedCode, GeneratesCompleteGenericFinalJavascript) {
-  EXPECT_EQ(GetGenericBuyerWrappedCode(
+  EXPECT_EQ(GetProtectedAppSignalsGenericBuyerWrappedCode(
                 absl::StrFormat(kBuyerBaseCode_template,
                                 kAdRenderUrlPrefixForCodeWrapperTest),
-                /*ad_tech_wasm=*/"", "testFunctionName", "testArg"),
-            absl::StrFormat(kExpectedGenericWrapperCode_template,
+                /*ad_tech_wasm=*/"", "prepareDataForAdRetrieval", "testArg"),
+            absl::StrFormat(kExpectedPrepareDataForAdRetrievalTemplate,
                             kAdRenderUrlPrefixForCodeWrapperTest));
 }
 

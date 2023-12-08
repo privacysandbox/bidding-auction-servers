@@ -131,7 +131,7 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BfeContextMap(
+    metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
     get_bids_config_.encryption_enabled = true;
@@ -143,6 +143,12 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
+
+    GetBidsRequest::GetBidsRawRequest raw_request =
+        MakeARandomGetBidsRawRequest();
+    raw_request.mutable_buyer_input()->mutable_interest_groups()->Add();
+    request_.set_request_ciphertext(raw_request.SerializeAsString());
+    request_.set_key_id(MakeARandomString());
   }
 
   grpc::CallbackServerContext context_;
@@ -257,6 +263,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
   auto* log_context = raw_request_.mutable_log_context();
   log_context->set_adtech_debug_id(kSampleBuyerDebugId);
   log_context->set_generation_id(kSampleGenerationId);
+  raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
   *request_.mutable_request_ciphertext() = raw_request_.SerializeAsString();
 
   SetupBiddingProviderMock(
@@ -288,7 +295,7 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
   void SetUp() override {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::BfeContextMap(
+    metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
@@ -301,6 +308,8 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
+
+    log::PS_VLOG_IS_ON(0, 10);
   }
 
   grpc::CallbackServerContext context_;
@@ -555,6 +564,76 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
   EXPECT_TRUE(MessageDifferencer::Equals(
       protected_audience_ad_with_bid.ad(),
       expected_protected_app_signals_ad_with_bid.ad()));
+}
+
+TEST_F(GetProtectedAppSignalsTest,
+       SkipProtectedAudienceBiddingIfNoInterestGroups) {
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/false);
+  absl::BlockingCounter bids_counter(1);
+
+  EXPECT_CALL(bidding_signals_provider_, Get(_, _, _)).Times(0);
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(0);
+
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .WillOnce([&bids_counter](
+                    std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
+                        get_values_raw_request,
+                    const RequestMetadata& metadata, auto on_done,
+                    absl::Duration timeout) {
+        auto raw_response =
+            std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>();
+        *raw_response->mutable_bids()->Add() =
+            CreateProtectedAppSignalsAdWithBid();
+        std::move(on_done)(std::move(raw_response));
+        bids_counter.DecrementCount();
+        return absl::OkStatus();
+      });
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+  bids_counter.Wait();
+
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.bids().empty());
+  ASSERT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+
+  // Validate that the protected app signals bid contents match.
+  const auto& protected_app_signals_ad_with_bid =
+      raw_response.protected_app_signals_bids().at(0);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.render(), kTestRender2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.bid(), kTestBidValue2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.bid_currency(), kTestCurrency2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.ad_cost(), kTestAdCost2);
+  EXPECT_EQ(protected_app_signals_ad_with_bid.modeling_signals(),
+            kTestModelingSignals2);
+  ProtectedAppSignalsAdWithBid expected_protected_app_signals_ad_with_bid;
+  expected_protected_app_signals_ad_with_bid.mutable_ad()
+      ->mutable_struct_value()
+      ->MergeFrom(
+          MakeAnAd(kTestRender1, kTestMetadataKey1, kTestMetadataValue1));
 }
 
 }  // namespace
