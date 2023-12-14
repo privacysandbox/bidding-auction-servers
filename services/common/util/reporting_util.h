@@ -59,8 +59,8 @@ inline constexpr char kDefaultWinningAdRenderUrl[] = "";
 inline constexpr char kDefaultWinningInterestGroupName[] = "";
 inline constexpr char kDefaultWinningInterestGroupOwner[] = "";
 inline constexpr char kDefaultHighestScoringOtherBidInterestGroupOwner[] = "";
-inline constexpr float kDefaultHighestScoringOtherBid = 0.0;
-inline constexpr bool kDefaultHasHighestScoringOtherBid = false;
+inline constexpr char kDefaultHighestScoringOtherBid[] = "0.00";
+inline constexpr char kDefaultHasHighestScoringOtherBid[] = "false";
 
 // Captures placeholder data for debug reporting.
 struct DebugReportingPlaceholder {
@@ -75,18 +75,6 @@ struct DebugReportingPlaceholder {
   // Reason provided by the seller if rejected.
   // Defaults to SELLER_REJECTION_REASON_NOT_AVAILABLE.
   SellerRejectionReason rejection_reason;
-
-  // Constructor with all fields.
-  explicit DebugReportingPlaceholder(float winning_bid, bool made_winning_bid,
-                                     float highest_scoring_other_bid,
-                                     bool made_highest_scoring_other_bid,
-                                     SellerRejectionReason rejection_reason) {
-    this->winning_bid = winning_bid;
-    this->made_winning_bid = made_winning_bid;
-    this->highest_scoring_other_bid = highest_scoring_other_bid;
-    this->made_highest_scoring_other_bid = made_highest_scoring_other_bid;
-    this->rejection_reason = rejection_reason;
-  }
 };
 
 // Returns post auction signals from winning ad score.
@@ -97,13 +85,11 @@ PostAuctionSignals GeneratePostAuctionSignals(
 // Returns a http request object for debug reporting after replacing placeholder
 // data in the url.
 HTTPRequest CreateDebugReportingHttpRequest(
-    absl::string_view url,
-    std::unique_ptr<DebugReportingPlaceholder> placeholder_data,
+    absl::string_view url, const DebugReportingPlaceholder& placeholder_data,
     bool is_win_debug_url);
 
-// Returns a unique pointer to debug reporting placeholder for the interest
-// group.
-std::unique_ptr<DebugReportingPlaceholder> GetPlaceholderDataForInterestGroup(
+// Returns a debug reporting placeholder for the interest group.
+DebugReportingPlaceholder GetPlaceholderDataForInterestGroup(
     absl::string_view interest_group_owner,
     absl::string_view interest_group_name,
     const PostAuctionSignals& post_auction_signals);

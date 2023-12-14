@@ -28,18 +28,19 @@ constexpr absl::string_view kHandleName = "GetVersion";
 
 DispatchConfig config;
 
-std::string BuildCodeToLoad(int version) {
+std::string BuildCodeToLoad(absl::string_view version) {
   return absl::StrCat("function ", kHandleName, "() { return { test: \"",
                       version, "\"}; }");
 }
 
-std::vector<DispatchRequest> BuildRequests(int request_count, int version_num) {
+std::vector<DispatchRequest> BuildRequests(int request_count,
+                                           const std::string& version) {
   std::vector<DispatchRequest> requests;
   for (int i = 0; i < request_count; i++) {
     DispatchRequest request;
     request.id = std::to_string(i);
     request.handler_name = kHandleName;
-    request.version_num = version_num;
+    request.version_string = version;
     requests.push_back(std::move(request));
   }
   return requests;
@@ -61,9 +62,8 @@ void CheckResponses(
 
 TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
   V8Dispatcher dispatcher;
-  DispatchConfig config;
-  ASSERT_TRUE(dispatcher.Init(config).ok());
-  const int version = 1;
+  ASSERT_TRUE(dispatcher.Init().ok());
+  const std::string version = "v1";
   ASSERT_TRUE(dispatcher.LoadSync(version, BuildCodeToLoad(version)).ok());
   CodeDispatchClient client(dispatcher);
   int request_count = 100;
@@ -72,8 +72,9 @@ TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
   absl::BlockingCounter done(request_count);
   auto status = client.BatchExecute(
       requests,
-      [&done](const std::vector<absl::StatusOr<DispatchResponse>>& results) {
-        CheckResponses(results, done, std::to_string(version));
+      [&done,
+       &version](const std::vector<absl::StatusOr<DispatchResponse>>& results) {
+        CheckResponses(results, done, version);
       });
 
   ASSERT_TRUE(status.ok());
@@ -83,25 +84,25 @@ TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
 
 TEST(CodeDispatchClientTest, RunsLatestCodeVersion) {
   V8Dispatcher dispatcher;
-  DispatchConfig config;
-  ASSERT_TRUE(dispatcher.Init(config).ok());
+  ASSERT_TRUE(dispatcher.Init().ok());
   CodeDispatchClient client(dispatcher);
 
   int version_count = 3;
   int request_count = 10;
   for (int current_version = 1; current_version <= version_count;
        current_version++) {
+    std::string version_str = absl::StrCat("v", current_version);
+
     ASSERT_TRUE(
-        dispatcher.LoadSync(current_version, BuildCodeToLoad(current_version))
-            .ok());
+        dispatcher.LoadSync(version_str, BuildCodeToLoad(version_str)).ok());
     std::vector<DispatchRequest> requests =
-        BuildRequests(request_count, current_version);
+        BuildRequests(request_count, version_str);
     absl::BlockingCounter done(request_count);
     auto status = client.BatchExecute(
         requests,
-        [&done, current_version](
+        [&done, version_str](
             const std::vector<absl::StatusOr<DispatchResponse>>& results) {
-          CheckResponses(results, done, std::to_string(current_version));
+          CheckResponses(results, done, version_str);
         });
 
     ASSERT_TRUE(status.ok());

@@ -20,6 +20,8 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include "absl/debugging/failure_signal_handler.h"
+#include "absl/debugging/symbolize.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
@@ -47,7 +49,6 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/request_response_constants.h"
-#include "services/common/util/signal_handler.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
 #include "src/cpp/util/status_macro/status_macros.h"
@@ -161,10 +162,10 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
 
 absl::StatusOr<std::unique_ptr<CodeFetcherInterface>> StartFetchingCodeBlob(
     const std::string& js_url, const std::string& wasm_helper_url,
-    int roma_version, absl::string_view script_logging_name,
+    const std::string& roma_version, absl::string_view script_logging_name,
     absl::Duration url_fetch_period_ms, absl::Duration url_fetch_timeout_ms,
     absl::AnyInvocable<std::string(const std::vector<std::string>&)> wrap_code,
-    const V8Dispatcher& dispatcher, server_common::Executor* executor) {
+    V8Dispatcher& dispatcher, server_common::Executor* executor) {
   if (js_url.empty()) {
     return absl::InvalidArgumentError(
         absl::StrCat("JS URL for ", script_logging_name, " is missing"));
@@ -183,8 +184,8 @@ absl::StatusOr<std::unique_ptr<CodeFetcherInterface>> StartFetchingCodeBlob(
 }
 
 absl::Status StartProtectedAppSignalsUdfFetching(
-    const BuyerCodeFetchConfig& code_fetch_proto,
-    const V8Dispatcher& dispatcher, server_common::Executor* executor,
+    const BuyerCodeFetchConfig& code_fetch_proto, V8Dispatcher& dispatcher,
+    server_common::Executor* executor,
     std::vector<std::unique_ptr<CodeFetcherInterface>>& code_fetchers) {
   absl::Duration url_fetch_period_ms =
       absl::Milliseconds(code_fetch_proto.url_fetch_period_ms());
@@ -246,15 +247,14 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty())
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
   DispatchConfig config;
   config.worker_queue_max_items =
       config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
   config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
 
-  PS_RETURN_IF_ERROR(dispatcher.Init(config))
-      << "Could not start code dispatcher.";
+  auto dispatcher = V8Dispatcher(config);
+  CodeDispatchClient client(dispatcher);
+  PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
 
   server_common::GrpcInit gprc_init;
   std::unique_ptr<server_common::Executor> executor =
@@ -372,10 +372,6 @@ absl::Status RunServer() {
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_adtech_code_logging = enable_adtech_code_logging,
-      .enable_otel_based_logging =
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
-      .consented_debug_token =
-          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
       .is_protected_app_signals_enabled = is_protected_app_signals_enabled,
       .ad_retrieval_timeout_ms =
           config_client.GetIntParameter(AD_RETRIEVAL_TIMEOUT_MS),
@@ -452,7 +448,9 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
-  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
+  absl::InitializeSymbolizer(argv[0]);
+  absl::FailureSignalHandlerOptions options;
+  absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);

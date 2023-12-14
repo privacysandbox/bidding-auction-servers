@@ -135,10 +135,24 @@ function _collect_logs() {
 set -o errexit
 bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //production/packaging/aws/common/ami:copy_to_dist
 "
+
+builder::cbuild_debian $"
+trap _collect_logs EXIT
+function _collect_logs() {
+  local -r -i STATUS=\$?
+  printf 'Collecting bazel logs...\n' &>/dev/stderr
+  bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //:collect-logs
+  exit \${STATUS}
+}
+set -o errexit
+bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //production/packaging/aws/common/ami:copy_to_dist_proto
+"
+
 "${WORKSPACE}"/builders/tools/normalize-dist
 
 if [[ -n ${AMI_REGIONS[0]} ]]; then
   unzip -o -d "${DIST}"/aws "${DIST}"/aws/nonenclave_artifacts.zip
+  unzip -o -d "${DIST}"/aws "${DIST}"/aws/artifacts_proto.zip
   printf "==== build AWS AMI (using packer) =====\n"
   regions="$(arr_to_string_list AMI_REGIONS)"
   builder::cbuild_al2 "

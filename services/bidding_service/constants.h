@@ -21,9 +21,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-inline constexpr uint64_t kProtectedAudienceGenerateBidBlobVersion = 1;
-inline constexpr uint64_t kProtectedAppSignalsGenerateBidBlobVersion = 2;
-inline constexpr uint64_t kPrepareDataForAdRetrievalBlobVersion = 3;
+inline constexpr char kProtectedAudienceGenerateBidBlobVersion[] = "v1";
+inline constexpr char kProtectedAppSignalsGenerateBidBlobVersion[] = "v2";
+inline constexpr char kPrepareDataForAdRetrievalBlobVersion[] = "v3";
 inline constexpr char kDecodedSignals[] = "decodedSignals";
 inline constexpr char kRetrievalData[] = "retrievalData";
 inline constexpr char kPrepareDataForAdRetrievalHandler[] =

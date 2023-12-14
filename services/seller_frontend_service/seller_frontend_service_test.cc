@@ -160,8 +160,9 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(),
-            absl::StrFormat(kMissingPrivateKey, absl::StrCat(kTestKeyId)));
+  ASSERT_EQ(
+      status.error_message(),
+      absl::StrFormat(kMissingPrivateKey, absl::StrCat(HpkeKeyset{}.key_id)));
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {

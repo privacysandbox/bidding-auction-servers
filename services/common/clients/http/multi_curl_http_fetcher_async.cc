@@ -20,6 +20,7 @@
 
 #include <curl/curl.h>
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "services/common/loggers/request_context_logger.h"

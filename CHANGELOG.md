@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.0.0 (2023-12-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* turn on metric noise (a minimum of 5 QPS is recommended for noised metric)
+* require consented token min length 6
+
+### Features
+
+* Add metric attribute for B&A release version
+* Add metric attribute for operator name
+* Add perf-test-helpers library
+* add sfe metric for request with win ad
+* **component auction:** Adds test for component auction support in secure invoke
+* **dep:** Update build-system to release-0.52.0
+* Import perfgate exporter and uploader tars
+* require consented token min length 6
+* turn on metric noise (a minimum of 5 QPS is recommended for noised metric)
+* Update perf environment to use custom Otel Collector
+* Use hardcoded adtech code and kv mock from e2e-testing env in perf env
+
+
+### Bug Fixes
+
+* Auction service parses adMetadata object
+* Consider non-positive desirability ads as rejected
+* Fixes broken test
+* Log JS errors conditionally
+* Make the error message compatible with deterministic CBOR
+* minimize secure_invoke reliance on default arguments
+* Remove rejected ads from consideration in scoring
+* Update B&A to integrate RomaService Changes
+
 ## 2.8.0 (2023-12-07)
 
 

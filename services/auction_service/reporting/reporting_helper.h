@@ -51,12 +51,15 @@ inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
 inline constexpr char kReportingProtectedAppSignalsFunctionName[] =
     "reportingEntryFunctionProtectedAppSignals";
-inline constexpr int kDispatchRequestVersionNumber = 1.0;
+inline constexpr char kDispatchRequestVersion[] = "v1";
+inline constexpr char kTopLevelSellerTag[] = "topLevelSeller";
+inline constexpr char kComponentSeller[] = "componentSeller";
 inline constexpr char kEnableReportWinUrlGeneration[] =
     "enableReportWinUrlGeneration";
 inline constexpr char kEnableProtectedAppSignals[] =
     "enableProtectedAppSignals";
 inline constexpr char kModelingSignalsTag[] = "modelingSignals";
+inline constexpr char kModifiedBid[] = "modifiedBid";
 inline constexpr char kReportWinResponse[] = "reportWinResponse";
 inline constexpr char kReportWinUrl[] = "reportWinUrl";
 inline constexpr char kBuyerSignals[] = "perBuyerSignals";
@@ -94,6 +97,12 @@ struct BuyerReportingMetadata {
   bool enable_report_win_input_noising;
 };
 
+struct ComponentReportingMetadata {
+  std::string top_level_seller;
+  std::string component_seller;
+  float modified_bid;
+};
+
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
     R"JSON(
         {
@@ -101,6 +110,14 @@ inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
         }
         )JSON",
     kEnableReportWinUrlGeneration);
+
+inline const std::string kDefaultComponentReportingMetadata = absl::StrFormat(
+    R"JSON(
+        {
+          "%s" : ""
+        }
+        )JSON",
+    kTopLevelSellerTag);
 
 // Parses json object returned from execution of reportingEntryFunction in Roma
 // and returns the ReportingResponse.
@@ -114,6 +131,7 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const std::string& publisher_hostname, bool enable_adtech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
     absl::string_view egress_features = "");
 
 // Creates the DispatchRequest for calling reportingEntryFunction in Roma
@@ -122,6 +140,7 @@ DispatchRequest GetReportingDispatchRequest(
     const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
     const std::string& handler_name = kReportingDispatchHandlerFunctionName,
     absl::string_view egress_features = "");
 

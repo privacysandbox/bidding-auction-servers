@@ -144,11 +144,11 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
-        "//services/common/util:signal_handler",
         "//services/seller_frontend_service/util:key_fetcher_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/debugging:failure_signal_handler",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",

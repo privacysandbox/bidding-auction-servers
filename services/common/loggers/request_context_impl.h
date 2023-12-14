@@ -18,12 +18,14 @@
 #define SERVICES_COMMON_LOGGERS_REQUEST_CONTEXT_IMPL_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/functional/any_invocable.h"
+#include "absl/log/check.h"
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "api/bidding_auction_servers.pb.h"
@@ -34,9 +36,20 @@
 
 namespace privacy_sandbox::bidding_auction_servers::log {
 
-inline absl::string_view TokenWithMinLength(absl::string_view token) {
-  constexpr int kTokenMinLength = 1;
-  return token.size() < kTokenMinLength ? "" : token;
+inline absl::string_view ServerToken(
+    std::optional<absl::string_view> token = std::nullopt) {
+  static std::string* server_token = [token]() {
+    if (token == std::nullopt || token->empty()) {
+      fprintf(stderr,
+              "Warning: server token is not set, consent log is turned off.\n");
+      return new std::string("");
+    }
+    constexpr int kTokenMinLength = 6;
+    CHECK(token->length() >= kTokenMinLength)
+        << "server token length must be at least " << kTokenMinLength;
+    return new std::string(token->data());
+  }();
+  return *server_token;
 }
 
 ABSL_CONST_INIT inline opentelemetry::logs::Logger* logger_private = nullptr;
@@ -50,11 +63,10 @@ class ContextImpl : public RequestContext {
  public:
   ContextImpl(
       const absl::btree_map<std::string, std::string>& context_map,
-      absl::string_view server_debug_token,
       const ConsentedDebugConfiguration& debug_config,
       absl::AnyInvocable<DebugInfo*()> debug_info = []() { return nullptr; })
       : debug_response_sink_(std::move(debug_info)),
-        server_debug_token_(TokenWithMinLength(server_debug_token)) {
+        server_token_(ServerToken()) {
     Update(context_map, debug_config);
   }
 
@@ -63,15 +75,13 @@ class ContextImpl : public RequestContext {
   void Update(const absl::btree_map<std::string, std::string>& new_context,
               const ConsentedDebugConfiguration& debug_config) {
     context_ = FormatContext(new_context);
-    client_debug_token_ = debug_config.is_consented()
-                              ? TokenWithMinLength(debug_config.token())
-                              : "";
+    client_debug_token_ =
+        debug_config.is_consented() ? debug_config.token() : "";
     debug_response_sink_.should_log_ = debug_config.is_debug_info_in_response();
   }
 
   bool is_consented() const override {
-    return !server_debug_token_.empty() &&
-           server_debug_token_ == client_debug_token_;
+    return !server_token_.empty() && server_token_ == client_debug_token_;
   }
 
   absl::LogSink* ConsentedSink() override { return &consented_sink; }
@@ -83,6 +93,8 @@ class ContextImpl : public RequestContext {
   absl::LogSink* DebugResponseSink() override { return &debug_response_sink_; };
 
  private:
+  friend class ConsentedLogTest;
+
   class ConsentedSinkImpl : public absl::LogSink {
    public:
     ConsentedSinkImpl() {}
@@ -112,6 +124,10 @@ class ContextImpl : public RequestContext {
     bool should_log_ = false;
   };
 
+  void SetServerTokenForTestOnly(absl::string_view token) {
+    server_token_ = token;
+  }
+
   std::string context_;
   ConsentedSinkImpl consented_sink;
   DebugResponseSinkImpl debug_response_sink_;
@@ -119,7 +135,7 @@ class ContextImpl : public RequestContext {
   // Debug token given by a consented client request.
   std::string client_debug_token_;
   // Debug token owned by the server.
-  std::string server_debug_token_;
+  absl::string_view server_token_;
 };
 
 template <class T>

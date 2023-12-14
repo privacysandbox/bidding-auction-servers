@@ -91,7 +91,9 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       try {
         generateBidResponse = generateBid($0);
       } catch({error, message}) {
+        if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");
+        }
       } finally {
         if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url

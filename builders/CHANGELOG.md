@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.52.0 (2023-12-02)
+
+
+### Features
+
+* add python3.9 dev to bazel-debian
+
+## 0.51.0 (2023-11-30)
+
+
+### Bug Fixes
+
+* Clean go build cache at the end of image build script
+
+
+### Dependencies
+
+* **deps:** Upgrade bazelisk to 1.19.0
+
+## 0.50.0 (2023-11-06)
+
+
+### Features
+
+* Add openssh-client to build-debian image
+
 ## 0.49.1 (2023-10-30)
 
 

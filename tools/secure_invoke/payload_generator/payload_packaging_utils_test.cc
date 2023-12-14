@@ -35,10 +35,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-server_common::PrivateKey GetPrivateKey(absl::string_view private_key_hex) {
+server_common::PrivateKey GetPrivateKey() {
+  HpkeKeyset default_keyset;
   server_common::PrivateKey private_key;
-  private_key.key_id = std::to_string(kTestKeyId);
-  private_key.private_key = GetHpkePrivateKey(private_key_hex);
+  private_key.key_id = std::to_string(default_keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(default_keyset.private_key);
   return private_key;
 }
 
@@ -52,8 +53,8 @@ server_common::PrivateKey GetPrivateKey(absl::string_view private_key_hex) {
 TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
   ProtectedAuctionInput expected =
       MakeARandomProtectedAuctionInput(CLIENT_TYPE_BROWSER);
-  auto output =
-      PackagePayload(expected, CLIENT_TYPE_BROWSER, kDefaultPublicKey);
+  HpkeKeyset keyset;
+  auto output = PackagePayload(expected, CLIENT_TYPE_BROWSER, keyset);
   ASSERT_TRUE(output.ok()) << output.status();
 
   absl::StatusOr<server_common::EncapsulatedRequest>
@@ -64,7 +65,7 @@ TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
 
   // Decrypt.
   auto decrypted_response = server_common::DecryptEncapsulatedRequest(
-      GetPrivateKey(kDefaultPrivateKey), *parsed_encapsulated_request);
+      GetPrivateKey(), *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   absl::StatusOr<server_common::DecodedRequest> decoded_request =
@@ -148,18 +149,20 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   EXPECT_TRUE(framed_data.ok()) << framed_data.status();
 
   // Encrypt.
+  HpkeKeyset keyset;
   auto input_ctxt_pair =
       PackagePayload(MakeARandomProtectedAuctionInput(CLIENT_TYPE_BROWSER),
-                     CLIENT_TYPE_BROWSER, kDefaultPublicKey);
+                     CLIENT_TYPE_BROWSER, keyset);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
-          *std::move(framed_data), GetPrivateKey(kDefaultPrivateKey),
-          input_ctxt_pair->second, kBiddingAuctionOhttpRequestLabel);
+          *std::move(framed_data), GetPrivateKey(), input_ctxt_pair->second,
+          kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
-  absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(
-      *encrypted_response, CLIENT_TYPE_BROWSER, input_ctxt_pair->second);
+  absl::StatusOr<AuctionResult> actual =
+      UnpackageAuctionResult(*encrypted_response, CLIENT_TYPE_BROWSER,
+                             input_ctxt_pair->second, keyset);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;
@@ -169,10 +172,11 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
 }
 
 TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
+  HpkeKeyset keyset;
   ProtectedAuctionInput expected =
       MakeARandomProtectedAuctionInput(CLIENT_TYPE_ANDROID);
   absl::StatusOr<std::pair<std::string, quiche::ObliviousHttpRequest::Context>>
-      output = PackagePayload(expected, CLIENT_TYPE_ANDROID, kDefaultPublicKey);
+      output = PackagePayload(expected, CLIENT_TYPE_ANDROID, keyset);
   ASSERT_TRUE(output.ok()) << output.status();
 
   absl::StatusOr<server_common::EncapsulatedRequest>
@@ -183,8 +187,8 @@ TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
 
   // Decrypt.
   absl::StatusOr<quiche::ObliviousHttpRequest> decrypted_response =
-      server_common::DecryptEncapsulatedRequest(
-          GetPrivateKey(kDefaultPrivateKey), *parsed_encapsulated_request);
+      server_common::DecryptEncapsulatedRequest(GetPrivateKey(),
+                                                *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decode.
@@ -244,18 +248,20 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
   ASSERT_TRUE(encoded_response.ok()) << encoded_response.status();
 
   // Encrypt.
+  HpkeKeyset keyset;
   auto input_ctxt_pair =
       PackagePayload(MakeARandomProtectedAuctionInput(CLIENT_TYPE_ANDROID),
-                     CLIENT_TYPE_ANDROID, kDefaultPublicKey);
+                     CLIENT_TYPE_ANDROID, keyset);
   ASSERT_TRUE(input_ctxt_pair.ok()) << input_ctxt_pair.status();
   absl::StatusOr<std::string> encrypted_response =
       server_common::EncryptAndEncapsulateResponse(
-          *std::move(encoded_response), GetPrivateKey(kDefaultPrivateKey),
+          *std::move(encoded_response), GetPrivateKey(),
           input_ctxt_pair->second, kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
-  absl::StatusOr<AuctionResult> actual = UnpackageAuctionResult(
-      *encrypted_response, CLIENT_TYPE_ANDROID, input_ctxt_pair->second);
+  absl::StatusOr<AuctionResult> actual =
+      UnpackageAuctionResult(*encrypted_response, CLIENT_TYPE_ANDROID,
+                             input_ctxt_pair->second, keyset);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;

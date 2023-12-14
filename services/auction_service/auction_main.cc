@@ -21,6 +21,8 @@
 #include <aws/core/Aws.h>
 #include <google/protobuf/util/json_util.h>
 
+#include "absl/debugging/failure_signal_handler.h"
+#include "absl/debugging/symbolize.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
@@ -45,7 +47,6 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
-#include "services/common/util/signal_handler.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
@@ -192,15 +193,14 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).empty())
       << "SELLER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
   DispatchConfig config;
   config.worker_queue_max_items =
       config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
   config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+  auto dispatcher = V8Dispatcher(config);
+  CodeDispatchClient client(dispatcher);
 
-  PS_RETURN_IF_ERROR(dispatcher.Init(config))
-      << "Could not start code dispatcher.";
+  PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
 
   server_common::GrpcInit gprc_init;
   std::unique_ptr<server_common::Executor> executor =
@@ -289,7 +289,7 @@ absl::Status RunServer() {
     adtech_code_blob = GetSellerWrappedCode(
         adtech_code_blob, enable_report_result_url_generation, false, {});
 
-    PS_RETURN_IF_ERROR(dispatcher.LoadSync(1, adtech_code_blob))
+    PS_RETURN_IF_ERROR(dispatcher.LoadSync("v1", adtech_code_blob))
         << "Could not load Adtech untrusted code for scoring.";
   } else {
     return absl::UnavailableError(
@@ -335,10 +335,6 @@ absl::Status RunServer() {
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_protected_app_signals =
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
-      .enable_otel_based_logging =
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING),
-      .consented_debug_token =
-          std::string(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN)),
       .enable_report_win_input_noising =
           config_client.GetBooleanParameter(ENABLE_REPORT_WIN_INPUT_NOISING),
       .max_allowed_size_debug_url_bytes =
@@ -392,7 +388,9 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
-  signal(SIGSEGV, privacy_sandbox::bidding_auction_servers::SignalHandler);
+  absl::InitializeSymbolizer(argv[0]);
+  absl::FailureSignalHandlerOptions options;
+  absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);

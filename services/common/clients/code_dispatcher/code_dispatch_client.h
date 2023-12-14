@@ -29,7 +29,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // executed in a different process sandbox.
 class CodeDispatchClient {
  public:
-  explicit CodeDispatchClient(const V8Dispatcher& dispatcher)
+  explicit CodeDispatchClient(V8Dispatcher& dispatcher)
       : dispatcher_(dispatcher) {}
 
   // Execute a batch of requests asynchronously via the code dispatcher library.
@@ -40,12 +40,11 @@ class CodeDispatchClient {
   // return: a status indicating if the execution request was properly
   // scheduled. This should not be confused with the output of the execution
   // itself, which is sent to batch_callback.
-  virtual absl::Status BatchExecute(
-      std::vector<DispatchRequest>& batch,
-      BatchDispatchDoneCallback batch_callback) const;
+  virtual absl::Status BatchExecute(std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback batch_callback);
 
  private:
-  const V8Dispatcher& dispatcher_;
+  V8Dispatcher& dispatcher_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

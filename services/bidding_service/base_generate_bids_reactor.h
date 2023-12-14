@@ -44,7 +44,7 @@ class BaseGenerateBidsReactor
     : public CodeDispatchReactor<Request, RawRequest, Response, RawResponse> {
  public:
   explicit BaseGenerateBidsReactor(
-      const CodeDispatchClient& dispatcher,
+      CodeDispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config, const Request* request,
       Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -58,7 +58,6 @@ class BaseGenerateBidsReactor
         enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
         log_context_(
             GetLoggingContext(this->raw_request_),
-            runtime_config.consented_debug_token,
             this->raw_request_.consented_debug_config(),
             [this]() { return this->raw_response_.mutable_debug_info(); }),
         max_allowed_size_debug_url_chars_(

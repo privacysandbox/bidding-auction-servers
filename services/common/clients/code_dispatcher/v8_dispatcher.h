@@ -21,26 +21,30 @@
 
 #include "absl/status/status.h"
 #include "scp/cc/roma/interface/roma.h"
+#include "scp/cc/roma/roma_service/roma_service.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 // The following aliases are part  of the exported API so the
 // user does not have to explicitly import the underlying library.
-using DispatchRequest = google::scp::roma::InvocationRequestSharedInput;
+using DispatchRequest = google::scp::roma::InvocationSharedRequest<>;
 using DispatchResponse = google::scp::roma::ResponseObject;
 using DispatchDoneCallback = google::scp::roma::Callback;
+using DispatchService = google::scp::roma::sandbox::roma_service::RomaService<>;
 using BatchDispatchDoneCallback = google::scp::roma::BatchCallback;
 // The DispatchConfig controls the number of worker processes, the number of
 // threads per worker process, the IPC shared memory size (in bytes), and
 // the max amount of tasks in the work queue before requests are rejected.
 // Default values of {0, 0, 0, 0} allow the underlying library to choose
 // these values as necessary.
-using DispatchConfig = google::scp::roma::Config;
+using DispatchConfig = google::scp::roma::Config<>;
 
 // This class is a wrapper around Roma, a library which provides an interface
 // for multi-process javascript and wasm execution in V8.
 class V8Dispatcher {
  public:
+  explicit V8Dispatcher(DispatchConfig config = DispatchConfig());
+
   // Init the dispatcher. Note that this call may bring up multiple processes,
   // which can be slow and should only happen on server startup.
   //
@@ -48,7 +52,7 @@ class V8Dispatcher {
   // pass in an empty struct '{}' to use default options (auto-scale).
   // return: a status indicated success or failure in starting. If startup
   // fails, a client may retry.
-  absl::Status Init(DispatchConfig config) const;
+  absl::Status Init();
 
   // Stop the dispatcher. Note that this call may bring down multiple processes,
   // which can be slow and should only happen on server shutdown.
@@ -56,15 +60,16 @@ class V8Dispatcher {
   // This will clean up all running processes the dispatcher owns.
   // return: a status indicated success or failure in stopping. If stopping
   // fails, a client may retry.
-  absl::Status Stop() const;
+  absl::Status Stop();
 
   // Load new execution code synchronously. This is a blocking wrapper around
   // the google::scp::roma::LoadCodeObj method.
   //
-  // version: the new version number of the code to load
+  // version: the new version string of the code to load
   // js: the js string to load
   // return: a status indicating whether the code load was successful.
-  virtual absl::Status LoadSync(int version, absl::string_view js) const;
+  virtual absl::Status LoadSync(absl::string_view version,
+                                absl::string_view js);
 
   // Execute a single request asynchronously.
   //
@@ -76,7 +81,7 @@ class V8Dispatcher {
   // scheduled. This should not be confused with the output of the execution
   // itself, which is sent to done_callback.
   virtual absl::Status Execute(std::unique_ptr<DispatchRequest> request,
-                               DispatchDoneCallback done_callback) const;
+                               DispatchDoneCallback done_callback);
 
   // Execute a batch of requests asynchronously. There are no guarantees
   // on the order of request processing.
@@ -86,9 +91,11 @@ class V8Dispatcher {
   // return: a status indicating if the execution request was properly
   // scheduled. This should not be confused with the output of the execution
   // itself, which is sent to batch_callback.
-  virtual absl::Status BatchExecute(
-      std::vector<DispatchRequest>& batch,
-      BatchDispatchDoneCallback batch_callback) const;
+  virtual absl::Status BatchExecute(std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback batch_callback);
+
+ private:
+  DispatchService roma_service_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

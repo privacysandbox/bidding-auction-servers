@@ -18,7 +18,8 @@ build:clang --client_env=CC=clang
 build:clang --cxxopt=-std=c++17
 build:clang --host_cxxopt=-std=c++17
 build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
-build:clang --linkopt=-rdynamic
+#disable the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
+build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
 
 test --test_verbose_timeout_warnings
 

@@ -31,35 +31,32 @@ inline constexpr absl::string_view kBiddingAuctionOhttpRequestLabel =
 inline constexpr absl::string_view kBiddingAuctionOhttpResponseLabel =
     "message/auction response";
 
-// Hardcoded test id for OHTTP key Config.
-constexpr uint8_t kTestKeyId = 64;
+struct HpkeKeyset {
+  // Defaults must match those found in FakeKeyFetcherManager.
 
-// Default private key for testing.
-constexpr absl::string_view kDefaultPrivateKey =
-    "e7b292f49df28b8065992cdeadbc9d032a0e09e8476cb6d8d507212e7be3b9b4";
+  // Hex representation of the public key.
+  std::string public_key =
+      "f3b7b2f1764f5c077effecad2afd86154596e63f7375ea522761b881e6c3c323";
+  // Hex representation of the private key.
+  std::string private_key =
+      "e7b292f49df28b8065992cdeadbc9d032a0e09e8476cb6d8d507212e7be3b9b4";
+  // Key id.
+  uint8_t key_id = 64;
+};
 
-// Default public key for testing.
-constexpr absl::string_view kDefaultPublicKey =
-    "f3b7b2f1764f5c077effecad2afd86154596e63f7375ea522761b881e6c3c323";
+std::string GetHpkePrivateKey(absl::string_view private_key_hex);
 
-std::string GetHpkePrivateKey(
-    absl::string_view private_key_hex = kDefaultPrivateKey);
-
-std::string GetHpkePublicKey(
-    absl::string_view public_key_hex = kDefaultPublicKey);
+std::string GetHpkePublicKey(absl::string_view public_key_hex);
 
 // OHTTP Encrypt using passed or default public key.
 absl::StatusOr<quiche::ObliviousHttpRequest> CreateValidEncryptedRequest(
-    const std::string& plaintext_payload,
-    absl::string_view public_key_hex = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId);
+    const std::string& plaintext_payload, const HpkeKeyset& keyset);
 
 // OHTTP Decrypt using passed or default public key.
 absl::StatusOr<quiche::ObliviousHttpResponse> DecryptEncapsulatedResponse(
     absl::string_view encapsulated_response,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
-    absl::string_view public_key_hex = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId);
+    const HpkeKeyset& keyset);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -53,14 +53,14 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
   explicit PeriodicCodeFetcher(
       std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
       std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
-      const V8Dispatcher& dispatcher, server_common::Executor* executor,
+      V8Dispatcher& dispatcher, server_common::Executor* executor,
       absl::Duration time_out_ms, WrapCodeForDispatch wrap_code);
   explicit PeriodicCodeFetcher(
       std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
       std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
-      const V8Dispatcher& dispatcher, server_common::Executor* executor,
+      V8Dispatcher& dispatcher, server_common::Executor* executor,
       absl::Duration time_out_ms, WrapCodeForDispatch wrap_code,
-      uint64_t version_num);
+      std::string version);
 
   // Not copyable or movable.
   PeriodicCodeFetcher(const PeriodicCodeFetcher&) = delete;
@@ -82,14 +82,14 @@ class PeriodicCodeFetcher : public CodeFetcherInterface {
   std::vector<std::string> url_endpoints_;
   absl::Duration fetch_period_ms_;
   std::unique_ptr<HttpFetcherAsync> curl_http_fetcher_;
-  const V8Dispatcher& dispatcher_;
+  V8Dispatcher& dispatcher_;
   server_common::Executor* executor_;
   absl::Duration time_out_ms_;
   WrapCodeForDispatch wrap_code_;
   // Callers should ensure that this version matches with the version provided
   // during the dispatch call. Different versions can help run different code
   // blobs inside Roma even if they have the same entry point names.
-  const uint64_t version_num_;
+  const std::string version_string_;
 
   // Keeps track of the next task to be performed on the executor.
   server_common::TaskId task_id_;

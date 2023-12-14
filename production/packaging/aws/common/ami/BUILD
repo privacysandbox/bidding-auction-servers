@@ -25,7 +25,6 @@ pkg_zip(
     name = "nonenclave_artifacts",
     srcs = [
         ":ami_config_group",
-        "//api:bidding_auction_servers_descriptor_set",
         "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxy",
     ],
 )
@@ -43,4 +42,26 @@ EOF""",
     executable = True,
     local = True,
     message = "copying AMI artifacts to dist/aws directory",
+)
+
+pkg_zip(
+    name = "artifacts_proto",
+    srcs = [
+        "//api:bidding_auction_servers_descriptor_set",
+    ],
+)
+
+genrule(
+    name = "copy_to_dist_proto",
+    srcs = [
+        ":artifacts_proto",
+    ],
+    outs = ["copy_to_dist_proto.bin"],
+    cmd_bash = """cat << EOF > '$@'
+mkdir -p dist/aws
+cp $(location :artifacts_proto) dist/aws
+EOF""",
+    executable = True,
+    local = True,
+    message = "copying AMI proto to dist/aws directory",
 )

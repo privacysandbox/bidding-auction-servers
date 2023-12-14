@@ -19,6 +19,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
 constexpr char kTestReportResultUrl[] = "http://test.com";
+constexpr char kTestComponentReportResultUrl[] =
+    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
+    "seller.com";
 constexpr char kTestInteractionEvent[] = "clickEvent";
 constexpr char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestReportWinUrl[] =
@@ -96,7 +99,11 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
     }
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
     }
@@ -111,6 +118,17 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
         allowComponentAuction: true
       }
     }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return "testSignalsForWinner"
+    }
+
 )JS_CODE";
 
 constexpr absl::string_view kSkipAdComponentAuctionCode = R"JS_CODE(
@@ -368,7 +386,11 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     }
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
     }
@@ -734,7 +756,11 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     }
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
     }
@@ -896,7 +922,11 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     }
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
     }
@@ -973,7 +1003,11 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
     }
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
-        sendReportTo("http://test.com")
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
     }

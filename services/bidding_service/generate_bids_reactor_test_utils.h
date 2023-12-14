@@ -110,7 +110,7 @@ absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
 absl::Status MockRomaExecution(std::vector<DispatchRequest>& batch,
                                BatchDispatchDoneCallback batch_callback,
                                absl::string_view expected_method_name,
-                               int expected_request_version,
+                               absl::string_view expected_request_version,
                                const std::string& expected_json_response);
 
 // Sets up expectations for the batch requests for UDFs that are to be run in

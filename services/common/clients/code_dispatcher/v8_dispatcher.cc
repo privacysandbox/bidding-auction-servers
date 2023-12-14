@@ -29,22 +29,21 @@ using LoadRequest = ::google::scp::roma::CodeObject;
 using LoadResponse = ::google::scp::roma::ResponseObject;
 using LoadDoneCallback = ::google::scp::roma::Callback;
 
-absl::Status V8Dispatcher::Init(DispatchConfig config) const {
-  return google::scp::roma::RomaInit(config);
-}
+V8Dispatcher::V8Dispatcher(DispatchConfig config) : roma_service_(config) {}
 
-absl::Status V8Dispatcher::Stop() const {
-  return google::scp::roma::RomaStop();
-}
+absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }
 
-absl::Status V8Dispatcher::LoadSync(int version, absl::string_view js) const {
+absl::Status V8Dispatcher::Stop() { return roma_service_.Stop(); }
+
+absl::Status V8Dispatcher::LoadSync(absl::string_view version,
+                                    absl::string_view js) {
   LoadRequest request;
-  request.version_num = version;
+  request.version_string = version;
   request.js = js;
   absl::BlockingCounter is_loading(1);
 
   absl::Status load_status;
-  absl::Status try_load = google::scp::roma::LoadCodeObj(
+  absl::Status try_load = roma_service_.LoadCodeObj(
       std::make_unique<LoadRequest>(request),
       [&is_loading,
        &load_status](std::unique_ptr<absl::StatusOr<LoadResponse>> res) {
@@ -63,14 +62,13 @@ absl::Status V8Dispatcher::LoadSync(int version, absl::string_view js) const {
 }
 
 absl::Status V8Dispatcher::Execute(std::unique_ptr<DispatchRequest> request,
-                                   DispatchDoneCallback done_callback) const {
-  return google::scp::roma::Execute(std::move(request),
-                                    std::move(done_callback));
+                                   DispatchDoneCallback done_callback) {
+  return roma_service_.Execute(std::move(request), std::move(done_callback));
 }
 
 absl::Status V8Dispatcher::BatchExecute(
     std::vector<DispatchRequest>& batch,
-    BatchDispatchDoneCallback batch_callback) const {
-  return google::scp::roma::BatchExecute(batch, std::move(batch_callback));
+    BatchDispatchDoneCallback batch_callback) {
+  return roma_service_.BatchExecute(batch, std::move(batch_callback));
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

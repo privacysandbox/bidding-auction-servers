@@ -158,16 +158,18 @@ void AsyncReporterStub::DoReport(
 
 class CodeDispatchClientStub : public CodeDispatchClient {
  public:
-  CodeDispatchClientStub() : CodeDispatchClient(MockV8Dispatcher()) {}
+  CodeDispatchClientStub() : CodeDispatchClient(dispatcher_) {}
   virtual ~CodeDispatchClientStub() = default;
-  absl::Status BatchExecute(
-      std::vector<DispatchRequest>& batch,
-      BatchDispatchDoneCallback batch_callback) const override;
+  absl::Status BatchExecute(std::vector<DispatchRequest>& batch,
+                            BatchDispatchDoneCallback batch_callback) override;
+
+ private:
+  MockV8Dispatcher dispatcher_;
 };
 
 absl::Status CodeDispatchClientStub::BatchExecute(
     std::vector<DispatchRequest>& batch,
-    BatchDispatchDoneCallback batch_callback) const {
+    BatchDispatchDoneCallback batch_callback) {
   std::vector<absl::StatusOr<DispatchResponse>> responses;
   absl::BitGen bit_gen;
   for (const auto& request : batch) {

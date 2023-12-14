@@ -25,6 +25,8 @@ constexpr char kTestInteractionEvent[] = "click";
 constexpr char kTestInteractionUrl[] = "http://event.com";
 constexpr char kTestPublisherHostName[] = "publisherName";
 constexpr char kTestAuctionConfig[] = "testAuctionConfig";
+constexpr char kTestSellerReportingSignalsForComponentSeller[] =
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0,"componentSeller":"http://seller.com"})";
 constexpr char kTestSellerReportingSignals[] =
     R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"desirability":2.0,"highestScoringOtherBid":0.5})";
 constexpr char kTestInterestGroupOwner[] = "testOwner";
@@ -44,6 +46,8 @@ constexpr char kTestBuyerMetadataWithProtectedAppSignals[] =
 constexpr char kTestBuyerSignals[] = "{\"testkey\":\"testvalue\"}";
 constexpr char kTestSeller[] = "http://seller.com";
 constexpr double kTestAdCost = 5.0;
+constexpr char kTestTopLevelSeller[] = "testTopLevelSeller";
+constexpr float kTestModifiedBid = 1.0;
 constexpr bool kTestEnableReportWinInputNoisingTrue = true;
 }  // namespace privacy_sandbox::bidding_auction_servers
 

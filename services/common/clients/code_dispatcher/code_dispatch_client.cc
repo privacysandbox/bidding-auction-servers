@@ -19,7 +19,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 absl::Status CodeDispatchClient::BatchExecute(
     std::vector<DispatchRequest>& batch,
-    BatchDispatchDoneCallback batch_callback) const {
+    BatchDispatchDoneCallback batch_callback) {
   return dispatcher_.BatchExecute(batch, std::move(batch_callback));
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

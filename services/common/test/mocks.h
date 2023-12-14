@@ -305,27 +305,27 @@ class BuyerFrontEndAsyncClientFactoryMock
 
 class MockV8Dispatcher : public V8Dispatcher {
  public:
-  MOCK_METHOD(absl::Status, Init, (DispatchConfig config), (const));
-  MOCK_METHOD(absl::Status, Stop, (), (const));
-  MOCK_METHOD(absl::Status, LoadSync, (int version, absl::string_view js),
-              (const));
+  MOCK_METHOD(absl::Status, Init, ());
+  MOCK_METHOD(absl::Status, Stop, ());
+  MOCK_METHOD(absl::Status, LoadSync,
+              (absl::string_view version, absl::string_view js));
   MOCK_METHOD(absl::Status, BatchExecute,
               (std::vector<DispatchRequest> & batch,
-               BatchDispatchDoneCallback batch_callback),
-              (const));
+               BatchDispatchDoneCallback batch_callback));
   MOCK_METHOD(absl::Status, Execute,
               (std::unique_ptr<DispatchRequest> request,
-               DispatchDoneCallback done_callback),
-              (const));
+               DispatchDoneCallback done_callback));
 };
 
 class MockCodeDispatchClient : public CodeDispatchClient {
  public:
-  MockCodeDispatchClient() : CodeDispatchClient(MockV8Dispatcher()) {}
+  MockCodeDispatchClient() : CodeDispatchClient(dispatcher_) {}
   MOCK_METHOD(absl::Status, BatchExecute,
               (std::vector<DispatchRequest> & batch,
-               BatchDispatchDoneCallback batch_callback),
-              (const));
+               BatchDispatchDoneCallback batch_callback));
+
+ private:
+  MockV8Dispatcher dispatcher_;
 };
 
 template <class Key, class Value>
@@ -337,7 +337,7 @@ class LocalCacheMock : public LocalCache<Key, Value> {
 class MockScoreAdsReactor : public ScoreAdsReactor {
  public:
   MockScoreAdsReactor(
-      const CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
+      CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
       ScoreAdsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
@@ -354,7 +354,7 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
 class MockGenerateBidsReactor : public GenerateBidsReactor {
  public:
   MockGenerateBidsReactor(
-      const CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
+      CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
       GenerateBidsResponse* response, absl::string_view js,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -371,7 +371,7 @@ class GenerateProtectedAppSignalsMockBidsReactor
  public:
   GenerateProtectedAppSignalsMockBidsReactor(
       const grpc::CallbackServerContext* context,
-      const CodeDispatchClient& dispatcher,
+      CodeDispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config,
       const GenerateProtectedAppSignalsBidsRequest* request,
       GenerateProtectedAppSignalsBidsResponse* response,
