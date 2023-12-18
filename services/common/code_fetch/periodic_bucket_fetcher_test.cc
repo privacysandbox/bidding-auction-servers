@@ -89,7 +89,7 @@ TEST(PeriodicBucketFetcherTest, LoadsResultIntoV8Dispatcher) {
           });
 
   EXPECT_CALL(dispatcher, LoadSync)
-      .WillOnce([&done_load_sync, &kSampleData](int version,
+      .WillOnce([&done_load_sync, &kSampleData](std::string_view version,
                                                 absl::string_view blob_data) {
         EXPECT_EQ(blob_data, kSampleData);
         done_load_sync.DecrementCount();
@@ -146,7 +146,7 @@ TEST(PeriodicBucketFetcherTest, PeriodicallyFetchesBucket) {
       });
 
   EXPECT_CALL(dispatcher, LoadSync)
-      .WillOnce([&](int version, absl::string_view blob_data) {
+      .WillOnce([&](std::string_view version, absl::string_view blob_data) {
         return absl::OkStatus();
       });
 
@@ -202,7 +202,7 @@ TEST(PeriodicBucketFetcherTest, LoadsOnlyDifferentFetchedResult) {
           });
 
   EXPECT_CALL(dispatcher, LoadSync)
-      .WillOnce([&done_load_sync, &kSampleData](int version,
+      .WillOnce([&done_load_sync, &kSampleData](std::string_view version,
                                                 absl::string_view blob_data) {
         EXPECT_EQ(blob_data, kSampleData);
         done_load_sync.DecrementCount();

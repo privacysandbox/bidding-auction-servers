@@ -187,7 +187,7 @@ DispatchRequest BuildScoreAdRequest(
   // TODO(b/250893468) Revisit dispatch id.
   score_ad_request.id = ad.render();
   // TODO(b/258790164) Update after code is fetched periodically.
-  score_ad_request.version_num = 1;
+  score_ad_request.version_string = "v1";
   score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
 
   score_ad_request.input = ScoreAdInput(ad, auction_config, scoring_signals,
@@ -519,7 +519,7 @@ void ScoringData::UpdateWinner(int index,
 }
 
 ScoreAdsReactor::ScoreAdsReactor(
-    const CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
+    CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
     ScoreAdsResponse* response,
     std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -537,7 +537,6 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.enable_seller_debug_url_generation),
       roma_timeout_ms_(runtime_config.roma_timeout_ms),
       log_context_(GetLoggingContext(raw_request_),
-                   runtime_config.consented_debug_token,
                    raw_request_.consented_debug_config(),
                    [this]() { return raw_response_.mutable_debug_info(); }),
       enable_adtech_code_logging_(log_context_.is_consented()),
@@ -718,7 +717,7 @@ long DebugReportUrlsLength(const ScoreAdsResponse::AdScore& ad_score) {
          ad_score.debug_report_urls().auction_debug_loss_url().length();
 }
 
-ScoreAdsResponse::AdScore ParseScoreAdResponse(
+absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
     const rapidjson::Document& score_ad_resp,
     int max_allowed_size_debug_url_chars,
     long max_allowed_size_all_debug_urls_chars,
@@ -753,15 +752,21 @@ ScoreAdsResponse::AdScore ParseScoreAdResponse(
 
     auto ad_metadata_itr =
         score_ad_resp.FindMember(kAdMetadataForComponentAuction);
-    if (ad_metadata_itr != score_ad_resp.MemberEnd() ||
-        !ad_metadata_itr->value.IsString()) {
+    if (ad_metadata_itr != score_ad_resp.MemberEnd() &&
+        ad_metadata_itr->value.IsString()) {
       score_ads_response.set_ad_metadata(ad_metadata_itr->value.GetString());
+    }
+
+    if (ad_metadata_itr != score_ad_resp.MemberEnd() &&
+        ad_metadata_itr->value.IsObject()) {
+      PS_ASSIGN_OR_RETURN((*score_ads_response.mutable_ad_metadata()),
+                          SerializeJsonDoc(ad_metadata_itr->value));
     }
 
     auto modified_bid_itr =
         score_ad_resp.FindMember(kModifiedBidForComponentAuction);
-    if (modified_bid_itr != score_ad_resp.MemberEnd() ||
-        !modified_bid_itr->value.IsNumber()) {
+    if (modified_bid_itr != score_ad_resp.MemberEnd() &&
+        modified_bid_itr->value.IsNumber()) {
       score_ads_response.set_bid((float)modified_bid_itr->value.GetFloat());
     }
   }
@@ -810,36 +815,33 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
                        absl::string_view interest_group_owner,
                        absl::string_view interest_group_name,
                        log::ContextImpl& log_context) {
-  std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
-      ad_rejection_reason;
   auto reject_reason_itr =
       score_ad_resp.FindMember(kRejectReasonPropertyForScoreAd);
   if (reject_reason_itr == score_ad_resp.MemberEnd() ||
       !reject_reason_itr->value.IsString()) {
-    return ad_rejection_reason;
+    return std::nullopt;
   }
   std::string rejection_reason_str =
       score_ad_resp[kRejectReasonPropertyForScoreAd].GetString();
   SellerRejectionReason rejection_reason =
       ToSellerRejectionReason(rejection_reason_str);
-
-  // We do not send rejection reasons if they are not available.
-  if (rejection_reason ==
-      SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE) {
-    return ad_rejection_reason;
-  }
-  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason_;
-  ad_rejection_reason_.set_interest_group_owner(interest_group_owner);
-  ad_rejection_reason_.set_interest_group_name(interest_group_name);
-  ad_rejection_reason_.set_rejection_reason(rejection_reason);
-  return ad_rejection_reason_;
+  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason;
+  ad_rejection_reason.set_interest_group_owner(interest_group_owner);
+  ad_rejection_reason.set_interest_group_name(interest_group_name);
+  ad_rejection_reason.set_rejection_reason(rejection_reason);
+  return ad_rejection_reason;
 }
 
 void ScoreAdsReactor::PerformReporting(
     const ScoreAdsResponse::AdScore& winning_ad_score, absl::string_view id) {
   std::shared_ptr<std::string> auction_config =
       BuildAuctionConfig(raw_request_);
-
+  ComponentReportingMetadata component_reporting_metadata = {};
+  if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+    component_reporting_metadata = {
+        .top_level_seller = raw_request_.top_level_seller(),
+        .component_seller = raw_request_.seller()};
+  }
   if (auto ad_it = ad_data_.find(id); ad_it != ad_data_.end()) {
     const auto& ad = ad_it->second;
     DispatchReportingRequest(
@@ -853,7 +855,8 @@ void ScoreAdsReactor::PerformReporting(
          .modeling_signals = ad->modeling_signals(),
          .seller = raw_request_.seller(),
          .interest_group_name = winning_ad_score.interest_group_name(),
-         .ad_cost = ad->ad_cost()});
+         .ad_cost = ad->ad_cost()},
+        std::optional(component_reporting_metadata), "");
   } else if (auto protected_app_signals_ad_it =
                  protected_app_signals_ad_data_.find(id);
              protected_app_signals_ad_it !=
@@ -870,7 +873,7 @@ void ScoreAdsReactor::PerformReporting(
          .seller = raw_request_.seller(),
          .interest_group_name = winning_ad_score.interest_group_name(),
          .ad_cost = ad->ad_cost()},
-        ad->egress_features());
+        std::optional(component_reporting_metadata), ad->egress_features());
   } else {
     PS_VLOG(1, log_context_)
         << "Following id didn't map to any ProtectedAudience or "
@@ -886,14 +889,27 @@ void ScoreAdsReactor::HandleScoredAd(
     absl::string_view interest_group_owner,
     const rapidjson::Document& response_json, AdType ad_type,
     ScoreAdsResponse::AdScore& score_ads_response, ScoringData& scoring_data) {
+  // Get ad rejection reason before updating the scoring data.
+  std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
+      ad_rejection_reason;
+  if (!response_json.IsNumber()) {
+    // Parse Ad rejection reason and store only if it has value.
+    ad_rejection_reason = ParseAdRejectionReason(
+        response_json, interest_group_owner, interest_group_name, log_context_);
+  }
+
   score_ads_response.set_interest_group_name(interest_group_name);
   score_ads_response.set_interest_group_owner(interest_group_owner);
   score_ads_response.set_ad_type(ad_type);
   score_ads_response.set_buyer_bid(bid);
-  // >= ensures that in the edge case where the most desirable ad's
-  // desirability is float.min_val, it is still selected.
-  if (score_ads_response.desirability() >=
-      scoring_data.desirability_of_most_desirable_ad) {
+  const bool is_valid_ad =
+      !ad_rejection_reason.has_value() ||
+      ad_rejection_reason->rejection_reason() ==
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
+  // Consider only ads that are not explicitly rejected and the ones that have
+  // a positive desirability score.
+  if (is_valid_ad && score_ads_response.desirability() >
+                         scoring_data.desirability_of_most_desirable_ad) {
     if (auction_scope_ == AuctionScope::kDeviceComponentSeller &&
         !score_ads_response.allow_component_auction()) {
       // Ignore component level winner if it is not allowed to
@@ -909,23 +925,36 @@ void ScoreAdsReactor::HandleScoredAd(
   scoring_data.score_ad_map[score_ads_response.desirability()].push_back(index);
   ad_scores_.push_back(
       std::make_unique<ScoreAdsResponse::AdScore>(score_ads_response));
-  if (response_json.IsNumber()) {
+
+  if (is_valid_ad && score_ads_response.desirability() > 0) {
+    // Consider scored ad as valid (i.e. not rejected) when it has a positive
+    // desirability and either:
+    // 1. scoreAd returned a number.
+    // 2. scoreAd returned an object but the reject reason was not populated.
+    // 3. scoreAd returned an object and the reject reason was explicitly set to
+    //    "not-available".
     return;
   }
 
-  // Parse Ad rejection reason and store only if it has value.
-  auto ad_rejection_reason = ParseAdRejectionReason(
-      response_json, interest_group_owner, interest_group_name, log_context_);
-  if (!ad_rejection_reason.has_value()) {
-    return;
+  // Populate a default rejection reason if needed when we didn't get a positive
+  // desirability.
+  if (score_ads_response.desirability() <= 0 &&
+      !ad_rejection_reason.has_value()) {
+    PS_VLOG(5, log_context_)
+        << "Non-positive desirability for ad and no rejection reason populated "
+           "by seller, providing a default rejection reason";
+    ad_rejection_reason = ScoreAdsResponse::AdScore::AdRejectionReason{};
+    ad_rejection_reason->set_interest_group_owner(interest_group_owner);
+    ad_rejection_reason->set_interest_group_name(interest_group_name);
+    ad_rejection_reason->set_rejection_reason(
+        SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
   }
-
-  scoring_data.ad_rejection_reasons.push_back(ad_rejection_reason.value());
+  scoring_data.ad_rejection_reasons.push_back(*ad_rejection_reason);
   scoring_data.seller_rejected_bid_count += 1;
   LogIfError(
       metric_context_->AccumulateMetric<metric::kAuctionBidRejectedCount>(
           1, ToSellerRejectionReasonString(
-                 ad_rejection_reason.value().rejection_reason())));
+                 ad_rejection_reason->rejection_reason())));
 }
 
 void ScoreAdsReactor::FindScoredAdType(
@@ -981,23 +1010,28 @@ ScoringData ScoreAdsReactor::FindWinningAd(
     }
 
     long current_all_debug_urls_chars = 0;
-    ScoreAdsResponse::AdScore score_ads_response = ParseScoreAdResponse(
+    auto score_ads_response = ParseScoreAdResponse(
         *response_json, max_allowed_size_debug_url_chars_,
         max_allowed_size_all_debug_urls_chars_, current_all_debug_urls_chars,
         auction_scope_ == AuctionScope::kDeviceComponentSeller);
-    current_all_debug_urls_chars += DebugReportUrlsLength(score_ads_response);
+    if (!score_ads_response.ok()) {
+      LogWarningForBadResponse(score_ads_response.status(), *response, ad,
+                               log_context_);
+      continue;
+    }
+    current_all_debug_urls_chars += DebugReportUrlsLength(*score_ads_response);
 
     if (ad) {
       HandleScoredAd(index, ad->bid(), ad->interest_group_name(),
                      ad->interest_group_owner(), *response_json,
-                     AdType::AD_TYPE_PROTECTED_AUDIENCE_AD, score_ads_response,
+                     AdType::AD_TYPE_PROTECTED_AUDIENCE_AD, *score_ads_response,
                      scoring_data);
     } else {
       HandleScoredAd(index, protected_app_signals_ad_with_bid->bid(),
                      /*interest_group_name=*/"",
                      protected_app_signals_ad_with_bid->owner(), *response_json,
                      AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD,
-                     score_ads_response, scoring_data);
+                     *score_ads_response, scoring_data);
     }
   }
   return scoring_data;
@@ -1179,26 +1213,48 @@ void ScoreAdsReactor::ReportingCallback(
               << "Warning Log from Buyer's execution script:" << log;
         }
       }
-      raw_response_.mutable_ad_score()
-          ->mutable_win_reporting_urls()
-          ->mutable_top_level_seller_reporting_urls()
-          ->set_reporting_url(reporting_response.value()
-                                  .report_result_response.report_result_url);
+      // For component auctions, the reporting urls for seller are set in the
+      // component_seller_reporting_urls field. For single seller auctions and
+      // top level auctions, the reporting urls are set in the
+      // top_level_seller_reporting_urls field.
+      if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+        raw_response_.mutable_ad_score()
+            ->mutable_win_reporting_urls()
+            ->mutable_component_seller_reporting_urls()
+            ->set_reporting_url(reporting_response.value()
+                                    .report_result_response.report_result_url);
+        for (const auto& [event, interactionReportingUrl] :
+             reporting_response.value()
+                 .report_result_response.interaction_reporting_urls) {
+          raw_response_.mutable_ad_score()
+              ->mutable_win_reporting_urls()
+              ->mutable_component_seller_reporting_urls()
+              ->mutable_interaction_reporting_urls()
+              ->try_emplace(event, interactionReportingUrl);
+        }
+
+      } else {
+        raw_response_.mutable_ad_score()
+            ->mutable_win_reporting_urls()
+            ->mutable_top_level_seller_reporting_urls()
+            ->set_reporting_url(reporting_response.value()
+                                    .report_result_response.report_result_url);
+        for (const auto& [event, interactionReportingUrl] :
+             reporting_response.value()
+                 .report_result_response.interaction_reporting_urls) {
+          raw_response_.mutable_ad_score()
+              ->mutable_win_reporting_urls()
+              ->mutable_top_level_seller_reporting_urls()
+              ->mutable_interaction_reporting_urls()
+              ->try_emplace(event, interactionReportingUrl);
+        }
+      }
       raw_response_.mutable_ad_score()
           ->mutable_win_reporting_urls()
           ->mutable_buyer_reporting_urls()
           ->set_reporting_url(
               reporting_response.value().report_win_response.report_win_url);
 
-      for (const auto& [event, interactionReportingUrl] :
-           reporting_response.value()
-               .report_result_response.interaction_reporting_urls) {
-        raw_response_.mutable_ad_score()
-            ->mutable_win_reporting_urls()
-            ->mutable_top_level_seller_reporting_urls()
-            ->mutable_interaction_reporting_urls()
-            ->try_emplace(event, interactionReportingUrl);
-      }
       for (const auto& [event, interactionReportingUrl] :
            reporting_response.value()
                .report_win_response.interaction_reporting_urls) {
@@ -1272,10 +1328,8 @@ void ScoreAdsReactor::EncryptAndFinishOK() {
 }
 
 void ScoreAdsReactor::FinishWithStatus(const grpc::Status& status) {
-  if (status.error_code() == grpc::StatusCode::OK) {
-    metric_context_->SetRequestSuccessful();
-  } else {
-    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
+  if (status.error_code() != grpc::StatusCode::OK) {
+    metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
   }
   Finish(status);
 }

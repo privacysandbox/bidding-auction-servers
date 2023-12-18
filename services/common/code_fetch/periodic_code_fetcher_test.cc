@@ -61,12 +61,12 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
       .WillOnce([&](absl::AnyInvocable<void()> closure) { closure(); });
 
   EXPECT_CALL(dispatcher, LoadSync)
-      .WillOnce(
-          [&done, &kSampleWrappedCode](int version, absl::string_view js) {
-            EXPECT_EQ(js, kSampleWrappedCode);
-            done.DecrementCount();
-            return absl::OkStatus();
-          });
+      .WillOnce([&done, &kSampleWrappedCode](std::string_view version,
+                                             absl::string_view js) {
+        EXPECT_EQ(js, kSampleWrappedCode);
+        done.DecrementCount();
+        return absl::OkStatus();
+      });
 
   PeriodicCodeFetcher code_fetcher(endpoints, fetch_period,
                                    std::move(curl_http_fetcher), dispatcher,
@@ -165,7 +165,7 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
 
   EXPECT_CALL(dispatcher, LoadSync)
       .Times(1)
-      .WillOnce([&done_load_sync, &kSampleWrappedCode](int version,
+      .WillOnce([&done_load_sync, &kSampleWrappedCode](std::string_view version,
                                                        absl::string_view js) {
         EXPECT_EQ(js, kSampleWrappedCode);
         done_load_sync.DecrementCount();
@@ -201,14 +201,14 @@ TEST(PeriodicCodeFetcherTest, LoadsCodeWithTheCorrectVersion) {
       .Times(1)
       .WillOnce([&](absl::AnyInvocable<void()> closure) { closure(); });
 
-  constexpr uint64_t kTestVersion = 10;
+  constexpr char kTestVersion[] = "v10";
   EXPECT_CALL(dispatcher, LoadSync)
-      .WillOnce(
-          [&done, kTestVersion](int observed_version, absl::string_view js) {
-            EXPECT_EQ(observed_version, kTestVersion);
-            done.DecrementCount();
-            return absl::OkStatus();
-          });
+      .WillOnce([&done, kTestVersion](std::string_view observed_version,
+                                      absl::string_view js) {
+        EXPECT_EQ(observed_version, kTestVersion);
+        done.DecrementCount();
+        return absl::OkStatus();
+      });
 
   PeriodicCodeFetcher code_fetcher(
       {"code.com"}, absl::Minutes(2), std::move(curl_http_fetcher), dispatcher,
@@ -233,7 +233,7 @@ TEST(PeriodicCodeFetcherTest, LoadFetchFrequencyMustBeGreaterThan1Min) {
       std::move(curl_http_fetcher), dispatcher, executor.get(),
       absl::Milliseconds(100),
       [](const std::vector<std::string>& ad_tech_code_blobs) { return ""; },
-      /*version_num=*/25);
+      /*version_num=*/"v25");
   EXPECT_DEATH(code_fetcher.Start(), "");
 }
 

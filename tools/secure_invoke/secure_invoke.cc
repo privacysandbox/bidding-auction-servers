@@ -33,6 +33,7 @@ constexpr char kJsonFormat[] = "JSON";
 constexpr char kProtoFormat[] = "PROTO";
 
 using ::privacy_sandbox::bidding_auction_servers::ClientType;
+using ::privacy_sandbox::bidding_auction_servers::HpkeKeyset;
 using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 
 int main(int argc, char** argv) {
@@ -78,6 +79,12 @@ int main(int argc, char** argv) {
   std::string id =
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
   uint8_t key_id = stoi(id);
+  const HpkeKeyset keyset = {
+      .key_id = key_id,
+      .public_key = public_key_hex,
+      .private_key = "unused",
+  };
+
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);
   if (op == "encrypt") {
     if (target_service == kSfe) {
@@ -85,24 +92,23 @@ int main(int argc, char** argv) {
           privacy_sandbox::bidding_auction_servers::LoadFile(input_file);
       // LOG causes clipping of response.
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextSelectAdRequestToJson(json_input_str, client_type,
-                                                    public_key_hex, key_id,
-                                                    enable_debug_reporting);
+              PackagePlainTextSelectAdRequestToJson(
+                  json_input_str, client_type, keyset, enable_debug_reporting);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextGetBidsRequestToJson(public_key_hex, key_id,
+              PackagePlainTextGetBidsRequestToJson(keyset,
                                                    enable_debug_reporting);
     }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type, public_key_hex, key_id, enable_debug_reporting);
+              client_type, keyset, enable_debug_reporting);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToBfe(
-              public_key_hex, key_id, enable_debug_reporting);
+              keyset, enable_debug_reporting);
       CHECK(status.ok()) << status;
     } else {
       LOG(FATAL) << "Unsupported target service: " << target_service;

@@ -53,7 +53,7 @@ class GenerateBidsReactor
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
   explicit GenerateBidsReactor(
-      const CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
+      CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
       GenerateBidsResponse* response,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,

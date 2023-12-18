@@ -32,6 +32,8 @@ namespace {
 inline constexpr char kLogs[] = "logs";
 inline constexpr char kWarnings[] = "warnings";
 inline constexpr char kErrors[] = "errors";
+inline constexpr int kNumDebugReportingReplacements = 5;
+inline constexpr int kNumAdditionalWinReportingReplacements = 2;
 
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
 
@@ -51,26 +53,23 @@ PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
   // If there is no winning ad, return with default signals values.
   if (!winning_ad_score.has_value()) {
-    absl::flat_hash_map<std::string,
-                        absl::flat_hash_map<std::string, SellerRejectionReason>>
-        rejection_reason_map;
     return {kDefaultWinningInterestGroupName,
             kDefaultWinningInterestGroupOwner,
             kDefaultWinningBid,
-            kDefaultHighestScoringOtherBid,
+            /*DefaultHighestScoringOtherBid=*/0.0,
             kDefaultHighestScoringOtherBidInterestGroupOwner,
-            kDefaultHasHighestScoringOtherBid,
+            /*DefaultHasHighestScoringOtherBid=*/false,
             kDefaultWinningScore,
             kDefaultWinningAdRenderUrl,
-            std::move(rejection_reason_map)};
+            {}};
   }
   float winning_bid = winning_ad_score->buyer_bid();
   float winning_score = winning_ad_score->desirability();
   // Set second highest other bid information in signals if available.
   std::string highest_scoring_other_bid_ig_owner =
       kDefaultHighestScoringOtherBidInterestGroupOwner;
-  float highest_scoring_other_bid = kDefaultHighestScoringOtherBid;
-  bool has_highest_scoring_other_bid;
+  float highest_scoring_other_bid = 0.0;
+  bool has_highest_scoring_other_bid = false;
   if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() > 0) {
     auto iterator =
         winning_ad_score->ig_owner_highest_scoring_other_bids_map().begin();
@@ -115,43 +114,41 @@ PostAuctionSignals GeneratePostAuctionSignals(
 }
 
 HTTPRequest CreateDebugReportingHttpRequest(
-    absl::string_view url,
-    std::unique_ptr<DebugReportingPlaceholder> placeholder_data,
+    absl::string_view url, const DebugReportingPlaceholder& placeholder_data,
     bool is_win_debug_url) {
-  std::vector<std::pair<const absl::string_view, std::string>> replacements;
+  std::vector<std::pair<absl::string_view, std::string>> replacements;
+  replacements.reserve(
+      kNumDebugReportingReplacements +
+      (is_win_debug_url ? kNumAdditionalWinReportingReplacements : 0));
   replacements.push_back(
       {kWinningBidPlaceholder,
-       absl::StrFormat("%.2f", placeholder_data->winning_bid)});
+       absl::StrFormat("%.2f", placeholder_data.winning_bid)});
   replacements.push_back(
       {kMadeWinningBidPlaceholder,
-       absl::StrFormat("%v", placeholder_data->made_winning_bid)});
+       placeholder_data.made_winning_bid ? "true" : "false"});
   replacements.push_back(
       {kRejectReasonPlaceholder, std::string(ToSellerRejectionReasonString(
-                                     placeholder_data->rejection_reason))});
+                                     placeholder_data.rejection_reason))});
   replacements.push_back(
-      {kHighestScoringOtherBidPlaceholder,
-       absl::StrFormat("%.2f", kDefaultHighestScoringOtherBid)});
-  replacements.push_back(
-      {kMadeHighestScoringOtherBidPlaceholder,
-       absl::StrFormat("%v", kDefaultHasHighestScoringOtherBid)});
+      {kHighestScoringOtherBidPlaceholder, kDefaultHighestScoringOtherBid});
+  replacements.push_back({kMadeHighestScoringOtherBidPlaceholder,
+                          kDefaultHasHighestScoringOtherBid});
   // Only pass the second highest scored bid information to the winner.
   if (is_win_debug_url) {
     replacements.push_back(
         {kHighestScoringOtherBidPlaceholder,
-         absl::StrFormat("%.2f", placeholder_data->highest_scoring_other_bid)});
+         absl::StrFormat("%.2f", placeholder_data.highest_scoring_other_bid)});
     replacements.push_back(
         {kMadeHighestScoringOtherBidPlaceholder,
-         absl::StrFormat("%v",
-                         placeholder_data->made_highest_scoring_other_bid)});
+         placeholder_data.made_highest_scoring_other_bid ? "true" : "false"});
   }
-  std::string formatted_url = absl::StrReplaceAll(url, replacements);
   HTTPRequest http_request;
-  http_request.url = formatted_url;
+  http_request.url = absl::StrReplaceAll(url, replacements);
   http_request.headers = {};
   return http_request;
 }
 
-std::unique_ptr<DebugReportingPlaceholder> GetPlaceholderDataForInterestGroup(
+DebugReportingPlaceholder GetPlaceholderDataForInterestGroup(
     absl::string_view interest_group_owner,
     absl::string_view interest_group_name,
     const PostAuctionSignals& post_auction_signals) {
@@ -171,10 +168,12 @@ std::unique_ptr<DebugReportingPlaceholder> GetPlaceholderDataForInterestGroup(
       rejection_reason = ig_name_itr->second;
     }
   }
-  return std::make_unique<DebugReportingPlaceholder>(
-      post_auction_signals.winning_bid, made_winning_bid,
-      post_auction_signals.highest_scoring_other_bid,
-      made_highest_scoring_other_bid, rejection_reason);
+  return {.winning_bid = post_auction_signals.winning_bid,
+          .made_winning_bid = made_winning_bid,
+          .highest_scoring_other_bid =
+              post_auction_signals.highest_scoring_other_bid,
+          .made_highest_scoring_other_bid = made_highest_scoring_other_bid,
+          .rejection_reason = rejection_reason};
 }
 
 SellerRejectionReason ToSellerRejectionReason(

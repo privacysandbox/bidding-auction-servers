@@ -25,6 +25,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
 #include "include/grpcpp/server_context.h"
 #include "services/common/clients/async_client.h"
 namespace privacy_sandbox::bidding_auction_servers {

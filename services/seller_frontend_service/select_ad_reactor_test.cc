@@ -111,7 +111,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         .Times(testing::AnyNumber())
         .WillRepeatedly(
             [](const google::scp::cpio::PublicPrivateKeyPairId& key_id) {
-              EXPECT_EQ(key_id, std::to_string(kTestKeyId));
+              EXPECT_EQ(key_id, std::to_string(HpkeKeyset{}.key_id));
               return GetPrivateKey();
             });
 

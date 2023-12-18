@@ -164,9 +164,10 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
 }
 
 server_common::PrivateKey GetPrivateKey() {
+  HpkeKeyset default_keyset = HpkeKeyset{};
   server_common::PrivateKey private_key;
-  private_key.key_id = std::to_string(kTestKeyId);
-  private_key.private_key = GetHpkePrivateKey();
+  private_key.key_id = std::to_string(default_keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(default_keyset.private_key);
   return private_key;
 }
 
@@ -248,7 +249,9 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
           server_common::CompressionType::kGzip, encoded_request,
           GetEncodedDataSize(encoded_request.size()));
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
-  auto ohttp_request = CreateValidEncryptedRequest(std::move(*framed_request));
+  HpkeKeyset keyset;
+  auto ohttp_request =
+      CreateValidEncryptedRequest(std::move(*framed_request), keyset);
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request =
       '\0' + ohttp_request->EncapsulateAndSerialize();
@@ -260,8 +263,9 @@ AuctionResult DecryptAppProtoAuctionResult(
     absl::string_view auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
+  HpkeKeyset keyset;
   auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context);
+      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Decompress the encoded response.
@@ -281,8 +285,9 @@ AuctionResult DecryptBrowserAuctionResult(
     absl::string_view auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
+  HpkeKeyset keyset;
   auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context);
+      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decompress the encoded response.

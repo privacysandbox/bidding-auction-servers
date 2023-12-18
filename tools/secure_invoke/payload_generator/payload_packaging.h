@@ -73,19 +73,15 @@ namespace privacy_sandbox::bidding_auction_servers {
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(
-    absl::string_view input_json_str,
-    ClientType client_type = CLIENT_TYPE_BROWSER,
-    absl::string_view public_key = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false,
+    absl::string_view input_json_str, ClientType client_type,
+    const HpkeKeyset& keyset, bool enable_debug_reporting = false,
     absl::string_view protected_app_signals_json = "");
 
 // This method returns a SelectAdRequest json for testing B&A servers in
 // "test_mode" using the PackagePlainTextSelectAdRequest method.
 std::string PackagePlainTextSelectAdRequestToJson(
-    absl::string_view input_json_str,
-    ClientType client_type = CLIENT_TYPE_BROWSER,
-    absl::string_view public_key = kDefaultPublicKey,
-    uint8_t key_id = kTestKeyId, bool enable_debug_reporting = false);
+    absl::string_view input_json_str, ClientType client_type,
+    const HpkeKeyset& keyset, bool enable_debug_reporting = false);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // TOOLS_PAYLOAD_GENERATOR_PAYLOAD_PACKAGING_H_

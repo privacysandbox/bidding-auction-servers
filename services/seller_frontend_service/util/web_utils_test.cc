@@ -67,7 +67,7 @@ inline constexpr char kTestInteractionUrl3[] = "http://close.com";
 inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
-log::ContextImpl log_context{{}, "", ConsentedDebugConfiguration()};
+log::ContextImpl log_context{{}, ConsentedDebugConfiguration()};
 
 using ErrorVisibility::CLIENT_VISIBLE;
 using BiddingGroupMap =
@@ -1211,7 +1211,7 @@ TEST(CborDecodeAuctionResultToProto, ValidAuctionResult) {
 
 TEST(CborDecodeAuctionResultToProto, ErrorResult) {
   absl::string_view hex_cbor =
-      "a1656572726f72a2676d657373616765684261644572726f7264636f6465190190";
+      "A1656572726F72A264636F6465190190676D657373616765684261644572726F72";
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(absl::HexStringToBytes(hex_cbor));
   CHECK_OK(decoded_result);

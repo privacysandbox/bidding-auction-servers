@@ -85,6 +85,7 @@ class SelectAdReactorForAppTest : public ::testing::Test {
   }
 
   TrustedServersConfigClient config_ = CreateConfig();
+  const HpkeKeyset default_keyset_ = HpkeKeyset{};
 };
 
 using ProtectedAuctionInputTypes =
@@ -115,7 +116,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       encrypted_response.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -188,7 +189,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       encrypted_response.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -244,7 +245,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
           server_common::CompressionType::kGzip, encoded_request,
           GetEncodedDataSize(encoded_request.size()));
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
-  auto ohttp_request = CreateValidEncryptedRequest(std::move(*framed_request));
+  auto ohttp_request = CreateValidEncryptedRequest(std::move(*framed_request),
+                                                   this->default_keyset_);
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request =
       '\0' + ohttp_request->EncapsulateAndSerialize();
@@ -258,7 +260,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(), context);
+      encrypted_response.auction_result_ciphertext(), context,
+      this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -398,6 +401,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
                           *key_fetcher_manager_,
                           std::make_unique<MockAsyncReporter>(
                               std::make_unique<MockHttpFetcherAsync>())};
+
+  const HpkeKeyset default_keyset_ = HpkeKeyset{};
 };
 
 TEST_F(SelectAdReactorPASTest, PASBuyerInputIsPopulatedForGetBids) {
@@ -678,7 +683,7 @@ TEST_F(SelectAdReactorPASTest, BothPASAndPAInputsMissingIsAnError) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       encrypted_response.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Unframe the framed response.

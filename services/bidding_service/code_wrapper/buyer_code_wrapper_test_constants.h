@@ -76,7 +76,9 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       try {
         generateBidResponse = generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
       } catch({error, message}) {
+        if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");
+        }
       } finally {
         if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
@@ -149,7 +151,9 @@ constexpr absl::string_view
       try {
         generateBidResponse = generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval);
       } catch({error, message}) {
+        if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");
+        }
       } finally {
         if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url

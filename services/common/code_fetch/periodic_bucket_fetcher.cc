@@ -42,7 +42,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 PeriodicBucketFetcher::PeriodicBucketFetcher(
     absl::string_view bucket_name, absl::string_view blob_name,
-    absl::Duration fetch_period_ms, const V8Dispatcher& dispatcher,
+    absl::Duration fetch_period_ms, V8Dispatcher& dispatcher,
     server_common::Executor* executor,
     std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
         BlobStorageClientFactory::Create())
@@ -97,7 +97,7 @@ void PeriodicBucketFetcher::PeriodicBucketFetch() {
           if (cb_result_value_ != result_value) {
             cb_result_value_ = result_value;
 
-            absl::Status roma_result = dispatcher_.LoadSync(1, result_value);
+            absl::Status roma_result = dispatcher_.LoadSync("v1", result_value);
             PS_VLOG(1) << "Roma Client Response: " << roma_result;
             if (roma_result.ok()) {
               PS_VLOG(2) << "Current code loaded into Roma:\n" << result_value;

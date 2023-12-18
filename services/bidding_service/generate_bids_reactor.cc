@@ -274,12 +274,12 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation, log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, uint64_t version_number) {
+    const bool enable_adtech_code_logging, absl::string_view version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
   // TODO(b/258790164) Update after code is fetched periodically.
-  generate_bid_request.version_num = version_number;
+  generate_bid_request.version_string = version;
   // Copy base input and amend with custom interest_group
   generate_bid_request.input = base_input;
 
@@ -402,7 +402,7 @@ long SetAndReturnDebugUrlSize(AdWithBid* ad_with_bid,
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
-    const CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
+    CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
     GenerateBidsResponse* response,
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -605,10 +605,8 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
     PS_VLOG(1, log_context_) << "Failed to encrypt the generate bids response.";
     status = grpc::Status(grpc::INTERNAL, kInternalServerError);
   }
-  if (status.error_code() == grpc::StatusCode::OK) {
-    metric_context_->SetRequestSuccessful();
-  } else {
-    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
+  if (status.error_code() != grpc::StatusCode::OK) {
+    metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
   }
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsResponse\n"
                                     << response_->ShortDebugString();

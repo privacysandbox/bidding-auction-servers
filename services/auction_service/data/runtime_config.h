@@ -45,11 +45,6 @@ struct AuctionServiceRuntimeConfig {
   // Enables protected app signals support.
   bool enable_protected_app_signals = false;
 
-  // Whether the OpenTelemetry Logs is enabled. It's used for consented
-  // debugging.
-  bool enable_otel_based_logging = false;
-  // The secret token for AdTech consented debugging.
-  std::string consented_debug_token = "";
   // Enables noising of modeling_signals, recency and join_count inputs to
   // reportWin function.
   bool enable_report_win_input_noising = false;

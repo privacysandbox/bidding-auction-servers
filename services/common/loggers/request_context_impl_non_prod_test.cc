@@ -22,8 +22,9 @@ using ::testing::ContainsRegex;
 
 TEST_F(ConsentedLogTest, LogNotConsented) {
   test_instance_ = std::make_unique<ContextImpl>(
-      absl::btree_map<std::string, std::string>{{"id", "1234"}}, kServerToken,
+      absl::btree_map<std::string, std::string>{{"id", "1234"}},
       mismatched_token_);
+  SetServerTokenForTestOnly(kServerToken);
   EXPECT_THAT(LogWithCapturedStderr(
                   [this]() { PS_VLOG(kMaxV, *test_instance_) << kLogContent; }),
               ContainsRegex(absl::StrCat("\\(id: 1234\\)[ \t]+", kLogContent)));
@@ -32,8 +33,9 @@ TEST_F(ConsentedLogTest, LogNotConsented) {
 
 TEST_F(ConsentedLogTest, LogConsented) {
   test_instance_ = std::make_unique<ContextImpl>(
-      absl::btree_map<std::string, std::string>{{"id", "1234"}}, kServerToken,
+      absl::btree_map<std::string, std::string>{{"id", "1234"}},
       matched_token_);
+  SetServerTokenForTestOnly(kServerToken);
   EXPECT_THAT(LogWithCapturedStderr(
                   [this]() { PS_VLOG(kMaxV, *test_instance_) << kLogContent; }),
               ContainsRegex(absl::StrCat("\\(id: 1234\\)[ \t]+", kLogContent)));
@@ -44,16 +46,18 @@ TEST_F(ConsentedLogTest, LogConsented) {
 TEST_F(DebugResponseTest, NotLoggedIfNotSet) {
   // mismatched_token_ does not log debug info
   test_instance_ = std::make_unique<ContextImpl>(
-      absl::btree_map<std::string, std::string>{{"id", "1234"}}, kServerToken,
+      absl::btree_map<std::string, std::string>{{"id", "1234"}},
       mismatched_token_,
       [this]() { return ad_response_.mutable_debug_info(); });
+  SetServerTokenForTestOnly(kServerToken);
   PS_VLOG(kMaxV, *test_instance_) << kLogContent;
   EXPECT_FALSE(ad_response_.has_debug_info());
 
   // matched_token_ does not log debug info
   test_instance_ = std::make_unique<ContextImpl>(
-      absl::btree_map<std::string, std::string>{{"id", "1234"}}, kServerToken,
-      matched_token_, [this]() { return ad_response_.mutable_debug_info(); });
+      absl::btree_map<std::string, std::string>{{"id", "1234"}}, matched_token_,
+      [this]() { return ad_response_.mutable_debug_info(); });
+  SetServerTokenForTestOnly(kServerToken);
   PS_VLOG(kMaxV, *test_instance_) << kLogContent;
   EXPECT_FALSE(ad_response_.has_debug_info());
 }
@@ -61,9 +65,10 @@ TEST_F(DebugResponseTest, NotLoggedIfNotSet) {
 TEST_F(DebugResponseTest, LoggedIfSet) {
   // debug_info turned on, then log
   test_instance_ = std::make_unique<ContextImpl>(
-      absl::btree_map<std::string, std::string>{{"id", "1234"}}, kServerToken,
+      absl::btree_map<std::string, std::string>{{"id", "1234"}},
       debug_info_config_,
       [this]() { return ad_response_.mutable_debug_info(); });
+  SetServerTokenForTestOnly(kServerToken);
   PS_VLOG(kMaxV, *test_instance_) << kLogContent;
   EXPECT_THAT(ad_response_.debug_info().logs(),
               ElementsAre(ContainsRegex(

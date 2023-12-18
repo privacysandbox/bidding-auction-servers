@@ -163,7 +163,7 @@ INPUT_FORMAT=PROTO
 CLIENT_IP=<A valid client IPv4 address>
 
 # Run the tool with desired arguments.
-./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
+DOCKER_NETWORK=host ./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
     -- \
     -target_service=bfe \
     -input_file="/src/workspace/${INPUT_PATH}" \
@@ -195,7 +195,7 @@ INPUT_PATH=select_ad_request.json  # Needs to be a valid plaintext request in th
 CLIENT_IP=<A valid client IPv4 address>
 
 # Run the tool with desired arguments.
-./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
+DOCKER_NETWORK=host ./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
     -- \
     -target_service=sfe \
     -input_file="/src/workspace/${INPUT_PATH}" \

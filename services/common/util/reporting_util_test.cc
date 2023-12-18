@@ -90,21 +90,27 @@ TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
 TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidSuccess) {
   absl::string_view url_1 =
       "https://wikipedia.org?wb=${winningBid}&m_wb=${madeWinningBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          2.25, false, 0.0, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 2.25,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view url_2 =
       "https://wikipedia.org?wb=${winningBid}&m_wb=${madeWinningBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_2 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, true, 0.0, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_2 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = true,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
 
   HTTPRequest request_1 =
-      CreateDebugReportingHttpRequest(url_1, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url_1, placeholder_1, true);
   HTTPRequest request_2 =
-      CreateDebugReportingHttpRequest(url_2, std::move(placeholder_2), true);
+      CreateDebugReportingHttpRequest(url_2, placeholder_2, true);
 
   absl::string_view expected_url_1 = "https://wikipedia.org?wb=2.25&m_wb=false";
   absl::string_view expected_url_2 = "https://wikipedia.org?wb=1.90&m_wb=true";
@@ -115,13 +121,16 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidSuccess) {
 TEST(CreateDebugReportingHttpRequestTest, GetWithWinningBidAsZero) {
   absl::string_view url =
       "https://wikipedia.org?wb=${winningBid}&m_wb=${madeWinningBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          0.0, false, 0.0, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 0.0,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?wb=0.00&m_wb=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -130,19 +139,25 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidSuccess) {
       "https://"
       "wikipedia.org?hob=${highestScoringOtherBid}&m_hob=${"
       "madeHighestScoringOtherBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 2.18, true,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 2.18,
+      .made_highest_scoring_other_bid = true,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?hob=2.18&m_hob=true";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_2 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 2.18, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_2 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 2.18,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   expected_url = "https://wikipedia.org?hob=2.18&m_hob=false";
   request =
       CreateDebugReportingHttpRequest(url, std::move(placeholder_2), true);
@@ -154,10 +169,13 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidAsZero) {
       "https://"
       "wikipedia.org?hob=${highestScoringOtherBid}&m_hob=${"
       "madeHighestScoringOtherBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 0.0, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
   HTTPRequest request =
       CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
@@ -167,39 +185,47 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidAsZero) {
 TEST(CreateDebugReportingHttpRequestTest, GetWithRejectionReasonSuccess) {
   absl::string_view url =
       "https://wikipedia.org?seller_rejection_reason=${rejectReason}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 2.18, true, SellerRejectionReason::INVALID_BID);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 2.18,
+      .made_highest_scoring_other_bid = true,
+      .rejection_reason = SellerRejectionReason::INVALID_BID};
   absl::string_view expected_url =
       "https://wikipedia.org?seller_rejection_reason=invalid-bid";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
 TEST(CreateDebugReportingHttpRequestTest, GetWithRejectionReasonNotAvailable) {
   absl::string_view url =
       "https://wikipedia.org?seller_rejection_reason=${rejectReason}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 0.0, false,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url =
       "https://wikipedia.org?seller_rejection_reason=not-available";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
 TEST(CreateDebugReportingHttpRequestTest, GetWithNoPlaceholder) {
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 2.18, true,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 2.18,
+      .made_highest_scoring_other_bid = true,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view url = "https://wikipedia.org";
   absl::string_view expected_url = "https://wikipedia.org";
-  HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder), true);
+  HTTPRequest request = CreateDebugReportingHttpRequest(url, placeholder, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -209,13 +235,16 @@ TEST(CreateDebugReportingHttpRequestTest,
       "https://"
       "wikipedia.org?hob=${highestScoringOtherBid}&m_hob=${"
       "madeHighestScoringOtherBid}";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder_1 =
-      std::make_unique<DebugReportingPlaceholder>(
-          1.9, false, 2.18, true,
-          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 2.18,
+      .made_highest_scoring_other_bid = true,
+      .rejection_reason =
+          SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), false);
+      CreateDebugReportingHttpRequest(url, placeholder_1, false);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -233,14 +262,14 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsNone) {
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
       .rejection_reason_map = std::move(rejection_reason_map)};
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
+  DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kTestIgName, signals);
-  EXPECT_FALSE(placeholder->made_winning_bid);
-  EXPECT_FALSE(placeholder->made_highest_scoring_other_bid);
-  EXPECT_EQ(placeholder->winning_bid, signals.winning_bid);
-  EXPECT_EQ(placeholder->highest_scoring_other_bid,
+  EXPECT_FALSE(placeholder.made_winning_bid);
+  EXPECT_FALSE(placeholder.made_highest_scoring_other_bid);
+  EXPECT_EQ(placeholder.winning_bid, signals.winning_bid);
+  EXPECT_EQ(placeholder.highest_scoring_other_bid,
             signals.highest_scoring_other_bid);
-  EXPECT_EQ(placeholder->rejection_reason,
+  EXPECT_EQ(placeholder.rejection_reason,
             SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
 }
 
@@ -259,11 +288,11 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsWinner) {
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
       .rejection_reason_map = std::move(rejection_reason_map)};
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
+  DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kTestIgName, signals);
 
-  EXPECT_TRUE(placeholder->made_winning_bid);
-  EXPECT_EQ(placeholder->winning_bid, signals.winning_bid);
+  EXPECT_TRUE(placeholder.made_winning_bid);
+  EXPECT_EQ(placeholder.winning_bid, signals.winning_bid);
 }
 
 TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerMadeHighestOtherBid) {
@@ -282,11 +311,11 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerMadeHighestOtherBid) {
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
       .rejection_reason_map = std::move(rejection_reason_map)};
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
+  DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kWinningIgName, signals);
 
-  EXPECT_TRUE(placeholder->made_highest_scoring_other_bid);
-  EXPECT_EQ(placeholder->highest_scoring_other_bid,
+  EXPECT_TRUE(placeholder.made_highest_scoring_other_bid);
+  EXPECT_EQ(placeholder.highest_scoring_other_bid,
             signals.highest_scoring_other_bid);
 }
 
@@ -308,14 +337,13 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsBoth) {
       .rejection_reason_map = std::move(rejection_reason_map)};
 
   absl::string_view test_ig_name = "test_ig_name";
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
-      GetPlaceholderDataForInterestGroup(kWinningIgOwner, test_ig_name,
-                                         signals);
+  DebugReportingPlaceholder placeholder = GetPlaceholderDataForInterestGroup(
+      kWinningIgOwner, test_ig_name, signals);
 
-  EXPECT_TRUE(placeholder->made_winning_bid);
-  EXPECT_TRUE(placeholder->made_highest_scoring_other_bid);
-  EXPECT_EQ(placeholder->winning_bid, signals.winning_bid);
-  EXPECT_EQ(placeholder->highest_scoring_other_bid,
+  EXPECT_TRUE(placeholder.made_winning_bid);
+  EXPECT_TRUE(placeholder.made_highest_scoring_other_bid);
+  EXPECT_EQ(placeholder.winning_bid, signals.winning_bid);
+  EXPECT_EQ(placeholder.highest_scoring_other_bid,
             signals.highest_scoring_other_bid);
 }
 
@@ -339,11 +367,10 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgHasRejectionReason) {
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
       .rejection_reason_map = std::move(rejection_reason_map)};
-  std::unique_ptr<DebugReportingPlaceholder> placeholder =
-      GetPlaceholderDataForInterestGroup(kWinningIgOwner, kWinningIgName,
-                                         signals);
+  DebugReportingPlaceholder placeholder = GetPlaceholderDataForInterestGroup(
+      kWinningIgOwner, kWinningIgName, signals);
 
-  EXPECT_EQ(placeholder->rejection_reason,
+  EXPECT_EQ(placeholder.rejection_reason,
             SellerRejectionReason::BID_BELOW_AUCTION_FLOOR);
 }
 

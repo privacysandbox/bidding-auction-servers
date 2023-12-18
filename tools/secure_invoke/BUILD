@@ -30,6 +30,7 @@ cc_library(
         ":flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/clients/seller_frontend_server:async_client",
+        "//services/common/test/utils:ohttp_test_utils",
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "//tools/secure_invoke/payload_generator:payload_packaging_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",

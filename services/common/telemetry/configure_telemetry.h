@@ -37,6 +37,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // TODO (b/278899152): get version dynamically
 inline constexpr std::string_view kOpenTelemetryVersion = "1.9.1";
+inline constexpr std::string_view kBuildVersion = "3.0.0";
+inline constexpr std::string_view kOperator = "operator";
 
 template <typename T>
 void InitTelemetry(const TrustedServerConfigUtil& config_util,
@@ -57,17 +59,24 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
           .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
+  bool consented_log_enabled =
+      telemetry_config.LogsAllowed() &&
+      config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING);
+  if (consented_log_enabled) {
+    log::ServerToken(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN));
+  }
   server_common::InitTelemetry(
       config_util.GetService().data(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
-      telemetry_config.LogsAllowed() &&
-          config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING));
+      consented_log_enabled);
   Resource server_info = Resource::Create(ResourceAttributes{
       {semantic_conventions::kServiceName, config_util.GetService().data()},
       {semantic_conventions::kDeploymentEnvironment,
        config_util.GetEnvironment().data()},
       {semantic_conventions::kServiceInstanceId,
-       config_util.GetInstanceId().data()}});
+       config_util.GetInstanceId().data()},
+      {semantic_conventions::kServiceVersion, kBuildVersion.data()},
+      {kOperator.data(), config_util.GetOperator().data()}});
 
   server_common::ConfigureTracer(server_info, collector_endpoint);
   static LoggerProvider* log_provider =

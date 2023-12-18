@@ -41,7 +41,7 @@ class ProtectedAppSignalsGenerateBidsReactor
  public:
   explicit ProtectedAppSignalsGenerateBidsReactor(
       const grpc::CallbackServerContext* context,
-      const CodeDispatchClient& dispatcher,
+      CodeDispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config,
       const GenerateProtectedAppSignalsBidsRequest* request,
       GenerateProtectedAppSignalsBidsResponse* response,

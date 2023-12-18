@@ -439,6 +439,16 @@ absl::StatusOr<std::string> GetCborSerializedAuctionResult(
 absl::Status CborSerializeError(const AuctionResult::Error& error,
                                 ErrorHandler error_handler, cbor_item_t& root) {
   ScopedCbor serialized_error_map(cbor_new_definite_map(kNumErrorKeys));
+  struct cbor_pair code_kv = {
+      .key = cbor_move(cbor_build_stringn(kCode, sizeof(kCode) - 1)),
+      .value = cbor_move(cbor_build_uint(error.code()))};
+  if (!cbor_map_add(*serialized_error_map, std::move(code_kv))) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL,
+        absl::StrCat("Failed to serialize error ", kCode, " to CBOR")));
+    return absl::InternalError("");
+  }
+
   const std::string& message = error.message();
   struct cbor_pair message_kv = {
       .key = cbor_move(cbor_build_stringn(kMessage, sizeof(kMessage) - 1)),
@@ -447,16 +457,6 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
     error_handler(grpc::Status(
         grpc::INTERNAL,
         absl::StrCat("Failed to serialize error ", kMessage, " to CBOR")));
-    return absl::InternalError("");
-  }
-
-  struct cbor_pair code_kv = {
-      .key = cbor_move(cbor_build_stringn(kCode, sizeof(kCode) - 1)),
-      .value = cbor_move(cbor_build_uint(error.code()))};
-  if (!cbor_map_add(*serialized_error_map, std::move(code_kv))) {
-    error_handler(grpc::Status(
-        grpc::INTERNAL,
-        absl::StrCat("Failed to serialize error ", kCode, " to CBOR")));
     return absl::InternalError("");
   }
 

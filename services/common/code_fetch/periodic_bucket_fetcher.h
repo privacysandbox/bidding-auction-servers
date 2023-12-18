@@ -52,7 +52,7 @@ class PeriodicBucketFetcher : public CodeFetcherInterface {
   // Constructs a new PeriodicBucketFether.
   explicit PeriodicBucketFetcher(
       absl::string_view bucket_name, absl::string_view blob_name,
-      absl::Duration fetch_period_ms, const V8Dispatcher& dispatcher,
+      absl::Duration fetch_period_ms, V8Dispatcher& dispatcher,
       server_common::Executor* executor,
       std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
           blob_storage_client);
@@ -77,7 +77,7 @@ class PeriodicBucketFetcher : public CodeFetcherInterface {
   absl::string_view bucket_name_;
   absl::string_view blob_name_;
   absl::Duration fetch_period_ms_;
-  const V8Dispatcher& dispatcher_;
+  V8Dispatcher& dispatcher_;
   server_common::Executor* executor_;
   std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
       blob_storage_client_;

@@ -78,11 +78,17 @@ std::string GetValidInput(const SelectAdRequest& expected_output) {
 }
 
 TEST(PaylodPackagingTest, FailsOnEmptyJson) {
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(""), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(
+      PackagePlainTextSelectAdRequestToJson("", CLIENT_TYPE_BROWSER, keyset),
+      "");
 }
 
 TEST(PaylodPackagingTest, FailsOnInvalidJson) {
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson("random-string"), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(
+                   "random-string", CLIENT_TYPE_BROWSER, keyset),
+               "");
 }
 
 TEST(PaylodPackagingTest, FailsOnEmptyInputJson) {
@@ -91,7 +97,10 @@ TEST(PaylodPackagingTest, FailsOnEmptyInputJson) {
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(input_str.value()), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(
+                   input_str.value(), CLIENT_TYPE_BROWSER, keyset),
+               "");
 }
 
 TEST(PaylodPackagingTest, FailsOnInputJsonMissingProtectedAudience) {
@@ -103,7 +112,10 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingProtectedAudience) {
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(input_str.value()), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(
+                   input_str.value(), CLIENT_TYPE_BROWSER, keyset),
+               "");
 }
 
 TEST(PaylodPackagingTest, FailsOnInputJsonMissingBuyerInputMap) {
@@ -121,7 +133,10 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingBuyerInputMap) {
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(input_str.value()), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(
+                   input_str.value(), CLIENT_TYPE_BROWSER, keyset),
+               "");
 }
 
 TEST(PaylodPackagingTest, HandlesOldBuyerInputMapKey) {
@@ -143,7 +158,9 @@ TEST(PaylodPackagingTest, HandlesOldBuyerInputMapKey) {
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
-  PackagePlainTextSelectAdRequestToJson(input_str.value());
+  HpkeKeyset keyset;
+  PackagePlainTextSelectAdRequestToJson(input_str.value(), CLIENT_TYPE_BROWSER,
+                                        keyset);
 }
 
 TEST(PaylodPackagingTest, FailsOnInputJsonMissingAuctionConfig) {
@@ -160,7 +177,10 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingAuctionConfig) {
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
-  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(input_str.value()), "");
+  HpkeKeyset keyset;
+  EXPECT_DEATH(PackagePlainTextSelectAdRequestToJson(
+                   input_str.value(), CLIENT_TYPE_BROWSER, keyset),
+               "");
 }
 
 TEST(PaylodPackagingTest, CopiesAuctionConfigFromSourceJson) {
@@ -170,7 +190,9 @@ TEST(PaylodPackagingTest, CopiesAuctionConfigFromSourceJson) {
       MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
   std::string input = GetValidInput(expected);
 
-  std::string output = PackagePlainTextSelectAdRequestToJson(input);
+  HpkeKeyset keyset;
+  std::string output =
+      PackagePlainTextSelectAdRequestToJson(input, CLIENT_TYPE_BROWSER, keyset);
   SelectAdRequest actual;
   auto parse_output =
       google::protobuf::util::JsonStringToMessage(output, &actual);
@@ -183,6 +205,25 @@ TEST(PaylodPackagingTest, CopiesAuctionConfigFromSourceJson) {
       << difference;
 }
 
+TEST(PaylodPackagingTest, PassesTopLevelSellerForComponentAuction) {
+  absl::string_view top_level_seller = "https://toplevel-seller.com";
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
+  SelectAdRequest expected =
+      MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
+  expected.mutable_auction_config()->set_top_level_seller(top_level_seller);
+  std::string input = GetValidInput(expected);
+
+  HpkeKeyset keyset;
+  std::string output =
+      PackagePlainTextSelectAdRequestToJson(input, CLIENT_TYPE_BROWSER, keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+  EXPECT_EQ(actual.auction_config().top_level_seller(), top_level_seller);
+}
+
 TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
   auto protected_audience_input =
       MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
@@ -190,7 +231,9 @@ TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
       MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
   auto input = GetValidInput(expected);
 
-  std::string output = PackagePlainTextSelectAdRequestToJson(input);
+  HpkeKeyset keyset;
+  std::string output =
+      PackagePlainTextSelectAdRequestToJson(input, CLIENT_TYPE_BROWSER, keyset);
   SelectAdRequest actual;
   auto parse_output =
       google::protobuf::util::JsonStringToMessage(output, &actual);
@@ -203,10 +246,10 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
   auto input =
       R"JSON({"auction_config":{"sellerSignals":"{\"seller_signal\": \"1698245045006099572\"}","auctionSignals":"{\"auction_signal\": \"1698245045006100642\"}","buyerList":["1698245045005905922"],"seller":"seller.com","perBuyerConfig":{"1698245045005905922":{"buyerSignals":"1698245045006101412"}},"buyerTimeoutMs":1000},"raw_protected_audience_input":{"raw_buyer_input":{"ad_tech_A.com":{"interestGroups":[{"name":"1698245045006110232","biddingSignalsKeys":["1698245045006110482","1698245045006110862"],"adRenderIds":["ad_render_id_1698245045006122582","ad_render_id_1698245045006123002","ad_render_id_1698245045006123242","ad_render_id_1698245045006123472","ad_render_id_1698245045006123772","ad_render_id_1698245045006124002","ad_render_id_1698245045006124212","ad_render_id_1698245045006124412","ad_render_id_1698245045006124672"],"userBiddingSignals":"{\"1698245045006112422\":\"1698245045006112622\",\"1698245045006113232\":\"1698245045006113422\",\"1698245045006111322\":\"1698245045006111702\",\"1698245045006112802\":\"1698245045006112972\",\"1698245045006112032\":\"1698245045006112252\"}","browserSignals":{"joinCount":"8","bidCount":"41","recency":"1698245045","prevWins":"[[1698245045,\"ad_render_id_1698245045006122582\"],[1698245045,\"ad_render_id_1698245045006123002\"],[1698245045,\"ad_render_id_1698245045006123242\"],[1698245045,\"ad_render_id_1698245045006123472\"],[1698245045,\"ad_render_id_1698245045006123772\"],[1698245045,\"ad_render_id_1698245045006124002\"],[1698245045,\"ad_render_id_1698245045006124212\"],[1698245045,\"ad_render_id_1698245045006124412\"],[1698245045,\"ad_render_id_1698245045006124672\"]]"}}]}}}})JSON";
 
+  HpkeKeyset keyset;
   auto select_ad_reqcurrent_all_debug_urls_chars =
       std::move(PackagePlainTextSelectAdRequest(input, CLIENT_TYPE_BROWSER,
-                                                kDefaultPublicKey, kTestKeyId,
-                                                enable_debug_reporting))
+                                                keyset, enable_debug_reporting))
           .first;
 
   absl::StatusOr<server_common::EncapsulatedRequest>
@@ -218,8 +261,8 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
 
   // Decrypt.
   server_common::PrivateKey private_key;
-  private_key.key_id = std::to_string(kTestKeyId);
-  private_key.private_key = GetHpkePrivateKey(kDefaultPrivateKey);
+  private_key.key_id = std::to_string(keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(keyset.private_key);
   auto decrypted_response = server_common::DecryptEncapsulatedRequest(
       private_key, *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
@@ -281,9 +324,10 @@ TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
           }
        }
     })JSON";
+  HpkeKeyset keyset;
   auto select_ad_req =
       std::move(PackagePlainTextSelectAdRequest(
-                    input, CLIENT_TYPE_ANDROID, kDefaultPublicKey, kTestKeyId,
+                    input, CLIENT_TYPE_ANDROID, keyset,
                     /*enable_debug_reporting=*/true, kTestProtectedAppSignals)
                     .first);
 
@@ -294,8 +338,8 @@ TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
 
   // Decrypt.
   server_common::PrivateKey private_key;
-  private_key.key_id = std::to_string(kTestKeyId);
-  private_key.private_key = GetHpkePrivateKey(kDefaultPrivateKey);
+  private_key.key_id = std::to_string(keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(keyset.private_key);
   auto decrypted_response = server_common::DecryptEncapsulatedRequest(
       private_key, *parsed_encapsulated_request);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();

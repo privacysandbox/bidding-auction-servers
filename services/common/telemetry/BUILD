@@ -37,6 +37,7 @@ cc_test(
     name = "configure_telemetry_test",
     timeout = "short",
     srcs = ["configure_telemetry_test.cc"],
+    data = ["//:version_data"],
     deps = [
         ":configure_telemetry",
         "@com_google_googletest//:gtest_main",

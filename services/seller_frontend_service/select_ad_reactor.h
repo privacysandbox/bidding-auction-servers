@@ -84,6 +84,8 @@ inline constexpr char kDeviceComponentAuctionWithAndroid[] =
 
 inline constexpr char kNoBidsReceived[] = "No bids received.";
 
+inline constexpr absl::string_view kWinningAd = "winning_ad";
+
 // Crypto key needed throughout the lifecycle of the request.
 struct KeyContext {
   // Key ID used to encrypt the request.
@@ -104,12 +106,11 @@ struct KeyContext {
 // necessary state and grpc releases the reactor from memory.
 class SelectAdReactor : public grpc::ServerUnaryReactor {
  public:
-  explicit SelectAdReactor(grpc::CallbackServerContext* context,
-                           const SelectAdRequest* request,
-                           SelectAdResponse* response,
-                           const ClientRegistry& clients,
-                           const TrustedServersConfigClient& config_client,
-                           bool fail_fast = true, int max_buyers_solicited = 2);
+  explicit SelectAdReactor(
+      grpc::CallbackServerContext* context, const SelectAdRequest* request,
+      SelectAdResponse* response, const ClientRegistry& clients,
+      const TrustedServersConfigClient& config_client, bool fail_fast = true,
+      int max_buyers_solicited = metric::kMaxBuyersSolicited);
 
   // Initiate the asynchronous execution of the SelectAdRequest.
   virtual void Execute();
@@ -392,6 +393,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
                                        const absl::Status& status,
                                        absl::string_view buyer = "");
+
+  absl::Time start_ = absl::Now();
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

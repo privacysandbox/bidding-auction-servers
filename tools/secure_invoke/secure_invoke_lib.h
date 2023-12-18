@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "services/common/test/utils/ohttp_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -37,14 +38,13 @@ struct RequestOptions {
 
 // Sends a request to SFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
-absl::Status SendRequestToSfe(ClientType client_type,
-                              absl::string_view public_key, uint8_t key_id,
+absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting);
 
 // Sends a request to BFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
 absl::Status SendRequestToBfe(
-    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting,
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr);
 
 // Gets contents of the provided file path.
@@ -52,8 +52,7 @@ std::string LoadFile(absl::string_view file_path);
 
 // Returns a JSON string of the OHTTP encrypted of the input GetBidsRawRequest
 // to the secure invoke tool.
-std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
-                                                 uint8_t key_id,
+std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
                                                  bool enable_debug_reporting);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

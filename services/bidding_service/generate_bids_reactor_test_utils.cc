@@ -107,12 +107,12 @@ ProtectedAppSignals CreateProtectedAppSignals(
 absl::Status MockRomaExecution(std::vector<DispatchRequest>& batch,
                                BatchDispatchDoneCallback batch_callback,
                                absl::string_view expected_method_name,
-                               int expected_request_version,
+                               absl::string_view expected_request_version,
                                const std::string& expected_json_response) {
   EXPECT_EQ(batch.size(), 1);
   const auto& request = batch[0];
   EXPECT_EQ(request.handler_name, expected_method_name);
-  EXPECT_EQ(request.version_num, expected_request_version)
+  EXPECT_EQ(request.version_string, expected_request_version)
       << "Failed for: " << expected_method_name;
 
   std::vector<absl::StatusOr<DispatchResponse>> responses = {

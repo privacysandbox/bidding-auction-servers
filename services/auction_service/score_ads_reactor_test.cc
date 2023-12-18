@@ -56,6 +56,7 @@ constexpr char kTestReportingWinResponseJson[] =
 constexpr int kTestDesirability = 5;
 constexpr char kTestConsentToken[] = "testConsentedToken";
 constexpr char kTestEgressFeatures[] = "testEgressFeatures";
+constexpr char kTestComponentSeller[] = "testComponentSeller";
 
 using ::google::protobuf::TextFormat;
 using ::testing::AnyNumber;
@@ -215,7 +216,6 @@ constexpr char kTestProtectedAppScoringSignals[] = R"json(
   }
 )json";
 constexpr char kTestPublisherHostname[] = "publisher_hostname";
-constexpr char kTestTopLevelSeller[] = "https://www.example-top-ssp.com";
 
 absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
                          BatchDispatchDoneCallback done_callback,
@@ -241,13 +241,14 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
 
 namespace {
 
-void BuildRawRequest(std::vector<AdWithBidMetadata> ads_with_bids_to_add,
+void BuildRawRequest(const std::vector<AdWithBidMetadata> ads_with_bids_to_add,
                      absl::string_view seller_signals,
                      absl::string_view auction_signals,
                      absl::string_view scoring_signals,
                      absl::string_view publisher_hostname, RawRequest& output,
                      const bool enable_debug_reporting = false,
-                     const bool enable_adtech_code_logging = false) {
+                     const bool enable_adtech_code_logging = false,
+                     absl::string_view top_level_seller = "") {
   for (int i = 0; i < ads_with_bids_to_add.size(); i++) {
     output.mutable_per_buyer_signals()->try_emplace(
         ads_with_bids_to_add[i].interest_group_owner(), kTestBuyerSignals);
@@ -258,6 +259,9 @@ void BuildRawRequest(std::vector<AdWithBidMetadata> ads_with_bids_to_add,
   output.set_scoring_signals(scoring_signals);
   output.set_publisher_hostname(publisher_hostname);
   output.set_enable_debug_reporting(enable_debug_reporting);
+  if (!top_level_seller.empty()) {
+    output.set_top_level_seller(top_level_seller);
+  }
   output.mutable_consented_debug_config()->set_is_consented(
       enable_adtech_code_logging);
   output.mutable_consented_debug_config()->set_token(kTestConsentToken);
@@ -380,7 +384,7 @@ class ScoreAdsReactorTest : public ::testing::Test {
         ->Get(&request_);
   }
   ScoreAdsResponse ExecuteScoreAds(
-      RawRequest& raw_request, const MockCodeDispatchClient& dispatcher,
+      RawRequest& raw_request, MockCodeDispatchClient& dispatcher,
       AuctionServiceRuntimeConfig runtime_config,
       bool enable_report_result_url_generation = false) {
     ScoreAdsResponse response;
@@ -662,15 +666,14 @@ TEST_F(ScoreAdsReactorTest,
                        &id_to_ad](std::vector<DispatchRequest>& batch,
                                   BatchDispatchDoneCallback done_callback) {
         ABSL_LOG(INFO) << "Batch executing";
-
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
         for (auto request : batch) {
           ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
-          score_to_ad.insert_or_assign(current_score + 1,
-                                       id_to_ad.at(request.id));
+          ++current_score;
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
           ABSL_LOG(INFO) << "Successfully accessed id ad mapping for "
                          << request.id;
           score_logic.push_back(absl::Substitute(
@@ -683,7 +686,7 @@ TEST_F(ScoreAdsReactorTest,
       "logs":[]
       }
 )",
-              current_score + 1, (allowComponentAuction) ? "true" : "false"));
+              current_score, (allowComponentAuction) ? "true" : "false"));
         }
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic));
@@ -814,7 +817,7 @@ TEST_F(ScoreAdsReactorTest, PassesTopLevelSellerToComponentAuction) {
           const auto& input = request.input;
           EXPECT_EQ(
               *input[4],
-              R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisher_hostname","adComponents":["barStandardAds.com/ad_components/id=0"],"topLevelSeller":"https://www.example-top-ssp.com","renderUrl":"barStandardAds.com/render_ad?id=barbecue2"})JSON");
+              R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisher_hostname","adComponents":["barStandardAds.com/ad_components/id=0"],"topLevelSeller":"testTopLevelSeller","renderUrl":"barStandardAds.com/render_ad?id=barbecue2"})JSON");
         }
         return absl::OkStatus();
       });
@@ -898,6 +901,52 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_TRUE(scored_ad.allow_component_auction());
   EXPECT_EQ(scored_ad.ad_metadata(), "adMetadata");
   EXPECT_GT(scored_ad.bid(), std::numeric_limits<float>::min());
+}
+
+TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
+  MockCodeDispatchClient dispatcher;
+  RawRequest raw_request;
+  AdWithBidMetadata foo, bar;
+  GetTestAdWithBidFoo(foo);
+  GetTestAdWithBidBar(bar);
+  BuildRawRequestForComponentAuction({foo, bar}, kTestSellerSignals,
+                                     kTestAuctionSignals, kTestScoringSignals,
+                                     kTestPublisherHostname, raw_request);
+  RawRequest raw_request_copy = raw_request;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_logic.push_back(
+              R"(
+      {
+      "response" : {
+        "ad": {"key1":"adMetadata"},
+        "desirability" : 0.1,
+        "bid" : 0.1,
+        "allowComponentAuction" : true
+      },
+      "logs":[]
+      }
+)");
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()))
+      << "ScoreAdsResponse could not be parsed: "
+      << response.response_ciphertext();
+  const auto& scored_ad = raw_response.ad_score();
+  EXPECT_EQ(scored_ad.ad_metadata(), "{\"key1\":\"adMetadata\"}");
 }
 
 TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
@@ -1100,6 +1149,114 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
             kTestInteractionUrl);
 }
 
+TEST_F(ScoreAdsReactorTest,
+       SuccessfullyExecutesReportResultAndReportWinForComponentAuctions) {
+  MockCodeDispatchClient dispatcher;
+  int current_score = 0;
+  bool allowComponentAuction = true;
+  bool enable_adtech_code_logging = true;
+  bool enable_report_result_url_generation = true;
+  bool enable_report_result_win_generation = true;
+  bool enable_debug_reporting = false;
+  RawRequest raw_request;
+  AdWithBidMetadata foo, bar;
+  GetTestAdWithBidFoo(foo);
+  GetTestAdWithBidBar(bar);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  enable_debug_reporting, enable_adtech_code_logging,
+                  kTopLevelSeller);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id(render id) is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad, enable_adtech_code_logging,
+                       enable_debug_reporting,
+                       enable_report_result_win_generation](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportingDispatchHandlerFunctionName) == 0) {
+            if (enable_report_result_win_generation) {
+              response.emplace_back(kTestReportingWinResponseJson);
+            } else {
+              response.emplace_back(kTestReportingResponseJson);
+            }
+          } else {
+            score_to_ad.insert_or_assign(current_score,
+                                         id_to_ad.at(request.id));
+            response.push_back(absl::StrFormat(
+                R"JSON(
+              {
+              "response": {
+                "desirability":%d,
+                "bid":%f,
+                "allowComponentAuction":%s
+              },
+              "logs":["test log"]
+              }
+              )JSON",
+                current_score++, 1 + (std::rand() % 20),
+                ((allowComponentAuction) ? "true" : "false")));
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           enable_debug_reporting, enable_adtech_code_logging);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = enable_debug_reporting,
+      .enable_adtech_code_logging = enable_adtech_code_logging,
+      .enable_report_result_url_generation =
+          enable_report_result_url_generation,
+      .enable_report_win_url_generation = enable_report_result_win_generation};
+  const auto& response = ExecuteScoreAds(
+      raw_request, dispatcher, runtime_config, enable_debug_reporting);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .reporting_url(),
+            kTestReportResultUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            1);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionUrl);
+  EXPECT_EQ(
+      scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
+      kTestReportWinUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            1);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionUrl);
+}
+
 TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
   MockCodeDispatchClient dispatcher;
   int current_score = 0;
@@ -1168,8 +1325,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
-      .enable_report_win_url_generation = enable_report_result_win_generation,
-      .consented_debug_token = kTestConsentToken};
+      .enable_report_win_url_generation = enable_report_result_win_generation};
   const auto& response = ExecuteScoreAds(
       raw_request, dispatcher, runtime_config, enable_debug_reporting);
 
@@ -1425,7 +1581,7 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
-        for (const auto& request : batch) {
+        for (auto request : batch) {
           std::string rejection_reason = id_to_rejection_reason.at(request.id);
           score_logic.push_back(absl::Substitute(
               R"(
@@ -1461,6 +1617,84 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
             foo.interest_group_owner());
   EXPECT_EQ(ad_rejection_reason.rejection_reason(),
             SellerRejectionReason::INVALID_BID);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       ScoredAdRemovedFromConsiderationWhenRejectReasonAvailable) {
+  MockCodeDispatchClient dispatcher;
+  RawRequest raw_request;
+  AdWithBidMetadata ad;
+  GetTestAdWithBidFoo(ad);
+
+  BuildRawRequest({ad}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_logic.push_back(
+              R"(
+                  {
+                  "response" : {
+                    "desirability" : 1000,
+                    "bid" : 1000,
+                    "allowComponentAuction" : false,
+                    "rejectReason" : "invalid-bid"
+                  },
+                  "logs":[]
+                  })");
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true};
+  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+
+  // No ad is present in the response even though the scored ad had non-zero
+  // desirability.
+  EXPECT_FALSE(raw_response.has_ad_score());
+}
+
+TEST_F(ScoreAdsReactorTest, ZeroDesirabilityAdsConsideredAsRejected) {
+  MockCodeDispatchClient dispatcher;
+  RawRequest raw_request;
+  AdWithBidMetadata ad;
+  GetTestAdWithBidFoo(ad);
+
+  BuildRawRequest({ad}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request);
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_logic.push_back(R"(
+          {
+            "response" : 0
+          })");
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true};
+  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+
+  // No ad is present in the response when a zero desirability is returned
+  // for the scored ad.
+  EXPECT_FALSE(raw_response.has_ad_score());
 }
 
 TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
@@ -1499,8 +1733,8 @@ TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
 void BuildProtectedAppSignalsRawRequest(
     const std::vector<ProtectedAppSignalsAdWithBidMetadata>&
         ads_with_bids_to_add,
-    absl::string_view seller_signals, absl::string_view auction_signals,
-    absl::string_view scoring_signals, absl::string_view publisher_hostname,
+    const std::string& seller_signals, const std::string& auction_signals,
+    const std::string& scoring_signals, const std::string& publisher_hostname,
     RawRequest& output, bool enable_debug_reporting = false) {
   for (int i = 0; i < ads_with_bids_to_add.size(); i++) {
     output.mutable_per_buyer_signals()->try_emplace(
@@ -1547,7 +1781,7 @@ class ScoreAdsReactorProtectedAppSignalsTest : public ScoreAdsReactorTest {
   }
 
   ScoreAdsResponse ExecuteScoreAds(const RawRequest& raw_request,
-                                   const MockCodeDispatchClient& dispatcher) {
+                                   MockCodeDispatchClient& dispatcher) {
     SetupMockCryptoClientWrapper(raw_request, crypto_client_);
     *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
     request_.set_key_id(kKeyId);

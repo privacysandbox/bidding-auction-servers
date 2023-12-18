@@ -104,8 +104,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
         return log::ContextImpl(
-            GetLoggingContext(), config_.consented_debug_token,
-            raw_request_.consented_debug_config(),
+            GetLoggingContext(), raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
       async_task_tracker_(kNumDefaultOutboundBiddingCalls, log_context_,
@@ -495,10 +494,8 @@ GetBidsUnaryReactor::GetLoggingContext() {
 }
 
 void GetBidsUnaryReactor::FinishWithStatus(const grpc::Status& status) {
-  if (status.error_code() == grpc::StatusCode::OK) {
-    metric_context_->SetRequestSuccessful();
-  } else {
-    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
+  if (status.error_code() != grpc::StatusCode::OK) {
+    metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
   }
 
   Finish(status);

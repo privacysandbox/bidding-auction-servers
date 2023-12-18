@@ -84,6 +84,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
   }
 
   TrustedServersConfigClient config_ = CreateConfig();
+  const HpkeKeyset default_keyset_ = HpkeKeyset{};
 };
 
 using ProtectedAuctionInputTypes =
@@ -124,7 +125,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -192,7 +193,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.
@@ -386,7 +387,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context);
+      response_with_cbor.auction_result_ciphertext(), context,
+      this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
@@ -448,7 +450,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context);
+      response_with_cbor.auction_result_ciphertext(), context,
+      this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
@@ -519,7 +522,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context);
+      response_with_cbor.auction_result_ciphertext(), context,
+      this->default_keyset_);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
@@ -693,7 +697,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyComponentAuctionCborEncoding) {
   // Decrypt the response.
   auto decrypted_response = DecryptEncapsulatedResponse(
       response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context);
+      request_with_context.context, this->default_keyset_);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
 
   // Expect the payload to be of length that is a power of 2.

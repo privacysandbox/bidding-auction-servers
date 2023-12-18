@@ -89,8 +89,7 @@ inline bool IsValidEgress(absl::string_view egress_features) {
 }  // namespace
 
 ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
-    const grpc::CallbackServerContext* context,
-    const CodeDispatchClient& dispatcher,
+    const grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
     const BiddingServiceRuntimeConfig& runtime_config,
     const GenerateProtectedAppSignalsBidsRequest* request,
     GenerateProtectedAppSignalsBidsResponse* response,
@@ -189,7 +188,7 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
       ArgIndex(GenerateBidsUdfArgs::kFeatureFlags), input);
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
-      .version_num = kProtectedAppSignalsGenerateBidBlobVersion,
+      .version_string = kProtectedAppSignalsGenerateBidBlobVersion,
       .handler_name = kDispatchHandlerFunctionNameWithCodeWrapper,
       .input = std::move(input),
   };
@@ -274,7 +273,7 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
       ArgIndex(PrepareDataForRetrievalUdfArgs::kFeatureFlags), input);
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
-      .version_num = kPrepareDataForAdRetrievalBlobVersion,
+      .version_string = kPrepareDataForAdRetrievalBlobVersion,
       .handler_name = kPrepareDataForAdRetrievalEntryFunctionName,
       .input = std::move(input),
   };

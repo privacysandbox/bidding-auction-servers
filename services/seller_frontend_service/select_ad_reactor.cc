@@ -65,8 +65,7 @@ SelectAdReactor::SelectAdReactor(
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                                     kBuyerMetadataKeysMap)),
       is_protected_auction_request_(false),
-      log_context_({}, config_client_.GetStringParameter(CONSENTED_DEBUG_TOKEN),
-                   ConsentedDebugConfiguration(),
+      log_context_({}, ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
       fail_fast_(fail_fast),
@@ -791,11 +790,13 @@ void SelectAdReactor::ScoreAds() {
 }
 
 void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
-  if (status.error_code() == grpc::StatusCode::OK) {
-    metric_context_->SetRequestSuccessful();
-  } else {
+  if (status.error_code() != grpc::StatusCode::OK) {
     PS_LOG(ERROR, log_context_) << "RPC failed: " << status.error_message();
-    metric_context_->SetRequestStatus(server_common::ToAbslStatus(status));
+    metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
+  }
+  if (metric_context_->CustomState(kWinningAd).ok()) {
+    LogIfError(metric_context_->LogHistogram<metric::kSfeWithWinnerTimeMs>(
+        static_cast<int>((absl::Now() - start_) / absl::Milliseconds(1))));
   }
   benchmarking_logger_->End();
   Finish(status);
@@ -853,6 +854,10 @@ void SelectAdReactor::OnScoreAdsDone(
     if (found_response->has_ad_score() &&
         found_response->ad_score().buyer_bid() > 0) {
       high_score = found_response->ad_score();
+      LogIfError(
+          metric_context_->LogUpDownCounter<metric::kRequestWithWinnerCount>(
+              1));
+      metric_context_->SetCustomState(kWinningAd, "");
     }
     if (found_response->has_debug_info()) {
       DebugInfo& auction_log =
@@ -925,13 +930,12 @@ void SelectAdReactor::PerformDebugReporting(
     const std::optional<AdScore>& high_score) {
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(high_score);
-  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
-    std::string ig_owner = buyer;
+  for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
-      AdWithBid adWithBid = get_bid_response->bids().at(i);
-      std::string ig_name = adWithBid.interest_group_name();
-      if (adWithBid.has_debug_report_urls()) {
-        auto done_cb = [ig_owner,
+      const AdWithBid& ad_with_bid = get_bid_response->bids().at(i);
+      const auto& ig_name = ad_with_bid.interest_group_name();
+      if (ad_with_bid.has_debug_report_urls()) {
+        auto done_cb = [ig_owner = ig_owner,
                         ig_name](absl::StatusOr<absl::string_view> result) {
           if (result.ok()) {
             PS_VLOG(2) << "Performed debug reporting for:" << ig_owner
@@ -942,22 +946,22 @@ void SelectAdReactor::PerformDebugReporting(
                        << " ,status:" << result.status();
           }
         };
-        std::string debug_url;
+        absl::string_view debug_url;
         bool is_win_debug_url = false;
-        if (post_auction_signals.winning_ig_owner == buyer &&
-            adWithBid.interest_group_name() ==
+        if (post_auction_signals.winning_ig_owner == ig_owner &&
+            ad_with_bid.interest_group_name() ==
                 post_auction_signals.winning_ig_name) {
-          debug_url = adWithBid.debug_report_urls().auction_debug_win_url();
+          debug_url = ad_with_bid.debug_report_urls().auction_debug_win_url();
           is_win_debug_url = true;
         } else {
-          debug_url = adWithBid.debug_report_urls().auction_debug_loss_url();
+          debug_url = ad_with_bid.debug_report_urls().auction_debug_loss_url();
         }
         HTTPRequest http_request = CreateDebugReportingHttpRequest(
             debug_url,
             GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
                                                post_auction_signals),
             is_win_debug_url);
-        clients_.reporting->DoReport(http_request, done_cb);
+        clients_.reporting->DoReport(http_request, std::move(done_cb));
       }
     }
   }

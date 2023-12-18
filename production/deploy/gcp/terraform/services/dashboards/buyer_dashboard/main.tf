@@ -43,8 +43,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -78,9 +80,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -117,8 +121,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -154,8 +160,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -192,9 +200,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -230,8 +240,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -268,8 +280,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -305,8 +319,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -348,8 +364,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"error_status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -390,8 +408,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -432,8 +452,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -473,8 +495,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -510,8 +534,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -554,8 +580,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"server_name\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -590,8 +618,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -627,8 +657,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -664,8 +696,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -701,8 +735,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -723,7 +759,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_response.kv.size_bytes [95TH PERCENTILE]",
+          "title": "bfe.initiated_response.kv.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -739,12 +775,14 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_response.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\" metric.label.\"service_name\"=\"bfe\""
+                    "filter": "metric.type=\"workload.googleapis.com/bfe.initiated_response.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\" metric.label.\"service_name\"=\"bfe\""
                   }
                 }
               }
@@ -783,8 +821,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"error_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -825,8 +865,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"error_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -868,8 +910,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"error_status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -910,8 +954,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"error_status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     }
@@ -946,8 +992,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
@@ -983,9 +1031,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -1022,9 +1072,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -1061,9 +1113,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -1099,9 +1153,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },
@@ -1138,8 +1194,10 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\""
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
                     },

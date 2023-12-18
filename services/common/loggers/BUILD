@@ -94,6 +94,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/log:globals",
         "@com_google_absl//absl/log:initialize",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
@@ -119,5 +120,15 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@io_opentelemetry_cpp//exporters/ostream:ostream_log_record_exporter",
+    ],
+)
+
+cc_test(
+    name = "request_context_impl_die_test",
+    timeout = "short",
+    srcs = ["request_context_impl_die_test.cc"],
+    deps = [
+        ":request_context_impl",
+        "@com_google_googletest//:gtest_main",
     ],
 )

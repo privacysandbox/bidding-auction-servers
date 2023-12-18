@@ -106,7 +106,8 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
 
 absl::StatusOr<std::string> GetSellerReportingSignals(
     const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname) {
+    const std::string& publisher_hostname,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata) {
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(winning_ad_score);
 
@@ -139,6 +140,25 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
   document.AddMember(kHighestScoringOtherBid,
                      post_auction_signals.highest_scoring_other_bid,
                      document.GetAllocator());
+
+  if (component_reporting_metadata.has_value()) {
+    rapidjson::Value top_level_seller;
+    top_level_seller.SetString(
+        component_reporting_metadata.value().top_level_seller.c_str(),
+        document.GetAllocator());
+    rapidjson::Value component_seller;
+    component_seller.SetString(
+        component_reporting_metadata.value().component_seller.c_str(),
+        document.GetAllocator());
+    document.AddMember(kTopLevelSellerTag, top_level_seller,
+                       document.GetAllocator());
+    document.AddMember(kModifiedBid,
+                       component_reporting_metadata.value().modified_bid,
+                       document.GetAllocator());
+    document.AddMember(kComponentSeller, component_seller,
+                       document.GetAllocator());
+  }
+
   return SerializeJsonDoc(document);
 }
 
@@ -261,9 +281,11 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
     absl::string_view egress_features) {
   absl::StatusOr<std::string> seller_reporting_signals =
-      GetSellerReportingSignals(winning_ad_score, publisher_hostname);
+      GetSellerReportingSignals(winning_ad_score, publisher_hostname,
+                                component_reporting_metadata);
   if (!seller_reporting_signals.ok()) {
     PS_VLOG(2, log_context)
         << "Error generating Seller Reporting Signals for Reporting input";
@@ -313,16 +335,17 @@ DispatchRequest GetReportingDispatchRequest(
     const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
     std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
     const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
     const std::string& handler_name, absl::string_view egress_features) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
       .id = winning_ad_score.render(),
-      .version_num = kDispatchRequestVersionNumber,
+      .version_string = kDispatchRequestVersion,
       .handler_name = handler_name,
       .input = GetReportingInput(winning_ad_score, publisher_hostname,
                                  enable_ad_tech_code_logging, auction_config,
                                  log_context, buyer_reporting_metadata,
-                                 egress_features),
+                                 component_reporting_metadata, egress_features),
   };
 }
 

@@ -178,7 +178,7 @@ std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 ClientType client_type,
-                                absl::string_view public_key, uint8_t key_id,
+                                const HpkeKeyset& keyset,
                                 bool enable_debug_reporting,
                                 absl::string_view protected_app_signals_json) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
@@ -204,7 +204,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
   protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
   // Package protected_auction_input.
   auto pa_ciphertext_encryption_context_pair =
-      PackagePayload(protected_auction_input, client_type, public_key, key_id);
+      PackagePayload(protected_auction_input, client_type, keyset);
   CHECK(pa_ciphertext_encryption_context_pair.ok())
       << pa_ciphertext_encryption_context_pair.status();
   auto select_ad_request = std::make_unique<SelectAdRequest>();
@@ -219,11 +219,11 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
 
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
-    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting) {
-  auto req = std::move(
-      PackagePlainTextSelectAdRequest(input_json_str, client_type, public_key,
-                                      key_id, enable_debug_reporting)
-          .first);
+    const HpkeKeyset& keyset, bool enable_debug_reporting) {
+  auto req =
+      std::move(PackagePlainTextSelectAdRequest(input_json_str, client_type,
+                                                keyset, enable_debug_reporting)
+                    .first);
   std::string select_ad_json;
   auto select_ad_json_status =
       google::protobuf::util::MessageToJsonString(*req, &select_ad_json);

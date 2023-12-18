@@ -64,7 +64,7 @@ struct ScoringData {
   absl::flat_hash_map<float, std::list<int>> score_ad_map;
   // Saving the desirability allows us to compare desirability between ads
   // without re-parsing the current most-desirable ad every time.
-  float desirability_of_most_desirable_ad = std::numeric_limits<float>::min();
+  float desirability_of_most_desirable_ad = 0;
   // List of rejection reasons provided by seller.
   std::vector<ScoreAdsResponse::AdScore::AdRejectionReason>
       ad_rejection_reasons;
@@ -84,7 +84,7 @@ class ScoreAdsReactor
           ScoreAdsResponse, ScoreAdsResponse::ScoreAdsRawResponse> {
  public:
   explicit ScoreAdsReactor(
-      const CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
+      CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
       ScoreAdsResponse* response,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -149,11 +149,13 @@ class ScoreAdsReactor
       absl::string_view id, std::shared_ptr<std::string> auction_config,
       const std::string& handler_name,
       const BuyerReportingMetadata& buyer_metadata,
+      std::optional<ComponentReportingMetadata> component_reporting_metadata,
       absl::string_view egress_features = "") {
     DispatchRequest dispatch_request = GetReportingDispatchRequest(
         winning_ad_score, raw_request_.publisher_hostname(),
         enable_adtech_code_logging_, auction_config, log_context_,
-        buyer_metadata, handler_name, egress_features);
+        buyer_metadata, component_reporting_metadata, handler_name,
+        egress_features);
     dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
 
     std::vector<DispatchRequest> dispatch_requests = {dispatch_request};

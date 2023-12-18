@@ -186,15 +186,23 @@ void TestResponse(const ReportingResponse& response,
 
 void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
               absl::string_view enable_adtech_code_logging,
+              const ComponentReportingMetadata&
+                  expected_component_reporting_metadata = {},
               const BuyerReportingMetadata& expected_buyer_metadata = {},
               absl::string_view test_buyer_metadata = kTestBuyerMetadata,
               absl::string_view expected_egress_features = "") {
   EXPECT_EQ(
       *(response_vector[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
       kTestAuctionConfig);
-  EXPECT_EQ(*(response_vector[ReportingArgIndex(
-                ReportingArgs::kSellerReportingSignals)]),
-            kTestSellerReportingSignals);
+  if (!expected_component_reporting_metadata.top_level_seller.empty()) {
+    EXPECT_EQ(*(response_vector[ReportingArgIndex(
+                  ReportingArgs::kSellerReportingSignals)]),
+              kTestSellerReportingSignalsForComponentSeller);
+  } else {
+    EXPECT_EQ(*(response_vector[ReportingArgIndex(
+                  ReportingArgs::kSellerReportingSignals)]),
+              kTestSellerReportingSignals);
+  }
   EXPECT_EQ(*(response_vector[ReportingArgIndex(
                 ReportingArgs::kDirectFromSellerSignals)]),
             "{}");
@@ -275,7 +283,7 @@ TEST(ParseAndGetReportingResponseJson, HandlesEmptyResponse) {
   TestResponse(response.value(), expected_response);
 }
 
-TEST(GetReportingInput, ReturnsTheInputArgsForReportResult) {
+TEST(GetReportingInput, ReturnsTheInputArgsForReportResultForComponentAuction) {
   ScoreAdsResponse::AdScore winning_ad_score;
   winning_ad_score.set_buyer_bid(kTestBuyerBid);
   winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
@@ -289,13 +297,18 @@ TEST(GetReportingInput, ReturnsTheInputArgsForReportResult) {
   winning_ad_score.set_desirability(kTestDesirability);
   winning_ad_score.set_render(kTestRender);
   bool enable_adtech_code_logging = true;
+  ComponentReportingMetadata component_reporting_metadata = {
+      .top_level_seller = kTestTopLevelSeller,
+      .modified_bid = kTestModifiedBid,
+      .component_seller = kTestSeller};
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
+  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
   std::vector<std::shared_ptr<std::string>> response_vector = GetReportingInput(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
-      auction_config, log_context, {});
-  TestArgs(response_vector, kEnableAdtechCodeLoggingTrue);
+      auction_config, log_context, {}, component_reporting_metadata);
+  TestArgs(response_vector, kEnableAdtechCodeLoggingTrue,
+           component_reporting_metadata);
 }
 
 TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
@@ -314,14 +327,14 @@ TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
+  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
-      auction_config, log_context, {});
+      auction_config, log_context, {}, {});
   TestArgs(request.input, kEnableAdtechCodeLoggingTrue);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
-  EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
+  EXPECT_EQ(request.version_string, kDispatchRequestVersion);
 }
 
 TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
@@ -340,7 +353,7 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
+  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
   const BuyerReportingMetadata buyer_reporting_metadata = {
       .enable_report_win_url_generation = true,
       .buyer_signals = kTestBuyerSignals,
@@ -353,12 +366,12 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
       .enable_report_win_input_noising = kTestEnableReportWinInputNoisingTrue};
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
-      auction_config, log_context, buyer_reporting_metadata);
-  TestArgs(request.input, kEnableAdtechCodeLoggingTrue,
+      auction_config, log_context, buyer_reporting_metadata, {});
+  TestArgs(request.input, kEnableAdtechCodeLoggingTrue, {},
            buyer_reporting_metadata);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
-  EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
+  EXPECT_EQ(request.version_string, kDispatchRequestVersion);
 }
 
 TEST(GetReportingDispatchRequest,
@@ -378,7 +391,7 @@ TEST(GetReportingDispatchRequest,
   bool enable_adtech_code_logging = true;
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, "", ConsentedDebugConfiguration());
+  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
   const BuyerReportingMetadata buyer_reporting_metadata = {
       .enable_report_win_url_generation = true,
       .enable_protected_app_signals = true,
@@ -392,14 +405,14 @@ TEST(GetReportingDispatchRequest,
       .enable_report_win_input_noising = kTestEnableReportWinInputNoisingTrue};
   DispatchRequest request = GetReportingDispatchRequest(
       winning_ad_score, kTestPublisherHostName, enable_adtech_code_logging,
-      auction_config, log_context, buyer_reporting_metadata,
+      auction_config, log_context, buyer_reporting_metadata, {},
       kReportingProtectedAppSignalsFunctionName, kTestEgressFeatures);
-  TestArgs(request.input, kEnableAdtechCodeLoggingTrue,
+  TestArgs(request.input, kEnableAdtechCodeLoggingTrue, {},
            buyer_reporting_metadata, kTestBuyerMetadataWithProtectedAppSignals,
            kTestEgressFeatures);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingProtectedAppSignalsFunctionName);
-  EXPECT_EQ(request.version_num, kDispatchRequestVersionNumber);
+  EXPECT_EQ(request.version_string, kDispatchRequestVersion);
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

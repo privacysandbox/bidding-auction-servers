@@ -435,10 +435,9 @@ function generateBid( interest_group,
 
 void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
                        absl::string_view adtech_wasm = "") {
-  DispatchConfig config;
-  ASSERT_TRUE(dispatcher->Init(config).ok());
+  ASSERT_TRUE(dispatcher->Init().ok());
   std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
-  ASSERT_TRUE(dispatcher->LoadSync(1, wrapper_blob).ok());
+  ASSERT_TRUE(dispatcher->LoadSync("v1", wrapper_blob).ok());
 }
 
 absl::StatusOr<GenerateBidsRequest::GenerateBidsRawRequest>

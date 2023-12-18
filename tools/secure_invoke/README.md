@@ -161,3 +161,10 @@ KEY_ID=$(echo $LIVE_KEYS | jq .keys[0].id)
     -public_key=${PUBLIC_KEY}
     -key_id=${KEY_ID}
 ```
+
+### Interacting with Local Servers
+
+If you want to send a request to servers running on localhost, make sure to specify the
+`DOCKER_NETWORK=host` environment variable. See
+[here](https://github.com/privacysandbox/bidding-auction-servers/blob/main/tools/debug/README.md#test-buyer-stack)
+for more detail.

@@ -42,7 +42,7 @@ template <typename Request, typename RawRequest, typename Response,
 class CodeDispatchReactor : public grpc::ServerUnaryReactor {
  public:
   explicit CodeDispatchReactor(
-      const CodeDispatchClient& dispatcher, const Request* request,
+      CodeDispatchClient& dispatcher, const Request* request,
       Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client, bool encryption_enabled)
@@ -139,7 +139,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
 
   // Dispatches execution requests to a library that runs V8 workers in
   // separate processes.
-  const CodeDispatchClient& dispatcher_;
+  CodeDispatchClient& dispatcher_;
   std::vector<DispatchRequest> dispatch_requests_;
 
   // The client request, lifecycle managed by gRPC.

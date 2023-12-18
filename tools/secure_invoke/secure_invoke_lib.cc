@@ -43,9 +43,9 @@ constexpr char kJsonFormat[] = "JSON";
 
 absl::StatusOr<std::string> ParseSelectAdResponse(
     std::unique_ptr<SelectAdResponse> resp, ClientType client_type,
-    quiche::ObliviousHttpRequest::Context& context) {
+    quiche::ObliviousHttpRequest::Context& context, const HpkeKeyset& keyset) {
   absl::StatusOr<AuctionResult> res = UnpackageAuctionResult(
-      resp->auction_result_ciphertext(), client_type, context);
+      resp->auction_result_ciphertext(), client_type, context, keyset);
   if (!res.ok()) {
     return res.status();
   }
@@ -63,7 +63,7 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
 absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
-    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting,
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -86,7 +86,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
   std::pair<std::unique_ptr<SelectAdRequest>,
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
-          raw_select_ad_request_json, client_type, public_key, key_id,
+          raw_select_ad_request_json, client_type, keyset,
           enable_debug_reporting, absl::GetFlag(FLAGS_pas_buyer_input_json));
 
   // Add request headers.
@@ -105,11 +105,11 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
   return sfe_client.Execute(
       std::move(request_context_pair.first), request_metadata,
       [context = std::move(request_context_pair.second),
-       onDone = std::move(on_done), client_type](
-          absl::StatusOr<std::unique_ptr<SelectAdResponse>> resp) mutable {
+       onDone = std::move(on_done), client_type,
+       keyset](absl::StatusOr<std::unique_ptr<SelectAdResponse>> resp) mutable {
         if (resp.ok()) {
-          std::move(onDone)(ParseSelectAdResponse(std::move(resp.value()),
-                                                  client_type, context));
+          std::move(onDone)(ParseSelectAdResponse(
+              std::move(resp.value()), client_type, context, keyset));
         } else {
           std::move(onDone)(resp.status());
         }
@@ -119,8 +119,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
 
 absl::Status InvokeBuyerFrontEndWithRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
-    const RequestOptions& request_options, absl::string_view public_key,
-    uint8_t key_id,
+    const RequestOptions& request_options, const HpkeKeyset& keyset,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr) {
   // Validate input
@@ -155,7 +154,7 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
   };
   auto key_fetcher_manager =
       std::make_unique<server_common::FakeKeyFetcherManager>(
-          public_key, "unused", std::to_string(key_id));
+          keyset.public_key, "unused", std::to_string(keyset.key_id));
   auto crypto_client = CreateCryptoClient();
   BuyerFrontEndAsyncGrpcClient bfe_client(
       key_fetcher_manager.get(), crypto_client.get(), service_client_config,
@@ -196,8 +195,7 @@ std::string LoadFile(absl::string_view file_path) {
                      (std::istreambuf_iterator<char>()));
 }
 
-absl::Status SendRequestToSfe(ClientType client_type,
-                              absl::string_view public_key, uint8_t key_id,
+absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
@@ -212,7 +210,7 @@ absl::Status SendRequestToSfe(ClientType client_type,
   absl::Notification notification;
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
-          raw_select_ad_request_json, options, client_type, public_key, key_id,
+          raw_select_ad_request_json, options, client_type, keyset,
           enable_debug_reporting,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
@@ -256,14 +254,13 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
   return get_bids_raw_request;
 }
 
-std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
-                                                 uint8_t key_id,
+std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
                                                  bool enable_debug_reporting) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting);
   auto key_fetcher_manager =
       std::make_unique<server_common::FakeKeyFetcherManager>(
-          public_key, "unused", std::to_string(key_id));
+          keyset.public_key, "unused", std::to_string(keyset.key_id));
   auto crypto_client = CreateCryptoClient();
   auto secret_request =
       EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
@@ -281,7 +278,7 @@ std::string PackagePlainTextGetBidsRequestToJson(absl::string_view public_key,
 }
 
 absl::Status SendRequestToBfe(
-    absl::string_view public_key, uint8_t key_id, bool enable_debug_reporting,
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting);
@@ -294,7 +291,7 @@ absl::Status SendRequestToBfe(
   absl::Status status = absl::OkStatus();
   auto call_status = privacy_sandbox::bidding_auction_servers::
       InvokeBuyerFrontEndWithRawRequest(
-          get_bids_raw_request, request_options, public_key, key_id,
+          get_bids_raw_request, request_options, keyset,
           [&status](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response

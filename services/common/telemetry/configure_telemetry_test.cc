@@ -14,6 +14,10 @@
 
 #include "configure_telemetry.h"
 
+#include <fstream>
+#include <iostream>
+#include <string>
+
 #include "absl/log/check.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -28,6 +32,7 @@ TEST(InitTelemetry, _) {
   config_client.SetFlagForTest("mode: OFF", TELEMETRY_CONFIG);
   config_client.SetFlagForTest(kTrue, ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlagForTest("", COLLECTOR_ENDPOINT);
+  config_client.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
 
   InitTelemetry<SelectAdRequest>(
       TrustedServerConfigUtil(/*init_config_client*/ false), config_client,
@@ -37,6 +42,16 @@ TEST(InitTelemetry, _) {
   // We only set the private logger, the shared logger is always noop
   EXPECT_TRUE(dynamic_cast<opentelemetry::logs::NoopLoggerProvider*>(
       opentelemetry::logs::Provider::GetLoggerProvider().get()));
+}
+TEST(CompareVersionStringTest, _) {
+  std::fstream new_file;
+  new_file.open("version.txt", std::ios::in);
+  std::string recent_version;
+  if (new_file.is_open()) {
+    getline(new_file, recent_version);
+    new_file.close();
+  }
+  EXPECT_EQ(kBuildVersion.data(), recent_version);
 }
 
 }  // namespace

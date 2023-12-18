@@ -150,3 +150,9 @@ config_setting(
     },
     visibility = ["//visibility:public"],
 )
+
+filegroup(
+    name = "version_data",
+    srcs = ["version.txt"],
+    visibility = ["//services/common/telemetry:__pkg__"],
+)

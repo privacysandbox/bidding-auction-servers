@@ -27,7 +27,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
-        "@google_privacysandbox_servers_common//scp/cc/roma/roma_service/src:roma_service_lib",
+        "@google_privacysandbox_servers_common//scp/cc/roma/roma_service:roma_service_lib",
     ],
 )
 

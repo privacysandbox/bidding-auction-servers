@@ -33,18 +33,18 @@ constexpr absl::Duration kMinCodeFetchDuration = absl::Minutes(1);
 PeriodicCodeFetcher::PeriodicCodeFetcher(
     std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
     std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
-    const V8Dispatcher& dispatcher, server_common::Executor* executor,
+    V8Dispatcher& dispatcher, server_common::Executor* executor,
     absl::Duration time_out_ms, WrapCodeForDispatch wrap_code)
     : PeriodicCodeFetcher(std::move(url_endpoints), fetch_period_ms,
                           std::move(curl_http_fetcher), dispatcher, executor,
                           time_out_ms, std::move(wrap_code),
-                          /*version_num=*/1) {}
+                          /*version_string=*/"v1") {}
 PeriodicCodeFetcher::PeriodicCodeFetcher(
     std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
     std::unique_ptr<HttpFetcherAsync> curl_http_fetcher,
-    const V8Dispatcher& dispatcher, server_common::Executor* executor,
+    V8Dispatcher& dispatcher, server_common::Executor* executor,
     absl::Duration time_out_ms, WrapCodeForDispatch wrap_code,
-    uint64_t version_num)
+    std::string version_string)
     : url_endpoints_(std::move(url_endpoints)),
       fetch_period_ms_(fetch_period_ms),
       curl_http_fetcher_(std::move(curl_http_fetcher)),
@@ -52,7 +52,7 @@ PeriodicCodeFetcher::PeriodicCodeFetcher(
       executor_(std::move(executor)),
       time_out_ms_(time_out_ms),
       wrap_code_(std::move(wrap_code)),
-      version_num_(version_num) {}
+      version_string_(std::move(version_string)) {}
 
 void PeriodicCodeFetcher::Start() {
   CHECK_LT(time_out_ms_, fetch_period_ms_)
@@ -96,7 +96,7 @@ void PeriodicCodeFetcher::PeriodicCodeFetch() {
 
             std::string wrapped_code = wrap_code_(cb_results_value_);
             absl::Status syncResult =
-                dispatcher_.LoadSync(version_num_, wrapped_code);
+                dispatcher_.LoadSync(version_string_, wrapped_code);
             PS_VLOG(1) << "Roma Client Response: " << syncResult;
             if (syncResult.ok()) {
               PS_VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
