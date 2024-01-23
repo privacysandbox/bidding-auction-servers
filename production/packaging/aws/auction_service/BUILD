@@ -30,7 +30,6 @@ load("//:config.bzl", "LOG_ENV_VARS")
 pkg_files(
     name = "server_executables",
     srcs = [
-        "bin/init_server_basic",
         "//services/auction_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
@@ -85,6 +84,11 @@ pkg_tar(
 # (/bin/sh) and where it actually is on our image (/busybox/sh).
 container_layer(
     name = "kmstool_enclave_cli_layer",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
     symlinks = {
         "/bin/sh": "/busybox/sh",
     },
@@ -102,9 +106,13 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "/init_server_basic",
+        "--init_config_client=true",
     ],
-    entrypoint = ["sh"],
+    entrypoint = [
+        "/proxify",
+        "--",
+        "/server",
+    ],
     env = LOG_ENV_VARS,
     layers = [
         "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify_layer",

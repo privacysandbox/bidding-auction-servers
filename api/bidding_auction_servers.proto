@@ -342,7 +342,7 @@ message SelectAdRequest {
       // Optional.
       // The Id is specified by the buyer to support coordinated experiments
       // with the buyer's Key/Value services.
-      int32 buyer_kv_experiment_group_id = 2;
+      optional int32 buyer_kv_experiment_group_id = 2;
 
       // Optional.
       // Version of buyer's GenerateBid() code.
@@ -398,7 +398,7 @@ message SelectAdRequest {
     message SellerCodeExperimentSpecification {
       // The Id is specified by the seller to support coordinated experiments
       // with the seller's Key/Value services.
-      int32 seller_kv_experiment_group_id = 1;
+      optional int32 seller_kv_experiment_group_id = 1;
 
       // The code version of the score ad module provided by the seller.
       // The string must be an object name belonging to the
@@ -547,6 +547,11 @@ message GetBidsRequest {
     // Top level seller passed in case of component auctions. This is forwarded
     // to generateBid.
     string top_level_seller = 12;
+
+    // Optional.
+    // The Id is specified by the buyer to support coordinated experiments
+    // with the buyer's Key/Value services.
+    optional int32 buyer_kv_experiment_group_id = 13;
   }
 
   // Encrypted GetBidsRawRequest.

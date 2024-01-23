@@ -168,7 +168,8 @@ T MakeARandomProtectedAuctionInput(int num_buyers = 2) {
 
 template <typename T>
 SelectAdRequest MakeARandomSelectAdRequest(
-    absl::string_view seller_domain_origin, const T& protected_auction_input) {
+    absl::string_view seller_domain_origin, const T& protected_auction_input,
+    bool set_buyer_egid = false, bool set_seller_egid = false) {
   SelectAdRequest request;
   request.mutable_auction_config()->set_seller_signals(absl::StrCat(
       "{\"seller_signal\": \"", MakeARandomString(), "\"}"));  // 3.
@@ -179,11 +180,21 @@ SelectAdRequest MakeARandomSelectAdRequest(
   request.mutable_auction_config()->set_seller(MakeARandomString());
   request.mutable_auction_config()->set_buyer_timeout_ms(1000);
 
+  if (set_seller_egid) {
+    request.mutable_auction_config()
+        ->mutable_code_experiment_spec()
+        ->set_seller_kv_experiment_group_id(MakeARandomInt(1000, 10000));
+  }
+
   for (auto& buyer_input_pair : protected_auction_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         buyer_input_pair.first;
     SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config = {};
     per_buyer_config.set_buyer_signals(MakeARandomString());
+    if (set_buyer_egid) {
+      per_buyer_config.set_buyer_kv_experiment_group_id(
+          MakeARandomInt(1000, 10000));
+    }
     request.mutable_auction_config()->mutable_per_buyer_config()->insert(
         {buyer_input_pair.first, per_buyer_config});
   }

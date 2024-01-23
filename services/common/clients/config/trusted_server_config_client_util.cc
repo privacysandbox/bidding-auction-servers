@@ -110,7 +110,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   client->Init();
   absl::StatusOr<std::string> resource_name = GetResourceName(client);
   CHECK_OK(resource_name) << "Could not fetch host resource name.";
-
+  ComputeZone(resource_name.value());
   absl::Notification done;
   GetInstanceDetailsByResourceNameRequest request;
   request.set_instance_resource_name(resource_name.value());

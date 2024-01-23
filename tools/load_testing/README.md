@@ -91,7 +91,7 @@ end
 1.  To run load test with the required number of requests use this command:
 
 ```bash
-./wrk  -R 300 -t50 -c60 -d5m -s <lua file path> --u_latency  https://seller1-<env>.sfe-gcp.com/v1/selectAd
+./wrk  -R 300 -t50 -c60 -d5m -s <lua file path> --u_latency  https://seller1-<env>.sfe.bas-gcp.pstest.dev/v1/selectAd
 ```
 
 1.  Performance metrics can be found on GCP/AWS dashboards:

@@ -47,6 +47,8 @@ void HttpScoringSignalsAsyncProvider::Get(
     }
   }
   request->client_type = scoring_signals_request.client_type_;
+  request->seller_kv_experiment_group_id =
+      scoring_signals_request.seller_kv_experiment_group_id_;
   http_seller_kv_async_client_->Execute(
       std::move(request), scoring_signals_request.filtering_metadata_,
       [on_done = std::move(on_done)](

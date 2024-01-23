@@ -25,6 +25,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 absl::StatusOr<uint64_t> RandGenerator(uint64_t max);
 uint8_t BucketJoinCount(int32_t join_count);
 uint8_t BucketRecency(long recency);
+
+// Stochastically rounds the floating point value to k bits.
+absl::StatusOr<double> RoundStochasticallyToKBits(double value, unsigned k);
+
 // Noises and masks ModelingSignals input for reportWin.
 // modeling_signals are noised 1 in 100 times. If noised, a random integer
 // between 0 and 0x0FFF  will be returned. Applies a mask of 0x0FFF to retain

@@ -168,6 +168,9 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
       ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
+  // Parses curl message to result string or an error message for the callback.
+  std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
+
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(
       const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,

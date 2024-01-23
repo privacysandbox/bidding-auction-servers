@@ -43,7 +43,7 @@ using DispatchConfig = google::scp::roma::Config<>;
 // for multi-process javascript and wasm execution in V8.
 class V8Dispatcher {
  public:
-  explicit V8Dispatcher(DispatchConfig config = DispatchConfig());
+  explicit V8Dispatcher(DispatchConfig&& config = DispatchConfig());
 
   // Init the dispatcher. Note that this call may bring up multiple processes,
   // which can be slow and should only happen on server startup.

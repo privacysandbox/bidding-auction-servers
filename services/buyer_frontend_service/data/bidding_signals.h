@@ -28,11 +28,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 // sourced such as from a gRPC Key Value Service.
 struct BiddingSignals {
   std::unique_ptr<std::string> trusted_signals;
-  absl::flat_hash_map<const BuyerInput::InterestGroup*,
-                      google::protobuf::ListValue>
-      ca_ads_map;
-  absl::flat_hash_map<const BuyerInput::InterestGroup*, std::string>
-      ca_user_signals_map;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

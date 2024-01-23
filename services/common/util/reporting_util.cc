@@ -81,6 +81,13 @@ PostAuctionSignals GeneratePostAuctionSignals(
     }
   }
 
+  bool made_highest_scoring_other_bid = false;
+  if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() == 1 &&
+      winning_ad_score->ig_owner_highest_scoring_other_bids_map().contains(
+          winning_ad_score->interest_group_owner())) {
+    made_highest_scoring_other_bid = true;
+  }
+
   // group rejection reasons by buyer and interest group owner.
   absl::flat_hash_map<std::string,
                       absl::flat_hash_map<std::string, SellerRejectionReason>>
@@ -110,7 +117,8 @@ PostAuctionSignals GeneratePostAuctionSignals(
           has_highest_scoring_other_bid,
           winning_score,
           winning_ad_score->render(),
-          std::move(rejection_reason_map)};
+          std::move(rejection_reason_map),
+          made_highest_scoring_other_bid};
 }
 
 HTTPRequest CreateDebugReportingHttpRequest(
