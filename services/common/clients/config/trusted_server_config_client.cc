@@ -1,4 +1,5 @@
 //  Copyright 2022 Google LLC
+//  Copyright (C) Microsoft Corporation. All rights reserved.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -109,7 +110,8 @@ absl::Status TrustedServersConfigClient::Init(
 
 bool TrustedServersConfigClient::HasParameter(
     absl::string_view name) const noexcept {
-  return config_entries_map_.contains(name);
+  return config_entries_map_.contains(name) &&
+         config_entries_map_.at(name) != kEmptyValue;
 }
 
 absl::string_view TrustedServersConfigClient::GetStringParameter(

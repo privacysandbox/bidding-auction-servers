@@ -1,4 +1,5 @@
 //  Copyright 2022 Google LLC
+//  Copyright (C) Microsoft Corporation. All rights reserved.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -52,6 +53,8 @@ class DefaultAsyncGrpcClient
         encryption_enabled_(encryption_enabled) {
 #if defined(CLOUD_PLATFORM_AWS)
     cloud_platform_ = server_common::CloudPlatform::kAws;
+#elif defined(CLOUD_PLATFORM_AZURE)
+    cloud_platform_ = server_common::CloudPlatform::kAzure;
 #elif defined(CLOUD_PLATFORM_GCP)
     cloud_platform_ = server_common::CloudPlatform::kGcp;
 #else

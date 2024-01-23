@@ -1,4 +1,5 @@
 //   Copyright 2022 Google LLC
+//   Copyright (C) Microsoft Corporation. All rights reserved.
 //
 //   Licensed under the Apache License, Version 2.0 (the "License");
 //   you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 
 #include "services/seller_frontend_service/util/config_param_parser.h"
 
+#include <array>
 #include <memory>
 #include <string>
 
@@ -51,19 +53,19 @@ constexpr absl::string_view kBuyerHostMapForMultipleBuyers =
       },
       "https://bid4.com": {
         "url": "dns:///bfe-dev.buyer4-frontend.com:443",
-        "cloudPlatform": "GCP"
+        "cloudPlatform": "AZURE"
       },
       "https://bid5.com": {
         "url": "dns:///bfe-dev.buyer5-frontend.com:443",
-        "cloudPlatform": "AWS"
+        "cloudPlatform": "GCP"
       },
       "https://bid6.com": {
         "url": "dns:///bfe-dev.buyer6-frontend.com:443",
-        "cloudPlatform": "GCP"
+        "cloudPlatform": "AWS"
       },
       "https://bid7.com": {
         "url": "dns:///bfe-dev.buyer7-frontend.com:443",
-        "cloudPlatform": "AWS"
+        "cloudPlatform": "AZURE"
       }
     }
     )json";
@@ -179,8 +181,9 @@ TEST(StartupParamParserTest, ParseMultiBuyerMap) {
         std::string url =
             absl::StrCat("dns:///bfe-dev.buyer", std::to_string(buyer_number),
                          "-frontend.com:443");
-        CloudPlatform platform =
-            (buyer_number % 2 == 0) ? CloudPlatform::kGcp : CloudPlatform::kAws;
+        constexpr std::array<CloudPlatform, 3> platforms = {
+            CloudPlatform::kGcp, CloudPlatform::kAws, CloudPlatform::kAzure};
+        CloudPlatform platform = platforms[buyer_number % platforms.size()];
         EXPECT_EQ(it->second.endpoint, url);
         EXPECT_EQ(it->second.cloud_platform, platform);
         actual_buyer_async_client = class_under_test.Get(current_ig_owner);

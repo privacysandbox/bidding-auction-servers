@@ -1,4 +1,5 @@
 # Copyright 2023 Google LLC
+# Copyright (C) Microsoft Corporation. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,6 +26,9 @@ cc_library(
             {
                 "@google_privacysandbox_servers_common//:aws_instance": [
                     "-DCLOUD_PLATFORM_AWS=1",
+                ],
+                "@google_privacysandbox_servers_common//:azure_instance": [
+                    "-DCLOUD_PLATFORM_AZURE=1",
                 ],
                 "@google_privacysandbox_servers_common//:gcp_instance": [
                     "-DCLOUD_PLATFORM_GCP=1",

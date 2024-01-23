@@ -32,6 +32,9 @@ build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
 build:instance_aws --//:instance=aws
 build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
+build:instance_azure --//:instance=azure
+build:instance_azure --@google_privacysandbox_servers_common//:instance=azure
+
 build:platform_local --//:platform=local
 
 build:platform_aws --//:platform=aws
@@ -40,11 +43,17 @@ build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
 build:platform_gcp --//:platform=gcp
 build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
 
+build:platform_azure --//:platform=azure
+build:platform_azure --@google_privacysandbox_servers_common//:platform=azure
+
 build:local_aws --config=instance_local
 build:local_aws --config=platform_aws
 
 build:local_gcp --config=instance_local
 build:local_gcp --config=platform_gcp
+
+build:local_azure --config=instance_local
+build:local_azure --config=platform_azure
 
 build:gcp_gcp --config=instance_gcp
 build:gcp_gcp --config=platform_gcp
@@ -54,6 +63,9 @@ build:local_local --config=platform_local
 
 build:aws_aws --config=instance_aws
 build:aws_aws --config=platform_aws
+
+build:azure_azure --config=instance_azure
+build:azure_azure --config=platform_azure
 
 build:non_prod --//:build_flavor=non_prod
 build:non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
