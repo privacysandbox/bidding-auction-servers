@@ -132,8 +132,7 @@ class ScoreAdsReactor
   // dispatch execution.
   // ad: the ad and bid that was scored.
   void ScoreAdsCallback(
-      const std::vector<absl::StatusOr<DispatchResponse>>& output,
-      bool enable_debug_reporting);
+      const std::vector<absl::StatusOr<DispatchResponse>>& output);
 
   absl::btree_map<std::string, std::string> GetLoggingContext(
       const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request);
@@ -144,56 +143,19 @@ class ScoreAdsReactor
 
   static constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 
-  void DispatchReportingRequestForPA(
-      const ScoreAdsResponse::AdScore& winning_ad_score,
-      std::shared_ptr<std::string> auction_config,
-      const BuyerReportingMetadata& buyer_reporting_metadata) {
-    ReportingDispatchRequestData dispatch_request_data = {
-        .handler_name = kReportingDispatchHandlerFunctionName,
-        .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-        .log_context = log_context_,
-        .publisher_hostname = raw_request_.publisher_hostname(),
-        .auction_config = auction_config,
-        .buyer_reporting_metadata = buyer_reporting_metadata};
-    if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
-      dispatch_request_data.component_reporting_metadata = {
-          .top_level_seller = raw_request_.top_level_seller(),
-          .component_seller = raw_request_.seller()};
-    }
-    if (winning_ad_score.bid() > 0) {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.bid();
-    } else {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.buyer_bid();
-    }
-    DispatchReportingRequest(dispatch_request_data);
-  }
-
-  void DispatchReportingRequestForPAS(
-      const ScoreAdsResponse::AdScore& winning_ad_score,
-      std::shared_ptr<std::string> auction_config,
-      const BuyerReportingMetadata& buyer_reporting_metadata,
-      std::string_view egress_features) {
-    DispatchReportingRequest(
-        {.handler_name = kReportingProtectedAppSignalsFunctionName,
-         .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-         .log_context = log_context_,
-         .publisher_hostname = raw_request_.publisher_hostname(),
-         .auction_config = auction_config,
-         .buyer_reporting_metadata = buyer_reporting_metadata,
-         .egress_features = egress_features});
-  }
-
+  template <typename T>
   void DispatchReportingRequest(
-      const ReportingDispatchRequestData& dispatch_request_data) {
-    ReportingDispatchRequestConfig dispatch_request_config = {
-        .enable_report_win_url_generation = enable_report_win_url_generation_,
-        .enable_protected_app_signals = enable_protected_app_signals_,
-        .enable_report_win_input_noising = enable_report_win_input_noising_,
-        .enable_adtech_code_logging = enable_adtech_code_logging_};
+      const T& ad, const ScoreAdsResponse::AdScore& winning_ad_score,
+      absl::string_view id, std::shared_ptr<std::string> auction_config,
+      const std::string& handler_name,
+      const BuyerReportingMetadata& buyer_metadata,
+      std::optional<ComponentReportingMetadata> component_reporting_metadata,
+      absl::string_view egress_features = "") {
     DispatchRequest dispatch_request = GetReportingDispatchRequest(
-        dispatch_request_config, dispatch_request_data);
+        winning_ad_score, raw_request_.publisher_hostname(),
+        enable_adtech_code_logging_, auction_config, log_context_,
+        buyer_metadata, component_reporting_metadata, handler_name,
+        egress_features);
     dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
 
     std::vector<DispatchRequest> dispatch_requests = {dispatch_request};

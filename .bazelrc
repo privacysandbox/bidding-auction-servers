@@ -5,9 +5,6 @@ build --compilation_mode=opt
 build --output_filter='^//((?!(third_party):).)*$'`
 build --color=yes
 
-build:run_all_tests --cache_test_results=no
-test:run_all_tests --test_verbose_timeout_warnings
-
 # Required to import opentelemetry with abseil
 build --@io_opentelemetry_cpp//api:with_abseil
 # Required to build OpenTelemtry with logs API.
@@ -66,7 +63,6 @@ build:prod --@google_privacysandbox_servers_common//:build_flavor=prod
 build:inference_non_prod --//:build_flavor=non_prod
 build:inference_non_prod --//:inference_build=yes
 build:inference_non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
-build:inference_non_prod --define=cuda=false
 
 # Address sanitizer, set action_env to segregate cache entries
 build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1

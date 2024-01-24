@@ -37,9 +37,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // TODO (b/278899152): get version dynamically
 inline constexpr std::string_view kOpenTelemetryVersion = "1.9.1";
-inline constexpr std::string_view kBuildVersion = "3.1.0";
+inline constexpr std::string_view kBuildVersion = "3.0.0";
 inline constexpr std::string_view kOperator = "operator";
-inline constexpr std::string_view kZone = "zone";
 
 template <typename T>
 void InitTelemetry(const TrustedServerConfigUtil& config_util,
@@ -77,8 +76,7 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
       {semantic_conventions::kServiceInstanceId,
        config_util.GetInstanceId().data()},
       {semantic_conventions::kServiceVersion, kBuildVersion.data()},
-      {kOperator.data(), config_util.GetOperator().data()},
-      {kZone.data(), config_util.GetZone().data()}});
+      {kOperator.data(), config_util.GetOperator().data()}});
 
   server_common::ConfigureTracer(server_info, collector_endpoint);
   static LoggerProvider* log_provider =

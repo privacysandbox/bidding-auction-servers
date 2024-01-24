@@ -215,10 +215,6 @@ AdWithBidMetadata BuildAdWithBid(
     ad_with_bid_metadata.add_ad_components(
         absl::StrCat("adComponent.com/foo_components/id=", i));
   }
-  ad_with_bid_metadata.set_modeling_signals(1);
-  ad_with_bid_metadata.set_recency(5000);
-  ad_with_bid_metadata.set_join_count(10000);
-  ad_with_bid_metadata.set_ad_cost(8.123456789101);
   return ad_with_bid_metadata;
 }
 
@@ -339,8 +335,7 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
       .enable_seller_debug_url_generation = true,
       .enable_adtech_code_logging = false,
       .enable_report_result_url_generation = true,
-      .enable_report_win_url_generation = true,
-      .enable_report_win_input_noising = true};
+      .enable_report_win_url_generation = true};
   score_ads_request.set_request_ciphertext(
       score_ads_raw_request.SerializeAsString());
   score_ads_request.set_key_id(kTestKeyId);
@@ -387,8 +382,7 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
       .enable_adtech_code_logging = true,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
-      .enable_protected_app_signals = true,
-      .enable_report_win_input_noising = true};
+      .enable_protected_app_signals = true};
   score_ads_request.set_request_ciphertext(
       score_ads_raw_request.SerializeAsString());
   score_ads_request.set_key_id(kTestKeyId);

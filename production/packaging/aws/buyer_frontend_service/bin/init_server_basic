@@ -1,3 +1,4 @@
+#!/busybox/sh
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,27 +13,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# OTEL_S3_BUCKET and OTEL_S3_PREFIX will be set as environment variables.
+set -o errexit
+set -x
 
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 127.0.0.1:4317
+usage() {
+  local exitval=${1-1}
+  cat >&2 << USAGE
+usage:
+  $0 <options>
+    --without-proxify        if running outside AWS Nitro enclave, set this
+USAGE
+  exit ${exitval}
+}
 
-exporters:
-  awss3:
-    s3uploader:
-      region: 'us-east-1'
-      s3_bucket: ${env:OTEL_S3_BUCKET}
-      s3_prefix: ${env:OTEL_S3_PREFIX}
-      s3_partition: 'minute'
+PROXY=/proxify
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --without-proxify)
+      PROXY=
+      shift
+      ;;
+    -h | --help)
+      usage 0
+      break
+      ;;
+    *)
+      usage
+      break
+      ;;
+  esac
+done
 
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [awss3]
-    metrics:
-      receivers: [otlp]
-      exporters: [awss3]
+
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
+
+# Start the server.
+$PROXY /server  --init_config_client=true

@@ -50,9 +50,6 @@ constexpr char kSecret[] = "secret";
 constexpr char kKeyId[] = "keyid";
 constexpr char kTestReportingResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
-constexpr char kTestComponentReportingWinResponseJson[] =
-    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com&bid=2.10&modifiedBid=1.0","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
-"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com&bid=2.10&modifiedBid=1.0","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
 constexpr char kTestReportingWinResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
 "reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
@@ -60,10 +57,6 @@ constexpr int kTestDesirability = 5;
 constexpr char kTestConsentToken[] = "testConsentedToken";
 constexpr char kTestEgressFeatures[] = "testEgressFeatures";
 constexpr char kTestComponentSeller[] = "testComponentSeller";
-constexpr char kTestComponentReportResultUrl[] =
-    "http://reportResultUrl.com&bid=2.10&modifiedBid=1.0";
-constexpr char kTestComponentReportWinUrl[] =
-    "http://reportWinUrl.com&bid=2.10&modifiedBid=1.0";
 
 using ::google::protobuf::TextFormat;
 using ::testing::AnyNumber;
@@ -906,7 +899,7 @@ TEST_F(ScoreAdsReactorTest,
   // Since in the above test we are assuming component auctions, check that the
   // required fields for component auctions are set.
   EXPECT_TRUE(scored_ad.allow_component_auction());
-  EXPECT_EQ(scored_ad.ad_metadata(), "\"adMetadata\"");
+  EXPECT_EQ(scored_ad.ad_metadata(), "adMetadata");
   EXPECT_GT(scored_ad.bid(), std::numeric_limits<float>::min());
 }
 
@@ -1196,7 +1189,7 @@ TEST_F(ScoreAdsReactorTest,
           if (std::strcmp(request.handler_name.c_str(),
                           kReportingDispatchHandlerFunctionName) == 0) {
             if (enable_report_result_win_generation) {
-              response.emplace_back(kTestComponentReportingWinResponseJson);
+              response.emplace_back(kTestReportingWinResponseJson);
             } else {
               response.emplace_back(kTestReportingResponseJson);
             }
@@ -1208,14 +1201,13 @@ TEST_F(ScoreAdsReactorTest,
               {
               "response": {
                 "desirability":%d,
-                "ad":"adMetadata",
                 "bid":%f,
                 "allowComponentAuction":%s
               },
               "logs":["test log"]
               }
               )JSON",
-                current_score++, 1.0,
+                current_score++, 1 + (std::rand() % 20),
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
@@ -1239,7 +1231,7 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .component_seller_reporting_urls()
                 .reporting_url(),
-            kTestComponentReportResultUrl);
+            kTestReportResultUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .component_seller_reporting_urls()
                 .interaction_reporting_urls()
@@ -1252,7 +1244,7 @@ TEST_F(ScoreAdsReactorTest,
             kTestInteractionUrl);
   EXPECT_EQ(
       scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
-      kTestComponentReportWinUrl);
+      kTestReportWinUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .buyer_reporting_urls()
                 .interaction_reporting_urls()

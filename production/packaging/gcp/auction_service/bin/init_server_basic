@@ -1,3 +1,4 @@
+#!/busybox/sh
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,24 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# refer to docs at https://github.com/GoogleContainerTools/container-structure-test
+set -o errexit
+set -x
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
 
-schemaVersion: 2.0.0
-
-fileExistenceTests:
-  - name: init_server_basic
-    path: /server/bin/init_server_basic
-    shouldExist: true
-    isExecutableBy: any
-
-  - name: server
-    path: /server/bin/server
-    shouldExist: true
-    isExecutableBy: any
-
-  - name: ca-certs
-    path: /etc/ssl/certs/ca-certificates.crt
-    shouldExist: true
-
-licenseTests:
-  - debian: true
+# Start the server first.
+/server/bin/server --init_config_client=true

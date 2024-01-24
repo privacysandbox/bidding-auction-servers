@@ -88,7 +88,7 @@ module "seller" {
     COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
     ENABLE_OTEL_BASED_LOGGING       = "" # Example: "false"
     CONSENTED_DEBUG_TOKEN           = "" # Example: "<unique_id>"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
+    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "false"
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.

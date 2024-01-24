@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 
 #include "services/common/providers/async_provider.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
@@ -28,12 +27,10 @@ struct ScoringSignalsRequest {
   explicit ScoringSignalsRequest(
       const BuyerBidsResponseMap& buyer_bids_map,
       const absl::flat_hash_map<std::string, std::string>& filtering_metadata,
-      ClientType client_type, std::string seller_kv_experiment_group_id = "")
+      ClientType client_type)
       : buyer_bids_map_(buyer_bids_map),
         filtering_metadata_(filtering_metadata),
-        client_type_(client_type),
-        seller_kv_experiment_group_id_(
-            std::move(seller_kv_experiment_group_id)) {}
+        client_type_(client_type) {}
 
   ClientType client_type_;
   // The objects here should be owned by the caller of the provider class
@@ -42,10 +39,6 @@ struct ScoringSignalsRequest {
   // method.
   const BuyerBidsResponseMap& buyer_bids_map_;
   const absl::flat_hash_map<std::string, std::string>& filtering_metadata_;
-
-  // [DSP] Optional ID for experiments conducted by buyer. By spec, valid values
-  // are [0, 65535].
-  std::string seller_kv_experiment_group_id_;
 };
 
 // The classes implementing this interface provide the external signals

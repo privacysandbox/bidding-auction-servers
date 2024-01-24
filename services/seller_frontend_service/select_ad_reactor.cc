@@ -158,11 +158,6 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   } else {
     encapsulated_req = request_->protected_audience_ciphertext();
   }
-  LogIfError(metric_context_->LogHistogram<metric::kProtectedCiphertextSize>(
-      (int)encapsulated_req.size()));
-  LogIfError(metric_context_->LogHistogram<metric::kAuctionConfigSize>(
-      (int)request_->auction_config().ByteSizeLong()));
-
   PS_VLOG(5) << "Protected "
              << (is_protected_auction_request_ ? "auction" : "audience")
              << " ciphertext: " << absl::Base64Escape(encapsulated_req);
@@ -460,10 +455,6 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
   if (per_buyer_config_itr !=
       request_->auction_config().per_buyer_config().end()) {
     buyer_debug_id = per_buyer_config_itr->second.buyer_debug_id();
-    if (per_buyer_config_itr->second.has_buyer_kv_experiment_group_id()) {
-      get_bids_request->set_buyer_kv_experiment_group_id(
-          per_buyer_config_itr->second.buyer_kv_experiment_group_id());
-    }
     if (!per_buyer_config_itr->second.buyer_signals().empty()) {
       get_bids_request->set_buyer_signals(
           per_buyer_config_itr->second.buyer_signals());
@@ -608,9 +599,9 @@ void SelectAdReactor::OnFetchBidsDone(
             1, metric::kSfeGetBidsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kBfe, response.status(),
                                     buyer_ig_owner);
-    PS_VLOG(1, log_context_)
-        << "GetBidsRequest failed for buyer " << buyer_ig_owner
-        << "\nresponse status: " << response.status();
+    PS_VLOG(1, log_context_) << "GetBidsRequest failed for buyer "
+                             << buyer_ig_owner << "\nresponse status: ",
+        response.status();
 
     async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
   }
@@ -648,15 +639,6 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 void SelectAdReactor::FetchScoringSignals() {
   ScoringSignalsRequest scoring_signals_request(
       shared_buyer_bids_map_, buyer_metadata_, request_->client_type());
-  if (request_->auction_config().has_code_experiment_spec() &&
-      request_->auction_config()
-          .code_experiment_spec()
-          .has_seller_kv_experiment_group_id()) {
-    scoring_signals_request.seller_kv_experiment_group_id_ =
-        absl::StrCat(request_->auction_config()
-                         .code_experiment_spec()
-                         .seller_kv_experiment_group_id());
-  }
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
   clients_.scoring_signals_async_provider.Get(
@@ -689,8 +671,8 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
             1, metric::kSfeScoringSignalsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kKv, result.status());
     PS_VLOG(1, log_context_)
-        << "Scoring signals fetch from key-value server failed: "
-        << result.status();
+        << "Scoring signals fetch from key-value server failed: ",
+        result.status();
 
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInternalError,
                 ErrorCode::SERVER_SIDE);

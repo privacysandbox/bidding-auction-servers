@@ -104,7 +104,6 @@ module "iam_role_policies" {
 module "buyer_dashboard" {
   source      = "../../services/dashboards/buyer_dashboard"
   environment = var.environment
-  region      = var.region
 }
 
 ################ Buyer FrontEnd operator Setup ################

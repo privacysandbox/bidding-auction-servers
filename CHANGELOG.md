@@ -2,41 +2,6 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-## 3.1.0 (2024-01-23)
-
-
-### Features
-
-* [reporting] Add set modifiedBid value in sellerReportingSignals for multi seller auctions
-* Add  metric for size of  protected_ciphertext and auction_config
-* add additional metrics to the AWS seller dashboard
-* Add AWS perfgate benchmark
-* Add aws s3 support to perf-test-helpers
-* Add metric attribute for instance zone
-* Add perfgate analyzer support
-* Add Support for Buyer Experiment Group ID
-* Add tf vars for otel collector template file and image uri
-* Builds AWS AMI with debug otel collector
-* create AWS seller and buyer metric dashboards for monitoring
-* Seller KV Experiment Group ID
-
-
-### Bug Fixes
-
-* ad metadata string is escaped to be valid json in browser
-* Add run_all_tests bazel config
-* Bazel builds should ignore the cost tool
-* Consider all 2XX HTTP codes as success
-* **deps:** Upgrade data-plane-shared-libraries to 44d1d64 2024-01-08
-* Ensure that non-200 status codes become errors
-* Fix build flag and copybara rule
-* Fix custom quickstore input file bug
-* Fix debug statements to include result status
-* Fix flaky sandbox_executor_test
-* Prevent Config from being copied into RomaService
-* Removes a test breaking the build
-* Temporarily revert changes to the SUT so that it passes
-
 ## 3.0.0 (2023-12-14)
 
 

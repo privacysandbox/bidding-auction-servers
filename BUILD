@@ -84,22 +84,6 @@ config_setting(
 )
 
 config_setting(
-    name = "gcp_instance",
-    flag_values = {
-        ":instance": "gcp",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "aws_instance",
-    flag_values = {
-        ":instance": "aws",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
     name = "local_platform",
     flag_values = {
         ":platform": "local",

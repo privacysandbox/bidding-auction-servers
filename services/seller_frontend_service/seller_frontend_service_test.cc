@@ -47,6 +47,7 @@ constexpr absl::string_view kSampleBuyer = "ad_tech_A.com";
 constexpr absl::string_view kSampleGenerationId =
     "a8098c1a-f86e-11da-bd1a-00112444be1e";
 constexpr absl::string_view kSamplePublisherName = "https://publisher.com";
+constexpr int kNumberOfComponentAdUrls = 1;
 constexpr absl::string_view kSampleSellerDomain = "https://sample-seller.com";
 constexpr absl::string_view kSampleSellerSignals = "[]";
 constexpr absl::string_view kSampleAuctionSignals = "[]";
@@ -501,9 +502,9 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
-    std::string ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, bid_value);
+    std::string url = buyer_to_ad_url.at(local_buyer);
+    AdWithBid bid = BuildNewAdWithBid(url, kSampleInterestGroupName, bid_value,
+                                      kNumberOfComponentAdUrls);
     GetBidsResponse::GetBidsRawResponse response;
     auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
@@ -601,9 +602,9 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
-    std::string ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, bid_value);
+    std::string url = buyer_to_ad_url.at(local_buyer);
+    AdWithBid bid = BuildNewAdWithBid(url, kSampleInterestGroupName, bid_value,
+                                      kNumberOfComponentAdUrls);
     GetBidsResponse::GetBidsRawResponse response;
     auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
@@ -823,8 +824,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
       // cover the scenario where select ad reactor may be terminating the
       // SelectAdRequest RPC prematurely on finding a a buyer with no client.
       AdWithBid bid = BuildNewAdWithBid(
-          /*ad_url=*/absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
-          kNonZeroBidValue);
+          absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
+          kNonZeroBidValue, kNumAdComponentRenderUrl);
       GetBidsResponse::GetBidsRawResponse get_bids_response;
       get_bids_response.mutable_bids()->Add(std::move(bid));
       SetupBuyerClientMock(buyer, buyer_clients, get_bids_response);
@@ -930,8 +931,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   int buyer_calls_counter = 0;
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
-        BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+        BuildNewAdWithBid(absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
+                          kNonZeroBidValue, kNumAdComponentRenderUrl);
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
@@ -1039,8 +1040,8 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
-        BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+        BuildNewAdWithBid(absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
+                          kNonZeroBidValue, kNumAdComponentRenderUrl);
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
@@ -1122,8 +1123,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
-        BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+        BuildNewAdWithBid(absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
+                          kNonZeroBidValue, kNumAdComponentRenderUrl);
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,

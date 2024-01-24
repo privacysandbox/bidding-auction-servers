@@ -23,6 +23,7 @@
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/strings/escaping.h"
+#include "cpio/client_providers/interface/crypto_client_provider_interface.h"
 #include "gtest/gtest.h"
 #include "proto/hpke.pb.h"
 #include "proto/tink.pb.h"
@@ -43,6 +44,7 @@ using ::google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse;
 using ::google::scp::cpio::Callback;
 
 using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
+using ::google::scp::core::AsyncContext;
 using ::google::scp::core::ExecutionResult;
 using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;

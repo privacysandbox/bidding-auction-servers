@@ -49,21 +49,6 @@ inline constexpr absl::string_view kServerName[]{
 constexpr int kMaxBuyersSolicited = 2;
 
 // Metric Definitions that are specific to bidding & auction servers.
-
-inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
-    server_common::metrics::Instrument::kHistogram>
-    kProtectedCiphertextSize("protected_ciphertext.size_bytes",
-                             "Size of protected ciphertext in Bytes",
-                             server_common::metrics::kSizeHistogram);
-
-inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
-    server_common::metrics::Instrument::kHistogram>
-    kAuctionConfigSize("auction_config.size_bytes",
-                       "Size of auction config in Bytes",
-                       server_common::metrics::kSizeHistogram);
-
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kHistogram>
@@ -525,8 +510,6 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kSfeErrorCountByErrorCode,
         &kRequestWithWinnerCount,
         &kSfeWithWinnerTimeMs,
-        &kProtectedCiphertextSize,
-        &kAuctionConfigSize,
 };
 
 template <>
@@ -614,7 +597,6 @@ class InitiatedRequest {
         LogPerBuyer(initiated_request_ms);
       }
     }
-
     if (destination_ == metric::kKv) {
       if constexpr (std::is_same_v<ContextT, BfeContext>) {
         LogOneServer<metric::kInitiatedRequestKVDuration,

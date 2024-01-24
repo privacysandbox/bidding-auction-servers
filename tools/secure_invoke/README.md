@@ -144,12 +144,12 @@ The example below queries a live public key endpoint, picks the first key, and p
 INPUT_PATH=...
 SFE_HOST_ADDRESS=...
 CLIENT_IP=...
-LIVE_KEY_ENDPOINT="https://..."
 
 # Setup keys.
-LIVE_KEYS=$(curl ${LIVE_KEY_ENDPOINT})
-PUBLIC_KEY=$(echo $LIVE_KEYS | jq -r .keys[0].key)
-KEY_ID=$(echo $LIVE_KEYS | jq -r .keys[0].id)
+LIVE_KEYS=$(curl https://<LIVE KEY ENDPOINT>)
+PUBLIC_KEY=$(echo $LIVE_KEYS | jq .keys[0].key)
+KEY_ID=$(echo $LIVE_KEYS | jq .keys[0].id)
+
 
 # Run the tool with desired arguments.
 ./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
@@ -157,8 +157,8 @@ KEY_ID=$(echo $LIVE_KEYS | jq -r .keys[0].id)
     -target_service=sfe \
     -input_file="/src/workspace/${INPUT_PATH}" \
     -host_addr=${SFE_HOST_ADDRESS} \
-    -client_ip=${CLIENT_IP} \
-    -public_key=${PUBLIC_KEY} \
+    -client_ip=${CLIENT_IP}
+    -public_key=${PUBLIC_KEY}
     -key_id=${KEY_ID}
 ```
 

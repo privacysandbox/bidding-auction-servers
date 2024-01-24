@@ -1,4 +1,3 @@
 bazel-bidding-auction-server
-google_internal/tools/cost
 production/aws/terraform
 scp

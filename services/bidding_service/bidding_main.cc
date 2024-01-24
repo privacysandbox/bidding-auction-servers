@@ -48,7 +48,6 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
-#include "services/common/util/file_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
@@ -248,14 +247,12 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty())
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  auto dispatcher = V8Dispatcher([&config_client]() {
-    DispatchConfig config;
-    config.worker_queue_max_items =
-        config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
-    config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+  DispatchConfig config;
+  config.worker_queue_max_items =
+      config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
+  config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
 
-    return config;
-  }());
+  auto dispatcher = V8Dispatcher(config);
   CodeDispatchClient client(dispatcher);
   PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
 
@@ -307,10 +304,11 @@ absl::Status RunServer() {
     code_fetcher->Start();
     code_fetchers.emplace_back(std::move(code_fetcher));
   } else if (!code_fetch_proto.bidding_js_path().empty()) {
-    PS_ASSIGN_OR_RETURN(auto adtech_code_blob,
-                        GetFileContent(code_fetch_proto.bidding_js_path(),
-                                       /*log_on_error=*/true));
+    std::ifstream ifs(code_fetch_proto.bidding_js_path().data());
+    std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
+                                 (std::istreambuf_iterator<char>()));
     adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
+
     PS_RETURN_IF_ERROR(dispatcher.LoadSync(
         kProtectedAudienceGenerateBidBlobVersion, adtech_code_blob))
         << "Could not load Adtech untrusted code for bidding.";

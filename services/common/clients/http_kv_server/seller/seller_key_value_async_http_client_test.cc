@@ -66,44 +66,6 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           "&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%3D123%26another_"
           "id%"
           "3D456")};
-  const absl::flat_hash_set<std::string> expected_urls_with_egid_ = {
-      absl::StrCat(
-          hostname_,
-          "?experimentGroupId=1776&renderUrls=https%3A%2F%2Fams.creativecdn."
-          "com%2Fcreatives%"
-          "3Ffls%3Dtrue%"
-          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
-          "3Drtbhfledge,"
-          "url2&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
-          "3D456,url4"),
-      absl::StrCat(
-          hostname_,
-          "?experimentGroupId=1776&renderUrls=url2,https%3A%2F%2Fams."
-          "creativecdn.com%2Fcreatives%"
-          "3Ffls%3Dtrue%"
-          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
-          "3Drtbhfledge"
-          "&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
-          "3D456,url4"),
-      absl::StrCat(hostname_,
-                   "?experimentGroupId=1776&renderUrls=https%3A%2F%2Fams."
-                   "creativecdn.com%2Fcreatives%"
-                   "3Ffls%3Dtrue%"
-                   "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
-                   "3Drtbhfledge,"
-                   "url2&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%"
-                   "3D123%26another_id%"
-                   "3D456"),
-      absl::StrCat(
-          hostname_,
-          "?experimentGroupId=1776&renderUrls=url2,https%3A%2F%2Fams."
-          "creativecdn.com%2Fcreatives%"
-          "3Ffls%3Dtrue%"
-          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
-          "3Drtbhfledge"
-          "&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%3D123%26another_"
-          "id%"
-          "3D456")};
 
  protected:
   void CheckGetValuesFromKeysViaHttpClient(
@@ -162,9 +124,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
        "rtbhfledge",
        "url2"},
-      {"www.foo.com/ad?id=123&another_id=456", "url4"},
-      ClientType::CLIENT_TYPE_UNKNOWN,
-      "1776"};
+      {"www.foo.com/ad?id=123&another_id=456", "url4"}};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
@@ -224,7 +184,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, expected_urls = &(expected_urls_with_egid_)](
+      .WillOnce([actualResult, expected_urls = &(expected_urls_)](
                     const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {

@@ -57,6 +57,7 @@ constexpr absl::string_view kSampleBuyerDebugId = "sample-buyer-debug-id";
 constexpr absl::string_view kSampleBuyerSignals = "[]";
 constexpr float kNonZeroBidValue = 1.0;
 constexpr float kZeroBidValue = 0.0;
+constexpr int kNumAdComponentRenderUrl = 1;
 constexpr int kNonZeroDesirability = 1;
 constexpr bool kIsConsentedDebug = true;
 constexpr absl::string_view kConsentedDebugToken = "test";
@@ -95,7 +96,7 @@ void BuildAdWithBidFromAdWithBidMetadata(
 
 AdWithBid BuildNewAdWithBid(
     const std::string& ad_url,
-    absl::optional<absl::string_view> interest_group_name = absl::nullopt,
+    absl::optional<absl::string_view> interest_group = absl::nullopt,
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
     int number_ad_component_render_urls = kDefaultNumAdComponents);
@@ -106,7 +107,7 @@ void SetupScoringProviderMock(
     const std::optional<std::string>& ad_render_urls,
     bool repeated_get_allowed = false,
     const std::optional<absl::Status>& server_error_to_return = std::nullopt,
-    int expected_num_bids = -1, std::string seller_egid = "");
+    int expected_num_bids = -1);
 
 TrustedServersConfigClient CreateConfig();
 
@@ -136,9 +137,10 @@ BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
 
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
-    const std::string& ad_url = buyer_to_ad_url.at(local_buyer);
+    const std::string& url = buyer_to_ad_url.at(local_buyer);
     AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, kNonZeroBidValue);
+        BuildNewAdWithBid(url, kSampleInterestGroupName, kNonZeroBidValue,
+                          kNumAdComponentRenderUrl);
     GetBidsResponse::GetBidsRawResponse response;
     auto mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));

@@ -24,8 +24,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr char kEgId[] = "1776";
-
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
   static constexpr char hostname_[] =
@@ -95,24 +93,20 @@ TEST_F(KeyValueAsyncHttpClientTest,
   const GetBuyerValuesInput getValuesClientInput = {
       {"1j1043317685", "1j112014758"},
       {"ig_name_likes_boots"},
-      "www.usatoday.com",
-      ClientType::CLIENT_TYPE_UNKNOWN,
-      kEgId};
+      "www.usatoday.com"};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls;
-  expected_urls.emplace(absl::StrCat(
-      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-      "&keys="
-      "1j1043317685,1j112014758&"
-      "interestGroupNames=ig_name_likes_boots"));
-  expected_urls.emplace(absl::StrCat(
-      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-      "&keys="
-      "1j112014758,1j1043317685&"
-      "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(
+      absl::StrCat(hostname_,
+                   "?hostname=www.usatoday.com&keys=1j1043317685,1j112014758&"
+                   "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(
+      absl::StrCat(hostname_,
+                   "?hostname=www.usatoday.com&keys=1j112014758,1j1043317685&"
+                   "interestGroupNames=ig_name_likes_boots"));
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
   const std::string expectedResult = R"json({
@@ -190,36 +184,30 @@ TEST_F(KeyValueAsyncHttpClientTest,
   const GetBuyerValuesInput getValuesClientInput = {
       {"1j386134098", "1s8yAqUg!2sZQakmQ!3sAFmfCp-n8sq_"},
       {"ig_name_likes_boots", "ig_name_ohio_state_fan"},
-      "www.usatoday.com",
-      ClientType::CLIENT_TYPE_UNKNOWN,
-      kEgId};
+      "www.usatoday.com"};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls = {
       absl::StrCat(
-          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-          "&keys=1j386134098,"
-          "1s8yAqUg%212sZQakmQ%"
+          hostname_,
+          "?hostname=www.usatoday.com&keys=1j386134098,1s8yAqUg%212sZQakmQ%"
           "213sAFmfCp-n8sq_&"
           "interestGroupNames=ig_name_likes_boots,ig_name_ohio_state_fan"),
       absl::StrCat(
-          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-          "&keys=1s8yAqUg%"
-          "212sZQakmQ%213sAFmfCp-n8sq_"
+          hostname_,
+          "?hostname=www.usatoday.com&keys=1s8yAqUg%212sZQakmQ%213sAFmfCp-n8sq_"
           ",1j386134098&"
           "interestGroupNames=ig_name_likes_boots,ig_name_ohio_state_fan"),
       absl::StrCat(
-          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-          "&keys=1j386134098,"
-          "1s8yAqUg%212sZQakmQ%"
+          hostname_,
+          "?hostname=www.usatoday.com&keys=1j386134098,1s8yAqUg%212sZQakmQ%"
           "213sAFmfCp-n8sq_&"
           "interestGroupNames=ig_name_ohio_state_fan,ig_name_likes_boots"),
       absl::StrCat(
-          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
-          "&keys=1s8yAqUg%"
-          "212sZQakmQ%213sAFmfCp-n8sq_"
+          hostname_,
+          "?hostname=www.usatoday.com&keys=1s8yAqUg%212sZQakmQ%213sAFmfCp-n8sq_"
           ",1j386134098&"
           "interestGroupNames=ig_name_ohio_state_fan,ig_name_likes_boots")};
   // Now we define what we expect to get back out of the client, which is a

@@ -36,10 +36,6 @@ class TrustedServerConfigUtil {
   // Returns the component that is running.
   absl::string_view GetService() const { return service_; }
 
-  absl::string_view GetZone() const { return zone_; }
-
-  void ComputeZone(absl::string_view resource_name);
-
   // Returns a config param prefix that is to be prepended to all keys fetched
   // from the metadata store.
   std::string GetConfigParameterPrefix() noexcept;
@@ -49,7 +45,6 @@ class TrustedServerConfigUtil {
   std::string environment_;
   std::string operator_;
   std::string service_;
-  std::string zone_;
   bool init_config_client_;
 };
 

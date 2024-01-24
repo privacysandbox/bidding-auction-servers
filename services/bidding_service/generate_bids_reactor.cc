@@ -357,10 +357,10 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
       << generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)]
              ->size()
       << " bytes.";
-  if (log::PS_VLOG_IS_ON(10)) {
-    PS_VLOG(10, log_context) << "\n\nGenerateBid Input Args:";
+  if (log::PS_VLOG_IS_ON(2)) {
+    PS_VLOG(2, log_context) << "\n\nGenerateBid Input Args:";
     for (const auto& it : generate_bid_request.input) {
-      PS_VLOG(10, log_context) << *it;
+      PS_VLOG(2, log_context) << it;
     }
   }
   return generate_bid_request;

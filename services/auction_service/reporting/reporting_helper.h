@@ -26,7 +26,6 @@
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/loggers/request_context_impl.h"
-#include "services/common/util/post_auction_signals.h"
 #include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -86,6 +85,8 @@ inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
 }
 
 struct BuyerReportingMetadata {
+  bool enable_report_win_url_generation = false;
+  bool enable_protected_app_signals = false;
   std::string buyer_signals;
   std::optional<int> join_count;
   std::optional<long> recency;
@@ -93,47 +94,13 @@ struct BuyerReportingMetadata {
   std::string seller;
   std::string interest_group_name;
   double ad_cost;
+  bool enable_report_win_input_noising;
 };
 
 struct ComponentReportingMetadata {
   std::string top_level_seller;
   std::string component_seller;
   float modified_bid;
-};
-
-// Config flags used to construct the inputs for inputs to dispatch
-// reporting function execution.
-struct ReportingDispatchRequestConfig {
-  bool enable_report_win_url_generation = false;
-  bool enable_protected_app_signals = false;
-  bool enable_report_win_input_noising = false;
-  bool enable_adtech_code_logging = false;
-};
-
-// Data required to build the inputs required to dispatch
-// reporting function execution.
-struct ReportingDispatchRequestData {
-  std::string handler_name;
-  std::shared_ptr<std::string> auction_config;
-  PostAuctionSignals post_auction_signals;
-  std::string_view publisher_hostname;
-  log::ContextImpl& log_context;
-  BuyerReportingMetadata buyer_reporting_metadata;
-  ComponentReportingMetadata component_reporting_metadata;
-  absl::string_view egress_features;
-};
-
-// Device signals passed as input to reportResult and reportWin
-struct SellerReportingMetadata {
-  std::string top_window_hostname;
-  std::string top_level_seller;
-  std::string component_seller;
-  std::string interest_group_owner;
-  std::string render_url;
-  float bid;
-  float desirability;
-  float modified_bid;
-  float highest_scoring_other_bid;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
@@ -160,13 +127,22 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
 // Creates the input arguments required for executing reportingEntryFunction in
 // Roma.
 std::vector<std::shared_ptr<std::string>> GetReportingInput(
-    const ReportingDispatchRequestConfig& dispatch_request_config,
-    const ReportingDispatchRequestData& dispatch_request_data);
+    const ScoreAdsResponse::AdScore& winning_ad_score,
+    const std::string& publisher_hostname, bool enable_adtech_code_logging,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
+    absl::string_view egress_features = "");
 
 // Creates the DispatchRequest for calling reportingEntryFunction in Roma
 DispatchRequest GetReportingDispatchRequest(
-    const ReportingDispatchRequestConfig& dispatch_request_config,
-    const ReportingDispatchRequestData& dispatch_request_data);
+    const ScoreAdsResponse::AdScore& winning_ad_score,
+    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
+    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
+    const BuyerReportingMetadata& buyer_reporting_metadata,
+    std::optional<ComponentReportingMetadata> component_reporting_metadata,
+    const std::string& handler_name = kReportingDispatchHandlerFunctionName,
+    absl::string_view egress_features = "");
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

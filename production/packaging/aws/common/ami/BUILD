@@ -16,12 +16,7 @@ load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 
 filegroup(
     name = "ami_config_group",
-    srcs = select({
-        "//conditions:default": [
-            "envoy.yaml",
-            "otel_collector_config.yaml",
-        ],
-    }),
+    srcs = glob(["*.yaml"]),
     visibility = ["//production/packaging:__subpackages__"],
 )
 

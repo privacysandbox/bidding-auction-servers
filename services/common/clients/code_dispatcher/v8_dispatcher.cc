@@ -29,8 +29,7 @@ using LoadRequest = ::google::scp::roma::CodeObject;
 using LoadResponse = ::google::scp::roma::ResponseObject;
 using LoadDoneCallback = ::google::scp::roma::Callback;
 
-V8Dispatcher::V8Dispatcher(DispatchConfig&& config)
-    : roma_service_(std::move(config)) {}
+V8Dispatcher::V8Dispatcher(DispatchConfig config) : roma_service_(config) {}
 
 absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }
 

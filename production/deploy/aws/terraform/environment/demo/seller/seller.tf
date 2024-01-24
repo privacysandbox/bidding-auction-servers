@@ -95,7 +95,7 @@ module "seller" {
     JS_NUM_WORKERS                  = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN             = "" # Example: "100".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
+    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "false"
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:

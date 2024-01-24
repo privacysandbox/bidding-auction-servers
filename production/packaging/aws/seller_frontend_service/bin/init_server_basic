@@ -1,3 +1,4 @@
+#!/busybox/sh
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,24 +13,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# refer to docs at https://github.com/GoogleContainerTools/container-structure-test
+set -o errexit
+set -x
 
-schemaVersion: 2.0.0
+usage() {
+  local exitval=${1-1}
+  cat >&2 << USAGE
+usage:
+  $0 <options>
+    --without-proxify        if running outside AWS Nitro enclave, set this
+USAGE
+  exit ${exitval}
+}
 
-fileExistenceTests:
-  - name: init_server_basic
-    path: /server/bin/init_server_basic
-    shouldExist: true
-    isExecutableBy: any
+PROXY=/proxify
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --without-proxify)
+      PROXY=
+      shift
+      ;;
+    -h | --help)
+      usage 0
+      break
+      ;;
+    *)
+      usage
+      break
+      ;;
+  esac
+done
 
-  - name: server
-    path: /server/bin/server
-    shouldExist: true
-    isExecutableBy: any
 
-  - name: ca-certs
-    path: /etc/ssl/certs/ca-certificates.crt
-    shouldExist: true
+export GLOG_logtostderr=1
+export GLOG_stderrthreshold=0
+export GRPC_DNS_RESOLVER=native
 
-licenseTests:
-  - debian: true
+# Start the server.
+$PROXY /server  --init_config_client=true

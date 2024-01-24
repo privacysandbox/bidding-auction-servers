@@ -30,9 +30,6 @@ namespace {
 
 using ::testing::An;
 
-// Seller Experiment Group ID.
-constexpr char kSellerEgId[] = "1787";
-
 TEST(HttpScoringSignalsAsyncProviderTest, IncludesClientTypeInRequest) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
@@ -75,8 +72,8 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
   // These are so the strings will outlive the string_views taken of them.
-  // In the main path these strings are owned by the AdWithBids which are going
-  // to be sent to AuctionServer.
+  // In the main path these strings are owned by the IGs which are going to be
+  // sent to BiddingServer.
   std::vector<std::string> ad_render_urls_orig;
   std::vector<std::string> ad_component_render_urls_orig;
   UrlKeysSet ad_render_urls;
@@ -133,7 +130,6 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
         // All ads from all responses were sent to KV client.
         EXPECT_EQ(input->render_urls, ad_render_urls);
         EXPECT_EQ(input->ad_component_render_urls, ad_component_render_urls);
-        EXPECT_EQ(input->seller_kv_experiment_group_id, kSellerEgId);
         notification.Notify();
         return absl::OkStatus();
       });
@@ -141,7 +137,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 
   ScoringSignalsRequest scoring_signals_request = ScoringSignalsRequest(
-      buyer_bids_map, {}, ClientType::CLIENT_TYPE_UNKNOWN, kSellerEgId);
+      buyer_bids_map, {}, ClientType::CLIENT_TYPE_UNKNOWN);
   class_under_test.Get(
       scoring_signals_request,
       [](absl::StatusOr<std::unique_ptr<ScoringSignals>> signals,
@@ -171,7 +167,6 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
                      absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
                  callback,
              absl::Duration timeout) {
-            EXPECT_EQ(input->seller_kv_experiment_group_id, "");
             (std::move(callback))(absl::InternalError(""));
             return absl::OkStatus();
           });
