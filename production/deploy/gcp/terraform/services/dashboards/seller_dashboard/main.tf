@@ -1196,31 +1196,11 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
             "chartOptions": {},
             "dataSets": [
               {
-                "minAlignmentPeriod": "60s",
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "timeSeriesFilter": {
-                    "aggregation": {
-                      "alignmentPeriod": "60s",
-                      "perSeriesAligner": "ALIGN_RATE"
-                    },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.duration_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
-                    "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
-                      "groupByFields": [
-                        "metric.label.\"buyer\"",
-                        "metric.label.\"service_name\"",
-                        "metric.label.\"deployment_environment\"",
-                        "metric.label.\"operator\"",
-                        "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
-                        "metric.label.\"service_version\""
-                      ],
-                      "perSeriesAligner": "ALIGN_MEAN"
-                    }
-                  }
+                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.duration_by_buyer'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.count_by_buyer' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div",
+                  "unitOverride": ""
                 }
               }
             ],
@@ -1565,6 +1545,85 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "width": 24,
         "xPos": 24,
         "yPos": 339
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "protected_ciphertext.size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/protected_ciphertext.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 358
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "auction_config.size_bytes [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/auction_config.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 358
       }
     ]
   }

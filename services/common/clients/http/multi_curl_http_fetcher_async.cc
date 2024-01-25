@@ -30,34 +30,6 @@ using ::grpc_event_engine::experimental::EventEngine;
 
 namespace {
 
-// Parses curl message to result string or an error message for the callback.
-std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg) {
-  void* output;
-  absl::Status status;
-  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
-  if (msg->msg == CURLMSG_DONE) {
-    auto result_msg = curl_easy_strerror(msg->data.result);
-    switch (msg->data.result) {
-      case CURLE_OK:
-        status = absl::OkStatus();
-        break;
-      case CURLE_OPERATION_TIMEDOUT:
-        status = absl::DeadlineExceededError(result_msg);
-        break;
-      case CURLE_URL_MALFORMAT:
-        status = absl::InvalidArgumentError(result_msg);
-        break;
-      default:
-        status = absl::InternalError(result_msg);
-        break;
-    }
-  } else {
-    status = absl::InternalError(
-        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
-  }
-  return std::make_pair(status, output);
-}
-
 constexpr int log_level = 2;
 struct CurlTimeStats {
   double time_namelookup = -1;
@@ -76,7 +48,7 @@ struct CurlTimeStats {
 void GetTraceFromCurl(CURL* handle) {
   if (log::PS_VLOG_IS_ON(log_level)) {
     CurlTimeStats curl_time_stats;
-    char* request_url = NULL;
+    char* request_url = nullptr;
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME,
                       &curl_time_stats.time_namelookup);
@@ -354,6 +326,47 @@ void MultiCurlHttpFetcherAsync::ExecuteLoop() ABSL_LOCKS_EXCLUDED(in_loop_mu_) {
     in_loop_mu_.Unlock();
   }
   // Another ExecuteLoop is already running.
+}
+
+std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
+    CURLMsg* msg) {
+  void* output;
+  absl::Status status;
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
+  if (msg->msg == CURLMSG_DONE) {
+    auto result_msg = curl_easy_strerror(msg->data.result);
+    switch (msg->data.result) {
+      case CURLE_OK: {
+        long http_code = 400;
+        curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
+        if (http_code >= 400) {
+          char* request_url = nullptr;
+          curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL,
+                            &request_url);
+          auto request_data = static_cast<CurlRequestData*>(output);
+          status = absl::InternalError(
+              absl::StrCat("Failed to curl ", request_url,
+                           "\nHTTP Code: ", http_code, "\nEndpoint returned: ",
+                           request_data->output ? *request_data->output : ""));
+        } else {
+          status = absl::OkStatus();
+        }
+      } break;
+      case CURLE_OPERATION_TIMEDOUT:
+        status = absl::DeadlineExceededError(result_msg);
+        break;
+      case CURLE_URL_MALFORMAT:
+        status = absl::InvalidArgumentError(result_msg);
+        break;
+      default:
+        status = absl::InternalError(result_msg);
+        break;
+    }
+  } else {
+    status = absl::InternalError(
+        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
+  }
+  return std::make_pair(status, output);
 }
 
 void MultiCurlHttpFetcherAsync::PerformCurlUpdate()

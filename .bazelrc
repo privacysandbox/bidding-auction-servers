@@ -5,6 +5,9 @@ build --compilation_mode=opt
 build --output_filter='^//((?!(third_party):).)*$'`
 build --color=yes
 
+build:run_all_tests --cache_test_results=no
+test:run_all_tests --test_verbose_timeout_warnings
+
 # Required to import opentelemetry with abseil
 build --@io_opentelemetry_cpp//api:with_abseil
 # Required to build OpenTelemtry with logs API.

@@ -70,6 +70,7 @@ constexpr absl::string_view js_code_template = R"JS_CODE(
         render: "%s" + interest_group.adRenderIds[0],
         ad: {"arbitraryMetadataField": 1},
         bid: bid,
+        bidCurrency: "USD",
         adComponents: [
           "adComponent.com/comp?id=1",
           "adComponent.com/comp?id=2"
@@ -553,6 +554,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
   EXPECT_GT(raw_response.bids_size(), 0);
   for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.bid_currency(), "USD");
     std::string expected_render_url =
         kAdRenderUrlPrefixForTest +
         interest_group_to_ad.at(ad_with_bid.interest_group_name()).at(0);

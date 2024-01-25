@@ -15,6 +15,7 @@
 #include "services/buyer_frontend_service/providers/http_bidding_signals_async_provider.h"
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/strings/str_cat.h"
 #include "absl/synchronization/notification.h"
 #include "gtest/gtest.h"
 #include "services/buyer_frontend_service/data/bidding_signals.h"
@@ -27,8 +28,14 @@ namespace {
 
 using ::testing::An;
 
-GetBidsRequest::GetBidsRawRequest GetRequest() {
+// Experiment Group ID.
+constexpr int kEgId = 1689;
+
+GetBidsRequest::GetBidsRawRequest GetRequest(bool set_buyer_kv_egid = false) {
   GetBidsRequest::GetBidsRawRequest request;
+  if (set_buyer_kv_egid) {
+    request.set_buyer_kv_experiment_group_id(kEgId);
+  }
   for (int i = 0; i < MakeARandomInt(1, 10); i++) {
     request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
         MakeARandomInterestGroupFromBrowser().release());
@@ -40,7 +47,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
   // The IGs created by this function have both names and bidding_signals_keys.
-  auto request = GetRequest();
+  auto request = GetRequest(/*set_buyer_kv_egid=*/true);
   request.clear_client_type();
   absl::Notification notification;
   EXPECT_CALL(
@@ -60,6 +67,11 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
                   callback,
               absl::Duration timeout) {
             EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_UNKNOWN);
+
+            EXPECT_TRUE(request.has_buyer_kv_experiment_group_id());
+            EXPECT_EQ(input->buyer_kv_experiment_group_id, absl::StrCat(kEgId));
+            EXPECT_EQ(input->buyer_kv_experiment_group_id,
+                      absl::StrCat(request.buyer_kv_experiment_group_id()));
             notification.Notify();
             return absl::OkStatus();
           });
@@ -99,6 +111,10 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
         // Check that keys received in input are from buyer_input
         EXPECT_EQ(input->hostname, request.publisher_name());
         EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
+
+        EXPECT_FALSE(request.has_buyer_kv_experiment_group_id());
+        EXPECT_EQ(request.buyer_kv_experiment_group_id(), 0);
+        EXPECT_EQ(input->buyer_kv_experiment_group_id, "");
 
         // Collect all expected keys
         UrlKeysSet expected_keys;

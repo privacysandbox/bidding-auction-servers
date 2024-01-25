@@ -30,7 +30,6 @@ load("//:config.bzl", "LOG_ENV_VARS")
 pkg_files(
     name = "server_executables",
     srcs = [
-        "bin/init_server_basic",
         "//services/buyer_frontend_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
@@ -88,6 +87,11 @@ container_layer(
 container_layer(
     name = "server_binary_layer",
     directory = "/",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
     tars = [
         ":server_binaries_tar",
     ],
@@ -102,9 +106,14 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "/init_server_basic",
+        "/proxify",
+        "--",
+        "/server",
+        "--init_config_client=true",
     ],
-    entrypoint = ["sh"],
+    entrypoint = [
+        "/busybox/sh",
+    ],
     env = LOG_ENV_VARS,
     layers = [
         "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify_layer",

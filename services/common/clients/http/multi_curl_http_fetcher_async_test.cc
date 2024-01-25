@@ -17,6 +17,8 @@
 #include <string>
 #include <utility>
 
+#include <include/gmock/gmock-matchers.h>
+
 #include "absl/status/status.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
@@ -32,7 +34,7 @@ namespace {
 using ::testing::HasSubstr;
 
 constexpr absl::string_view kUrlA = "https://example.com";
-constexpr absl::string_view kUrlB = "https://www.iana.org/domains/example";
+constexpr absl::string_view kUrlB = "https://google.com";
 constexpr absl::string_view kUrlC = "https://wikipedia.org";
 constexpr int kNormalTimeoutMs = 5000;
 
@@ -171,15 +173,30 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
   std::string msg;
-  absl::BlockingCounter done(1);
-  auto done_cb = [&done](absl::StatusOr<std::string> result) {
+  absl::Notification notification;
+  auto done_cb = [&notification](absl::StatusOr<std::string> result) {
     EXPECT_TRUE(result.ok()) << result.status();
-    EXPECT_GT(result->length(), 0);
-    done.DecrementCount();
+    EXPECT_GT(result.value().length(), 0);
+    notification.Notify();
   };
-  fetcher_->PutUrl({"httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
+  fetcher_->PutUrl({"http://httpbin.org/put", {}, "{}"}, kNormalTimeoutMs,
+                   done_cb);
 
-  done.Wait();
+  notification.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
+  std::string msg;
+  absl::Notification notification;
+  auto done_cb = [&notification](absl::StatusOr<std::string> result) {
+    EXPECT_FALSE(result.ok()) << result.status();
+    EXPECT_THAT(result.status().message(),
+                HasSubstr("The method is not allowed"));
+    notification.Notify();
+  };
+  fetcher_->PutUrl({"http://httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
+
+  notification.WaitForNotification();
 }
 
 }  // namespace

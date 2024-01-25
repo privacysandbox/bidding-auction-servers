@@ -48,6 +48,9 @@ struct PostAuctionSignals {
   absl::flat_hash_map<std::string,
                       absl::flat_hash_map<std::string, SellerRejectionReason>>
       rejection_reason_map;
+  // Set to true if the interest group owner
+  // was the only bidder that made bids with the second highest score.
+  bool made_highest_scoring_other_bid;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

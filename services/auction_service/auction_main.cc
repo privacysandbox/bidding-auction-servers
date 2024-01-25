@@ -193,11 +193,13 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).empty())
       << "SELLER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  DispatchConfig config;
-  config.worker_queue_max_items =
-      config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
-  config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
-  auto dispatcher = V8Dispatcher(config);
+  auto dispatcher = V8Dispatcher([&config_client]() {
+    DispatchConfig config;
+    config.worker_queue_max_items =
+        config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
+    config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+    return config;
+  }());
   CodeDispatchClient client(dispatcher);
 
   PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";

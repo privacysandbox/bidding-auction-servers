@@ -118,5 +118,4 @@ absl::StatusOr<std::string> ParseAndGetResponseJson(
     log::ContextImpl& log_context);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
-
 #endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

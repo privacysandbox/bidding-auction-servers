@@ -42,6 +42,10 @@ struct GetSellerValuesInput {
   // [SSP] The client type that originated the request. Passed to the key/value
   // service.
   ClientType client_type{CLIENT_TYPE_UNKNOWN};
+
+  // [DSP] Optional ID for experiments conducted by buyer. By spec, valid values
+  // are in the range: [0, 65535].
+  std::string seller_kv_experiment_group_id;
 };
 
 // Response from Seller Key Value server.
