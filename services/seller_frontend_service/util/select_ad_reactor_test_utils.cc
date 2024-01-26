@@ -132,11 +132,12 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   result->set_modeling_signals(kModelingSignals);
 }
 
-AdWithBid BuildNewAdWithBid(const std::string& ad_url,
-                            absl::optional<absl::string_view> interest_group,
-                            absl::optional<float> bid_value,
-                            const bool enable_event_level_debug_reporting,
-                            int number_ad_component_render_urls) {
+AdWithBid BuildNewAdWithBid(
+    const std::string& ad_url,
+    absl::optional<absl::string_view> interest_group_name,
+    absl::optional<float> bid_value,
+    const bool enable_event_level_debug_reporting,
+    int number_ad_component_render_urls) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -146,8 +147,8 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
   if (bid_value.has_value()) {
     bid.set_bid(*bid_value);
   }
-  if (interest_group.has_value()) {
-    bid.set_interest_group_name(*interest_group);
+  if (interest_group_name.has_value()) {
+    bid.set_interest_group_name(*interest_group_name);
   }
   bid.set_ad_cost(kAdCost);
   bid.set_modeling_signals(kModelingSignals);
@@ -177,12 +178,12 @@ void SetupScoringProviderMock(
     const std::optional<std::string>& scoring_signals_value,
     bool repeated_get_allowed,
     const std::optional<absl::Status>& server_error_to_return,
-    int expected_num_bids) {
+    int expected_num_bids, std::string seller_egid) {
   auto MockScoringSignalsProvider =
       [&expected_buyer_bids, scoring_signals_value, server_error_to_return,
-       expected_num_bids](const ScoringSignalsRequest& scoring_signals_request,
-                          ScoringSignalsDoneCallback on_done,
-                          absl::Duration timeout) {
+       expected_num_bids, seller_egid](
+          const ScoringSignalsRequest& scoring_signals_request,
+          ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
         if (expected_num_bids > -1) {
           EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
                     expected_num_bids);
@@ -207,6 +208,9 @@ void SetupScoringProviderMock(
               }))
               << diff_output;
         }
+
+        EXPECT_EQ(scoring_signals_request.seller_kv_experiment_group_id_,
+                  seller_egid);
 
         GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {

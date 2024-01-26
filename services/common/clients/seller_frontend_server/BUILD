@@ -26,6 +26,7 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
     ],
 )

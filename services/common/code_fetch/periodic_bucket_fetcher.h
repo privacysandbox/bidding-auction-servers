@@ -74,8 +74,8 @@ class PeriodicBucketFetcher : public CodeFetcherInterface {
   // Roma.
   void PeriodicBucketFetch();
 
-  absl::string_view bucket_name_;
-  absl::string_view blob_name_;
+  std::string bucket_name_;
+  std::string blob_name_;
   absl::Duration fetch_period_ms_;
   V8Dispatcher& dispatcher_;
   server_common::Executor* executor_;

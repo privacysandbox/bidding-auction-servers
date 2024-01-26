@@ -32,6 +32,12 @@ void HttpBiddingSignalsAsyncProvider::Get(
       bidding_signals_request.get_bids_raw_request_.publisher_name();
   request->client_type =
       bidding_signals_request.get_bids_raw_request_.client_type();
+  if (bidding_signals_request.get_bids_raw_request_
+          .has_buyer_kv_experiment_group_id()) {
+    request->buyer_kv_experiment_group_id =
+        absl::StrCat(bidding_signals_request.get_bids_raw_request_
+                         .buyer_kv_experiment_group_id());
+  }
   absl::StatusOr<std::unique_ptr<BiddingSignals>> output =
       std::make_unique<BiddingSignals>();
 

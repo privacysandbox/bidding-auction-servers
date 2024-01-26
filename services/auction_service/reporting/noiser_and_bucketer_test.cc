@@ -13,8 +13,10 @@
 // limitations under the License.
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 
+#include <cmath>
 #include <limits>
 
+#include "absl/container/flat_hash_set.h"
 #include "googletest/include/gtest/gtest.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -263,6 +265,124 @@ TEST(NoiserAndBucketerTest, Recency) {
                                 /*function=*/NoiseAndBucketRecency,
                                 /*min=*/kMin, /*max=*/kMax);
   }
+}
+
+TEST(RoundStochasticallyToKBits, MatchesTable) {
+  struct {
+    double input;
+    unsigned k;
+    double expected_output;
+  } test_cases[] = {
+      {0, 8, 0},
+      {1, 8, 1},
+      {-1, 8, -1},
+      // infinity passes through
+      {std::numeric_limits<double>::infinity(), 7,
+       std::numeric_limits<double>::infinity()},
+      {-std::numeric_limits<double>::infinity(), 7,
+       -std::numeric_limits<double>::infinity()},
+      // not clipped
+      {255, 8, 255},
+      // positive overflow
+      {2e38, 8, std::numeric_limits<double>::infinity()},
+      // positive underflow
+      {1e-39, 8, 0},
+      // negative overflow
+      {-2e38, 8, -std::numeric_limits<double>::infinity()},
+      // negative underflow
+      {-1e-39, 8, -0},
+  };
+
+  for (const auto& test_case : test_cases) {
+    EXPECT_EQ(test_case.expected_output,
+              RoundStochasticallyToKBits(test_case.input, test_case.k).value())
+        << "with " << test_case.input << " and " << test_case.k;
+  }
+}
+
+TEST(RoundStochasticallyToKBits, PassesNaN) {
+  EXPECT_TRUE(std::isnan(
+      RoundStochasticallyToKBits(std::numeric_limits<double>::quiet_NaN(), 8)
+          .value()));
+  EXPECT_TRUE(std::isnan(RoundStochasticallyToKBits(
+                             std::numeric_limits<double>::signaling_NaN(), 8)
+                             .value()));
+}
+
+TEST(RoundStochasticallyToKBits, IsNonDeterministic) {
+  // Since 0.3 can't be represented with 8 bits of precision, this value will be
+  // clipped to either the nearest lower number or nearest higher number.
+  const double kInput = 0.3;
+  absl::flat_hash_set<double> seen;
+  const absl::flat_hash_set<double> expected_values = {0.298828125, 0.30078125};
+  while (seen.size() < 2) {
+    double result = RoundStochasticallyToKBits(kInput, 8).value();
+    ASSERT_TRUE(
+        std::any_of(expected_values.begin(), expected_values.end(),
+                    [&result](float number) { return result == number; }));
+    seen.insert(result);
+  }
+}
+
+TEST(RoundStochasticallyToKBits, RoundsUpAndDown) {
+  const double inputs[] = {129.3, 129.8};
+  const absl::flat_hash_set<double> expected_values = {129.0, 130.0};
+  for (auto input : inputs) {
+    SCOPED_TRACE(input);
+    absl::flat_hash_set<double> seen;
+    while (seen.size() < 2) {
+      double result = RoundStochasticallyToKBits(input, 8).value();
+      ASSERT_TRUE(
+          std::any_of(expected_values.begin(), expected_values.end(),
+                      [&result](float number) { return result == number; }));
+      seen.insert(result);
+    }
+  }
+}
+
+TEST(RoundStochasticallyToKBits, HandlesOverflow) {
+  double max_value =
+      std::ldexp(0.998046875, std::numeric_limits<int8_t>::max());
+  double expected_value =
+      std::ldexp(0.99609375, std::numeric_limits<int8_t>::max());
+  const double inputs[] = {
+      max_value,
+      -max_value,
+  };
+  for (auto input : inputs) {
+    SCOPED_TRACE(input);
+    absl::flat_hash_set<double> expected_numbers = {
+        std::copysign(expected_value, input),
+        std::copysign(std::numeric_limits<double>::infinity(), input)};
+    absl::flat_hash_set<double> seen;
+    while (seen.size() < 2) {
+      double result = RoundStochasticallyToKBits(input, 8).value();
+      ASSERT_TRUE(
+          std::any_of(expected_numbers.begin(), expected_numbers.end(),
+                      [&result](float number) { return result == number; }));
+      seen.insert(result);
+    }
+  }
+}
+
+// Test that random rounding allows mean to approximate the true value.
+TEST(RoundStochasticallyToKBits, ApproximatesTrueSum) {
+  // Since 0.3 can't be represented with 8 bits of precision, this value will be
+  // clipped randomly. Because 0.3 is 60% of the way from the nearest
+  // representable number smaller than it and 40% of the way to the nearest
+  // representable number larger than it, the value should be rounded down to
+  // 0.2988... 60% of the time and rounded up to 0.30078... 40% of the time.
+  // This ensures that if you add the result N times you roughly get 0.3 * N.
+  const size_t kIterations = 10000;
+  const double kInput = 0.3;
+  double total = 0;
+
+  for (size_t idx = 0; idx < kIterations; idx++) {
+    total += RoundStochasticallyToKBits(kInput, 8).value();
+  }
+
+  EXPECT_GT(total, 0.9 * kInput * kIterations);
+  EXPECT_LT(total, 1.1 * kInput * kIterations);
 }
 
 }  // namespace

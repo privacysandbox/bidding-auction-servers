@@ -48,6 +48,10 @@ struct GetBuyerValuesInput {
   // [DSP] The client type that originated the request. Passed to the key/value
   // service.
   ClientType client_type{CLIENT_TYPE_UNKNOWN};
+
+  // [DSP] Optional ID for experiments conducted by buyer. By spec, valid values
+  // are [0, 65535].
+  std::string buyer_kv_experiment_group_id;
 };
 
 // Response from Buyer Key Value server.

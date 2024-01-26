@@ -16,7 +16,7 @@
 
 #include "services/common/code_fetch/periodic_bucket_fetcher.h"
 
-#include <string>
+#include <memory>
 #include <utility>
 
 #include "absl/log/check.h"
@@ -61,8 +61,6 @@ void PeriodicBucketFetcher::Start() {
 void PeriodicBucketFetcher::End() {
   if (task_id_.keys != nullptr) {
     executor_->Cancel(std::move(task_id_));
-  } else {
-    return;
   }
 }
 
@@ -86,7 +84,7 @@ void PeriodicBucketFetcher::PeriodicBucketFetch() {
   get_blob_request->mutable_blob_metadata()->set_blob_name(blob_name_);
 
   AsyncContext<GetBlobRequest, GetBlobResponse> get_blob_context(
-      move(get_blob_request), [&result, this](auto& context) {
+      std::move(get_blob_request), [&result, this](auto& context) {
         result = context.result;
 
         if (result.Successful()) {

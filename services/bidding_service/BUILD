@@ -202,6 +202,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:file_util",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli

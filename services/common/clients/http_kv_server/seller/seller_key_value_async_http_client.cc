@@ -36,6 +36,12 @@ HTTPRequest SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
     absl::StrAppend(&request.url, "client_type=", client_input->client_type);
   }
 
+  if (!client_input->seller_kv_experiment_group_id.empty()) {
+    AddAmpersandIfNotFirstQueryParam(&request.url);
+    absl::StrAppend(&request.url, "experimentGroupId=",
+                    client_input->seller_kv_experiment_group_id);
+  }
+
   if (!client_input->render_urls.empty()) {
     AddListItemsAsQueryParamsToUrl(&request.url, "renderUrls",
                                    client_input->render_urls, true);

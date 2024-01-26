@@ -44,6 +44,11 @@ HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
     AddAmpersandIfNotFirstQueryParam(&request.url);
     absl::StrAppend(&request.url, "hostname=", client_input->hostname);
   }
+  if (!client_input->buyer_kv_experiment_group_id.empty()) {
+    AddAmpersandIfNotFirstQueryParam(&request.url);
+    absl::StrAppend(&request.url, "experimentGroupId=",
+                    client_input->buyer_kv_experiment_group_id);
+  }
   if (!client_input->keys.empty()) {
     AddListItemsAsQueryParamsToUrl(&request.url, "keys", client_input->keys,
                                    kEnableEncodeParams);
