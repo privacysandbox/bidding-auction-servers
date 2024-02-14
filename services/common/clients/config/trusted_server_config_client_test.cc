@@ -121,6 +121,48 @@ TEST(TrustedServerConfigClientTest, CanReadFlagsPassedThroughConstructor) {
             server_common::telemetry::TelemetryConfig::PROD);
 }
 
+TEST(TrustedServerConfigClientTest, HasParameterWithValue) {
+  absl::SetFlag(&FLAGS_config_param_1, "");
+
+  std::vector<std::future<void>> f;
+  TrustedServersConfigClient config_client(
+      kFlags,
+      [&](ParameterClientOptions parameter_client_options)
+          -> std::unique_ptr<ParameterClientInterface> {
+        std::unique_ptr<MockParameterClient> mock_config_client =
+            std::make_unique<MockParameterClient>();
+        EXPECT_CALL(*mock_config_client, Init)
+            .WillOnce(Return(SuccessExecutionResult()));
+        EXPECT_CALL(*mock_config_client, Run)
+            .WillOnce(Return(SuccessExecutionResult()));
+        EXPECT_CALL(*mock_config_client, GetParameter)
+            .WillRepeatedly([&](GetParameterRequest get_param_req,
+                                Callback<GetParameterResponse> callback)
+                                -> ExecutionResult {
+              // async reading parameter like the real case.
+              f.push_back(std::async(std::launch::async, [cb = std::move(
+                                                              callback)]() {
+                absl::SleepFor(absl::Milliseconds(100));  // simulate delay
+                GetParameterResponse response;
+                cb(FailureExecutionResult(
+                       google::scp::core::errors::SC_CPIO_RESOURCE_NOT_FOUND),
+                   response);
+              }));
+              return SuccessExecutionResult();
+            });
+        return std::move(mock_config_client);
+      });
+  config_client.SetFlag(FLAGS_config_param_1, "");
+
+  ASSERT_TRUE(config_client.Init("").ok());
+  for (auto& each : f) {
+    each.get();
+  }
+
+  EXPECT_EQ(config_client.HasParameter("config_param_1"), true);
+  EXPECT_EQ(config_client.HasParameterWithValue("config_param_1"), false);
+}
+
 TEST(TrustedServerConfigClientTest, FetchesConfigValueFromConfigClient) {
   // The values we expect the ADMC config client to return.
   absl::flat_hash_map<std::string, std::string> expected_param_values = {
