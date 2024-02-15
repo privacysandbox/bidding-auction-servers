@@ -45,27 +45,27 @@ constexpr absl::string_view kBuyerHostMapForMultipleBuyers =
     {
       "https://bid2.com": {
         "url": "dns:///bfe-dev.buyer2-frontend.com:443",
-        "cloudPlatform": "GCP"
+        "cloudPlatform": "AZURE"
       },
       "https://bid3.com": {
         "url": "dns:///bfe-dev.buyer3-frontend.com:443",
-        "cloudPlatform": "AWS"
+        "cloudPlatform": "GCP"
       },
       "https://bid4.com": {
         "url": "dns:///bfe-dev.buyer4-frontend.com:443",
-        "cloudPlatform": "AZURE"
+        "cloudPlatform": "AWS"
       },
       "https://bid5.com": {
         "url": "dns:///bfe-dev.buyer5-frontend.com:443",
-        "cloudPlatform": "GCP"
+        "cloudPlatform": "AZURE"
       },
       "https://bid6.com": {
         "url": "dns:///bfe-dev.buyer6-frontend.com:443",
-        "cloudPlatform": "AWS"
+        "cloudPlatform": "GCP"
       },
       "https://bid7.com": {
         "url": "dns:///bfe-dev.buyer7-frontend.com:443",
-        "cloudPlatform": "AZURE"
+        "cloudPlatform": "AWS"
       }
     }
     )json";
