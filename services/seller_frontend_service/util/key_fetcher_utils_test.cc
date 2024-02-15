@@ -30,7 +30,7 @@ TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
 {
   "GCP": "https://publickeyservice.foo/v1alpha/publicKeys",
   "AWS": "https://publickeyservice.cloudfront.net/v1alpha/publicKeys",
-  "AZURE": "https://publickeyservice.bar/v1alpha/publicKeys",
+  "AZURE": "https://publickeyservice.bar/v1alpha/publicKeys"
 }
 )json";
 
