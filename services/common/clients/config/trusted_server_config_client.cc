@@ -109,7 +109,12 @@ absl::Status TrustedServersConfigClient::Init(
 
 bool TrustedServersConfigClient::HasParameter(
     absl::string_view name) const noexcept {
-  return config_entries_map_.contains(name) && config_entries_map_.at(name) != kEmptyValue;
+  return config_entries_map_.contains(name);
+}
+
+bool TrustedServersConfigClient::HasParameterWithValue(
+    absl::string_view name) const noexcept {
+  return HasParameter(name) && config_entries_map_.at(name) != kEmptyValue;
 }
 
 absl::string_view TrustedServersConfigClient::GetStringParameter(
