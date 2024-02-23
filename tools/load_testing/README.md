@@ -26,9 +26,11 @@ Note the following while building and deploying the services:
 -   Modify the terraform configuration based on the load(QPS) you are testing with:
 
     -   **bidding_machine_type, bfe_machine_type, auction_machine_type, sfe_machine_type**: Specify
-        the size of the machine for all the services. Note: SFE can use a standard machine while
-        BFE, Bidding and Auction Services will need a high memory configuration. Bidding and Auction
-        are usually recommended to be more compute optimized.
+        the size of the machine for all the services. Note: SFE can use a standard machine.
+        BFE is typically more memory-insentive than SFE. The Bidding and Auction Services will
+        need at least 3 GB of memory per Roma worker.
+        Bidding and Auction workloads are typically relatively more compute-intensive so are
+        usually recommended to have relatively more compute power.
     -   **Min_replicas_per_service_region**
     -   **Max_replicas_per_service_region**
     -   **JS_NUM_WORKERS** : Specify the number Roma workers (equal to the vCPUs in the machine)
