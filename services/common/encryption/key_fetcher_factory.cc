@@ -108,7 +108,8 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
   }
 
   std::vector<google::scp::cpio::PrivateKeyVendingEndpoint> secondaries{};
-  if (config_client.HasParameterWithValue(SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT)) {
+  if (config_client.HasParameterWithValue(
+          SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT)) {
     google::scp::cpio::PrivateKeyVendingEndpoint secondary;
 
     secondary.account_identity = config_client.GetStringParameter(
