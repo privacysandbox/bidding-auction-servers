@@ -221,10 +221,10 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@rapidjson",
-        "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_request_builder",
-        "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_response_parser",
-        "@service_value_key_fledge_privacysandbox//public/query/cpp:client_utils",
-        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
+        "@protected-auction-key-value-service//public/applications/pas:retrieval_request_builder",
+        "@protected-auction-key-value-service//public/applications/pas:retrieval_response_parser",
+        "@protected-auction-key-value-service//public/query/cpp:client_utils",
+        "@protected-auction-key-value-service//public/query/v2:get_values_v2_cc_proto",
     ],
 )
 
