@@ -1,4 +1,5 @@
 // Copyright 2023 Google LLC
+// Copyright (C) Microsoft Corporation. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -55,6 +56,8 @@ ParseCloudPlatformPublicKeysMap(
       cloud_platform = server_common::CloudPlatform::kGcp;
     } else if (absl::EqualsIgnoreCase(cloud_platform_str, "AWS")) {
       cloud_platform = server_common::CloudPlatform::kAws;
+    } else if (absl::EqualsIgnoreCase(cloud_platform_str, "AZURE")) {
+      cloud_platform = server_common::CloudPlatform::kAzure;
     } else {
       return absl::InvalidArgumentError(
           absl::StrCat(kUnsupportedCloudPlatformValue, cloud_platform_str));

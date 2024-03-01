@@ -1,4 +1,5 @@
 # Copyright 2022 Google LLC
+# Copyright (C) Microsoft Corporation. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +21,9 @@ string_flag(
     name = "instance",
     build_setting_default = "aws",
     values = [
-        "gcp",
         "aws",
+        "azure",
+        "gcp",
         "local",
     ],
 )
