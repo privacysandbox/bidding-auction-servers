@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.1.1 (2024-03-06)
+
+
+### Bug Fixes
+
+* update kv service hash after repo name change
+
 ## 3.1.0 (2024-01-25)
 
 
