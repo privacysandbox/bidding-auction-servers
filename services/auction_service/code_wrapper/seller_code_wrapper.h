@@ -151,6 +151,7 @@ inline constexpr absl::string_view kReportingEntryFunction =
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount

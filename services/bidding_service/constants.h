@@ -38,7 +38,7 @@ constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
     "device_signals";
 constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
     "ads, sellerAuctionSignals, buyerSignals, "
-    "preprocessedDataForRetrieval";
+    "preprocessedDataForRetrieval, protectedAppSignals, encodingVersion";
 
 // Params related to the UDF that can be used to retrieve the protected
 // embeddings that can later be used to fetch the top-k ads from ads retrieval
@@ -53,12 +53,14 @@ enum class PrepareDataForRetrievalUdfArgs {
 };
 
 // Params related to the UDF to use to generate bids for the protected signals.
-inline constexpr int kNumGenerateBidsUdfArgs = 7;
+inline constexpr int kNumGenerateBidsUdfArgs = 9;
 enum class GenerateBidsUdfArgs {
   kAds = 0,
   kAuctionSignals,
   kBuyerSignals,
   kPreProcessedDataForRetrieval,
+  kProtectedAppSignals,
+  kProtectedAppSignalsVersion,
   kFeatureFlags,
 };
 

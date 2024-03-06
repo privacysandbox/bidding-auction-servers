@@ -134,10 +134,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
@@ -149,12 +147,13 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
                               client_config);
   absl::Notification notification;
 
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
+  CHECK_OK(status);
   notification.WaitForNotification();
   EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
       raw_request, received_request));
@@ -190,10 +189,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
@@ -204,12 +201,13 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(), sent_metadata,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
+  CHECK_OK(status);
   notification.WaitForNotification();
 
   // GRPC might have added some more headers.
@@ -241,10 +239,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
@@ -256,7 +252,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
                               client_config);
   absl::Notification notification;
 
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
@@ -264,7 +260,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();
       });
-
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 
@@ -301,10 +297,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
@@ -314,13 +308,14 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       },
       timeout);
+  CHECK_OK(status);
   notification.WaitForNotification();
   // Time diff in ms is expected due to different invocations of absl::Now(),
   // but should within a small range.
@@ -349,10 +344,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
@@ -365,7 +358,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   absl::Notification notification;
   std::unique_ptr<Response> output;
 
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification, &expected_output](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
@@ -373,7 +366,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
             **get_values_response, expected_output));
         notification.Notify();
       });
-
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 
@@ -398,10 +391,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
@@ -448,10 +439,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .encryption_enabled = true,
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
@@ -464,7 +453,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   absl::Notification notification;
   std::unique_ptr<Response> output;
 
-  class_under_test.ExecuteInternal(
+  auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
@@ -472,7 +461,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
         notification.Notify();
       },
       absl::Milliseconds(10));
-
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 

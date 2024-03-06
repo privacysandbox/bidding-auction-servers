@@ -46,10 +46,9 @@ absl::Status V8Dispatcher::LoadSync(absl::string_view version,
   absl::Status load_status;
   absl::Status try_load = roma_service_.LoadCodeObj(
       std::make_unique<LoadRequest>(request),
-      [&is_loading,
-       &load_status](std::unique_ptr<absl::StatusOr<LoadResponse>> res) {
-        if (!res->ok()) {
-          load_status.Update(res->status());
+      [&is_loading, &load_status](const absl::StatusOr<LoadResponse>& res) {
+        if (!res.ok()) {
+          load_status.Update(res.status());
         }
         is_loading.DecrementCount();
       });

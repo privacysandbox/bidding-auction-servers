@@ -236,7 +236,7 @@ absl::Status CborSerializeBuyerInput(const BuyerInputMapEncoded& buyer_inputs,
 }
 
 absl::Status CborSerializeConsentedDebugConfig(
-    const ConsentedDebugConfiguration& consented_debug_config,
+    const server_common::ConsentedDebugConfiguration& consented_debug_config,
     cbor_item_t& root) {
   ScopedCbor serialized_consented_debug_config(
       cbor_new_definite_map(kNumConsentedDebugConfigKeys));

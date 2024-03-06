@@ -50,6 +50,8 @@ inline constexpr char kBadCompressedBuyerInput[] =
 inline constexpr char kBadBuyerInputProto[] =
     "Unable to decode BuyerInput binary proto for buyer: %s";
 inline constexpr char kMalformedBuyerInput[] = "Malformed buyer input.";
+inline constexpr char kErrorDecryptingCiphertextError[] =
+    "Error while decrypting protected_auction_ciphertext: %s.";
 
 // Server side errors listed here.
 inline constexpr char kInternalError[] = "Internal Error";

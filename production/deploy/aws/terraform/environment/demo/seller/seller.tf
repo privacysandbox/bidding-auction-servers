@@ -67,9 +67,9 @@ module "seller" {
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
     ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE              = "" # Example: "true"
     PS_VERBOSITY                           = "" # Example: "10"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
-    ENABLE_ENCRYPTION                      = "" # Example: "true"
     TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
     TEST_MODE                              = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:

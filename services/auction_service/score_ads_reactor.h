@@ -37,10 +37,10 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/cpp/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -49,8 +49,6 @@ inline constexpr char kDeviceComponentAuctionWithPAS[] =
     "Device Component Auction";
 inline constexpr char kNoAdsWithValidScoringSignals[] =
     "No ads with valid scoring signals.";
-inline constexpr char kNoTrustedScoringSignals[] =
-    "Empty trusted scoring signals";
 
 // An aggregate of the data we track when scoring all the ads.
 struct ScoringData {
@@ -96,7 +94,6 @@ class ScoreAdsReactor
   virtual void Execute();
 
  private:
-  enum class AuctionScope : int { kSingleSeller, kDeviceComponentSeller };
   using AdWithBidMetadata =
       ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
   using ProtectedAppSignalsAdWithBidMetadata =
@@ -117,6 +114,7 @@ class ScoreAdsReactor
   // for finding second highest bid (among other things).
   ScoringData FindWinningAd(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+
   // Populates the data about the highest second other bid in the response to
   // be returned to SFE.
   void PopulateHighestScoringOtherBidsData(
@@ -150,12 +148,13 @@ class ScoreAdsReactor
       const BuyerReportingMetadata& buyer_reporting_metadata) {
     ReportingDispatchRequestData dispatch_request_data = {
         .handler_name = kReportingDispatchHandlerFunctionName,
-        .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-        .log_context = log_context_,
-        .publisher_hostname = raw_request_.publisher_hostname(),
         .auction_config = auction_config,
+        .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
+        .publisher_hostname = raw_request_.publisher_hostname(),
+        .log_context = log_context_,
         .buyer_reporting_metadata = buyer_reporting_metadata};
-    if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+    if (auction_scope_ ==
+        AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
       dispatch_request_data.component_reporting_metadata = {
           .top_level_seller = raw_request_.top_level_seller(),
           .component_seller = raw_request_.seller()};
@@ -177,10 +176,10 @@ class ScoreAdsReactor
       std::string_view egress_features) {
     DispatchReportingRequest(
         {.handler_name = kReportingProtectedAppSignalsFunctionName,
-         .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-         .log_context = log_context_,
-         .publisher_hostname = raw_request_.publisher_hostname(),
          .auction_config = auction_config,
+         .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
+         .publisher_hostname = raw_request_.publisher_hostname(),
+         .log_context = log_context_,
          .buyer_reporting_metadata = buyer_reporting_metadata,
          .egress_features = egress_features});
   }
@@ -238,7 +237,8 @@ class ScoreAdsReactor
   // scoring data.
   // The AdScore fields that need to be parsed from ROMA response
   // must be populated separately before this is called.
-  void HandleScoredAd(int index, float bid,
+  void HandleScoredAd(int index, float buyer_bid,
+                      absl::string_view ad_with_bid_currency,
                       absl::string_view interest_group_name,
                       absl::string_view interest_group_owner,
                       const rapidjson::Document& response_json, AdType ad_type,
@@ -260,7 +260,7 @@ class ScoreAdsReactor
   const AsyncReporter& async_reporter_;
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
-  log::ContextImpl log_context_;
+  server_common::log::ContextImpl log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;

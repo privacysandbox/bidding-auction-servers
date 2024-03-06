@@ -29,13 +29,12 @@ export SERVER_START_CMD=$(cat << END
 --generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
 --protected_app_signals_generate_bid_timeout_ms=60000 \
 --create_new_event_engine="false" \
---enable_encryption="true" \
 --test_mode="true" \
 --telemetry_config="mode: EXPERIMENT" \
---enable_encryption="true" \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \
 --ps_verbosity=2 \
+--enable_protected_audience="true" \
 --enable_protected_app_signals="false" && exit
 END
 )

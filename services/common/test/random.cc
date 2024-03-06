@@ -53,17 +53,20 @@ std::unique_ptr<google::protobuf::Struct> MakeARandomStruct(int num_fields) {
   return a_struct;
 }
 
-void ProtoToJson(const google::protobuf::Message& proto,
-                 std::string* json_output) {
+absl::Status ProtoToJson(const google::protobuf::Message& proto,
+                         std::string* json_output) {
   auto options = google::protobuf::util::JsonPrintOptions();
   options.preserve_proto_field_names = true;
-  google::protobuf::util::MessageToJsonString(proto, json_output, options);
+  return google::protobuf::util::MessageToJsonString(proto, json_output,
+                                                     options);
 }
 
 std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields) {
   std::unique_ptr<std::string> json_output = std::make_unique<std::string>();
   std::unique_ptr<google::protobuf::Struct> map = MakeARandomStruct(num_fields);
-  ProtoToJson(*map, json_output.get());
+  if (auto status = ProtoToJson(*map, json_output.get()); !status.ok()) {
+    return nullptr;
+  }
   return json_output;
 }
 
@@ -255,8 +258,10 @@ InterestGroupForBidding MakeARandomInterestGroupForBidding(
 }
 
 InterestGroupForBidding MakeALargeInterestGroupForBiddingForLatencyTesting() {
-  int num_ads = 10, num_bidding_signals_keys = 10, num_ad_render_ids = 10,
-      num_ad_component_render_ids = 10, num_user_bidding_signals = 10;
+  int num_bidding_signals_keys = 10;
+  int num_ad_render_ids = 10;
+  int num_ad_component_render_ids = 10;
+  int num_user_bidding_signals = 10;
   InterestGroupForBidding ig_for_bidding;
   // Name.
   ig_for_bidding.set_name("HandbagShoppers");
@@ -578,10 +583,9 @@ ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type) {
   return input;
 }
 
-AuctionResult MakeARandomAuctionResult() {
+AuctionResult MakeARandomSingleSellerAuctionResult() {
   AuctionResult result;
   result.set_ad_render_url(MakeARandomString());
-  result.set_bid(MakeARandomNumber<float>(0.0, 1.0));
   result.set_interest_group_name(MakeARandomString());
   result.set_interest_group_owner(MakeARandomString());
   result.set_score(MakeARandomNumber<float>(0.0, 1.0));

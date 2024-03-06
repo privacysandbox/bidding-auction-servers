@@ -25,6 +25,10 @@ void TrustedServerConfigUtil::ComputeZone(absl::string_view resource_name) {
   GcpInstanceResourceNameDetails details;
   GcpInstanceClientUtils::GetInstanceResourceNameDetails(resource_name,
                                                          details);
+  // The zone id is of the form 'us-central1-a'.
   zone_ = details.zone_id;
+  // The region is of the form 'us-central1', which is the first 11 characters
+  // of the zone id.
+  region_ = zone_.substr(0, zone_.size() - 2);
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

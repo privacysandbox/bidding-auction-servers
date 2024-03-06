@@ -68,8 +68,6 @@ SellerFrontEndService::CreateKVClient() {
 grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("SelectAd"));
   LogCommonMetric(request, response);
   auto reactor = GetReactorForRequest(context, request, response, clients_,
                                       config_client_);

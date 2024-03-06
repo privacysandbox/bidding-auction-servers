@@ -29,14 +29,23 @@ resource "google_compute_subnetwork" "backends" {
   ip_cidr_range = "10.${each.key}.2.0/24"
 }
 
+resource "google_compute_subnetwork" "proxy_subnets" {
+  for_each = { for index, region in tolist(var.regions) : index => region }
+
+  ip_cidr_range = "10.${129 + each.key}.0.0/23"
+  name          = "${var.operator}-${var.environment}-${each.value}-collector-proxy-subnet"
+  network       = google_compute_network.default.id
+  purpose       = "GLOBAL_MANAGED_PROXY"
+  region        = each.value
+  role          = "ACTIVE"
+  lifecycle {
+    ignore_changes = [ipv6_access_type]
+  }
+}
+
 # Frontend address, used for frontend service LB only
 resource "google_compute_global_address" "frontend" {
   name       = "${var.operator}-${var.environment}-${var.frontend_service}-lb"
-  ip_version = "IPV4"
-}
-
-resource "google_compute_global_address" "collector" {
-  name       = "${var.collector_service_name}-${var.operator}-${var.environment}-${var.frontend_service}-lb"
   ip_version = "IPV4"
 }
 
@@ -57,11 +66,18 @@ resource "google_compute_router" "routers" {
 resource "google_compute_router_nat" "nat" {
   for_each = google_compute_router.routers
 
-  name                               = "${var.operator}-${var.environment}-${each.value.region}-nat"
-  router                             = each.value.name
-  region                             = each.value.region
-  nat_ip_allocate_option             = "AUTO_ONLY"
-  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+  name                                = "${var.operator}-${var.environment}-${each.value.region}-nat"
+  router                              = each.value.name
+  region                              = each.value.region
+  nat_ip_allocate_option              = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat  = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+  enable_dynamic_port_allocation      = var.fast_nat ? true : null
+  enable_endpoint_independent_mapping = var.fast_nat ? false : null
+  min_ports_per_vm                    = var.fast_nat ? 4096 : null
+  max_ports_per_vm                    = var.fast_nat ? 8192 : null
+  tcp_established_idle_timeout_sec    = var.fast_nat ? 10 : null
+  tcp_time_wait_timeout_sec           = var.fast_nat ? 5 : null
+  tcp_transitory_idle_timeout_sec     = var.fast_nat ? 3 : null
 
   log_config {
     enable = true

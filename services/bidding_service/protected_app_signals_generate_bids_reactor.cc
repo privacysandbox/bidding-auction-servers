@@ -23,9 +23,10 @@
 
 #include "absl/strings/escaping.h"
 #include "absl/strings/numbers.h"
+#include "public/applications/pas/retrieval_request_builder.h"
+#include "public/applications/pas/retrieval_response_parser.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
-#include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_metadata.h"
@@ -35,13 +36,15 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-using AdsRetrievalResult = absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>;
+using KVLookUpResult =
+    absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesResponse>>;
 
 inline constexpr char kClientIpKey[] = "x-bna-client-ip";
 inline constexpr char kUserAgentKey[] = "x-user-agent";
 inline constexpr char kAcceptLanguageKey[] = "x-accept-language";
-inline constexpr int kNumMaxEgressBytes = 3;
-inline constexpr int kEgressHighestBitMask = 0x800000;
+inline constexpr char kUserAgent[] = "X-User-Agent";
+inline constexpr char kClientIp[] = "X-BnA-Client-IP";
+inline constexpr char kAcceptLanguage[] = "X-Accept-Language";
 
 inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
     kBuyerMetadataKeysMap = {{{kAcceptLanguageKey, kAcceptLanguageKey},
@@ -54,36 +57,11 @@ inline void PopulateArgInRomaRequest(
   request[index] = std::make_shared<std::string>((arg.empty()) ? "\"\"" : arg);
 }
 
-// Checks that 24-th bit in egress feature vector is always clear (since we
-// want to allow a maximum of 23-bits to egress).
-inline bool IsEgressMSBClear(absl::string_view egress_features) {
-  auto hex_string = absl::BytesToHexString(egress_features);
-  PS_VLOG(5) << "Egress features as hex: " << hex_string;
-  uint32_t out;
-  if (auto success = absl::SimpleHexAtoi(hex_string, &out); !success) {
-    PS_VLOG(1) << "Failed to convert hex egress features (bytes: "
-               << egress_features << ", hex: " << hex_string << ") to integer";
-    return false;
-  }
-
-  PS_VLOG(5) << "Egress features as int: " << out;
-  return (out & kEgressHighestBitMask) == 0;
-}
-
 // Gets string information about a bid's well-formed-ness.
 inline std::string GetBidDebugInfo(const ProtectedAppSignalsAdWithBid& bid) {
-  return absl::StrCat(
-      "Is non-zero bid: ", bid.bid() > 0.0f,
-      ", Num egress bytes: ", bid.egress_features().size(),
-      ", MSB in egress is clear: ", IsEgressMSBClear(bid.egress_features()),
-      ", has debug report urls: ", bid.has_debug_report_urls());
-}
-
-// Validates that egress features don't exceed 23-bits in size.
-inline bool IsValidEgress(absl::string_view egress_features) {
-  return egress_features.empty() ||
-         (egress_features.size() <= kNumMaxEgressBytes &&
-          IsEgressMSBClear(egress_features));
+  return absl::StrCat("Is non-zero bid: ", bid.bid() > 0.0f,
+                      ", Num egress bytes: ", bid.egress_features().size(),
+                      ", has debug report urls: ", bid.has_debug_report_urls());
 }
 
 }  // namespace
@@ -95,8 +73,7 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
     GenerateProtectedAppSignalsBidsResponse* response,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
-    AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-        http_ad_retrieval_async_client)
+    KVAsyncClient* ad_retrieval_async_client, KVAsyncClient* kv_async_client)
     : BaseGenerateBidsReactor<GenerateProtectedAppSignalsBidsRequest,
                               GenerateProtectedAppSignalsBidsRequest::
                                   GenerateProtectedAppSignalsBidsRawRequest,
@@ -105,11 +82,12 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
                                   GenerateProtectedAppSignalsBidsRawResponse>(
           dispatcher, runtime_config, request, response, key_fetcher_manager,
           crypto_client),
-      http_ad_retrieval_async_client_(http_ad_retrieval_async_client),
+      ad_retrieval_async_client_(ad_retrieval_async_client),
+      kv_async_client_(kv_async_client),
       ad_bids_retrieval_timeout_ms_(runtime_config.ad_retrieval_timeout_ms),
       metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                               kBuyerMetadataKeysMap)) {
-  DCHECK(http_ad_retrieval_async_client_) << "Missing: Ads Async HTTP client";
+  DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
 }
 
 absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
@@ -126,35 +104,44 @@ absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
   return absl::OkStatus();
 }
 
-std::unique_ptr<AdRetrievalInput>
-ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalRequest(
-    const std::string& prepare_data_for_ads_retrieval_response) {
-  return std::make_unique<AdRetrievalInput>(AdRetrievalInput{
-      .retrieval_data = prepare_data_for_ads_retrieval_response,
-      .contextual_signals = raw_request_.buyer_signals(),
-      .device_metadata = {.client_ip = metadata_[kClientIpKey],
-                          .user_agent = metadata_[kUserAgentKey],
-                          .accept_language = metadata_[kAcceptLanguageKey]},
-  });
+std::unique_ptr<kv_server::v2::GetValuesRequest>
+ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalOrKVLookupRequest(
+    const std::string& prepare_data_for_ads_retrieval_response,
+    absl::optional<ProtectedAppSignalsGenerateBidsReactor::AdRenderIds>
+        ad_render_ids) {
+  std::vector<std::string> ad_render_ids_list;
+  if (ad_render_ids.has_value()) {
+    ad_render_ids_list =
+        std::vector<std::string>(ad_render_ids->begin(), ad_render_ids->end());
+  }
+  return std::make_unique<kv_server::v2::GetValuesRequest>(
+      kv_server::application_pas::BuildRetrievalRequest(
+          prepare_data_for_ads_retrieval_response,
+          {{kClientIp, metadata_[kClientIpKey]},
+           {kAcceptLanguage, metadata_[kAcceptLanguageKey]},
+           {kUserAgent, metadata_[kUserAgentKey]}},
+          raw_request_.buyer_signals(), std::move(ad_render_ids_list)));
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
     const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__;
-  auto status = http_ad_retrieval_async_client_->Execute(
-      CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response), {},
+  auto status = ad_retrieval_async_client_->ExecuteInternal(
+      CreateAdsRetrievalOrKVLookupRequest(
+          prepare_data_for_ads_retrieval_response),
+      {},
       [this, prepare_data_for_ads_retrieval_response](
-          AdsRetrievalResult ad_retrieval_kv_output) {
-        if (!ad_retrieval_kv_output.ok()) {
+          KVLookUpResult ad_retrieval_result) {
+        if (!ad_retrieval_result.ok()) {
           PS_VLOG(2, log_context_) << "Ad retrieval request failed: "
-                                   << ad_retrieval_kv_output.status();
+                                   << ad_retrieval_result.status();
           EncryptResponseAndFinish(grpc::Status(
-              grpc::INTERNAL, ad_retrieval_kv_output.status().ToString()));
+              grpc::INTERNAL, ad_retrieval_result.status().ToString()));
           return;
         }
 
-        OnFetchAdsDone(*std::move(ad_retrieval_kv_output),
-                       prepare_data_for_ads_retrieval_response);
+        OnFetchAdsDataDone(*std::move(ad_retrieval_result),
+                           prepare_data_for_ads_retrieval_response);
       },
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
@@ -167,12 +154,12 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
 
 DispatchRequest
 ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
-    std::unique_ptr<AdRetrievalOutput> result,
+    std::unique_ptr<kv_server::v2::GetValuesResponse> result,
     absl::string_view prepare_data_for_ads_retrieval_response) {
   std::vector<std::shared_ptr<std::string>> input(
       kNumGenerateBidsUdfArgs, std::make_shared<std::string>());
-  PopulateArgInRomaRequest(result->ads, ArgIndex(GenerateBidsUdfArgs::kAds),
-                           input);
+  PopulateArgInRomaRequest(result->single_partition().string_output(),
+                           ArgIndex(GenerateBidsUdfArgs::kAds), input);
   PopulateArgInRomaRequest(raw_request_.auction_signals(),
                            ArgIndex(GenerateBidsUdfArgs::kAuctionSignals),
                            input);
@@ -181,6 +168,21 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
   PopulateArgInRomaRequest(
       prepare_data_for_ads_retrieval_response,
       ArgIndex(GenerateBidsUdfArgs::kPreProcessedDataForRetrieval), input);
+  if (prepare_data_for_ads_retrieval_response.empty() &&
+      IsContextualRetrievalRequest()) {
+    // If prepareDataForAdRetrieval was not run then we relay the PAS as well
+    // as the encoding version directly to generateBid.
+    PopulateArgInRomaRequest(
+        absl::StrCat(
+            "\"",
+            absl::BytesToHexString(
+                raw_request_.protected_app_signals().app_install_signals()),
+            "\""),
+        ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignals), input);
+    PopulateArgInRomaRequest(
+        absl::StrCat(raw_request_.protected_app_signals().encoding_version()),
+        ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignalsVersion), input);
+  }
   PopulateArgInRomaRequest(
       GetFeatureFlagJson(enable_adtech_code_logging_,
                          enable_buyer_debug_url_generation_ &&
@@ -211,15 +213,15 @@ ProtectedAppSignalsGenerateBidsReactor::
   return bid;
 }
 
-void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDone(
-    std::unique_ptr<AdRetrievalOutput> result,
+void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
+    std::unique_ptr<kv_server::v2::GetValuesResponse> result,
     const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__
                            << "Ads data returned by the ad retrieval service: "
-                           << result->ads;
-  if (result->ads.empty()) {
-    PS_VLOG(4, log_context_) << "No ads data returned by the ad retrieval "
-                                "service, finishing RPC";
+                           << result->single_partition().string_output();
+  if (result->single_partition().string_output().empty()) {
+    PS_VLOG(4, log_context_) << "No ads data returned by the ad retrieval OR KV"
+                                " service, finishing RPC";
     EncryptResponseAndFinish(grpc::Status::OK);
     return;
   }
@@ -277,7 +279,7 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
       .handler_name = kPrepareDataForAdRetrievalEntryFunctionName,
       .input = std::move(input),
   };
-  if (log::PS_VLOG_IS_ON(3)) {
+  if (server_common::log::PS_VLOG_IS_ON(3)) {
     for (const auto& i : request.input) {
       PS_VLOG(3, log_context_)
           << "Roma request input to prepared data for ads retrieval: " << *i;
@@ -287,7 +289,7 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
   return request;
 }
 
-void ProtectedAppSignalsGenerateBidsReactor::GetPreparedDataForAdsRetrieval() {
+void ProtectedAppSignalsGenerateBidsReactor::StartNonContextualAdsRetrieval() {
   PS_VLOG(8, log_context_) << __func__;
   embeddings_requests_.emplace_back(CreatePrepareDataForAdsRetrievalRequest());
   ExecuteRomaRequests<std::string>(
@@ -302,19 +304,93 @@ void ProtectedAppSignalsGenerateBidsReactor::GetPreparedDataForAdsRetrieval() {
       });
 }
 
+bool ProtectedAppSignalsGenerateBidsReactor::IsContextualRetrievalRequest() {
+  if (is_contextual_retrieval_request_.has_value()) {
+    return *is_contextual_retrieval_request_;
+  }
+
+  if (!raw_request_.has_contextual_protected_app_signals_data()) {
+    PS_VLOG(5, log_context_) << "No contextual PAS data found";
+    is_contextual_retrieval_request_ = false;
+    return false;
+  }
+
+  const auto& protected_app_signals_data =
+      raw_request_.contextual_protected_app_signals_data();
+  if (protected_app_signals_data.ad_render_ids().size() > 0 &&
+      !protected_app_signals_data.fetch_ads_from_retrieval_service()) {
+    PS_VLOG(5, log_context_)
+        << "Contextual ad render ids: "
+        << protected_app_signals_data.ad_render_ids().size()
+        << ", fetch_ads_from_retrieval_service: "
+        << protected_app_signals_data.fetch_ads_from_retrieval_service();
+    is_contextual_retrieval_request_ = true;
+    return true;
+  }
+
+  is_contextual_retrieval_request_ = false;
+  return false;
+}
+
+void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
+    const std::string& prepare_data_for_ads_retrieval_response) {
+  const auto& ad_render_ids =
+      raw_request_.contextual_protected_app_signals_data().ad_render_ids();
+  PS_VLOG(8, log_context_) << __func__ << " Found ad render ids: "
+                           << absl::StrJoin(
+                                  raw_request_
+                                      .contextual_protected_app_signals_data()
+                                      .ad_render_ids(),
+                                  ", ");
+  auto status = kv_async_client_->ExecuteInternal(
+      CreateAdsRetrievalOrKVLookupRequest(
+          prepare_data_for_ads_retrieval_response, ad_render_ids),
+      {},
+      [this, prepare_data_for_ads_retrieval_response](
+          KVLookUpResult kv_look_up_result) {
+        if (!kv_look_up_result.ok()) {
+          PS_VLOG(2, log_context_)
+              << "KV metadata request failed: " << kv_look_up_result.status();
+          EncryptResponseAndFinish(grpc::Status(
+              grpc::INTERNAL, kv_look_up_result.status().ToString()));
+          return;
+        }
+
+        OnFetchAdsDataDone(*std::move(kv_look_up_result),
+                           prepare_data_for_ads_retrieval_response);
+      },
+      absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
+
+  if (!status.ok()) {
+    PS_VLOG(2, log_context_)
+        << "Failed to execute ads metadata KV lookup request: " << status;
+    EncryptResponseAndFinish(grpc::Status(grpc::INTERNAL, status.ToString()));
+  }
+}
+
+void ProtectedAppSignalsGenerateBidsReactor::StartContextualAdsRetrieval() {
+  PS_VLOG(8, log_context_) << __func__;
+  std::string prepare_data_for_ads_retrieval_response;
+  FetchAdsMetadata(prepare_data_for_ads_retrieval_response);
+}
+
 void ProtectedAppSignalsGenerateBidsReactor::Execute() {
-  PS_VLOG(8) << __func__;
+  PS_VLOG(8, log_context_) << __func__;
   PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
                            << request_->DebugString();
   PS_VLOG(1, log_context_) << "GenerateBidsRawRequest:\n"
                            << raw_request_.DebugString();
 
-  // Trigger the request processing workflow to:
-  // 1. Fetch protected embeddings for retrieval
-  // 2. Fetch top-k ads and metadata using the embeddings retrieved in 1.
-  // 3. Run the `generateBid` UDF for Protected App Signals and return the
-  //    response back to BFE.
-  GetPreparedDataForAdsRetrieval();
+  if (IsContextualRetrievalRequest()) {
+    StartContextualAdsRetrieval();
+  } else {
+    // Trigger the request processing workflow to:
+    // 1. Fetch protected embeddings for retrieval
+    // 2. Fetch top-k ads and metadata using the embeddings retrieved in 1.
+    // 3. Run the `generateBid` UDF for Protected App Signals and return the
+    //    response back to BFE.
+    StartNonContextualAdsRetrieval();
+  }
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::OnDone() { delete this; }

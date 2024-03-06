@@ -24,6 +24,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 void TrustedServerConfigUtil::ComputeZone(absl::string_view resource_name) {
   AwsResourceNameDetails details;
   AwsInstanceClientUtils::GetResourceNameDetails(resource_name, details);
-  zone_ = details.region;
+  region_ = details.region;
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/btree_map.h"
 #include "services/common/clients/http_kv_server/buyer/buyer_key_value_async_http_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -38,7 +39,8 @@ class FakeBuyerKeyValueAsyncHttpClient
   // KV client to establish connection and cache connection data with the
   // underlying HTTP server. It's false by default.
   explicit FakeBuyerKeyValueAsyncHttpClient(
-      absl::string_view kv_server_base_address);
+      absl::string_view kv_server_base_address,
+      absl::btree_map<std::string, std::string> request_to_path = {});
 
   // Executes the http request to a Key-Value Server asynchronously.
   //
@@ -55,6 +57,8 @@ class FakeBuyerKeyValueAsyncHttpClient
 
  private:
   const std::string kv_server_base_address_;
+  // map from kv request to response
+  absl::btree_map<std::string, std::string> kv_data_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

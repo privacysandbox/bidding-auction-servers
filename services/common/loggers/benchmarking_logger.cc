@@ -19,7 +19,7 @@
 #include <iostream>
 
 #include "absl/strings/str_cat.h"
-#include "services/common/loggers/request_context_logger.h"
+#include "src/cpp/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -133,6 +133,29 @@ EOF""",
     message = "generate coverage report",
 )
 
+genrule(
+    name = "package-lcov-report",
+    outs = ["package_lcov_report.bin"],
+    cmd_bash = """cat << EOF > '$@'
+cp bazel-out/_coverage/_coverage_report.dat dist/_"\\$$@"_coverage_report.dat
+EOF""",
+    executable = True,
+    local = True,
+    message = "package lcov report",
+)
+
+genrule(
+    name = "merge-lcov-reports",
+    outs = ["merge_lcov_reports.bin"],
+    cmd_bash = """cat << EOF > '$@'
+find dist -name '*_coverage_report.dat' -exec echo -a '{}' \\; | \\
+xargs builders/tools/lcov -o dist/_combined_coverage_report.dat
+EOF""",
+    executable = True,
+    local = True,
+    message = "merge lcov reports",
+)
+
 string_flag(
     name = "build_flavor",
     build_setting_default = "prod",

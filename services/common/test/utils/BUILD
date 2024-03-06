@@ -23,6 +23,7 @@ package(
 
 cc_library(
     name = "ohttp_test_utils",
+    testonly = True,
     srcs = [
         "ohttp_utils.cc",
     ],
@@ -30,6 +31,7 @@ cc_library(
         "ohttp_utils.h",
     ],
     deps = [
+        "//services/common/util:oblivious_http_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

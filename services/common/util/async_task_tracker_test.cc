@@ -32,8 +32,9 @@ constexpr int kNumMaxThreads = 10;
 
 class AsyncTasksTrackerTest : public testing::Test {
  protected:
-  log::ContextImpl log_context_{absl::btree_map<std::string, std::string>{},
-                                ConsentedDebugConfiguration()};
+  server_common::log::ContextImpl log_context_{
+      absl::btree_map<std::string, std::string>{},
+      server_common::ConsentedDebugConfiguration()};
   absl::Notification notification_;
 };
 

@@ -32,6 +32,7 @@ constexpr char kTestAdTechDebugId[] = "test_ad_tech_debug_id";
 constexpr char kTestConsentedDebuggingToken[] =
     "test_consented_debugging_token";
 constexpr char kTestProtectedAppSignals[] = "test_protected_app_signals";
+constexpr char kTestContextualPasAdRenderId[] = "ad1";
 constexpr int kTestEncodingVersion = 5;
 constexpr char kTestInterestGroupName[] = "test_ig";
 constexpr int kTestBidValue1 = 10.0;

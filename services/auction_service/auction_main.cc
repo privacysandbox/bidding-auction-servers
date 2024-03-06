@@ -50,6 +50,7 @@
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/cpp/util/rlimit_core_config.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
@@ -88,7 +89,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_enable_auction_service_benchmark,
                         ENABLE_AUCTION_SERVICE_BENCHMARK);
-  config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
   config_client.SetFlag(FLAGS_test_mode, TEST_MODE);
   config_client.SetFlag(FLAGS_roma_timeout_ms, ROMA_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_public_key_endpoint, PUBLIC_KEY_ENDPOINT);
@@ -140,7 +140,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::PS_VLOG_IS_ON(
+      0, config_client.GetIntParameter(PS_VERBOSITY));
 
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
              << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -278,9 +279,9 @@ absl::Status RunServer() {
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
         endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
-        std::move(http_fetcher), dispatcher, executor.get(),
+        http_fetcher.get(), &dispatcher, executor.get(),
         absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()),
-        std::move(wrap_code));
+        std::move(wrap_code), "v1");
 
     code_fetcher->Start();
   } else if (!code_fetch_proto.auction_js_path().empty()) {
@@ -326,15 +327,13 @@ absl::Status RunServer() {
       };
 
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled =
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
+      .roma_timeout_ms =
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
       .enable_report_win_url_generation = enable_report_win_url_generation,
-      .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_protected_app_signals =
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
       .enable_report_win_input_noising =
@@ -391,6 +390,9 @@ absl::Status RunServer() {
 
 int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
+  privacysandbox::server_common::SetRLimits({
+      .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
+  });
   absl::FailureSignalHandlerOptions options;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);

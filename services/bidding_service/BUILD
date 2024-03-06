@@ -14,6 +14,7 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -46,10 +47,9 @@ cc_library(
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
-        "//services/common/clients:ads_retrieval_async_http_client",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/kv_server:kv_async_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
-        "//services/common/loggers:request_context_impl",
         "//services/common/metric:server_definition",
         "//services/common/util:json_util",
         "//services/common/util:request_metadata",
@@ -57,6 +57,7 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
@@ -107,6 +108,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
     ],
 )
 
@@ -150,7 +152,6 @@ cc_library(
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
-        "//services/common/clients:ads_retrieval_async_http_client",
         "//services/common/clients/config:config_client",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/metric:server_definition",
@@ -185,6 +186,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
+    local_defines = ENABLE_CORE_DUMPS_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
         ":bidding_code_fetch_config_cc_proto",
@@ -214,6 +216,7 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/cpp/util:rlimit_core_config",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
@@ -245,6 +248,8 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_grpc",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
     ],
 )
 
@@ -271,5 +276,7 @@ cc_library(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
     ],
 )

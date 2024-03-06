@@ -473,7 +473,6 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
         server_common::telemetry::BuildDependentConfig(config_proto));
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
@@ -484,9 +483,7 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
       std::make_unique<MockCryptoClientWrapper>();
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
-  BiddingServiceRuntimeConfig bidding_service_runtime_config_ = {
-      .encryption_enabled = true};
-  MockAsyncProvider<AdRetrievalInput, AdRetrievalOutput> ads_provider_;
+  BiddingServiceRuntimeConfig bidding_service_runtime_config_;
 };
 
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
@@ -533,11 +530,12 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
 
   BiddingService service(
@@ -622,11 +620,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
 
   BiddingService service(
@@ -702,11 +701,12 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
 
   GenerateBidsResponse response;
@@ -773,11 +773,12 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
   GenerateBidsResponse response;
   BiddingService service(
@@ -872,11 +873,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
@@ -954,11 +956,12 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
@@ -1036,17 +1039,17 @@ void GenerateBidCodeWrapperTestHelper(
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
-                AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                    http_ad_retrieval_async_client) {
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
-            key_fetcher_manager, crypto_client, http_ad_retrieval_async_client);
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
       };
 
   std::unique_ptr<MockCryptoClientWrapper> crypto_client =
       std::make_unique<MockCryptoClientWrapper>();
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   SetupMockCryptoClientWrapper(*crypto_client);
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
@@ -1054,7 +1057,6 @@ void GenerateBidCodeWrapperTestHelper(
           config_client, /* public_key_fetcher= */ nullptr);
 
   const BiddingServiceRuntimeConfig& runtime_config = {
-      .encryption_enabled = true,
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .enable_adtech_code_logging = enable_adtech_code_logging};
   BiddingService service(
@@ -1199,7 +1201,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,
-       GeneratesBidsReturnDebugReportingUrlsWhenScriptCrashes) {
+       NoDebugReportingUrlsSentWhenScriptCrashes) {
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
@@ -1208,14 +1210,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
       enable_debug_reporting, enable_buyer_debug_url_generation);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
-  EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_EQ(adWithBid.bid(), 0);
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
-              "https://example-dsp.com/debugWin");
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url(),
-              "https://example-dsp.com/debugLoss");
-  }
+  EXPECT_EQ(raw_response.bids_size(), 0);
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,

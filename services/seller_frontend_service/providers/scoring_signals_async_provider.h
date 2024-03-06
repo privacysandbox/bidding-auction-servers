@@ -29,9 +29,9 @@ struct ScoringSignalsRequest {
       const BuyerBidsResponseMap& buyer_bids_map,
       const absl::flat_hash_map<std::string, std::string>& filtering_metadata,
       ClientType client_type, std::string seller_kv_experiment_group_id = "")
-      : buyer_bids_map_(buyer_bids_map),
+      : client_type_(client_type),
+        buyer_bids_map_(buyer_bids_map),
         filtering_metadata_(filtering_metadata),
-        client_type_(client_type),
         seller_kv_experiment_group_id_(
             std::move(seller_kv_experiment_group_id)) {}
 

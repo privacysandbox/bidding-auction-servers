@@ -16,9 +16,11 @@
 
 #include <string>
 
+#include "absl/strings/str_join.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
-ErrorAccumulator::ErrorAccumulator(log::ContextImpl* log_context)
+ErrorAccumulator::ErrorAccumulator(server_common::log::ContextImpl* log_context)
     : log_context_(log_context) {}
 
 void ErrorAccumulator::ReportError(
@@ -51,5 +53,15 @@ const ErrorAccumulator::ErrorMap& ErrorAccumulator::GetErrors(
 }
 
 bool ErrorAccumulator::HasErrors() const { return !dst_error_map_.empty(); }
+
+std::string ErrorAccumulator::GetAccumulatedErrorString(
+    ErrorVisibility error_visibility) {
+  const ErrorAccumulator::ErrorMap& error_map = GetErrors(error_visibility);
+  auto it = error_map.find(ErrorCode::CLIENT_SIDE);
+  if (it == error_map.end()) {
+    return "";
+  }
+  return absl::StrJoin(it->second, kErrorDelimiter);
+}
 
 }  // namespace privacy_sandbox::bidding_auction_servers

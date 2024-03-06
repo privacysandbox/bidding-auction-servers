@@ -182,6 +182,8 @@ inline constexpr server_common::metrics::Definition<
 
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
+    kRejectionReasonBidFromGenBidFailedCurrencyCheck,
+    kRejectionReasonBidFromScoreAdFailedCurrencyCheck,
     kRejectionReasonBlockedByPublisher,
     kRejectionReasonCategoryExclusions,
     kRejectionReasonDisapprovedByExchange,
@@ -256,45 +258,63 @@ inline constexpr server_common::metrics::Definition<
         "Total time taken by SFE to execute the request with winner ads",
         server_common::metrics::kTimeHistogram, 1000, 100);
 
+// For error_code metrics, min_noise_to_output = 0.99, noise bound = 8.29,
+// privacy budget = 0.55
 inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
+    int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
     kAuctionErrorCountByErrorCode(
         /*name*/ "auction.error_code",
         /*description*/
         "Number of errors in the auction server by error code",
         /*partition_type*/ "error code",
-        /*public_partitions*/ kAuctionErrorCode);
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ kAuctionErrorCode,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0,
+        /*min_noise_to_output*/ 0.99);
 
 inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
+    int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
     kBfeErrorCountByErrorCode(
         /*name*/ "bfe.error_code",
         /*description*/
         "Number of errors in the BFE server by error code",
         /*partition_type*/ "error code",
-        /*public_partitions*/ kBfeErrorCode);
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ kBfeErrorCode,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0,
+        /*min_noise_to_output*/ 0.99);
 
 inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
+    int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
     kBiddingErrorCountByErrorCode(
         /*name*/ "bidding.error_code",
         /*description*/
         "Number of errors in the bidding server by error code",
         /*partition_type*/ "error code",
-        /*public_partitions*/ kBiddingErrorCode);
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ kBiddingErrorCode,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0,
+        /*min_noise_to_output*/ 0.99);
 
 inline constexpr server_common::metrics::Definition<
-    int, server_common::metrics::Privacy::kNonImpacting,
+    int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
     kSfeErrorCountByErrorCode(
         /*name*/ "sfe.error_code",
         /*description*/
         "Number of errors in the SFE server by error code",
         /*partition_type*/ "error code",
-        /*public_partitions*/ kSfeErrorCode);
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ kSfeErrorCode,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0,
+        /*min_noise_to_output*/ 0.99);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
@@ -671,9 +691,9 @@ class InitiatedRequest {
   std::string destination_;
   absl::Time start_;
   ContextT& metric_context_;
-  int request_size_;
-  int response_size_;
-  std::string buyer_;
+  int request_size_ = 0;
+  int response_size_ = 0;
+  std::string buyer_ = "";
 };
 
 template <typename ContextT>

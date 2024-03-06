@@ -19,6 +19,7 @@ package(default_visibility = ["//:__subpackages__"])
 cc_library(
     name = "code_fetcher_interface",
     hdrs = ["code_fetcher_interface.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -29,13 +30,14 @@ cc_library(
         ":code_fetcher_interface",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
         "//services/common/clients/http:http_fetcher_async",
-        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
     ],
 )
 
@@ -46,9 +48,9 @@ cc_library(
     deps = [
         ":code_fetcher_interface",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
-        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
@@ -57,6 +59,9 @@ cc_library(
         "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
         "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
     ],
 )
 

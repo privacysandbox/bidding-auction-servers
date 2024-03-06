@@ -14,6 +14,7 @@
 
 #include "services/buyer_frontend_service/util/proto_factory.h"
 
+#include "absl/log/check.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
@@ -29,6 +30,7 @@ constexpr bool kIsConsentedDebug = true;
 constexpr absl::string_view kConsentedDebugToken = "test";
 
 using ::google::protobuf::util::MessageDifferencer;
+using ::google::protobuf::util::MessageToJsonString;
 using GenBidsRawReq = GenerateBidsRequest::GenerateBidsRawRequest;
 using GenBidsRawResp = GenerateBidsResponse::GenerateBidsRawResponse;
 
@@ -204,11 +206,11 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
   if (!(MessageDifferencer::Equals(expected_raw_output, *raw_output))) {
     std::string expected_output_str, output_str;
 
-    google::protobuf::util::MessageToJsonString(
+    CHECK_OK(MessageToJsonString(
         expected_raw_output.interest_group_for_bidding().at(0),
-        &expected_output_str);
-    google::protobuf::util::MessageToJsonString(
-        raw_output->interest_group_for_bidding().at(0), &output_str);
+        &expected_output_str));
+    CHECK_OK(MessageToJsonString(raw_output->interest_group_for_bidding().at(0),
+                                 &output_str));
 
     ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
     ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
@@ -373,11 +375,11 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   if (!(differencer.Compare(expected_raw_output, *raw_output))) {
     std::string expected_output_str, output_str;
 
-    google::protobuf::util::MessageToJsonString(
+    CHECK_OK(MessageToJsonString(
         expected_raw_output.interest_group_for_bidding().at(0),
-        &expected_output_str);
-    google::protobuf::util::MessageToJsonString(
-        raw_output->interest_group_for_bidding().at(0), &output_str);
+        &expected_output_str));
+    CHECK_OK(MessageToJsonString(raw_output->interest_group_for_bidding().at(0),
+                                 &output_str));
 
     ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
     ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
@@ -464,6 +466,12 @@ TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
   EXPECT_EQ(request->consented_debug_config().is_consented(), true);
   EXPECT_EQ(request->consented_debug_config().token(),
             kTestConsentedDebuggingToken);
+  ASSERT_TRUE(request->has_contextual_protected_app_signals_data());
+  ASSERT_EQ(
+      request->contextual_protected_app_signals_data().ad_render_ids_size(), 1);
+  EXPECT_EQ(
+      request->contextual_protected_app_signals_data().ad_render_ids().at(0),
+      kTestContextualPasAdRenderId);
 }
 
 }  // namespace

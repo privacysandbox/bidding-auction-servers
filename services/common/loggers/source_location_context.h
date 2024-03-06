@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,21 @@
  * limitations under the License.
  */
 
-#include "services/common/loggers/request_context_impl.h"
+#ifndef SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
+#define SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
+#include <utility>
 
-#include <vector>
-
-#include "absl/strings/str_join.h"
-#include "services/common/util/request_response_constants.h"
-
+#include "src/cpp/util/status_macro/source_location.h"
 namespace privacy_sandbox::bidding_auction_servers::log {
-
-std::string FormatContext(
-    const absl::btree_map<std::string, std::string>& context_map) {
-  if (context_map.empty()) {
-    return "";
-  }
-  std::vector<std::string> pairs;
-  for (const auto& [key, val] : context_map) {
-    if (!val.empty()) {
-      pairs.emplace_back(absl::StrCat(key, ": ", val));
-    }
-  }
-  if (pairs.empty()) {
-    return "";
-  }
-  return absl::StrCat(" (", absl::StrJoin(std::move(pairs), ", "), ") ");
-}
-
+template <class T>
+struct ParamWithSourceLoc {
+  T mandatory_param;
+  server_common::SourceLocation location;
+  template <class U>
+  ParamWithSourceLoc(
+      U param, server_common::SourceLocation loc_in PS_LOC_CURRENT_DEFAULT_ARG)
+      : mandatory_param(std::forward<U>(param)), location(loc_in) {}
+};
 }  // namespace privacy_sandbox::bidding_auction_servers::log
+
+#endif  // SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_

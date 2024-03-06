@@ -135,6 +135,12 @@ variable "instance_template_waits_for_instances" {
 }
 
 variable "collector_startup_script" {
-  description = "Script to configure and start the otel collector."
+  description = "Script to configure and start the collector server."
   type        = string
+}
+
+variable "fast_nat" {
+  description = "If true, use extra nat options."
+  type        = bool
+  default     = false
 }

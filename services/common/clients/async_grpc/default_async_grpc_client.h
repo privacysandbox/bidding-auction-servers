@@ -25,9 +25,9 @@
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/loggers/request_context_logger.h"
 #include "services/common/util/error_categories.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/cpp/logger/request_context_logger.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -45,11 +45,10 @@ class DefaultAsyncGrpcClient
  public:
   DefaultAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client, bool encryption_enabled)
+      CryptoClientWrapperInterface* crypto_client)
       : AsyncClient<Request, Response, RawRequest, RawResponse>(),
         key_fetcher_manager_(key_fetcher_manager),
-        crypto_client_(crypto_client),
-        encryption_enabled_(encryption_enabled) {
+        crypto_client_(crypto_client) {
 #if defined(CLOUD_PLATFORM_AWS)
     cloud_platform_ = server_common::CloudPlatform::kAws;
 #elif defined(CLOUD_PLATFORM_GCP)
@@ -61,12 +60,11 @@ class DefaultAsyncGrpcClient
 
   DefaultAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client, bool encryption_enabled,
+      CryptoClientWrapperInterface* crypto_client,
       server_common::CloudPlatform cloud_platform)
       : AsyncClient<Request, Response, RawRequest, RawResponse>(),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
-        encryption_enabled_(encryption_enabled),
         cloud_platform_(cloud_platform) {}
 
   DefaultAsyncGrpcClient(const DefaultAsyncGrpcClient&) = delete;
@@ -77,7 +75,6 @@ class DefaultAsyncGrpcClient
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
           on_done,
       absl::Duration timeout = max_timeout) const override {
-    DCHECK(encryption_enabled_);
     PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     PS_VLOG(5) << "Encrypting request ...";
     auto secret_request = EncryptRequestWithHpke<RawRequest, Request>(
@@ -86,8 +83,7 @@ class DefaultAsyncGrpcClient
     if (!secret_request.ok()) {
       PS_VLOG(1) << "Failed to encrypt the request: "
                  << secret_request.status();
-      auto error_status = absl::InternalError(kEncryptionFailed);
-      return error_status;
+      return absl::InternalError(kEncryptionFailed);
     }
     auto& [hpke_secret, request] = *secret_request;
     PS_VLOG(5) << "Encryption completed ...";
@@ -144,9 +140,6 @@ class DefaultAsyncGrpcClient
 
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;
-
-  // Whether HPKE encryption is enabled for intra-server communication.
-  bool encryption_enabled_;
 
   server_common::CloudPlatform cloud_platform_;
 };

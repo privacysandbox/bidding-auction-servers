@@ -133,3 +133,9 @@ variable "collector_startup_script" {
   description = "Script to configure and start the otel collector."
   type        = string
 }
+
+variable "fast_nat" {
+  description = "If true, use extra nat options."
+  type        = bool
+  default     = false
+}

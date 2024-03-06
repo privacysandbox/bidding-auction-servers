@@ -28,7 +28,7 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "public/cpio/interface/cpio.h"
+#include "scp/cc/public/cpio/interface/cpio.h"
 #include "services/buyer_frontend_service/buyer_frontend_service.h"
 #include "services/buyer_frontend_service/providers/http_bidding_signals_async_provider.h"
 #include "services/buyer_frontend_service/runtime_flags.h"
@@ -44,6 +44,7 @@
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/cpp/util/rlimit_core_config.h"
 #include "src/cpp/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
@@ -112,7 +113,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_bfe_tls_key, BFE_TLS_KEY);
   config_client.SetFlag(FLAGS_bfe_tls_cert, BFE_TLS_CERT);
   config_client.SetFlag(FLAGS_bidding_egress_tls, BIDDING_EGRESS_TLS);
-  config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
   config_client.SetFlag(FLAGS_test_mode, TEST_MODE);
   config_client.SetFlag(FLAGS_public_key_endpoint, PUBLIC_KEY_ENDPOINT);
   config_client.SetFlag(FLAGS_primary_coordinator_private_key_endpoint,
@@ -145,6 +145,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_enable_protected_audience,
+                        ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
@@ -152,10 +154,22 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::PS_VLOG_IS_ON(
+      0, config_client.GetIntParameter(PS_VERBOSITY));
+
+  const bool enable_protected_app_signals =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  const bool enable_protected_audience =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
+  if (!enable_protected_audience && !enable_protected_app_signals) {
+    ABSL_LOG(WARNING) << "Neither Protected Audience nor Protected App Signals "
+                         "support enabled";
+  }
 
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+             << enable_protected_app_signals;
+  PS_VLOG(1) << "Protected Audience support enabled on the service: "
+             << enable_protected_audience;
   PS_VLOG(1) << "Successfully constructed the config client.\n";
   return config_client;
 }
@@ -210,8 +224,6 @@ absl::Status RunServer() {
           .compression = enable_bidding_compression,
           .secure_client =
               config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
-          .encryption_enabled =
-              config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
           .is_pas_enabled =
               config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)},
       CreateKeyFetcherManager(config_client,
@@ -220,11 +232,10 @@ absl::Status RunServer() {
       GetBidsConfig{
           config_client.GetIntParameter(GENERATE_BID_TIMEOUT_MS),
           config_client.GetIntParameter(BIDDING_SIGNALS_LOAD_TIMEOUT_MS),
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
           config_client.GetIntParameter(
               PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS),
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
-      },
+          config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE)},
       enable_buyer_frontend_benchmarking);
 
   grpc::EnableDefaultHealthCheckService(true);
@@ -284,6 +295,9 @@ absl::Status RunServer() {
 
 int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
+  privacysandbox::server_common::SetRLimits({
+      .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
+  });
   absl::FailureSignalHandlerOptions options;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);

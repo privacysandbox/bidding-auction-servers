@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.2.0 (2024-03-06)
+
+
+### Features
+
+* Add a metric attribute for instance region
+* Add bid rejection reasons for bid currency
+* Add bid_currency to CBOR Auction Response
+* Add binary HTTP Utils
+* add component_reporting_urls to SelectAdResponse
+* Add KV client for TEE retrieval
+* Add pylint to pre-commit
+* Add TF flags for PAS KV/retrieval service
+* Adds API support for server component auctions
+* Adds HPKE encryption utility for server component auction
+* Adds OHTTP Encryption utils for sharing with top level auction reactor
+* Adds proto field to support top level auction
+* Adds util for resolving AuctionScope with SelectAdRequest
+* Check bid currency on AdWithBids against buyer currency in SFE
+* Disable/enable core dumps based on build flavour
+* Enable prettier pre-commit hook for JavaScript
+* Enable prettier pre-commit hook for JSON
+* Instantiate KV GRPC Client in bidding
+* Integrate bidding with KV service
+* Oblivious HTTP Utils
+* PAS contextual ads API changes
+* Pass Contextual PAS Ads from SFE -> BFE
+* Relay contextual PAS Ads from BFE -> Bidding
+* Support Bid Currency in the ScoreAdsReactor
+* update gcp collector to use internal proxy network load
+* Use GRPC client for ad retrieval
+* Validate currencies in the auction config
+
+
+### Bug Fixes
+
+* Avoid race conditions when turning PyTorch models into eval mode
+* correct branching condition in register model request
+* Correct git submodule links
+* Fix debug statements to include result status
+* Fix flaky reporting_helper_test
+* resolve inference sidecar path for unit test
+* update kv service hash after repo name change
+
+
+### Documentation
+
+* Fix minor typos in load testing doc
+
+
+### Dependencies
+
+* **deps:** Downgrade build-system to v0.52.0
+* **deps:** Upgrade build-system to 0.53.0
+* **deps:** Upgrade build-system to 0.55.1
+* **deps:** Upgrade build-system to 0.56.0
+* **deps:** Upgrade functionaltest-system to v0.12.0
+
 ## 3.1.0 (2024-01-25)
 
 

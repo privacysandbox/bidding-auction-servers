@@ -21,6 +21,8 @@
 #include <vector>
 
 #include "api/bidding_auction_servers.pb.h"
+#include "public/query/v2/get_values_v2.grpc.pb.h"
+#include "public/query/v2/get_values_v2.pb.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
@@ -30,6 +32,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 using GenerateProtectedAppSignalsBidsRawRequest =
     GenerateProtectedAppSignalsBidsRequest::
         GenerateProtectedAppSignalsBidsRawRequest;
+using kv_server::v2::GetValuesResponse;
 
 constexpr char kTestAuctionSignals[] =
     R"json({"auction_signal": "test 1"})json";
@@ -77,7 +80,9 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client);
 GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& auction_signals, const std::string& buyer_signals,
     const ProtectedAppSignals& protected_app_signals, const std::string seller,
-    const std::string publisher_name);
+    const std::string publisher_name,
+    absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data =
+        absl::nullopt);
 
 // Creates a generate protected app signals bids request using the provided
 // raw request.
@@ -101,7 +106,8 @@ std::string CreateGenerateBidsUdfResponse(
     absl::string_view debug_reporting_urls = kTestDebugReportingUrls);
 
 // Creates a mock response from ads retrieval service.
-absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
+absl::StatusOr<kv_server::v2::GetValuesResponse>
+CreateAdsRetrievalOrKvLookupResponse(
     absl::string_view ads = kTestAdsRetrievalAdsResponse);
 
 // Mocks the request dispatch to Roma using the provided expected_json_response.
@@ -121,10 +127,16 @@ void SetupProtectedAppSignalsRomaExpectations(
         absl::nullopt,
     absl::optional<std::string> generate_bid_udf_response = absl::nullopt);
 
+// Sets up expectations for the batch requests for UDFs that are to be run in
+// Roma for Protected App Signals contextual ads workflow.
+void SetupContextualProtectedAppSignalsRomaExpectations(
+    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    absl::optional<std::string> generate_bid_udf_response = absl::nullopt);
+
 // Sets up expectations on the ad retrieval client mock.
 void SetupAdRetrievalClientExpectations(
-    AsyncClientMock<AdRetrievalInput, AdRetrievalOutput>& ad_retrieval_client,
-    absl::optional<absl::StatusOr<AdRetrievalOutput>> ads_retrieval_response =
+    KVAsyncClientMock& ad_retrieval_client,
+    absl::optional<absl::StatusOr<GetValuesResponse>> ads_retrieval_response =
         absl::nullopt);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

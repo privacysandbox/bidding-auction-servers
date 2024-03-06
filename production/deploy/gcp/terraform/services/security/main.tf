@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 # allow all access from IAP and health check ranges
 resource "google_compute_firewall" "fw_allow_hc" {
   name          = "${var.operator}-${var.environment}-fw-allow-hc"
@@ -73,5 +74,5 @@ resource "google_compute_firewall" "fw_allow_otlp" {
     ports    = [var.collector_service_port]
   }
   target_tags   = ["allow-otlp"]
-  source_ranges = [for subnet in var.subnets : subnet.ip_cidr_range]
+  source_ranges = [for subnet in var.proxy_subnets : subnet.ip_cidr_range]
 }

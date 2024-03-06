@@ -157,6 +157,13 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   *generate_bids_raw_request->mutable_protected_app_signals() =
       raw_request.protected_app_signals_buyer_input().protected_app_signals();
+  if (raw_request.protected_app_signals_buyer_input()
+          .has_contextual_protected_app_signals_data()) {
+    *generate_bids_raw_request
+         ->mutable_contextual_protected_app_signals_data() =
+        raw_request.protected_app_signals_buyer_input()
+            .contextual_protected_app_signals_data();
+  }
 
   generate_bids_raw_request->set_seller(raw_request.seller());
 

@@ -18,6 +18,7 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
@@ -56,9 +57,8 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
   }
 
   // Encrypt request.
-  PS_ASSIGN_OR_RETURN(
-      (quiche::ObliviousHttpRequest ohttp_request),
-      CreateValidEncryptedRequest(std::move(encoded_request), keyset));
+  PS_ASSIGN_OR_RETURN((quiche::ObliviousHttpRequest ohttp_request),
+                      CreateValidEncryptedRequest(encoded_request, keyset));
   // Prepend with a zero byte to follow the new B&A request format that uses
   // custom media types for request encryption/request decryption.
   std::string encrypted_request =
@@ -82,28 +82,29 @@ PackageBuyerInputsForBrowser(
 }
 
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
-    absl::string_view auction_result_ciphertext, ClientType client_type,
+    std::string& auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context, const HpkeKeyset& keyset) {
   // Decrypt Response.
   PS_ASSIGN_OR_RETURN(
-      (quiche::ObliviousHttpResponse decrypted_response),
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset));
+      auto decrypted_response,
+      FromObliviousHTTPResponse(auction_result_ciphertext, context,
+                                kBiddingAuctionOhttpResponseLabel));
 
   switch (client_type) {
     case CLIENT_TYPE_BROWSER: {
       // Decompress the encoded response.
-      PS_ASSIGN_OR_RETURN((std::string decompressed_response),
-                          UnframeAndDecompressAuctionResult(
-                              decrypted_response.GetPlaintextData()));
+      PS_ASSIGN_OR_RETURN(
+          (std::string decompressed_response),
+          UnframeAndDecompressAuctionResult(decrypted_response));
 
       // Decode the response.
       return CborDecodeAuctionResultToProto(decompressed_response);
     }
     case CLIENT_TYPE_ANDROID: {
       absl::StatusOr<server_common::DecodedRequest> decoded_response;
-      PS_ASSIGN_OR_RETURN((std::string decompressed_response),
-                          UnframeAndDecompressAuctionResult(
-                              decrypted_response.GetPlaintextData()));
+      PS_ASSIGN_OR_RETURN(
+          (std::string decompressed_response),
+          UnframeAndDecompressAuctionResult(decrypted_response));
       AuctionResult auction_result;
       if (!auction_result.ParseFromArray(decompressed_response.data(),
                                          decompressed_response.size())) {

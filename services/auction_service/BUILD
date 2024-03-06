@@ -15,6 +15,7 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -31,6 +32,10 @@ cc_library(
     name = "auction_constants",
     hdrs = [
         "auction_constants.h",
+    ],
+    visibility = [
+        "//services/auction_service:__pkg__",
+        "//services/auction_service/utils:__pkg__",
     ],
 )
 
@@ -93,25 +98,25 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
-        "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/data:runtime_config",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/utils:proto_utils",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",
-        "//services/common/loggers:request_context_impl",
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
+        "//services/common/util:auction_scope_util",
         "//services/common/util:json_util",
-        "//services/common/util:reporting_util",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
         "@rapidjson",
@@ -215,6 +220,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
+    local_defines = ENABLE_CORE_DUMPS_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
         ":auction_code_fetch_config_cc_proto",
@@ -240,6 +246,7 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/util:rlimit_core_config",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )

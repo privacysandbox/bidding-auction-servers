@@ -14,6 +14,7 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -199,6 +200,7 @@ std::string GetBuyerMetadataJson(
   if (!dispatch_request_config.enable_report_win_url_generation) {
     return kDefaultBuyerReportingMetadata;
   }
+
   rapidjson::Document buyer_reporting_signals_obj;
   buyer_reporting_signals_obj.SetObject();
   buyer_reporting_signals_obj.AddMember(
@@ -218,7 +220,7 @@ std::string GetBuyerMetadataJson(
           << "Error parsing buyer signals to Json object";
     } else {
       buyer_reporting_signals_obj.AddMember(
-          kBuyerSignals, buyer_signals_obj.value(),
+          kBuyerSignals, *std::move(buyer_signals_obj),
           buyer_reporting_signals_obj.GetAllocator());
     }
   }
@@ -227,7 +229,7 @@ std::string GetBuyerMetadataJson(
       dispatch_request_data.post_auction_signals.winning_ig_owner.c_str(),
       buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
-      kBuyerOriginTag, buyer_origin,
+      kBuyerOriginTag, std::move(buyer_origin),
       buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
       kMadeHighestScoringOtherBid,
@@ -286,14 +288,15 @@ std::string GetBuyerMetadataJson(
         dispatch_request_data.buyer_reporting_metadata.seller.c_str(),
         buyer_reporting_signals_obj.GetAllocator());
     buyer_reporting_signals_obj.AddMember(
-        kSellerTag, seller, buyer_reporting_signals_obj.GetAllocator());
+        kSellerTag, std::move(seller),
+        buyer_reporting_signals_obj.GetAllocator());
   }
   rapidjson::Value interest_group_name;
   interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
                                     .interest_group_name.c_str(),
                                 buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
-      kInterestGroupName, interest_group_name,
+      kInterestGroupName, std::move(interest_group_name),
       buyer_reporting_signals_obj.GetAllocator());
   double ad_cost = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,

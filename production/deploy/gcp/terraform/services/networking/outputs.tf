@@ -23,12 +23,13 @@ output "subnets" {
   value       = google_compute_subnetwork.backends
 }
 
-output "frontend_address" {
-  value = google_compute_global_address.frontend.address
+output "proxy_subnets" {
+  description = "All service proxy subnets."
+  value       = google_compute_subnetwork.proxy_subnets
 }
 
-output "collector_address" {
-  value = google_compute_global_address.collector.address
+output "frontend_address" {
+  value = google_compute_global_address.frontend.address
 }
 
 output "mesh" {

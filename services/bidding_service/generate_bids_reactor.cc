@@ -48,10 +48,12 @@ using TrustedBiddingSignalsByIg =
                         absl::StatusOr<ParsedTrustedBiddingSignals>>;
 constexpr int kArgsSizeWithWrapper = 6;
 
-std::string ProtoToJson(const google::protobuf::Message& proto) {
+absl::StatusOr<std::string> ProtoToJson(
+    const google::protobuf::Message& proto) {
   auto options = google::protobuf::util::JsonPrintOptions();
   std::string json;
-  google::protobuf::util::MessageToJsonString(proto, &json, options);
+  PS_RETURN_IF_ERROR(
+      google::protobuf::util::MessageToJsonString(proto, &json, options));
   return json;
 }
 
@@ -209,7 +211,7 @@ absl::StatusOr<std::string> SerializeIG(IGForBidding ig) {
 // in a loop for all Interest Groups.
 absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
-    log::ContextImpl& log_context) {
+    server_common::log::ContextImpl& log_context) {
   // Parse into JSON.
   auto start_parse_time = absl::Now();
   PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
@@ -273,7 +275,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     IGForBidding& interest_group, const RawRequest& raw_request,
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
-    const bool enable_buyer_debug_url_generation, log::ContextImpl& log_context,
+    const bool enable_buyer_debug_url_generation,
+    server_common::log::ContextImpl& log_context,
     const bool enable_adtech_code_logging, absl::string_view version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
@@ -320,8 +323,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
              interest_group.android_signals().IsInitialized() &&
              !differencer.Equals(AndroidSignals::default_instance(),
                                  interest_group.browser_signals())) {
-    std::string serialized_android_signals =
-        ProtoToJson(interest_group.android_signals());
+    PS_ASSIGN_OR_RETURN(std::string serialized_android_signals,
+                        ProtoToJson(interest_group.android_signals()));
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>((serialized_android_signals.empty())
                                           ? R"JSON("")JSON"
@@ -357,7 +360,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
       << generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)]
              ->size()
       << " bytes.";
-  if (log::PS_VLOG_IS_ON(10)) {
+  if (server_common::log::PS_VLOG_IS_ON(10)) {
     PS_VLOG(10, log_context) << "\n\nGenerateBid Input Args:";
     for (const auto& it : generate_bid_request.input) {
       PS_VLOG(10, log_context) << *it;
@@ -438,10 +441,9 @@ void GenerateBidsReactor::Execute() {
   absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
       SerializeTrustedBiddingSignalsPerIG(raw_request_, log_context_);
   if (!ig_trusted_signals_map.ok()) {
-    PS_VLOG(0, log_context_)
-        << "Request failed while parsing bidding signals: ",
-        ig_trusted_signals_map.status().ToString(
-            absl::StatusToStringMode::kWithEverything);
+    PS_VLOG(0, log_context_) << "Request failed while parsing bidding signals: "
+                             << ig_trusted_signals_map.status().ToString(
+                                    absl::StatusToStringMode::kWithEverything);
     EncryptResponseAndFinish(
         server_common::FromAbslStatus(ig_trusted_signals_map.status()));
     return;
@@ -458,9 +460,10 @@ void GenerateBidsReactor::Execute() {
                                 log_context_, enable_adtech_code_logging_,
                                 kProtectedAudienceGenerateBidBlobVersion);
     if (!generate_bid_request.ok()) {
-      PS_VLOG(3, log_context_) << "Unable to build GenerateBidRequest: ",
-          generate_bid_request.status().ToString(
-              absl::StatusToStringMode::kWithEverything);
+      PS_VLOG(3, log_context_)
+          << "Unable to build GenerateBidRequest: "
+          << generate_bid_request.status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
     } else {
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
@@ -507,7 +510,7 @@ void GenerateBidsReactor::Execute() {
 // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#32-on-device-bidding
 void GenerateBidsReactor::GenerateBidsCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& output) {
-  if (log::PS_VLOG_IS_ON(2)) {
+  if (server_common::log::PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : output) {
       PS_VLOG(2, log_context_)
           << "Generate Bids V8 Response: " << dispatch_response.status();
@@ -600,7 +603,6 @@ void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
   PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse\n"
                                 << raw_response_.DebugString();
 
-  DCHECK(encryption_enabled_);
   if (!EncryptResponse()) {
     PS_VLOG(1, log_context_) << "Failed to encrypt the generate bids response.";
     status = grpc::Status(grpc::INTERNAL, kInternalServerError);

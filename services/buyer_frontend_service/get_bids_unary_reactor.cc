@@ -52,7 +52,7 @@ void HandleSingleBidCompletion(
 
   auto response = *std::move(raw_response);
   if (response->has_debug_info()) {
-    DebugInfo& downstream_debug_info =
+    server_common::DebugInfo& downstream_debug_info =
         *get_bid_raw_response.mutable_debug_info()->add_downstream_servers();
     downstream_debug_info = std::move(*response->mutable_debug_info());
     if constexpr (std::is_same_v<T,
@@ -103,7 +103,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       crypto_client_(crypto_client),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
-        return log::ContextImpl(
+        return server_common::log::ContextImpl(
             GetLoggingContext(), raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
@@ -204,7 +204,8 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
 
 int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
   int num_expected_calls = 0;
-  if (raw_request_.buyer_input().interest_groups_size() > 0) {
+  if (config_.is_protected_audience_enabled &&
+      raw_request_.buyer_input().interest_groups_size() > 0) {
     PS_VLOG(5, log_context_) << "Interest groups found in the request";
     ++num_expected_calls;
   }
@@ -218,7 +219,6 @@ int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
 
 void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
-  DCHECK(config_.encryption_enabled);
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
                                     << request_->ShortDebugString();
   PS_VLOG(2, log_context_) << "Headers:\n"
@@ -346,6 +346,12 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 }
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
+  if (!config_.is_protected_audience_enabled) {
+    PS_VLOG(3, log_context_)
+        << "Protected Audience is not enabled, skipping bids fetching for PA";
+    return;
+  }
+
   if (raw_request_.buyer_input().interest_groups().empty()) {
     PS_VLOG(3, log_context_)
         << "No interest groups found, skipping bidding for protected audience";

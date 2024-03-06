@@ -14,11 +14,12 @@
 
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <string>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <include/gmock/gmock-actions.h>
 #include <include/gmock/gmock-nice-strict.h>
@@ -30,6 +31,7 @@
 #include "gmock/gmock.h"
 #include "services/common/compression/gzip.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "src/cpp/communication/encoding_utils.h"
@@ -73,6 +75,21 @@ Cardinality BuyerCallCardinality(bool expect_all_buyers_solicited,
   } else {
     return testing::AtMost(1);
   }
+}
+
+GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
+    const std::string& ad_url, absl::optional<std::string> interest_group_name,
+    absl::optional<float> bid_value,
+    const bool enable_event_level_debug_reporting,
+    int number_ad_component_render_urls,
+    absl::optional<std::string> bid_currency) {
+  AdWithBid bid = BuildNewAdWithBid(
+      ad_url, std::move(interest_group_name), std::move(bid_value),
+      enable_event_level_debug_reporting, number_ad_component_render_urls,
+      bid_currency);
+  GetBidsResponse::GetBidsRawResponse response;
+  response.mutable_bids()->Add(std::move(bid));
+  return response;
 }
 
 void SetupBuyerClientMock(
@@ -125,6 +142,7 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   }
   result->set_bid(input.bid());
   result->set_render(input.render());
+  result->set_bid_currency(input.bid_currency());
   result->mutable_ad_components()->CopyFrom(input.ad_components());
   result->set_allow_component_auction(input.allow_component_auction());
   result->set_interest_group_name(input.interest_group_name());
@@ -137,7 +155,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<absl::string_view> interest_group_name,
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
-    int number_ad_component_render_urls) {
+    int number_ad_component_render_urls,
+    absl::optional<absl::string_view> bid_currency) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -145,10 +164,13 @@ AdWithBid BuildNewAdWithBid(
         absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
   if (bid_value.has_value()) {
-    bid.set_bid(*bid_value);
+    bid.set_bid(bid_value.value());
   }
   if (interest_group_name.has_value()) {
     bid.set_interest_group_name(*interest_group_name);
+  }
+  if (bid_currency.has_value()) {
+    bid.set_bid_currency(bid_currency.value());
   }
   bid.set_ad_cost(kAdCost);
   bid.set_modeling_signals(kModelingSignals);
@@ -240,7 +262,6 @@ TrustedServersConfigClient CreateConfig() {
   config.SetFlagForTest(kAuctionHost, AUCTION_SERVER_HOST);
   config.SetFlagForTest(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
   config.SetFlagForTest(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   return config;
 }
 
@@ -254,8 +275,7 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
           GetEncodedDataSize(encoded_request.size()));
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
   HpkeKeyset keyset;
-  auto ohttp_request =
-      CreateValidEncryptedRequest(std::move(*framed_request), keyset);
+  auto ohttp_request = CreateValidEncryptedRequest(*framed_request, keyset);
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request =
       '\0' + ohttp_request->EncapsulateAndSerialize();
@@ -264,17 +284,16 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
 }
 
 AuctionResult DecryptAppProtoAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
-  HpkeKeyset keyset;
-  auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
-  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      auction_result_ciphertext, context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
 
@@ -286,17 +305,16 @@ AuctionResult DecryptAppProtoAuctionResult(
 }
 
 AuctionResult DecryptBrowserAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
-  HpkeKeyset keyset;
-  auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      auction_result_ciphertext, context, kBiddingAuctionOhttpResponseLabel);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decompress the encoded response.
   auto decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok()) << decompressed_response.status();
 
   absl::StatusOr<AuctionResult> deserialized_auction_result =

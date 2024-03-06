@@ -78,8 +78,7 @@ ParseCloudPlatformPublicKeysMap(
 
 absl::StatusOr<std::unique_ptr<server_common::PublicKeyFetcherInterface>>
 CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client) {
-  if (config_client.GetBooleanParameter(TEST_MODE) ||
-      !config_client.GetBooleanParameter(ENABLE_ENCRYPTION)) {
+  if (config_client.GetBooleanParameter(TEST_MODE)) {
     return nullptr;
   }
 

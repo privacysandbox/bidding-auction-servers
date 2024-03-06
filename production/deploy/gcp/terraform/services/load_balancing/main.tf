@@ -79,16 +79,16 @@ resource "google_compute_health_check" "backend" {
 #
 #                         Collector LB
 #
-# The external lb uses HTTP/2 (gRPC) with no TLS.
+# The internal lb uses HTTP/2 (gRPC) with no TLS.
 ###############################################################
 
-resource "google_compute_backend_service" "mesh_collector" {
-  name     = "${var.operator}-${var.environment}-mesh-collector-service"
+resource "google_compute_backend_service" "collector" {
+  name     = "${var.operator}-${var.environment}-collector-service"
   provider = google-beta
 
-  port_name             = "otlp"
   protocol              = "TCP"
-  load_balancing_scheme = "EXTERNAL"
+  load_balancing_scheme = "INTERNAL_MANAGED"
+  port_name             = "otlp"
   timeout_sec           = 10
   health_checks         = [google_compute_health_check.collector.id]
 
@@ -101,28 +101,28 @@ resource "google_compute_backend_service" "mesh_collector" {
       capacity_scaler       = 1.0
     }
   }
-  depends_on = [var.mesh, google_network_services_grpc_route.default]
 }
 
 resource "google_compute_target_tcp_proxy" "collector" {
-  name            = "${var.operator}-${var.environment}-${var.collector_service_name}-lb-proxy"
-  backend_service = google_compute_backend_service.mesh_collector.id
+  name            = "${var.operator}-${var.environment}-tcp-collector-lb-proxy"
+  backend_service = google_compute_backend_service.collector.id
 }
 
-resource "google_compute_global_forwarding_rule" "collector" {
-  name     = "${var.operator}-${var.environment}-${var.collector_service_name}-forwarding-rule"
-  provider = google-beta
+resource "google_compute_global_forwarding_rule" "collectors" {
+  for_each = var.subnets
+
+  name = "${var.operator}-${var.environment}-${var.collector_service_name}-${each.value.region}-ilb-rule"
 
   ip_protocol           = "TCP"
   port_range            = var.collector_service_port
-  load_balancing_scheme = "EXTERNAL"
+  load_balancing_scheme = "INTERNAL_MANAGED"
   target                = google_compute_target_tcp_proxy.collector.id
-  ip_address            = var.collector_ip_address
-
+  subnetwork            = each.value.id
   labels = {
     environment = var.environment
     operator    = var.operator
     service     = var.collector_service_name
+    region      = each.value.region
   }
 }
 
@@ -131,18 +131,22 @@ resource "google_dns_record_set" "collector" {
   managed_zone = var.frontend_dns_zone
   type         = "A"
   ttl          = 10
-  rrdatas = [
-    var.collector_ip_address
-  ]
+  routing_policy {
+    dynamic "geo" {
+      for_each = google_compute_global_forwarding_rule.collectors
+      content {
+        location = geo.value.labels.region
+        rrdatas  = [geo.value.ip_address]
+      }
+    }
+  }
 }
-
 
 resource "google_compute_health_check" "collector" {
   name = "${var.operator}-${var.environment}-${var.collector_service_name}-lb-hc"
 
-  tcp_health_check {
-    port_name = "otlp"
-    port      = var.collector_service_port
+  grpc_health_check {
+    port = var.collector_service_port
   }
 
   timeout_sec         = 3
@@ -154,7 +158,6 @@ resource "google_compute_health_check" "collector" {
     enable = true
   }
 }
-
 
 ###############################################################
 #

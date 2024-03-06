@@ -23,7 +23,7 @@ function normalize_symlink() {
   local -r link_path="$(readlink "${link_name}")"
   local -r output_user_root="${link_path///bazel_root/}"
   rm -f "${link_name}"
-  ln -s "${BAZEL_CACHE_DIR}/${output_user_root}" "${link_name}"
+  ln -s "$(realpath "${BAZEL_CACHE_DIR}/${output_user_root}")" "${link_name}"
 }
 
 function normalize_symlink_docker() {
@@ -35,7 +35,7 @@ function normalize_symlink_docker() {
   local -r link_path="$(readlink "${link_name}")"
   local -r output_user_root="${link_path##*/.cache/bazel/}"
   rm -f "${link_name}"
-  ln -s "/bazel_root/${output_user_root}" "${link_name}"
+  ln -s "$(realpath "/bazel_root/${output_user_root}")" "${link_name}"
 }
 
 declare _normalize_fn=normalize_symlink
@@ -50,5 +50,7 @@ declare -a -r LINK_DIRS=(
   bazel-workspace
 )
 for link in "${LINK_DIRS[@]}"; do
-  ${_normalize_fn} "${link}"
+  if [[ -L ${link} ]]; then
+    ${_normalize_fn} "${link}"
+  fi
 done

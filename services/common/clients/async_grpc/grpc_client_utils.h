@@ -23,8 +23,10 @@
 
 #include "absl/status/statusor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/loggers/request_context_logger.h"
+#include "services/common/util/hpke_utils.h"
 #include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/cpp/logger/request_context_logger.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -35,30 +37,14 @@ EncryptRequestWithHpke(
     CryptoClientWrapperInterface& crypto_client,
     server_common::KeyFetcherManagerInterface& key_fetcher_manager,
     server_common::CloudPlatform cloud_platform) {
-  auto key = key_fetcher_manager.GetPublicKey(cloud_platform);
-  if (!key.ok()) {
-    const std::string error =
-        absl::StrCat("Could not get public key to use for HPKE encryption: ",
-                     key.status().message());
-    ABSL_LOG(ERROR) << error;
-    return absl::InternalError(error);
-  }
-
-  auto encrypt_response =
-      crypto_client.HpkeEncrypt(key.value(), raw_request->SerializeAsString());
-
-  if (!encrypt_response.ok()) {
-    const std::string error = absl::StrCat("Failed encrypting request: ",
-                                           encrypt_response.status().message());
-    ABSL_LOG(ERROR) << error;
-    return absl::InternalError(error);
-  }
-
+  std::string plaintext = raw_request->SerializeAsString();
+  PS_ASSIGN_OR_RETURN(HpkeMessage encrypted_request,
+                      HpkeEncrypt(plaintext, crypto_client, key_fetcher_manager,
+                                  cloud_platform));
   std::unique_ptr<Request> request = std::make_unique<Request>();
-  request->set_key_id(key->key_id());
-  request->set_request_ciphertext(
-      std::move(encrypt_response->encrypted_data().ciphertext()));
-  return std::pair{std::move(encrypt_response->secret()), std::move(request)};
+  request->set_key_id(std::move(encrypted_request.key_id));
+  request->set_request_ciphertext(std::move(encrypted_request.ciphertext));
+  return std::pair{std::move(encrypted_request.secret), std::move(request)};
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -24,23 +24,36 @@ build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
 #disable the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
 build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
 
+# Flag compiler warnings as errors.
+build:cpp_no_warn --copt=-Werror
+# Ignore warnings from Roma, zlib, differential privacy repo etc.
+build:cpp_no_warn --per_file_copt=.*external/.*@-Wno-error
+# Ignore deprecated declarations warnings from Roma, ProtectedAudience, Telemetry
+build:cpp_no_warn --per_file_copt=services/.*@-Wno-macro-redefined,-Wno-deprecated-declarations
+build:cpp_no_warn --per_file_copt=tools/secure_invoke.*@-Wno-macro-redefined,-Wno-deprecated-declarations
+# Telemetry has some unchecked results after registering observers.
+build:cpp_no_warn --per_file_copt=services/.*_main.cc@-Wno-unused-result
+build:cpp_no_warn --per_file_copt=services/common/telemetry/.*_test.cc@-Wno-unused-result
+# Compiler complains about main function being unused in the micro-benchmarks.
+build:cpp_no_warn --per_file_copt=services/.*_benchmarks.cc@-Wno-unused-function
+
 test --test_verbose_timeout_warnings
 
-build:instance_local --//:instance=local
+build:instance_local --//:instance=local --config=cpp_no_warn
 build:instance_local --@google_privacysandbox_servers_common//:instance=local
 
-build:instance_gcp --//:instance=gcp
+build:instance_gcp --//:instance=gcp --config=cpp_no_warn
 build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
 
-build:instance_aws --//:instance=aws
+build:instance_aws --//:instance=aws --config=cpp_no_warn
 build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
-build:platform_local --//:platform=local
+build:platform_local --//:platform=local --config=cpp_no_warn
 
-build:platform_aws --//:platform=aws
+build:platform_aws --//:platform=aws --config=cpp_no_warn
 build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
 
-build:platform_gcp --//:platform=gcp
+build:platform_gcp --//:platform=gcp --config=cpp_no_warn
 build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
 
 build:local_aws --config=instance_local

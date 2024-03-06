@@ -282,7 +282,7 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
 }
 
 TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
-  log::PS_VLOG_IS_ON(0, 10);
+  server_common::log::PS_VLOG_IS_ON(0, 10);
   auto input = R"JSON(
     {
        "auction_config" : {

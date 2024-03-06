@@ -49,7 +49,7 @@ void HttpBiddingSignalsAsyncProvider::Get(
                          interest_group.bidding_signals_keys().end());
   }
 
-  http_buyer_kv_async_client_->Execute(
+  auto status = http_buyer_kv_async_client_->Execute(
       std::move(request), bidding_signals_request.filtering_metadata_,
       [res = std::move(output), on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
@@ -67,5 +67,8 @@ void HttpBiddingSignalsAsyncProvider::Get(
         std::move(on_done)(std::move(res), get_byte_size);
       },
       timeout);
+  if (!status.ok()) {
+    PS_VLOG(1) << "Unable to fetch bidding signals";
+  }
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

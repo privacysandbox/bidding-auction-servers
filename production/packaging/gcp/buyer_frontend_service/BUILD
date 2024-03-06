@@ -75,6 +75,8 @@ container_image(
     layers = [
         ":server_binary_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     # BFE and BFE Non-TLS Healthcheck ports, respectively:

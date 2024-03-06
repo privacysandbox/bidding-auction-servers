@@ -82,9 +82,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 .compression = config_client_.GetBooleanParameter(
                     ENABLE_AUCTION_COMPRESSION),
                 .secure_client =
-                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS),
-                .encryption_enabled =
-                    config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)})),
+                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS)})),
         buyer_factory_([this]() {
           absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
               ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(
@@ -97,9 +95,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                   .compression = config_client_.GetBooleanParameter(
                       ENABLE_BUYER_COMPRESSION),
                   .secure_client =
-                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS),
-                  .encryption_enabled =
-                      config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)});
+                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS)});
         }()),
         clients_{
             *scoring_signals_async_provider_, *scoring_, *buyer_factory_,

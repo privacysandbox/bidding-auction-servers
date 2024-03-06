@@ -183,15 +183,16 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
     const std::string& handler_name) {
-  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
+  server_common::log::ContextImpl log_context(
+      {}, server_common::ConsentedDebugConfiguration());
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
   ReportingDispatchRequestData reporting_dispatch_request_data = {
       .handler_name = handler_name,
-      .log_context = log_context,
       .auction_config = auction_config,
       .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-      .publisher_hostname = kTestPublisherHostName};
+      .publisher_hostname = kTestPublisherHostName,
+      .log_context = log_context};
   if (dispatch_request_config.enable_report_win_url_generation) {
     reporting_dispatch_request_data.buyer_reporting_metadata = {
         .buyer_signals = kTestBuyerSignals,
@@ -214,8 +215,8 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestData(
                                  handler_name);
   reporting_dispatch_request_data.component_reporting_metadata = {
       .top_level_seller = kTestTopLevelSeller,
-      .modified_bid = kTestModifiedBid,
-      .component_seller = kTestSeller};
+      .component_seller = kTestSeller,
+      .modified_bid = kTestModifiedBid};
   return reporting_dispatch_request_data;
 }
 
@@ -256,8 +257,8 @@ void TestResponse(const ReportingResponse& response,
 void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
               const ReportingDispatchRequestConfig& dispatch_request_config,
               absl::string_view expected_seller_reporting_signals,
-              const BuyerReportingMetadata& expected_buyer_metadata = {},
-              absl::string_view test_buyer_metadata = kTestBuyerMetadata,
+              absl::string_view expected_unnoised_buyer_metadata_json =
+                  kTestBuyerMetadata,
               absl::string_view expected_egress_features = "") {
   EXPECT_EQ(
       *(response_vector[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
@@ -276,10 +277,10 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
     EXPECT_EQ(*(response_vector[ReportingArgIndex(
                   ReportingArgs::kBuyerReportingMetadata)]),
               kDefaultBuyerReportingMetadata);
-  } else {
+  } else if (!expected_unnoised_buyer_metadata_json.empty()) {
     EXPECT_EQ(*(response_vector[ReportingArgIndex(
                   ReportingArgs::kBuyerReportingMetadata)]),
-              test_buyer_metadata);
+              expected_unnoised_buyer_metadata_json);
   }
   if (dispatch_request_config.enable_protected_app_signals) {
     EXPECT_EQ(
@@ -484,16 +485,15 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
   winning_ad_score.set_desirability(kTestDesirability);
   winning_ad_score.set_render(kTestRender);
   ReportingDispatchRequestConfig dispatch_request_config = {
-      .enable_adtech_code_logging = true,
       .enable_report_win_url_generation = true,
-      .enable_report_win_input_noising = false};
+      .enable_report_win_input_noising = false,
+      .enable_adtech_code_logging = true};
   ReportingDispatchRequestData dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingDispatchHandlerFunctionName);
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
-  TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
-           dispatch_request_data.buyer_reporting_metadata);
+  TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals);
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
   EXPECT_EQ(request.version_string, kDispatchRequestVersion);
@@ -515,18 +515,19 @@ TEST(GetReportingDispatchRequest,
   winning_ad_score.set_render(kTestRender);
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  log::ContextImpl log_context({}, ConsentedDebugConfiguration());
+  server_common::log::ContextImpl log_context(
+      {}, server_common::ConsentedDebugConfiguration());
   ReportingDispatchRequestConfig dispatch_request_config = {
-      .enable_adtech_code_logging = true,
       .enable_report_win_url_generation = true,
-      .enable_report_win_input_noising = true};
+      .enable_report_win_input_noising = true,
+      .enable_adtech_code_logging = true};
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingDispatchHandlerFunctionName);
   DispatchRequest request = GetReportingDispatchRequest(
       dispatch_request_config, reporting_dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
-           {});
+           /*expected_unnoised_buyer_metadata_json=*/"");
   VerifyBuyerReportingMetadata(
       *(request
             .input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]),
@@ -560,8 +561,7 @@ TEST(GetReportingDispatchRequest,
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
-           dispatch_request_data.buyer_reporting_metadata,
-           kTestBuyerMetadataWithProtectedAppSignals,
+           /*expected_unnoised_buyer_metadata_json=*/"",
            dispatch_request_data.egress_features);
   VerifyBuyerReportingMetadata(
       *(request

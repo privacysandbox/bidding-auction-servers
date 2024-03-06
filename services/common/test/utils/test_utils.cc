@@ -37,6 +37,11 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
             ->mutable_protected_app_signals();
     protected_app_signals->set_app_install_signals(kTestProtectedAppSignals);
     protected_app_signals->set_encoding_version(kTestEncodingVersion);
+    auto* contextual_protected_app_signals_data =
+        raw_request.mutable_protected_app_signals_buyer_input()
+            ->mutable_contextual_protected_app_signals_data();
+    *contextual_protected_app_signals_data->mutable_ad_render_ids()->Add() =
+        kTestContextualPasAdRenderId;
   }
   if (add_protected_audience_input) {
     *raw_request.mutable_buyer_input() = MakeARandomBuyerInput();

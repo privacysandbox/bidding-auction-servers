@@ -1,11 +1,11 @@
 {
   "adRenderURL": "http://foo.com/ad",
-  "componentAds": [ "http://foo/com/ad/component1", "http://foo/com/ad/component2" ],
+  "componentAds": ["http://foo/com/ad/component1", "http://foo/com/ad/component2"],
   "interestGroupName": "ad_loving_group",
   "interestGroupOwner": "ad_showing_company",
   "biddingGroups": {
-    "https://ad_showing_company_1.com:1234": [ 0, 5, 6],
-    "https://ad_showing_company_2.com:321": [ 0, 2, 6]
+    "https://ad_showing_company_1.com:1234": [0, 5, 6],
+    "https://ad_showing_company_2.com:321": [0, 2, 6]
   },
   "score": 2.12,
   "bid": 1.32,

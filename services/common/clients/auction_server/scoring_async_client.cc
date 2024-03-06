@@ -25,8 +25,7 @@ ScoringAsyncGrpcClient::ScoringAsyncGrpcClient(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     AuctionServiceClientConfig client_config)
-    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled) {
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client) {
   stub_ = Auction::NewStub(CreateChannel(client_config.server_addr,
                                          client_config.compression,
                                          client_config.secure_client));
@@ -40,7 +39,6 @@ void ScoringAsyncGrpcClient::SendRpc(
   stub_->async()->ScoreAds(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
         if (!status.ok()) {
           PS_VLOG(1) << "SendRPC completion status not ok: "
                      << server_common::ToAbslStatus(status);

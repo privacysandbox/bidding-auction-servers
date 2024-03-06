@@ -18,8 +18,15 @@
 #define SERVICES_COMMON_CODE_FETCH_CODE_FETCHER_INTERFACE_H_
 
 #include <memory>
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+using WrapCodeForDispatch =
+    absl::AnyInvocable<std::string(const std::vector<std::string>&)>;
 
 // Interface for different versions of code fetchers.
 class CodeFetcherInterface {
@@ -27,7 +34,7 @@ class CodeFetcherInterface {
   virtual ~CodeFetcherInterface() = default;
 
   // Starts a new code blob fetching process.
-  virtual void Start() = 0;
+  virtual absl::Status Start() = 0;
 
   // Ends the code blob fetching process by canceling scheduled tasks. Should be
   // called when there is no more need to update generateBid.js and scoreAd.js,

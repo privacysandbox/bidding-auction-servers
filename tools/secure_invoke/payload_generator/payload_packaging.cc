@@ -98,9 +98,6 @@ ProtectedAuctionInput GetProtectedAuctionInput(
   return protected_auction_input;
 }
 
-void MayAddProtectedAppSignals(
-    google::protobuf::Map<std::string, BuyerInput>& buyer_input) {}
-
 absl::flat_hash_map<std::string, BuyerInput> GetProtectedAppSignals(
     ClientType client_type, absl::string_view protected_app_signals_json) {
   if (client_type == ClientType::CLIENT_TYPE_BROWSER ||

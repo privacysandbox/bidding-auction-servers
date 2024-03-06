@@ -35,10 +35,10 @@
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/loggers/benchmarking_logger.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/cpp/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -150,7 +150,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   std::string hpke_secret_;
 
   grpc::Status decrypt_status_;
-  log::ContextImpl log_context_;
+  server_common::log::ContextImpl log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;

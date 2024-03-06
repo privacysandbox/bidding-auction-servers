@@ -15,6 +15,8 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/numbers.h"
@@ -39,9 +41,6 @@ using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // Set log level to 0 and to be shown on terminal.
-  google::LogToStderr();
-  google::SetStderrLogging(google::GLOG_INFO);
-  google::InitGoogleLogging(argv[0]);
   std::string input_file = absl::GetFlag(FLAGS_input_file);
   std::string json_input_str = absl::GetFlag(FLAGS_json_input_str);
   std::string op = absl::GetFlag(FLAGS_op);
@@ -80,9 +79,9 @@ int main(int argc, char** argv) {
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
   uint8_t key_id = stoi(id);
   const HpkeKeyset keyset = {
-      .key_id = key_id,
       .public_key = public_key_hex,
       .private_key = "unused",
+      .key_id = key_id,
   };
 
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);

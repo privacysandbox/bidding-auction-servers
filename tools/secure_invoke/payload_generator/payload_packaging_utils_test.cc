@@ -123,12 +123,11 @@ TEST(PackageBuyerInputsForBrowserTest, GeneratesAValidBuyerInputMap) {
 // Therefore, it verifies that the AuctionResult payload packaged by the
 // SelectAdReactor is correctly parsed by UnpackageAuctionResult.
 TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
-  AuctionResult expected = MakeARandomAuctionResult();
+  AuctionResult expected = MakeARandomSingleSellerAuctionResult();
 
   ScoreAdsResponse::AdScore input;
   input.set_interest_group_owner(expected.interest_group_owner());
   input.set_interest_group_name(expected.interest_group_name());
-  input.set_buyer_bid(expected.bid());
   input.set_desirability(expected.score());
   input.set_render(expected.ad_render_url());
 
@@ -236,7 +235,7 @@ TEST(PackageBuyerInputsForAppTest, GeneratesAValidBuyerInputMap) {
 }
 
 TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
-  AuctionResult expected = MakeARandomAuctionResult();
+  AuctionResult expected = MakeARandomSingleSellerAuctionResult();
 
   // Encode, compress and frame with pre-amble.
   std::string serialized_result = expected.SerializeAsString();

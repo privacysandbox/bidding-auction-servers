@@ -15,12 +15,13 @@
 
 #include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/functional/any_invocable.h"

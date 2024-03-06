@@ -112,11 +112,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
         void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
         do_nothing_done_callback;
     // Create the client
-    SellerKeyValueAsyncHttpClient kvHttpClient(
+    SellerKeyValueAsyncHttpClient seller_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), {},
-                         std::move(do_nothing_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = seller_key_value_async_http_client.Execute(
+        std::move(keys), {}, std::move(do_nothing_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 
   void CheckGetValuesFromKeysViaHttpClient(
@@ -126,11 +127,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
           value_checking_done_callback) {
     // Create the client
-    SellerKeyValueAsyncHttpClient kvHttpClient(
+    SellerKeyValueAsyncHttpClient seller_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), metadata,
-                         std::move(value_checking_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = seller_key_value_async_http_client.Execute(
+        std::move(keys), metadata, std::move(value_checking_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 };
 

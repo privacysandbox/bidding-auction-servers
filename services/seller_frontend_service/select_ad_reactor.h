@@ -41,6 +41,7 @@
 #include "services/common/util/request_metadata.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
+#include "services/seller_frontend_service/util/encryption_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
@@ -51,17 +52,7 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
 // Constants for user errors.
 inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
     "protected_auction_ciphertext must be non-null.";
-inline constexpr char kInvalidOhttpKeyIdError[] =
-    "Invalid key ID provided in OHTTP encapsulated request for "
-    "protected_audience_ciphertext.";
-inline constexpr char kMissingPrivateKey[] =
-    "Unable to get private key for the key ID in OHTTP encapsulated request. "
-    "Key ID: %s";
 inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
-inline constexpr char kMalformedEncapsulatedRequest[] =
-    "Malformed OHTTP encapsulated request provided for "
-    "protected_audience_ciphertext: "
-    "%s";
 
 // Constants for bad Ad server provided inputs.
 inline constexpr char kEmptySellerSignals[] =
@@ -81,24 +72,18 @@ inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
     "One or more buyer keys are empty in per buyer config map";
 inline constexpr char kDeviceComponentAuctionWithAndroid[] =
     "Device orchestrated Component Auctions not supported for Android";
+inline constexpr char kInvalidBuyerCurrency[] = "Invalid Buyer Currency";
+inline constexpr char kInvalidSellerCurrency[] = "Invalid Seller Currency";
 
 inline constexpr char kNoBidsReceived[] = "No bids received.";
 
+inline constexpr char kAllBidsRejectedBuyerCurrencyMismatch[] =
+    "All bids rejected for failure to match buyer currency.";
+
 inline constexpr absl::string_view kWinningAd = "winning_ad";
 
-// Crypto key needed throughout the lifecycle of the request.
-struct KeyContext {
-  // Key ID used to encrypt the request.
-  google::scp::cpio::PublicPrivateKeyPairId key_id;
-
-  // OHTTP context generated during request decryption.
-  std::unique_ptr<quiche::ObliviousHttpRequest::Context> context;
-
-  server_common::PrivateKey private_key;
-
-  // Media type used to encrypt the SelectAdRequest.
-  absl::string_view request_label;
-};
+inline constexpr char kValidCurrencyCodePattern[] = "^[A-Z]{3}$";
+const std::regex kValidCurrencyCodeRegex(kValidCurrencyCodePattern);
 
 // This is a gRPC reactor that serves a single GenerateBidsRequest.
 // It stores state relevant to the request and after the
@@ -118,8 +103,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
  protected:
   using ErrorHandlerSignature = const std::function<void(absl::string_view)>&;
   using AuctionConfig = SelectAdRequest::AuctionConfig;
-  // Todo(b/306038754): Move this to B&A API
-  enum class AuctionScope : int { kSingleSeller, kDeviceComponentSeller };
 
   // Gets a string representing the response to be returned to the client. This
   // data will be encrypted before it is sent back to the client.
@@ -155,6 +138,13 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Checks if any ad server visible errors have been observed.
   bool HaveAdServerVisibleErrors();
+
+  // Checks that all AdWithBids match the specified buyer_currency, and throws
+  // out those which do not match.
+  // PRECONDITION 1: shared_buyer_bids_map_ must have at least one entry.
+  // PRECONDITION 2: each buyer in shared_buyer_bids_map must be non-empty.
+  // RETURNS: True if any bids remain to be scored and false otherwise.
+  bool FilterBidsWithMismatchingCurrency();
 
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
@@ -193,11 +183,12 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
         if (!buyer_input.protected_app_signals()
                  .app_install_signals()
                  .empty() &&
-            auction_scope == AuctionScope::kDeviceComponentSeller) {
+            auction_scope ==
+                AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
           // Invalid input. Device component auctions can't contain PAS
           // audience. This path should not be possible since app install
           // signals will not be created for web reactor and
-          // kDeviceComponentSeller cannot be conducted for app reactor.
+          // DeviceComponentSeller cannot be conducted for app reactor.
           PS_VLOG(2, log_context_)
               << "Device component auctions can't contain PAS audience";
         }
@@ -347,10 +338,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Benchmarking Logger to benchmark the service
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
 
-  // Key context needed throughout the lifecycle of the request.
-  KeyContext key_context_;
+  // Encryption context needed throughout the lifecycle of the request.
+  std::unique_ptr<OhttpHpkeDecryptedMessage> decrypted_request_;
 
-  log::ContextImpl log_context_;
+  server_common::log::ContextImpl log_context_;
 
   // Decompressed and decoded buyer inputs.
   absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>
@@ -375,6 +366,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Indicates whether or not the protected app signals feature is enabled or
   // not.
   const bool is_pas_enabled_;
+
+  // Indicates whether or not the protected audience support is enabled.
+  const bool is_protected_audience_enabled_;
 
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
