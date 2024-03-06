@@ -70,7 +70,7 @@ constexpr absl::string_view kBuyerBaseCode =
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
 
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -102,7 +102,7 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
                     "&adCost="+buyerReportingSignals.adCost+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -169,6 +169,8 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
         ad: device_signals["topLevelSeller"],
         desirability: 1,
         bid: 2,
+        incomingBidInSellerCurrency: 1.868,
+        bidCurrency: "USD",
         allowComponentAuction: true
       }
     }
@@ -315,6 +317,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -419,7 +422,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
 
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -569,6 +572,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -716,6 +720,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -939,6 +944,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount

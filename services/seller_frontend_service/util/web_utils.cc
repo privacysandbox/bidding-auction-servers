@@ -233,51 +233,6 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
   return signals;
 }
 
-google::protobuf::Map<std::string, BuyerInput> DecodeInterestGroupEntries(
-    absl::Span<cbor_pair> interest_group_data_entries,
-    ErrorAccumulator& error_accumulator, bool fail_fast) {
-  google::protobuf::Map<std::string, BuyerInput> result;
-  for (const cbor_pair& interest_group : interest_group_data_entries) {
-    bool is_valid_key_type = IsTypeValid(&cbor_isa_string, interest_group.key,
-                                         kIgKey, kString, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, result);
-
-    if (!is_valid_key_type) {
-      continue;
-    }
-
-    const std::string owner = DecodeCborString(interest_group.key);
-    // The value is a gzip compressed bytestring.
-    bool is_owner_valid_type =
-        IsTypeValid(&cbor_isa_bytestring, interest_group.value, kIgValue,
-                    kByteString, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, result);
-
-    if (!is_owner_valid_type) {
-      continue;
-    }
-
-    const std::string compressed_igs(
-        reinterpret_cast<char*>(cbor_bytestring_handle(interest_group.value)),
-        cbor_bytestring_length(interest_group.value));
-    const absl::StatusOr<std::string> decompressed_buyer_input =
-        GzipDecompress(compressed_igs);
-    if (!decompressed_buyer_input.ok()) {
-      error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE,
-                                    kMalformedCompressedBytestring,
-                                    ErrorCode::CLIENT_SIDE);
-    }
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, result);
-
-    BuyerInput buyer_input = DecodeBuyerInput(owner, *decompressed_buyer_input,
-                                              error_accumulator, fail_fast);
-
-    result.insert({std::move(owner), std::move(buyer_input)});
-  }
-
-  return result;
-}
-
 absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
                                  ErrorHandler error_handler,
                                  cbor_item_t& root) {
@@ -356,8 +311,6 @@ absl::Status CborSerializeScoreAdResponse(
     const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
   PS_RETURN_IF_ERROR(
-      CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
-  PS_RETURN_IF_ERROR(
       CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
@@ -381,14 +334,19 @@ absl::Status CborSerializeComponentScoreAdResponse(
     const ScoreAdsResponse::AdScore& ad_score,
     const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
-  // Replace bid if modified bid is present for a device component auction.
-  if (ad_score.bid() == 0.0f) {
-    PS_RETURN_IF_ERROR(
-        CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
-  } else {
-    PS_RETURN_IF_ERROR(
-        CborSerializeFloat(kBid, ad_score.bid(), error_handler, root));
+  // Logic in the rest of the system guarantees that:
+  // - buyer_bid must be > 0 for the AdWithBid to be scored
+  // - modified bid is replaced by buyer_bid if modified bid is <= 0
+  // Therefore if modified bid is 0 here,
+  // there must have been an error in B&A logic.
+  // Chrome regards modified bids of 0 as invalid and will reject them.
+  // Thus we return an error for modified bids <= 0.
+  if (ad_score.bid() <= 0.0f) {
+    return absl::Status(absl::StatusCode::kInternal,
+                        "Modified bid should never be zero, logic error");
   }
+  PS_RETURN_IF_ERROR(
+      CborSerializeFloat(kBid, ad_score.bid(), error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
@@ -398,6 +356,10 @@ absl::Status CborSerializeComponentScoreAdResponse(
       kAdComponents, ad_score.component_renders(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
                                          error_handler, root));
+  if (!ad_score.bid_currency().empty()) {
+    PS_RETURN_IF_ERROR(CborSerializeString(
+        kBidCurrency, ad_score.bid_currency(), error_handler, root));
+  }
   PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(kTopLevelSeller, top_level_seller,
@@ -587,6 +549,12 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
                 ->mutable_buyer_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
+          // kComponentSellerReportingUrls
+          case 1:
+            auction_result.mutable_win_reporting_urls()
+                ->mutable_component_seller_reporting_urls()
+                ->set_reporting_url(reporting_url_value);
+            break;
           // kTopLevelSellerReportingUrls
           case 2:
             auction_result.mutable_win_reporting_urls()
@@ -609,6 +577,12 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
             case 0:  // winReportingURLs
               auction_result.mutable_win_reporting_urls()
                   ->mutable_buyer_reporting_urls()
+                  ->mutable_interaction_reporting_urls()
+                  ->try_emplace(event, url);
+              break;
+            case 1:  // componentSellerReportingURLs
+              auction_result.mutable_win_reporting_urls()
+                  ->mutable_component_seller_reporting_urls()
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
               break;
@@ -647,10 +621,10 @@ absl::Status CborDecodeReportingUrlsToProto(
 
 }  // namespace
 
-ConsentedDebugConfiguration DecodeConsentedDebugConfig(
+server_common::ConsentedDebugConfiguration DecodeConsentedDebugConfig(
     const cbor_item_t* root, ErrorAccumulator& error_accumulator,
     bool fail_fast) {
-  ConsentedDebugConfiguration consented_debug_config;
+  server_common::ConsentedDebugConfiguration consented_debug_config;
   bool is_config_valid_type = IsTypeValid(
       &cbor_isa_map, root, kConsentedDebugConfig, kMap, error_accumulator);
   RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/!is_config_valid_type,
@@ -758,11 +732,7 @@ bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
                  ErrorAccumulator& error_accumulator,
                  server_common::SourceLocation location) {
   if (!is_valid_type(item)) {
-    absl::string_view actual_type = kUnknownDataType;
-    if (item->type < kCborDataTypesLookup.size()) {
-      actual_type = kCborDataTypesLookup[item->type];
-    }
-
+    absl::string_view actual_type = kCborDataTypesLookup[item->type];
     std::string error = absl::StrFormat(kInvalidTypeError, field_name,
                                         expected_type, actual_type);
     PS_VLOG(3) << "CBOR type validation failure at: " << location.file_name()
@@ -1185,7 +1155,7 @@ absl::Status CborSerializeWinReportingUrls(
     return absl::OkStatus();
   }
   ScopedCbor serialized_win_reporting_urls(
-      cbor_new_definite_map(kNumReportingUrlsKeys));
+      cbor_new_definite_map(kNumWinReportingUrlsKeys));
   if (win_reporting_urls.has_buyer_reporting_urls()) {
     PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
         kBuyerReportingUrls, win_reporting_urls.buyer_reporting_urls(),
@@ -1195,6 +1165,12 @@ absl::Status CborSerializeWinReportingUrls(
     PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
         kTopLevelSellerReportingUrls,
         win_reporting_urls.top_level_seller_reporting_urls(), error_handler,
+        **serialized_win_reporting_urls));
+  }
+  if (win_reporting_urls.has_component_seller_reporting_urls()) {
+    PS_RETURN_IF_ERROR(CborSerializeReportingUrls(
+        kComponentSellerReportingUrls,
+        win_reporting_urls.component_seller_reporting_urls(), error_handler,
         **serialized_win_reporting_urls));
   }
   struct cbor_pair serialized_win_reporting_urls_kv = {
@@ -1332,6 +1308,13 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
               "Expected Top Level Seller value to be a string");
         }
         auction_result.set_top_level_seller(CborDecodeString(kv.value));
+      } break;
+      case 12: {  // kBidCurrency
+        if (!cbor_isa_string(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected Bid Currency value to be a string");
+        }
+        auction_result.set_bid_currency(CborDecodeString(kv.value));
       } break;
       default:
         // Unexpected key in the auction result CBOR

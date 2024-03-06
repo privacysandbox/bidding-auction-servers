@@ -14,6 +14,8 @@
 
 #include "services/buyer_frontend_service/buyer_frontend_service.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -21,7 +23,6 @@
 
 #include <grpcpp/server.h>
 
-#include <gmock/gmock-matchers.h>
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/strings/match.h"
@@ -66,7 +67,7 @@ constexpr char valid_bidding_signals[] =
 
 TrustedServersConfigClient CreateTrustedServerConfigClient() {
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   return config_client;
 }
@@ -137,9 +138,9 @@ ClientRegistry CreateClientRegistry(
 }
 
 GetBidsConfig CreateGetBidsConfig() {
-  return {.encryption_enabled = true,
-          .protected_app_signals_generate_bid_timeout_ms = 60000,
-          .is_protected_app_signals_enabled = true};
+  return {.protected_app_signals_generate_bid_timeout_ms = 60000,
+          .is_protected_app_signals_enabled = true,
+          .is_protected_audience_enabled = true};
 }
 
 class BuyerFrontEndServiceTest : public ::testing::Test {
@@ -150,8 +151,6 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
     metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
-
-    bidding_service_client_config_.encryption_enabled = true;
   }
 
   BiddingServiceClientConfig bidding_service_client_config_;

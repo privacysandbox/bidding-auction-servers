@@ -44,9 +44,9 @@ cc_library(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/encryption:key_fetcher_factory",
-        "//services/common/loggers:request_context_logger",
         "//services/common/util:error_categories",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )
@@ -136,9 +136,10 @@ cc_library(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/encryption:key_fetcher_factory",
-        "//services/common/loggers:request_context_logger",
+        "//services/common/util:hpke_utils",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
     ],
 )

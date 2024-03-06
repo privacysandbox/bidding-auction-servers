@@ -26,8 +26,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 grpc::ServerUnaryReactor* BiddingService::GenerateBids(
     grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
     GenerateBidsResponse* response) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan(kGenerateBids));
   LogCommonMetric(request, response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = generate_bids_reactor_factory_(
@@ -44,7 +42,8 @@ grpc::ServerUnaryReactor* BiddingService::GenerateProtectedAppSignalsBids(
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = protected_app_signals_generate_bids_reactor_factory_(
       context, request, runtime_config_, response, key_fetcher_manager_.get(),
-      crypto_client_.get(), http_ad_retrieval_async_client_.get());
+      crypto_client_.get(), ad_retrieval_async_client_.get(),
+      kv_async_client_.get());
   reactor->Execute();
   return reactor;
 }

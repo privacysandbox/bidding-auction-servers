@@ -80,6 +80,8 @@ container_image(
     layers = [
         ":server_binary_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     ports = ["50051"],

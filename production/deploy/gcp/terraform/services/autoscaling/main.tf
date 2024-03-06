@@ -18,6 +18,7 @@ resource "null_resource" "runtime_flags" {
   triggers = var.runtime_flags
 }
 
+
 ###############################################################
 #
 #                         FRONTEND

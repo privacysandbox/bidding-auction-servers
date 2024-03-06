@@ -75,18 +75,17 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       var generateBidResponse = {};
       try {
         generateBidResponse = generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
-      } catch({error, message}) {
-        if (featureFlags.enable_logging) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-        }
-      } finally {
-        if( featureFlags.enable_debug_url_generation &&
+      if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
           generateBidResponse.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
+        }
+      } catch({error, message}) {
+        if (featureFlags.enable_logging) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
       return {
@@ -119,7 +118,7 @@ constexpr absl::string_view
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
-    function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, featureFlags){
+    function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion, featureFlags){
       // No additional setup.
       var ps_logs = [];
       var ps_errors = [];
@@ -149,19 +148,18 @@ constexpr absl::string_view
 
       var generateBidResponse = {};
       try {
-        generateBidResponse = generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval);
-      } catch({error, message}) {
-        if (featureFlags.enable_logging) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-        }
-      } finally {
-        if( featureFlags.enable_debug_url_generation &&
+        generateBidResponse = generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion);
+      if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
           generateBidResponse.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
+        }
+      } catch({error, message}) {
+        if (featureFlags.enable_logging) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
       return {

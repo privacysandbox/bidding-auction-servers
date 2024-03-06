@@ -53,8 +53,6 @@ inline constexpr char kServiceTagName[] = "service";
 
 inline constexpr char kResourceNameFetchError[] =
     "Unable to fetch instance resource name: (status_code: %s)";
-inline constexpr char kInstanceIdFetchError[] =
-    "Unable to fetch instance id: (status_code: %s)";
 inline constexpr char kResourceTagFetchError[] =
     "Unable to fetch instance's tags: (status_code: %s)";
 
@@ -115,7 +113,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   GetInstanceDetailsByResourceNameRequest request;
   request.set_instance_resource_name(resource_name.value());
 
-  const auto& result = client->GetInstanceDetailsByResourceName(
+  const auto result = client->GetInstanceDetailsByResourceName(
       std::move(request),
       [&](const ExecutionResult& result,
           const GetInstanceDetailsByResourceNameResponse& response) {
@@ -132,8 +130,12 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
         }
         done.Notify();
       });
-
-  done.WaitForNotification();
+  if (!result.Successful()) {
+    ABSL_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
+                                       GetErrorMessage(result.status_code));
+  } else {
+    done.WaitForNotification();
+  }
 }
 
 // Returns the string to preprend the names of all keys/flags fetched from the

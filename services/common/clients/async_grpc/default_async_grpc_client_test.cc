@@ -114,11 +114,10 @@ class TestDefaultAsyncGrpcClient
  public:
   TestDefaultAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client, bool encryption_enabled,
+      CryptoClientWrapperInterface* crypto_client,
       absl::Notification& notification, MockRequest req,
       absl::Duration expected_timeout)
-      : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                               encryption_enabled),
+      : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client),
         notification_(notification),
         req_(req),
         expected_timeout_(expected_timeout) {}
@@ -158,18 +157,18 @@ TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestDefaultAsyncGrpcClient client(key_fetcher_manager.get(),
-                                    crypto_client.get(), true, notification,
-                                    req, timeout_ms);
+                                    crypto_client.get(), notification, req,
+                                    timeout_ms);
 
-  client.ExecuteInternal(
+  auto status = client.ExecuteInternal(
       std::make_unique<MockRawRequest>(raw_request), metadata,
       [](absl::StatusOr<std::unique_ptr<MockRawResponse>> result) {},
       timeout_ms);
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 }  // namespace

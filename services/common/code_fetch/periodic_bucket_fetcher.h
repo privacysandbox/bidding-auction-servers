@@ -18,9 +18,11 @@
 #define SERVICES_COMMON_CODE_FETCH_PERIODIC_BUCKET_FETCHER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
@@ -30,63 +32,60 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-/* Code Bucket fetching system that updates AdTech's scripts (ex: GenerateBid(),
- * ScoreAd()) by performing GetBlob() from a BlobStorageClient.
- * Periodic fetching starts when Start() is called, and each fetch is done after
- * a certain period of time (not after the last request is executed). End the
- * process by calling End(). This current design can only fetch 1 blob out of 1
- * specific bucket (no support for wasm, reportWin/reportResult, multi-version,
- * etc) since GetBlob() can only fetch 1 blob per request. To support fetching
- * multiple files, my design recommendation is to pass a map of bucket and blob
- * names as inputs (ex: {"bucket A": "blob A", "bucket B": "blob B"}) and call
- * GetBlob() per pair in a loop. However, if you are trying to fetch a large
- * number of blobs or a whole bucket, my recommendation is to create new
- * functions for BlobStorageClient such as GetBucket() that fetches the whole
- * bucket or GetBlobs() that fetch multiple blobs at once. This is so you are
- * making one async call instead of managing multiple and combining the results
- * in this PeriodicBucketFetcher class.
- */
-
 class PeriodicBucketFetcher : public CodeFetcherInterface {
  public:
   // Constructs a new PeriodicBucketFether.
   explicit PeriodicBucketFetcher(
-      absl::string_view bucket_name, absl::string_view blob_name,
-      absl::Duration fetch_period_ms, V8Dispatcher& dispatcher,
-      server_common::Executor* executor,
-      std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-          blob_storage_client);
+      absl::string_view bucket_name, absl::Duration fetch_period_ms,
+      V8Dispatcher* dispatcher, server_common::Executor* executor,
+      WrapCodeForDispatch wrap_code,
+      google::scp::cpio::BlobStorageClientInterface* blob_storage_client);
+
+  ~PeriodicBucketFetcher() { End(); }
 
   // Not copyable or movable.
   PeriodicBucketFetcher(const PeriodicBucketFetcher&) = delete;
   PeriodicBucketFetcher& operator=(const PeriodicBucketFetcher&) = delete;
 
   // Starts a periodic bucket fetch process with PeriodicBucketFetch().
-  void Start() override;
+  // This may only be called once.
+  absl::Status Start() override;
   // Ends a periodic bucket fetch process by canceling the last scheduled task.
+  // This may only be called once.
   void End() override;
 
  private:
-  // Init and run BlobStorageClient. InitCpio is done in
-  // bidding/auction_main.cc.
-  void InitAndRunConfigClient();
   // Performs bucket fetching with BlobStorageClient and loads code blob into
-  // Roma.
-  void PeriodicBucketFetch();
+  // Roma. Synchronous; only returns after attempting to load each fetched code
+  // blob.
+  void PeriodicBucketFetchSync();
+
+  // List the blobs in bucket_name_.
+  absl::StatusOr<
+      google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse>
+  ListBlobsSync();
+
+  // Callback that handles a GetBlob fetch result.
+  void HandleBlobFetchResult(
+      const google::scp::core::AsyncContext<
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
+          context);
 
   std::string bucket_name_;
-  std::string blob_name_;
+  WrapCodeForDispatch wrap_code_;
   absl::Duration fetch_period_ms_;
   V8Dispatcher& dispatcher_;
-  server_common::Executor* executor_;
-  std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-      blob_storage_client_;
+  server_common::Executor& executor_;
+  google::scp::cpio::BlobStorageClientInterface& blob_storage_client_;
 
-  // Keeps track of the last fetched value for comparison. Code is only loaded
-  // into Roma if the fetched result is different from the previous value.
-  std::string cb_result_value_;
   // Keeps track of the next task to be performed on the executor.
-  server_common::TaskId task_id_;
+  absl::optional<server_common::TaskId> task_id_;
+
+  // Represents a lock on some_load_success_.
+  absl::Mutex some_load_success_mu_;
+  // Notified when 1 blob is successfully loaded.
+  bool some_load_success_ ABSL_GUARDED_BY(some_load_success_mu_) = false;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

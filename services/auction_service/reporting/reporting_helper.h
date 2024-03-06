@@ -25,8 +25,8 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/util/post_auction_signals.h"
+#include "src/cpp/logger/request_context_impl.h"
 #include "src/cpp/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -117,7 +117,7 @@ struct ReportingDispatchRequestData {
   std::shared_ptr<std::string> auction_config;
   PostAuctionSignals post_auction_signals;
   std::string_view publisher_hostname;
-  log::ContextImpl& log_context;
+  server_common::log::ContextImpl& log_context;
   BuyerReportingMetadata buyer_reporting_metadata;
   ComponentReportingMetadata component_reporting_metadata;
   absl::string_view egress_features;

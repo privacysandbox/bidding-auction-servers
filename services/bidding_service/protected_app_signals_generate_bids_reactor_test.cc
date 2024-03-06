@@ -25,10 +25,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "include/grpcpp/server_context.h"
+#include "public/query/v2/get_values_v2.pb.h"
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/generate_bids_reactor_test_utils.h"
-#include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
+#include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
@@ -41,23 +42,31 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr int kPreparedRetrievalDataIndex = 0;
+constexpr int kContextualSignalsIndex = 2;
+constexpr int kAdRenderIdsIndex = 3;
+constexpr int kNumAdRetrievalOrKvLookupUdfArguments = 4;
+constexpr char kTestAdRenderId[] = "TestAdId";
+
 using Request = GenerateProtectedAppSignalsBidsRequest;
 using RawRequest = GenerateProtectedAppSignalsBidsRequest::
     GenerateProtectedAppSignalsBidsRawRequest;
 using Response = GenerateProtectedAppSignalsBidsResponse;
 using RawResponse = GenerateProtectedAppSignalsBidsResponse::
     GenerateProtectedAppSignalsBidsRawResponse;
-using AdsRetrievalAsyncClientType =
-    AsyncClientMock<AdRetrievalInput, AdRetrievalOutput>;
+using KVLookUpResult =
+    absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesResponse>>;
+using kv_server::v2::GetValuesRequest;
+using kv_server::v2::GetValuesResponse;
+using kv_server::v2::ObliviousGetValuesRequest;
 
 class GenerateBidsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     config_client.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-    log::PS_VLOG_IS_ON(/*verbose_level=*/0, /*max_v=*/20);
+    server_common::log::PS_VLOG_IS_ON(/*verbose_level=*/0, /*max_v=*/20);
 
     key_fetcher_manager_ =
         CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
@@ -69,7 +78,6 @@ class GenerateBidsReactorTest : public ::testing::Test {
                                         runtime_config = std::nullopt) {
     if (!runtime_config.has_value()) {
       runtime_config = {
-          .encryption_enabled = true,
           .enable_buyer_debug_url_generation = false,
           .enable_adtech_code_logging = false,
       };
@@ -81,7 +89,8 @@ class GenerateBidsReactorTest : public ::testing::Test {
     Response response;
     ProtectedAppSignalsGenerateBidsReactor reactor(
         &context_, dispatcher_, *runtime_config, &request, &response,
-        key_fetcher_manager_.get(), &crypto_client_, &ad_retrieval_client_);
+        key_fetcher_manager_.get(), &crypto_client_, &ad_retrieval_client_,
+        &kv_async_client_);
     reactor.Execute();
     RawResponse raw_response;
     raw_response.ParseFromString(response.response_ciphertext());
@@ -91,7 +100,8 @@ class GenerateBidsReactorTest : public ::testing::Test {
   grpc::CallbackServerContext context_;
   MockCryptoClientWrapper crypto_client_;
   MockCodeDispatchClient dispatcher_;
-  AdsRetrievalAsyncClientType ad_retrieval_client_;
+  KVAsyncClientMock ad_retrieval_client_;
+  KVAsyncClientMock kv_async_client_;
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
 };
@@ -100,18 +110,18 @@ TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 
@@ -137,12 +147,12 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
             EXPECT_EQ(timeout, absl::Milliseconds(kTestAdRetrievalTimeoutMs));
@@ -155,7 +165,6 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
       kSeller, kPublisherName);
   RunReactorWithRequest(
       raw_request, BiddingServiceRuntimeConfig({
-                       .encryption_enabled = true,
                        .enable_buyer_debug_url_generation = false,
                        .enable_adtech_code_logging = false,
                        .ad_retrieval_timeout_ms = kTestAdRetrievalTimeoutMs,
@@ -196,6 +205,7 @@ TEST_F(GenerateBidsReactorTest, PrepareDataForAdRetrievalInputIsCorrect) {
                                    kPrepareDataForAdRetrievalBlobVersion,
                                    CreatePrepareDataForAdsRetrievalResponse());
         }
+        return absl::OkStatus();
       });
 
   auto raw_request = CreateRawProtectedAppSignalsRequest(
@@ -209,35 +219,41 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
-      .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
-             const RequestMetadata& metadata,
-             absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
-                 on_done,
-             absl::Duration timeout) {
-            auto parsed_retrieval_data = ParseJsonString(keys->retrieval_data);
-            auto decoded_signals_itr =
-                parsed_retrieval_data->FindMember(kDecodedSignals);
-            EXPECT_NE(decoded_signals_itr, parsed_retrieval_data->MemberEnd());
-            EXPECT_EQ(std::string(decoded_signals_itr->value.GetString()),
-                      kTestDecodedAppInstallSignals);
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   const RequestMetadata& metadata,
+                   absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                               GetValuesResponse>>) &&>
+                       on_done,
+                   absl::Duration timeout) {
+        EXPECT_EQ(raw_request->partitions().size(), 1);
+        const auto& udf_arguments = raw_request->partitions()[0].arguments();
+        EXPECT_EQ(udf_arguments.size(), kNumAdRetrievalOrKvLookupUdfArguments);
+        auto parsed_retrieval_data = ParseJsonString(
+            udf_arguments[kPreparedRetrievalDataIndex].data().string_value());
+        auto decoded_signals_itr =
+            parsed_retrieval_data->FindMember(kDecodedSignals);
+        EXPECT_NE(decoded_signals_itr, parsed_retrieval_data->MemberEnd());
+        EXPECT_EQ(std::string(decoded_signals_itr->value.GetString()),
+                  kTestDecodedAppInstallSignals);
 
-            auto retrieval_data_itr =
-                parsed_retrieval_data->FindMember(kRetrievalData);
-            EXPECT_NE(retrieval_data_itr, parsed_retrieval_data->MemberEnd());
-            EXPECT_EQ(std::string(retrieval_data_itr->value.GetString()),
-                      kTestRetrievalData);
+        auto retrieval_data_itr =
+            parsed_retrieval_data->FindMember(kRetrievalData);
+        EXPECT_NE(retrieval_data_itr, parsed_retrieval_data->MemberEnd());
+        EXPECT_EQ(std::string(retrieval_data_itr->value.GetString()),
+                  kTestRetrievalData);
 
-            EXPECT_EQ(keys->contextual_signals, kTestBuyerSignals);
+        EXPECT_EQ(
+            std::string(
+                udf_arguments[kContextualSignalsIndex].data().string_value()),
+            kTestBuyerSignals);
 
-            auto response = CreateAdsRetrievalResponse();
-            EXPECT_TRUE(response.ok()) << response.status();
-            std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
-            return absl::OkStatus();
-          });
+        auto response = CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)));
+        return absl::OkStatus();
+      });
 
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
@@ -296,18 +312,18 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
         }
       });
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 
@@ -326,18 +342,18 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesAreNotPopulated) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 
@@ -385,18 +401,18 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
         }
       });
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse();
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 
@@ -429,20 +445,21 @@ TEST_F(GenerateBidsReactorTest,
                                    kPrepareDataForAdRetrievalBlobVersion,
                                    CreatePrepareDataForAdsRetrievalResponse());
         }
+        return absl::OkStatus();
       });
 
-  EXPECT_CALL(ad_retrieval_client_, Execute)
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
-            auto response = CreateAdsRetrievalResponse("");
+            auto response = CreateAdsRetrievalOrKvLookupResponse("");
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 
@@ -455,6 +472,140 @@ TEST_F(GenerateBidsReactorTest,
   // One dispatch to `preparedDataForAdRetrieval` and no dispatch to
   // `generateBids` is expected.
   ASSERT_EQ(num_roma_dispatches, 1);
+}
+
+TEST_F(GenerateBidsReactorTest, NoContextualAdsMeansAdRetrievalServiceInvoked) {
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+  EXPECT_CALL(kv_async_client_, ExecuteInternal).Times(0);
+  ContextualProtectedAppSignalsData contextual_pas_data;
+  EXPECT_TRUE(contextual_pas_data.ad_render_ids().empty());
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, std::move(contextual_pas_data));
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
+  // is expected.
+  ASSERT_EQ(num_roma_dispatches, 2);
+
+  // Verify the bid returned by the generateBid UDF is the same returned by
+  // the reactor.
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+}
+
+TEST_F(GenerateBidsReactorTest, ContextualAdsMeansKVServiceInvoked) {
+  int num_roma_dispatches = 0;
+  SetupContextualProtectedAppSignalsRomaExpectations(dispatcher_,
+                                                     num_roma_dispatches);
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal).Times(0);
+  EXPECT_CALL(kv_async_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+  ContextualProtectedAppSignalsData contextual_pas_data;
+  *contextual_pas_data.mutable_ad_render_ids()->Add() = kTestAdRenderId;
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, std::move(contextual_pas_data));
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // One dispatch to `generateBids` is expected.
+  ASSERT_EQ(num_roma_dispatches, 1);
+
+  // Verify the bid returned by the generateBid UDF is the same returned by
+  // the reactor.
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+}
+
+TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
+  int num_roma_dispatches = 0;
+  SetupContextualProtectedAppSignalsRomaExpectations(dispatcher_,
+                                                     num_roma_dispatches);
+  EXPECT_CALL(kv_async_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            EXPECT_EQ(raw_request->partitions().size(), 1);
+            const auto& udf_arguments =
+                raw_request->partitions()[0].arguments();
+            EXPECT_EQ(udf_arguments.size(),
+                      kNumAdRetrievalOrKvLookupUdfArguments);
+            EXPECT_TRUE(udf_arguments[kPreparedRetrievalDataIndex]
+                            .data()
+                            .string_value()
+                            .empty());
+
+            EXPECT_EQ(std::string(udf_arguments[kContextualSignalsIndex]
+                                      .data()
+                                      .string_value()),
+                      kTestBuyerSignals);
+
+            const auto& ad_render_ids =
+                udf_arguments[kAdRenderIdsIndex].data().list_value().values();
+
+            EXPECT_EQ(ad_render_ids.size(), 1);
+            EXPECT_EQ(ad_render_ids[0].string_value(), kTestAdRenderId);
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+
+  ContextualProtectedAppSignalsData contextual_pas_data;
+  *contextual_pas_data.mutable_ad_render_ids()->Add() = kTestAdRenderId;
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, std::move(contextual_pas_data));
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // Only a single dispatch to `generateBids` is expected.
+  ASSERT_EQ(num_roma_dispatches, 1);
+
+  // Verify the bid returned by the generateBid UDF is the same returned by
+  // the reactor.
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 }
 
 }  // namespace

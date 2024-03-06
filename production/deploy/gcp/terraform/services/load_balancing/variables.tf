@@ -19,6 +19,11 @@ variable "mesh" {
   type        = any
 }
 
+variable "subnets" {
+  description = "All service subnets."
+  type        = any
+}
+
 variable "operator" {
   description = "Operator name used to identify the resource owner."
   type        = string
@@ -91,11 +96,6 @@ variable "backend_service_port" {
   type        = number
 }
 
-variable "collector_ip_address" {
-  description = "Collector IP address"
-  type        = string
-}
-
 variable "collector_instance_group_managers" {
   description = "OpenTelemetry collector instance group managers."
   type        = set(any)
@@ -104,6 +104,8 @@ variable "collector_instance_group_managers" {
 variable "collector_service_name" {
   type = string
 }
+
+
 
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."

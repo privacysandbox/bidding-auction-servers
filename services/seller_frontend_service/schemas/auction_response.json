@@ -73,6 +73,10 @@
       "type": "number",
       "description": "Bid price corresponding to an ad."
     },
+    "bidCurrency": {
+      "type": "string",
+      "description": "Optional currency of the bid (three uppercase letters, ISO 4217 alpha code suggested)."
+    },
     "isChaff": {
       "type": "boolean",
       "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."

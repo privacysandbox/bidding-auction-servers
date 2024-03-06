@@ -167,8 +167,7 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
   // Only the private_key field needs to be set for decryption.
   google::cmrt::sdk::private_key_service::v1::PrivateKey key;
   key.set_key_id(private_key.key_id);
-  key.set_private_key(
-      std::move(absl::Base64Escape(keyset.SerializeAsString())));
+  key.set_private_key(absl::Base64Escape(keyset.SerializeAsString()));
 
   // Only the ciphertext field needs to be set for decryption.
   HpkeEncryptedData encrypted_data;

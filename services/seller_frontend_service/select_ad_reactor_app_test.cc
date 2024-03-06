@@ -13,13 +13,14 @@
 // limitations under the License.
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <math.h>
 
 #include <memory>
 #include <set>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <google/protobuf/util/json_util.h>
 #include <include/gmock/gmock-actions.h>
 #include <include/gmock/gmock-nice-strict.h>
@@ -34,6 +35,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
@@ -79,9 +81,9 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
   }
 
   TrustedServersConfigClient config_ = CreateConfig();
@@ -114,21 +116,103 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
-  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Unframe the framed response.
   absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(
-          decrypted_response->GetPlaintextData());
+      server_common::DecodeRequestPayload(*decrypted_response);
+  ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      GzipDecompress(unframed_response->compressed_data);
+  EXPECT_TRUE(decompressed_response.ok())
+      << decompressed_response.status().message();
+  AuctionResult deserialized_auction_result;
+  EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
+      decompressed_response->data(), decompressed_response->size()));
+  EXPECT_FALSE(deserialized_auction_result.is_chaff());
+  EXPECT_EQ(deserialized_auction_result.ad_type(),
+            AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
+
+  // Validate that the bidding groups data is not present.
+  EXPECT_EQ(deserialized_auction_result.bidding_groups().size(), 0);
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .top_level_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .top_level_seller_reporting_urls()
+                  .interaction_reporting_urls()
+                  .empty());
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .buyer_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .buyer_reporting_urls()
+                  .interaction_reporting_urls()
+                  .empty());
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .component_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_TRUE(deserialized_auction_result.win_reporting_urls()
+                  .component_seller_reporting_urls()
+                  .interaction_reporting_urls()
+                  .empty());
+}
+
+TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  bool expect_all_buyers_solicited = true;
+  absl::string_view top_level_seller = "";
+  bool enable_reporting = true;
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+          CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          expect_all_buyers_solicited, top_level_seller, enable_reporting);
+
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          this->config_, clients, request_with_context.select_ad_request);
+  EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Unframe the framed response.
+  // Unframe the framed response.
+  absl::StatusOr<server_common::DecodedRequest> unframed_response =
+      server_common::DecodeRequestPayload(*decrypted_response);
   ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
 
   // Decompress the encoded response.
@@ -163,6 +247,15 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
                 .interaction_reporting_urls()
                 .at(kTestEvent),
             kTestInteractionUrl);
+  EXPECT_EQ(deserialized_auction_result.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .reporting_url(),
+            kTestComponentSellerReportingUrl);
+  EXPECT_EQ(deserialized_auction_result.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestEvent),
+            kTestInteractionUrl);
 }
 
 TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
@@ -187,21 +280,20 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
-  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Unframe the framed response.
   absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(
-          decrypted_response->GetPlaintextData());
+      server_common::DecodeRequestPayload(*decrypted_response);
   ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
 
   // Decompress the encoded response.
@@ -245,8 +337,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
           server_common::CompressionType::kGzip, encoded_request,
           GetEncodedDataSize(encoded_request.size()));
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
-  auto ohttp_request = CreateValidEncryptedRequest(std::move(*framed_request),
-                                                   this->default_keyset_);
+  auto ohttp_request =
+      CreateValidEncryptedRequest(*framed_request, this->default_keyset_);
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request =
       '\0' + ohttp_request->EncapsulateAndSerialize();
@@ -259,21 +351,20 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(), context,
-      this->default_keyset_);
-  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(), context,
+      kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Unframe the framed response.
   absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(
-          decrypted_response->GetPlaintextData());
+      server_common::DecodeRequestPayload(*decrypted_response);
   ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
 
   // Decompress the encoded response.
@@ -302,13 +393,13 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));
-    log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::PS_VLOG_IS_ON(0, 10);
   }
 
   // This could return any valid byte string.
@@ -316,6 +407,17 @@ class SelectAdReactorPASTest : public ::testing::Test {
     ProtectedAppSignals protected_app_signals;
     protected_app_signals.set_encoding_version(kTestEncodingVersion);
     return protected_app_signals.SerializeAsString();
+  }
+
+  AdWithBid GetTestPAAdWithBid() {
+    AdWithBid result;
+    result.mutable_ad()->mutable_struct_value()->MergeFrom(
+        MakeAnAd(kTestRender, kTestMetadataKey, kTestMetadataValue));
+    result.set_bid(kTestBidValue);
+    result.set_render(kTestRender);
+    result.set_modeling_signals(kTestModelingSignals);
+    result.set_ad_cost(kTestAdCost);
+    return result;
   }
 
   ProtectedAppSignalsAdWithBid GetTestPASAdWithBid() {
@@ -330,12 +432,11 @@ class SelectAdReactorPASTest : public ::testing::Test {
     return result;
   }
 
-  // Creates a SelectAdRequest with PA + PAS Buyer Input.
-  EncryptedSelectAdRequestWithContext<ProtectedAuctionInput>
-  CreateSelectAdRequest(
+  std::pair<SelectAdRequest, ProtectedAuctionInput> CreateRawSelectAdRequest(
       absl::string_view seller_origin_domain, bool add_interest_group = true,
       bool add_protected_app_signals = true,
-      std::optional<std::string> app_install_signals = std::nullopt) {
+      std::optional<absl::string_view> app_install_signals = std::nullopt,
+      bool add_contextual_pas_ad_render_ids = false) {
     BuyerInput buyer_input;
 
     if (add_interest_group) {
@@ -366,23 +467,57 @@ class SelectAdReactorPASTest : public ::testing::Test {
     protected_auction_input.set_publisher_name(MakeARandomString());
 
     SelectAdRequest request;
-    request.mutable_auction_config()->set_seller_signals(
+    auto* auction_config = request.mutable_auction_config();
+    auction_config->set_seller_signals(
         absl::StrCat("{\"seller_signal\": \"", MakeARandomString(), "\"}"));
-    request.mutable_auction_config()->set_auction_signals(
+    auction_config->set_auction_signals(
         absl::StrCat("{\"auction_signal\": \"", MakeARandomString(), "\"}"));
-    request.mutable_auction_config()->set_seller(seller_origin_domain);
+    auction_config->set_seller(seller_origin_domain);
     request.set_client_type(CLIENT_TYPE_ANDROID);
     for (const auto& [local_buyer, unused] :
          protected_auction_input.buyer_input()) {
-      *request.mutable_auction_config()->mutable_buyer_list()->Add() =
-          local_buyer;
+      *auction_config->mutable_buyer_list()->Add() = local_buyer;
+      if (add_contextual_pas_ad_render_ids) {
+        auto& buyer_config =
+            (*auction_config->mutable_per_buyer_config())[local_buyer];
+        auto* contextual_protected_app_signals_data =
+            buyer_config.mutable_contextual_protected_app_signals_data();
+        *contextual_protected_app_signals_data->mutable_ad_render_ids()->Add() =
+            kSampleContextualPasAdId;
+      }
     }
+    return {std::move(request), std::move(protected_auction_input)};
+  }
 
+  // Creates a SelectAdRequest with PA + PAS Buyer Input.
+  EncryptedSelectAdRequestWithContext<ProtectedAuctionInput>
+  CreateSelectAdRequest(
+      absl::string_view seller_origin_domain, bool add_interest_group = true,
+      bool add_protected_app_signals = true,
+      std::optional<absl::string_view> app_install_signals = std::nullopt) {
+    auto [request, protected_auction_input] = CreateRawSelectAdRequest(
+        seller_origin_domain, add_interest_group, add_protected_app_signals,
+        std::move(app_install_signals));
     auto [encrypted_request, context] =
         GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
     *request.mutable_protected_auction_ciphertext() =
         std::move(encrypted_request);
+    return {std::move(protected_auction_input), std::move(request),
+            std::move(context)};
+  }
 
+  // Creates a SelectAdRequest with PA + PAS Buyer Input.
+  EncryptedSelectAdRequestWithContext<ProtectedAuctionInput>
+  CreateSelectAdRequestWithContextualPasAds(
+      absl::string_view seller_origin_domain, bool add_interest_group = true) {
+    auto [request, protected_auction_input] = CreateRawSelectAdRequest(
+        seller_origin_domain, add_interest_group,
+        /*add_protected_app_signals=*/true, GetTestAppSignals(),
+        /*add_contextual_pas_ad_render_ids=*/true);
+    auto [encrypted_request, context] =
+        GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+    *request.mutable_protected_auction_ciphertext() =
+        std::move(encrypted_request);
     return {std::move(protected_auction_input), std::move(request),
             std::move(context)};
   }
@@ -556,9 +691,6 @@ TEST_F(SelectAdReactorPASTest,
        PASAdWithBidIsNotSentForScoringWhenFeatureDisabled) {
   config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
-  const auto& select_ad_req = request_with_context.select_ad_request;
-  const auto& protected_auction_input =
-      request_with_context.protected_auction_input;
 
   // Setup BFE to return a PAS bid -- though this will be an error in itself
   // since the feature is disabled but we still cover this possible error case.
@@ -584,7 +716,7 @@ TEST_F(SelectAdReactorPASTest,
   EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
       .WillRepeatedly(MockBuyerFactoryCall);
 
-  // Verify call to scoring client is not made since there are not PA bids
+  // Verify call to scoring client is not made since there are no PA bids
   // and though BFE returned PAS bids (possibly erroneously), we don't send
   // them for scoring.
   EXPECT_CALL(scoring_client_, ExecuteInternal).Times(0);
@@ -681,15 +813,14 @@ TEST_F(SelectAdReactorPASTest, BothPASAndPAInputsMissingIsAnError) {
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      encrypted_response.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Unframe the framed response.
   absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(
-          decrypted_response->GetPlaintextData());
+      server_common::DecodeRequestPayload(*decrypted_response);
   ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
 
   // Decompress the encoded response.
@@ -713,11 +844,10 @@ TEST_F(SelectAdReactorPASTest,
       CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/true,
                             /*add_protected_app_signals=*/false);
 
-  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                                  get_bids_raw_request,
-                              const RequestMetadata& metadata,
-                              GetBidDoneCallback on_done,
-                              absl::Duration timeout) {
+  auto mock_get_bids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                              get_bids_raw_request,
+                          const RequestMetadata& metadata,
+                          GetBidDoneCallback on_done, absl::Duration timeout) {
     // Expect PAS buyer inputs to not be be populated in GetBids.
     EXPECT_FALSE(get_bids_raw_request->has_protected_app_signals_buyer_input());
 
@@ -755,13 +885,147 @@ TEST_F(SelectAdReactorPASTest,
                             /*add_protected_app_signals=*/true,
                             /*app_install_signals=*/"");
 
+  auto mock_get_bids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                              get_bids_raw_request,
+                          const RequestMetadata& metadata,
+                          GetBidDoneCallback on_done, absl::Duration timeout) {
+    // Expect PAS buyer inputs to not be be populated in GetBids.
+    EXPECT_FALSE(get_bids_raw_request->has_protected_app_signals_buyer_input());
+
+    // Ensure PA buyer inputs doesn't have the PAS data.
+    EXPECT_FALSE(
+        get_bids_raw_request->buyer_input().has_protected_app_signals());
+    return absl::OkStatus();
+  };
+  auto setup_mock_buyer =
+      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
+            .WillRepeatedly(mock_get_bids);
+        return buyer;
+      };
+  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
+    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
+      .WillRepeatedly(MockBuyerFactoryCall);
+
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          config_, clients_, request_with_context.select_ad_request);
+  AuctionResult auction_result;
+  auction_result.ParseFromString(
+      encrypted_response.auction_result_ciphertext());
+  EXPECT_FALSE(auction_result.has_error());
+}
+
+TEST_F(SelectAdReactorPASTest,
+       PASBuyerInputWithContextualAdIsPopulatedForGetBids) {
+  auto request_with_context =
+      CreateSelectAdRequestWithContextualPasAds(kSellerOriginDomain);
+
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
                               const RequestMetadata& metadata,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout) {
-    // Expect PAS buyer inputs to not be be populated in GetBids.
-    EXPECT_FALSE(get_bids_raw_request->has_protected_app_signals_buyer_input());
+    // Expect PAS buyer inputs to be populated correctly in GetBids.
+    EXPECT_TRUE(get_bids_raw_request->has_protected_app_signals_buyer_input());
+    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
+                    .has_protected_app_signals());
+    auto protected_app_signals =
+        get_bids_raw_request->protected_app_signals_buyer_input()
+            .protected_app_signals();
+    EXPECT_EQ(protected_app_signals.encoding_version(), kTestEncodingVersion);
+    EXPECT_EQ(protected_app_signals.app_install_signals(), GetTestAppSignals());
+
+    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
+                    .has_contextual_protected_app_signals_data());
+    auto contextual_protected_app_signals_data =
+        get_bids_raw_request->protected_app_signals_buyer_input()
+            .contextual_protected_app_signals_data();
+    EXPECT_EQ(contextual_protected_app_signals_data.ad_render_ids_size(), 1);
+    EXPECT_EQ(contextual_protected_app_signals_data.ad_render_ids().at(0),
+              kSampleContextualPasAdId);
+
+    return absl::OkStatus();
+  };
+  auto setup_mock_buyer =
+      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
+            .WillRepeatedly(mock_get_bids);
+        return buyer;
+      };
+  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
+    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
+      .WillRepeatedly(MockBuyerFactoryCall);
+
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          config_, clients_, request_with_context.select_ad_request);
+}
+
+TEST_F(SelectAdReactorPASTest,
+       ProtectedAudienceAdWithBidIsNotSentForScoringWhenFeatureDisabled) {
+  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
+  auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
+
+  // Setup BFE to return a PA bid and no PAS bid.
+  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                                  get_bids_raw_request,
+                              const RequestMetadata& metadata,
+                              GetBidDoneCallback on_done,
+                              absl::Duration timeout) {
+    auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+    response->mutable_bids()->Add(GetTestPAAdWithBid());
+    std::move(on_done)(std::move(response));
+    return absl::OkStatus();
+  };
+  auto setup_mock_buyer =
+      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
+            .WillRepeatedly(mock_get_bids);
+        return buyer;
+      };
+  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
+    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
+      .WillRepeatedly(MockBuyerFactoryCall);
+
+  // Verify call to scoring client is not made since there are no PAS bids
+  // and though BFE returned PA bids (possibly erroneously), we don't send
+  // them for scoring.
+  EXPECT_CALL(scoring_client_, ExecuteInternal).Times(0);
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          config_, clients_, request_with_context.select_ad_request);
+}
+
+TEST_F(SelectAdReactorPASTest,
+       InterestGroupsRemovedIfProtectedAudienceDisabled) {
+  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
+  auto request_with_context =
+      CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/true);
+
+  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                                  get_bids_raw_request,
+                              const RequestMetadata& metadata,
+                              GetBidDoneCallback on_done,
+                              absl::Duration timeout) {
+    // Expect no interest groups are present.
+    EXPECT_EQ(get_bids_raw_request->buyer_input().interest_groups_size(), 0);
+
+    // Expect PAS buyer inputs to be populated correctly in GetBids.
+    EXPECT_TRUE(get_bids_raw_request->has_protected_app_signals_buyer_input());
+    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
+                    .has_protected_app_signals());
+    auto protected_app_signals =
+        get_bids_raw_request->protected_app_signals_buyer_input()
+            .protected_app_signals();
+    EXPECT_EQ(protected_app_signals.encoding_version(), kTestEncodingVersion);
+    EXPECT_EQ(protected_app_signals.app_install_signals(), GetTestAppSignals());
 
     // Ensure PA buyer inputs doesn't have the PAS data.
     EXPECT_FALSE(

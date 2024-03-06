@@ -14,10 +14,11 @@
 
 #include "tools/secure_invoke/secure_invoke_lib.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/flags/flag.h"
@@ -38,8 +39,6 @@
 using ::privacy_sandbox::bidding_auction_servers::HpkeKeyset;
 using ::testing::HasSubstr;
 
-constexpr char kSfe[] = "SFE";
-constexpr char kBfe[] = "BFE";
 constexpr char kClientIp[] = "104.133.126.32";
 constexpr char kUserAgent[] =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -127,8 +126,8 @@ class SecureInvokeLib : public testing::Test {
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
+    config_client.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, CreatePublicKeyFetcher(config_client));
 
@@ -148,11 +147,9 @@ class SecureInvokeLib : public testing::Test {
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
   GetBidsConfig get_bids_config_ = {
-      .encryption_enabled = true,
+      .is_protected_audience_enabled = true,
   };
-  BiddingServiceClientConfig bidding_service_client_config_ = {
-      .encryption_enabled = true,
-  };
+  BiddingServiceClientConfig bidding_service_client_config_;
   std::unique_ptr<MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>
       bidding_signals_provider_ = std::make_unique<
           MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>();
@@ -168,7 +165,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsClientIp) {
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   absl::SetFlag(&FLAGS_host_addr,
                 absl::StrFormat("localhost:%d", start_service_result.port));
-  EXPECT_DEATH(SendRequestToBfe(default_keyset_, false),
+  EXPECT_DEATH(auto unused = SendRequestToBfe(default_keyset_, false),
                "Client IP must be specified");
 }
 
@@ -179,7 +176,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
       std::move(get_bids_config_)};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
-  EXPECT_DEATH(SendRequestToBfe(default_keyset_, false),
+  EXPECT_DEATH(auto unused = SendRequestToBfe(default_keyset_, false),
                "BFE host address must be specified");
 }
 
@@ -195,7 +192,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty user agent would cause the validation failure.
   absl::SetFlag(&FLAGS_client_user_agent, "");
-  EXPECT_DEATH(SendRequestToBfe(default_keyset_, false),
+  EXPECT_DEATH(auto unused = SendRequestToBfe(default_keyset_, false),
                "User Agent must be specified");
 }
 
@@ -211,7 +208,7 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
   absl::SetFlag(&FLAGS_client_ip, kClientIp);
   // Setting empty client accept language would cause the validation failure.
   absl::SetFlag(&FLAGS_client_accept_language, "");
-  EXPECT_DEATH(SendRequestToBfe(default_keyset_, false),
+  EXPECT_DEATH(auto unused = SendRequestToBfe(default_keyset_, false),
                "Accept Language must be specified");
 }
 
@@ -298,9 +295,10 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {
   const std::string invalid_key =
       "rvJwF4YQi1hZLWMcGbDf9uGN2jQInZvtHPJsgTUewQY=";
   EXPECT_NE(invalid_key, HpkeKeyset{}.public_key);
-  EXPECT_DEATH(SendRequestToBfe(HpkeKeyset{.public_key = invalid_key}, false,
-                                std::move(stub)),
-               "Encryption Failure.");
+  EXPECT_DEATH(
+      auto unused = SendRequestToBfe(HpkeKeyset{.public_key = invalid_key},
+                                     false, std::move(stub)),
+      "Encryption Failure.");
 }
 
 TEST_F(SecureInvokeLib, UsesKeyForBfeEncryption) {

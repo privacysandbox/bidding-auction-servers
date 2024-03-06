@@ -30,7 +30,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-constexpr int kNormalTimeoutMs = 5000;
 
 class AsyncReporterTest : public ::testing::Test {
  protected:

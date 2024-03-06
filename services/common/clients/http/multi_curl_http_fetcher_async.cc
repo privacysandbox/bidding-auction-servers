@@ -23,7 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "services/common/loggers/request_context_logger.h"
+#include "src/cpp/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
@@ -46,7 +46,7 @@ struct CurlTimeStats {
   curl_off_t new_conns = -1;
 };
 void GetTraceFromCurl(CURL* handle) {
-  if (log::PS_VLOG_IS_ON(log_level)) {
+  if (server_common::log::PS_VLOG_IS_ON(log_level)) {
     CurlTimeStats curl_time_stats;
     char* request_url = nullptr;
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);

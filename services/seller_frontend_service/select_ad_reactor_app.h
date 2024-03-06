@@ -28,7 +28,6 @@
 #include "services/seller_frontend_service/select_ad_reactor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
 class SelectAdReactorForApp : public SelectAdReactor {
  public:
   explicit SelectAdReactorForApp(
@@ -63,6 +62,7 @@ class SelectAdReactorForApp : public SelectAdReactor {
   // Signals (PAS) buyer inputs and this method forks those out while making the
   // outbound call.
   void MayPopulateProtectedAppSignalsBuyerInput(
+      absl::string_view buyer,
       GetBidsRequest::GetBidsRawRequest* get_bids_raw_request);
 
   // Creates a GetBids request to be sent to BFE. If PAS is enabled and client

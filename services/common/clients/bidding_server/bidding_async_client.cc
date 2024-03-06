@@ -57,9 +57,7 @@ BiddingAsyncGrpcClient::BiddingAsyncGrpcClient(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceClientConfig& client_config, Bidding::Stub* stub)
-    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled),
-      stub_(stub) {}
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void BiddingAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
@@ -70,7 +68,6 @@ void BiddingAsyncGrpcClient::SendRpc(
   stub_->async()->GenerateBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
         OnRpcDone<GenerateBidsRequest, GenerateBidsResponse,
                   GenerateBidsResponse::GenerateBidsRawResponse>(
             status, params,
@@ -85,9 +82,7 @@ ProtectedAppSignalsBiddingAsyncGrpcClient::
         server_common::KeyFetcherManagerInterface* key_fetcher_manager,
         CryptoClientWrapperInterface* crypto_client,
         const BiddingServiceClientConfig& client_config, Bidding::Stub* stub)
-    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled),
-      stub_(stub) {}
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
@@ -98,7 +93,6 @@ void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
   stub_->async()->GenerateProtectedAppSignalsBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
         OnRpcDone<GenerateProtectedAppSignalsBidsRequest,
                   GenerateProtectedAppSignalsBidsResponse,
                   GenerateProtectedAppSignalsBidsRawResponse>(

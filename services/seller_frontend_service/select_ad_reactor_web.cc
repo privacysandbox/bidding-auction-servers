@@ -99,7 +99,8 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
   std::string encoded_data;
-  if (auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+  if (auction_scope_ ==
+      AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
     PS_ASSIGN_OR_RETURN(
         encoded_data,
         EncodeComponent(request_->auction_config().top_level_seller(),

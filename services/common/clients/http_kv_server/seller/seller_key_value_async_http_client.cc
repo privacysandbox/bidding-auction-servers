@@ -102,7 +102,7 @@ SellerKeyValueAsyncHttpClient::SellerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetSellerValuesInput>();
-    Execute(
+    auto status = Execute(
         std::move(request), {},
         [](absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
                seller_kv_output) mutable {
@@ -114,6 +114,10 @@ SellerKeyValueAsyncHttpClient::SellerKeyValueAsyncHttpClient(
         },
         // Longer timeout for first request
         absl::Milliseconds(60000));
+    if (!status.ok()) {
+      PS_VLOG(1) << "SellerKeyValueAsyncHttpClient pre-warming failed:"
+                 << status;
+    }
   }
 }
 

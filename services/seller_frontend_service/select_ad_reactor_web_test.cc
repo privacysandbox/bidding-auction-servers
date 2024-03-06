@@ -14,6 +14,8 @@
 
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <math.h>
 
 #include <memory>
@@ -21,7 +23,6 @@
 #include <utility>
 #include <vector>
 
-#include <gmock/gmock-matchers.h>
 #include <google/protobuf/util/json_util.h>
 #include <include/gmock/gmock-actions.h>
 #include <include/gmock/gmock-nice-strict.h>
@@ -32,6 +33,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
@@ -65,9 +67,9 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
   }
 
   void SetProtectedAuctionCipherText(const T& protected_auction_input,
@@ -123,20 +125,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
                  << MessageToJson(response_with_cbor);
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
-  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok());
 
   std::string base64_response;
@@ -191,20 +193,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
-  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok());
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -386,20 +388,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context,
-      this->default_keyset_);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(), context,
+      kBiddingAuctionOhttpResponseLabel);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -449,20 +451,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context,
-      this->default_keyset_);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(), context,
+      kBiddingAuctionOhttpResponseLabel);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -521,20 +523,20 @@ TYPED_TEST(SelectAdReactorForWebTest,
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(), context,
-      this->default_keyset_);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(), context,
+      kBiddingAuctionOhttpResponseLabel);
   ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   ASSERT_TRUE(decompressed_response.ok()) << decompressed_response.status();
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
@@ -549,11 +551,12 @@ TYPED_TEST(SelectAdReactorForWebTest,
 }
 
 auto EqConsentedDebugConfig(
-    const ConsentedDebugConfiguration& consented_debug_config) {
-  return AllOf(Property(&ConsentedDebugConfiguration::is_consented,
-                        Eq(consented_debug_config.is_consented())),
-               Property(&ConsentedDebugConfiguration::token,
-                        Eq(consented_debug_config.token())));
+    const server_common::ConsentedDebugConfiguration& consented_debug_config) {
+  return AllOf(
+      Property(&server_common::ConsentedDebugConfiguration::is_consented,
+               Eq(consented_debug_config.is_consented())),
+      Property(&server_common::ConsentedDebugConfiguration::token,
+               Eq(consented_debug_config.token())));
 }
 
 auto EqGetBidsRawRequestWithConsentedDebugConfig(
@@ -695,20 +698,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyComponentAuctionCborEncoding) {
                  << MessageToJson(response_with_cbor);
 
   // Decrypt the response.
-  auto decrypted_response = DecryptEncapsulatedResponse(
-      response_with_cbor.auction_result_ciphertext(),
-      request_with_context.context, this->default_keyset_);
-  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Expect the payload to be of length that is a power of 2.
-  const size_t payload_size = decrypted_response->GetPlaintextData().size();
+  const size_t payload_size = decrypted_response->size();
   int log_2_payload = log2(payload_size);
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok());
 
   std::string base64_response;
@@ -740,6 +743,38 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyComponentAuctionCborEncoding) {
       std::inserter(unexpected_interest_group_indices,
                     unexpected_interest_group_indices.begin()));
   EXPECT_TRUE(unexpected_interest_group_indices.empty());
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/true);
+
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_FALSE(decrypted_response.ok()) << decrypted_response.status();
 }
 
 }  // namespace

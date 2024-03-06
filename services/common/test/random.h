@@ -55,8 +55,8 @@ num_type MakeARandomNumber(num_type min, num_type max) {
 
 std::unique_ptr<google::protobuf::Struct> MakeARandomStruct(int num_fields);
 
-void ProtoToJson(const google::protobuf::Message& proto,
-                 std::string* json_output);
+absl::Status ProtoToJson(const google::protobuf::Message& proto,
+                         std::string* json_output);
 
 std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields);
 
@@ -163,13 +163,16 @@ T MakeARandomProtectedAuctionInput(int num_buyers = 2) {
   *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_input);
   protected_auction_input.set_publisher_name(MakeARandomString());
+  protected_auction_input.set_enable_debug_reporting(true);
   return protected_auction_input;
 }
 
 template <typename T>
 SelectAdRequest MakeARandomSelectAdRequest(
     absl::string_view seller_domain_origin, const T& protected_auction_input,
-    bool set_buyer_egid = false, bool set_seller_egid = false) {
+    bool set_buyer_egid = false, bool set_seller_egid = false,
+    absl::string_view seller_currency = "",
+    absl::string_view buyer_currency = "") {
   SelectAdRequest request;
   request.mutable_auction_config()->set_seller_signals(absl::StrCat(
       "{\"seller_signal\": \"", MakeARandomString(), "\"}"));  // 3.
@@ -195,11 +198,17 @@ SelectAdRequest MakeARandomSelectAdRequest(
       per_buyer_config.set_buyer_kv_experiment_group_id(
           MakeARandomInt(1000, 10000));
     }
+    if (!buyer_currency.empty()) {
+      per_buyer_config.set_buyer_currency(buyer_currency);
+    }
     request.mutable_auction_config()->mutable_per_buyer_config()->insert(
         {buyer_input_pair.first, per_buyer_config});
   }
 
   request.mutable_auction_config()->set_seller(seller_domain_origin);
+  if (!seller_currency.empty()) {
+    request.mutable_auction_config()->set_seller_currency(seller_currency);
+  }
   request.set_client_type(CLIENT_TYPE_BROWSER);
   return request;
 }
@@ -215,7 +224,7 @@ BuyerInput MakeARandomBuyerInput();
 
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
 
-AuctionResult MakeARandomAuctionResult();
+AuctionResult MakeARandomSingleSellerAuctionResult();
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

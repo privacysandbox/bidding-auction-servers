@@ -14,11 +14,12 @@
 
 #include "services/common/encryption/crypto_client_wrapper.h"
 
+#include <gmock/gmock.h>
+
 #include <memory>
 #include <string>
 #include <utility>
 
-#include <gmock/gmock.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <include/gmock/gmock-actions.h>
 
@@ -161,8 +162,7 @@ TEST(CryptoClientWrapperTest, HpkeDecrypt_Success) {
   HpkeDecryptRequest expected_request;
   google::cmrt::sdk::private_key_service::v1::PrivateKey key;
   key.set_key_id(private_key.key_id);
-  key.set_private_key(
-      std::move(absl::Base64Escape(keyset.SerializeAsString())));
+  key.set_private_key(absl::Base64Escape(keyset.SerializeAsString()));
   *expected_request.mutable_private_key() = std::move(key);
   HpkeEncryptedData data;
   data.set_ciphertext(kCiphertext);

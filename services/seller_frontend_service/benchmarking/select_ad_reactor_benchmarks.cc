@@ -133,7 +133,9 @@ absl::Status ScoringClientStub::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse>>) &&>
         on_done,
-    absl::Duration timeout) const {}
+    absl::Duration timeout) const {
+  return absl::OkStatus();
+}
 
 absl::Status ScoringClientStub::ExecuteInternal(
     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
@@ -176,7 +178,6 @@ class BuyerFrontEndAsyncClientFactoryStub
 
  private:
   const SelectAdRequest& request_;
-  const ProtectedAuctionInput& protected_auction_input_;
   absl::flat_hash_map<std::string,
                       std::shared_ptr<BuyerFrontEndAsyncClientStub>>
       buyer_clients_;
@@ -185,7 +186,7 @@ class BuyerFrontEndAsyncClientFactoryStub
 BuyerFrontEndAsyncClientFactoryStub::BuyerFrontEndAsyncClientFactoryStub(
     const SelectAdRequest& request,
     const ProtectedAuctionInput& protected_auction_input)
-    : request_(request), protected_auction_input_(protected_auction_input) {
+    : request_(request) {
   ErrorAccumulator error_accumulator;
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request_);
@@ -219,7 +220,9 @@ class KeyFetcherManagerStub : public server_common::KeyFetcherManagerInterface {
 
 absl::StatusOr<google::cmrt::sdk::public_key_service::v1::PublicKey>
 KeyFetcherManagerStub::GetPublicKey(
-    server_common::CloudPlatform cloud_platform) noexcept {}
+    server_common::CloudPlatform cloud_platform) noexcept {
+  return google::cmrt::sdk::public_key_service::v1::PublicKey{};
+}
 
 // Fetches the corresponding private key for a public key ID.
 std::optional<server_common::PrivateKey> KeyFetcherManagerStub::GetPrivateKey(
@@ -301,7 +304,6 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
                                                     protected_auction_input);
   KeyFetcherManagerStub key_fetcher_manager;
   TrustedServersConfigClient config_client = CreateConfig();
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
   config_client.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,

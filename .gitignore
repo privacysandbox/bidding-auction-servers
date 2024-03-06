@@ -1,7 +1,6 @@
 # Bazel symlinks
-/bazel-*
 /dist/
-/google_internal/tools/cost/bazel-*
+bazel-*
 
 # IDEs
 /.vscode/

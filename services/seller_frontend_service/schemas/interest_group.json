@@ -8,18 +8,18 @@
     }
   },
   "type": "object",
-  "required": [ "name" ],
+  "required": ["name"],
   "properties": {
-    "name": {"type": "string"},
+    "name": { "type": "string" },
     "biddingSignalsKeys": {
       "type": "array",
-      "items": {"type": "string", "uniqueItems": true}
+      "items": { "type": "string", "uniqueItems": true }
     },
-    "userBiddingSignals": {"type": "string"},
+    "userBiddingSignals": { "type": "string" },
     "ads": {
       "type": "array",
       "items": {
-       "$ref": "#/$defs/adRenderId"
+        "$ref": "#/$defs/adRenderId"
       }
     },
     "components": {
@@ -47,14 +47,13 @@
           "type": "array",
           "items": {
             "type": "array",
-            "description":
-              "Tuple of time-ad pairs for a previous win for this interest group that occurred in the last 30 days. The time is specified in seconds before the containing auctionBlob was requested.",
+            "description": "Tuple of time-ad pairs for a previous win for this interest group that occurred in the last 30 days. The time is specified in seconds before the containing auctionBlob was requested.",
             "items": false,
             "prefixItems": [
               {
                 "type": "number"
               },
-              { "$ref": "#/$defs/adRenderId"}
+              { "$ref": "#/$defs/adRenderId" }
             ]
           }
         }

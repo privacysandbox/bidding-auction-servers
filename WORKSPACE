@@ -7,11 +7,11 @@ python_deps("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2024-01-24
-    sha256 = "b3411adec989e8c04ec1455816d5bea81eb1ab105925e872cdc58e394148bcf3",
-    strip_prefix = "data-plane-shared-libraries-318cd74c7ecdc8f4b7482feb995dfc95c26d51c3",
+    # 2024-02-15
+    sha256 = "4073bbbce12efe4d1f1d3586a86bfa712ddf373605f4626abf1c43ec1772c14b",
+    strip_prefix = "data-plane-shared-libraries-a4b61aeca9da3ce79a03a5ee4aa32e0acaa78cb6",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/318cd74c7ecdc8f4b7482feb995dfc95c26d51c3.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/a4b61aeca9da3ce79a03a5ee4aa32e0acaa78cb6.zip",
     ],
 )
 
@@ -59,8 +59,9 @@ http_archive(
 http_archive(
     name = "service_value_key_fledge_privacysandbox",
     # commit 1eee8e79e44f3ca735cfab0b716e57f81d95bd46 2023-10-26
-    strip_prefix = "fledge-key-value-service-1eee8e79e44f3ca735cfab0b716e57f81d95bd46",
+    sha256 = "f9705cfa29e7ba1fb196a30a8dd11fc314077d7f693091d24fa8597612ac160a",
+    strip_prefix = "protected-auction-key-value-service-1eee8e79e44f3ca735cfab0b716e57f81d95bd46",
     urls = [
-        "https://github.com/privacysandbox/fledge-key-value-service/archive/1eee8e79e44f3ca735cfab0b716e57f81d95bd46.zip",
+        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/1eee8e79e44f3ca735cfab0b716e57f81d95bd46.zip",
     ],
 )

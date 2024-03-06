@@ -22,6 +22,7 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
+    "strip_prefix",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
@@ -39,6 +40,17 @@ pkg_files(
 )
 
 pkg_files(
+    name = "server_data",
+    srcs = [
+    ] + select({
+        "//conditions:default": [],
+    }),
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/server/data",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+pkg_files(
     name = "kmstool_enclave_executable",
     srcs = [
         "@google_privacysandbox_servers_common//scp/cc/cpio/client_providers/kms_client_provider/src/aws:kms_cli",
@@ -49,6 +61,7 @@ pkg_files(
 
 server_binaries = [
     ":kmstool_enclave_executable",
+    ":server_data",
     ":server_executables",
 ]
 

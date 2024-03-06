@@ -38,6 +38,8 @@ class TrustedServerConfigUtil {
 
   absl::string_view GetZone() const { return zone_; }
 
+  absl::string_view GetRegion() const { return region_; }
+
   void ComputeZone(absl::string_view resource_name);
 
   // Returns a config param prefix that is to be prepended to all keys fetched
@@ -50,6 +52,7 @@ class TrustedServerConfigUtil {
   std::string operator_;
   std::string service_;
   std::string zone_;
+  std::string region_;
   bool init_config_client_;
 };
 

@@ -69,8 +69,6 @@ BuyerFrontEndService::BuyerFrontEndService(ClientRegistry client_registry,
 grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
     grpc::CallbackServerContext* context, const GetBidsRequest* request,
     GetBidsResponse* response) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("GetBids"));
   LogCommonMetric(request, response);
 
   // Will be deleted in onDone

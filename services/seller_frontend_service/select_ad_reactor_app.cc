@@ -63,6 +63,32 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
   return protected_auction_input;
 }
 
+void SetReportingUrls(const WinReportingUrls& win_reporting_urls,
+                      AuctionResult& auction_result) {
+  auto* mutable_win_reporting_urls =
+      auction_result.mutable_win_reporting_urls();
+  mutable_win_reporting_urls->mutable_buyer_reporting_urls()->set_reporting_url(
+      win_reporting_urls.buyer_reporting_urls().reporting_url());
+  *mutable_win_reporting_urls->mutable_buyer_reporting_urls()
+       ->mutable_interaction_reporting_urls() =
+      win_reporting_urls.buyer_reporting_urls().interaction_reporting_urls();
+  mutable_win_reporting_urls->mutable_top_level_seller_reporting_urls()
+      ->set_reporting_url(
+          win_reporting_urls.top_level_seller_reporting_urls().reporting_url());
+  *mutable_win_reporting_urls->mutable_top_level_seller_reporting_urls()
+       ->mutable_interaction_reporting_urls() =
+      win_reporting_urls.top_level_seller_reporting_urls()
+          .interaction_reporting_urls();
+  mutable_win_reporting_urls->mutable_component_seller_reporting_urls()
+      ->set_reporting_url(
+          win_reporting_urls.component_seller_reporting_urls().reporting_url());
+
+  *mutable_win_reporting_urls->mutable_component_seller_reporting_urls()
+       ->mutable_interaction_reporting_urls() =
+      win_reporting_urls.component_seller_reporting_urls()
+          .interaction_reporting_urls();
+}
+
 }  // namespace
 
 SelectAdReactorForApp::SelectAdReactorForApp(
@@ -80,37 +106,14 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     *auction_result.mutable_error() = *error;
   } else if (high_score.has_value()) {
     auction_result.set_is_chaff(false);
-    auction_result.set_bid(high_score->buyer_bid());
+    auction_result.set_bid(high_score->bid());
     auction_result.set_score(high_score->desirability());
-    auction_result.set_interest_group_name(high_score->interest_group_name());
-    auction_result.set_interest_group_owner(high_score->interest_group_owner());
-    auction_result.set_ad_render_url(high_score->render());
-    auction_result.mutable_win_reporting_urls()
-        ->mutable_buyer_reporting_urls()
-        ->set_reporting_url(high_score->win_reporting_urls()
-                                .buyer_reporting_urls()
-                                .reporting_url());
-    for (auto& [event, url] : high_score->win_reporting_urls()
-                                  .buyer_reporting_urls()
-                                  .interaction_reporting_urls()) {
-      auction_result.mutable_win_reporting_urls()
-          ->mutable_buyer_reporting_urls()
-          ->mutable_interaction_reporting_urls()
-          ->try_emplace(event, url);
-    }
-    auction_result.mutable_win_reporting_urls()
-        ->mutable_top_level_seller_reporting_urls()
-        ->set_reporting_url(high_score->win_reporting_urls()
-                                .top_level_seller_reporting_urls()
-                                .reporting_url());
-    for (auto& [event, url] : high_score->win_reporting_urls()
-                                  .top_level_seller_reporting_urls()
-                                  .interaction_reporting_urls()) {
-      auction_result.mutable_win_reporting_urls()
-          ->mutable_top_level_seller_reporting_urls()
-          ->mutable_interaction_reporting_urls()
-          ->try_emplace(event, url);
-    }
+    auction_result.set_interest_group_name(
+        std::move(high_score->interest_group_name()));
+    auction_result.set_interest_group_owner(
+        std::move(high_score->interest_group_owner()));
+    auction_result.set_ad_render_url(std::move(high_score->render()));
+    SetReportingUrls(high_score->win_reporting_urls(), auction_result);
     *auction_result.mutable_ad_component_render_urls() =
         high_score->component_renders();
     auction_result.set_ad_type(high_score->ad_type());
@@ -186,12 +189,13 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
 }
 
 void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
+    absl::string_view buyer,
     GetBidsRequest::GetBidsRawRequest* get_bids_raw_request) {
   if (!is_pas_enabled_) {
     PS_VLOG(8, log_context_) << "Protected app signals is not enabled and "
                                 "hence not populating PAS buyer input";
     // We don't want to forward the protected signals when feature is disabled,
-    // even when if client sent them erroneously.
+    // even if client sent them erroneously.
     get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
     return;
   }
@@ -215,6 +219,28 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
       get_bids_raw_request->mutable_buyer_input()
           ->mutable_protected_app_signals());
   get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+
+  // Add contextual Protected App Signals data to PAS buyer input.
+  auto& per_buyer_config = request_->auction_config().per_buyer_config();
+  auto buyer_config_it = per_buyer_config.find(buyer);
+  if (buyer_config_it == per_buyer_config.end()) {
+    PS_VLOG(3, log_context_) << "No buyer config found for: " << buyer;
+    return;
+  }
+
+  const auto& buyer_config = buyer_config_it->second;
+  if (!buyer_config.has_contextual_protected_app_signals_data() ||
+      buyer_config.contextual_protected_app_signals_data()
+              .ad_render_ids_size() == 0) {
+    PS_VLOG(3, log_context_) << "No PAS ad render ids received via contextual "
+                                "path for buyer: "
+                             << buyer;
+    return;
+  }
+
+  *protected_app_signals_buyer_input
+       ->mutable_contextual_protected_app_signals_data() =
+      buyer_config.contextual_protected_app_signals_data();
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
@@ -222,7 +248,7 @@ SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
                                             const BuyerInput& buyer_input) {
   auto request =
       SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
-  MayPopulateProtectedAppSignalsBuyerInput(request.get());
+  MayPopulateProtectedAppSignalsBuyerInput(buyer_ig_owner, request.get());
   return request;
 }
 

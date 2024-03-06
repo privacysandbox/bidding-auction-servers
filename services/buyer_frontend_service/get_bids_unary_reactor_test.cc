@@ -53,6 +53,7 @@ using GenerateProtectedAppSignalsBidsRawRequest =
 using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
+using server_common::ConsentedDebugConfiguration;
 
 constexpr absl::Duration kTestProtectedAppSignalsGenerateBidTimeout =
     absl::Milliseconds(1);
@@ -60,9 +61,7 @@ constexpr char kTestInterestGroupName[] = "test_ig";
 constexpr int kTestBidValue1 = 10.0;
 constexpr int kTestAdCost1 = 2.0;
 constexpr int kTestModelingSignals1 = 54;
-constexpr char kTestEgressFeature[] = "test_egress_features";
 constexpr char kTestRender1[] = "https://test-render.com";
-constexpr char kAdRenderUrls1[] = "test_ad_render_urls";
 constexpr char kTestMetadataKey1[] = "test_metadata_key";
 constexpr char kTestAdComponent[] = "test_ad_component";
 constexpr char kTestCurrency1[] = "USD";
@@ -72,10 +71,7 @@ constexpr int kTestBidValue2 = 20.0;
 constexpr int kTestAdCost2 = 4.0;
 constexpr int kTestModelingSignals2 = 3;
 constexpr char kTestRender2[] = "https://test-render-2.com";
-constexpr char kAdRenderUrls2[] = "test_ad_render_urls_2";
-constexpr char kTestMetadataKey2[] = "test_metadata_key_2";
 constexpr char kTestCurrency2[] = "RS";
-constexpr int kTestMetadataValue2 = 51;
 constexpr char bidding_signals_to_be_returned[] =
     R"JSON({"keys":{"ig_name":[123,456]}})JSON";
 
@@ -134,11 +130,10 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     metric::MetricContextMap<GetBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
-    get_bids_config_.encryption_enabled = true;
     get_bids_config_.is_protected_app_signals_enabled = false;
+    get_bids_config_.is_protected_audience_enabled = true;
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
@@ -299,17 +294,16 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request_);
 
-    get_bids_config_.encryption_enabled = true;
     get_bids_config_.is_protected_app_signals_enabled = true;
+    get_bids_config_.is_protected_audience_enabled = true;
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
-    key_fetcher_manager_ = CreateKeyFetcherManager(
-        config_client, /* public_key_fetcher= */ nullptr);
+    key_fetcher_manager_ =
+        CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
 
-    log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::PS_VLOG_IS_ON(0, 10);
   }
 
   grpc::CallbackServerContext context_;
@@ -433,8 +427,12 @@ TEST_F(GetProtectedAppSignalsTest, TimeoutIsRespected) {
 }
 
 TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
-  request_ = CreateGetBidsRequest();
-
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  SetupBiddingProviderMock(bidding_signals_provider_,
+                           bidding_signals_to_be_returned,
+                           /*repeated_get_allowed=*/false,
+                           /*server_error_to_return=*/std::nullopt);
   get_bids_config_.is_protected_app_signals_enabled = false;
   EXPECT_CALL(
       protected_app_signals_bidding_client_mock_,
@@ -446,7 +444,53 @@ TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
                        GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
           An<absl::Duration>()))
       .Times(0);
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(1);
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_,
+      &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+}
 
+TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  SetupBiddingProviderMock(bidding_signals_provider_,
+                           bidding_signals_to_be_returned,
+                           /*repeated_get_allowed=*/false,
+                           /*server_error_to_return=*/std::nullopt,
+                           /*match_any_params_any_times=*/true);
+  get_bids_config_.is_protected_audience_enabled = false;
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(0);
+  EXPECT_CALL(
+      protected_app_signals_bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
+          An<const RequestMetadata&>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
+          An<absl::Duration>()))
+      .Times(1);
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,

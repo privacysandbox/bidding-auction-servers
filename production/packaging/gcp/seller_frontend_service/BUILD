@@ -130,6 +130,8 @@ container_image(
         ":envoy_distroless_layer",
         ":envoy_config_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     # Envoy, SFE, and SFE Non-TLS Healthcheck ports, respectively:

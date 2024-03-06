@@ -31,6 +31,7 @@
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/common/util/auction_scope_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/web_utils.h"
@@ -47,8 +48,6 @@ using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using ErrorVisibility::CLIENT_VISIBLE;
-
 }  // namespace
 
 SelectAdReactor::SelectAdReactor(
@@ -64,17 +63,17 @@ SelectAdReactor::SelectAdReactor(
       // TODO(b/278039901): Add integration test for metadata forwarding.
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                                     kBuyerMetadataKeysMap)),
-      is_protected_auction_request_(false),
-      log_context_({}, ConsentedDebugConfiguration(),
+      log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
       fail_fast_(fail_fast),
+      is_protected_auction_request_(false),
       is_pas_enabled_(
           config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)),
+      is_protected_audience_enabled_(
+          config_client_.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE)),
       max_buyers_solicited_(max_buyers_solicited),
-      auction_scope_(request_->auction_config().top_level_seller().empty()
-                         ? AuctionScope::kSingleSeller
-                         : AuctionScope::kDeviceComponentSeller),
+      auction_scope_(GetAuctionScope(*request_)),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -106,6 +105,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_interest_group_owner(interest_group_owner);
   result.set_ad_cost(input.ad_cost());
   result.set_modeling_signals(input.modeling_signals());
+  result.set_bid_currency(input.bid_currency());
   const BuyerInput& buyer_input =
       buyer_inputs_->find(interest_group_owner)->second;
   for (const auto& interest_group : buyer_input.interest_groups()) {
@@ -139,8 +139,8 @@ void SelectAdReactor::MayPopulateClientVisibleErrors() {
   }
 
   error_.set_code(static_cast<int>(ErrorCode::CLIENT_SIDE));
-  error_.set_message(
-      GetAccumulatedErrorString(ErrorVisibility::CLIENT_VISIBLE));
+  error_.set_message(error_accumulator_.GetAccumulatedErrorString(
+      ErrorVisibility::CLIENT_VISIBLE));
 }
 
 grpc::Status SelectAdReactor::DecryptRequest() {
@@ -167,67 +167,28 @@ grpc::Status SelectAdReactor::DecryptRequest() {
              << (is_protected_auction_request_ ? "auction" : "audience")
              << " ciphertext: " << absl::Base64Escape(encapsulated_req);
 
-  absl::StatusOr<server_common::EncapsulatedRequest>
-      parsed_encapsulated_request =
-          server_common::ParseEncapsulatedRequest(encapsulated_req);
-  if (!parsed_encapsulated_request.ok()) {
-    PS_VLOG(2) << "Error while parsing encapsulated request: "
-               << parsed_encapsulated_request.status();
+  auto decrypted_hpke_req = DecryptOHTTPEncapsulatedHpkeCiphertext(
+      encapsulated_req, clients_.key_fetcher_manager_);
+  if (!decrypted_hpke_req.ok()) {
+    PS_VLOG(2) << "Error decrypting the protected "
+               << (is_protected_auction_request_ ? "auction" : "audience")
+               << " input ciphertext" << decrypted_hpke_req.status();
     return {grpc::StatusCode::INVALID_ARGUMENT,
-            parsed_encapsulated_request.status().message().data()};
-  }
-
-  // Parse the encapsulated request for the key ID.
-  absl::StatusOr<uint8_t> key_id = quiche::ObliviousHttpHeaderKeyConfig::
-      ParseKeyIdFromObliviousHttpRequestPayload(
-          parsed_encapsulated_request->request_payload);
-  if (!key_id.ok()) {
-    PS_VLOG(2) << "Parsed key id error status: " << key_id.status().message();
-    return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidOhttpKeyIdError};
-  }
-  PS_VLOG(5) << "Key Id parsed correctly";
-
-  std::string str_key_id = std::to_string(*key_id);
-  std::optional<server_common::PrivateKey> private_key =
-      clients_.key_fetcher_manager_.GetPrivateKey(str_key_id);
-
-  if (!private_key.has_value()) {
-    PS_VLOG(2) << "Unable to retrieve private key for key ID: " << str_key_id;
-    return {grpc::StatusCode::INVALID_ARGUMENT,
-            absl::StrFormat(kMissingPrivateKey, str_key_id)};
-  }
-
-  PS_VLOG(3) << "Private Key Id: " << private_key->key_id << ", Key Hex: "
-             << absl::BytesToHexString(private_key->private_key);
-  // Decrypt the ciphertext.
-  absl::StatusOr<quiche::ObliviousHttpRequest> ohttp_request =
-      server_common::DecryptEncapsulatedRequest(*private_key,
-                                                *parsed_encapsulated_request);
-  if (!ohttp_request.ok()) {
-    PS_VLOG(2) << "Unable to decrypt the ciphertext. Reason: "
-               << ohttp_request.status().message();
-    return {grpc::StatusCode::INVALID_ARGUMENT,
-            absl::StrFormat(kMalformedEncapsulatedRequest,
-                            ohttp_request.status().message())};
+            absl::StrFormat(kErrorDecryptingCiphertextError,
+                            decrypted_hpke_req.status().message())};
   }
 
   PS_VLOG(5) << "Successfully decrypted the protected "
              << (is_protected_auction_request_ ? "auction" : "audience")
              << " input ciphertext";
 
-  quiche::ObliviousHttpRequest::Context ohttp_context =
-      std::move(ohttp_request.value()).ReleaseContext();
-  key_context_ =
-      KeyContext{str_key_id,
-                 std::make_unique<quiche::ObliviousHttpRequest::Context>(
-                     std::move(ohttp_context)),
-                 *private_key, parsed_encapsulated_request->request_label};
+  decrypted_request_ = std::move(*decrypted_hpke_req);
   if (is_protected_auction_request_) {
     protected_auction_input_ =
-        GetDecodedProtectedAuctionInput(ohttp_request->GetPlaintextData());
+        GetDecodedProtectedAuctionInput(decrypted_request_->plaintext);
   } else {
     protected_auction_input_ =
-        GetDecodedProtectedAudienceInput(ohttp_request->GetPlaintextData());
+        GetDecodedProtectedAudienceInput(decrypted_request_->plaintext);
   }
   std::visit(
       [this](const auto& protected_auction_input) {
@@ -259,6 +220,14 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
                 ErrorCode::CLIENT_SIDE);
   }
 
+  if (!request_->auction_config().seller_currency().empty()) {
+    if (!std::regex_match(request_->auction_config().seller_currency(),
+                          kValidCurrencyCodeRegex)) {
+      ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInvalidSellerCurrency,
+                  ErrorCode::CLIENT_SIDE);
+    }
+  }
+
   if (config_client_.GetStringParameter(SELLER_ORIGIN_DOMAIN) !=
       request_->auction_config().seller()) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kWrongSellerDomain,
@@ -276,6 +245,13 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
                   absl::StrFormat(kEmptyBuyerSignals, buyer),
                   ErrorCode::CLIENT_SIDE);
     }
+    if (!per_buyer_config.buyer_currency().empty()) {
+      if (!std::regex_match(per_buyer_config.buyer_currency(),
+                            kValidCurrencyCodeRegex)) {
+        ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInvalidBuyerCurrency,
+                    ErrorCode::CLIENT_SIDE);
+      }
+    }
   }
 
   if (request_->client_type() == CLIENT_TYPE_UNKNOWN) {
@@ -285,7 +261,8 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
 
   // Device Component Auction not allowed with Android client type.
   if (request_->client_type() == CLIENT_TYPE_ANDROID &&
-      auction_scope_ == AuctionScope::kDeviceComponentSeller) {
+      auction_scope_ ==
+          AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE,
                 kDeviceComponentAuctionWithAndroid, ErrorCode::CLIENT_SIDE);
   }
@@ -308,15 +285,6 @@ void SelectAdReactor::MayLogBuyerInput() {
 }
 
 void SelectAdReactor::Execute() {
-  auto span = server_common::GetTracer()->StartSpan("SelectAdReactor_Execute");
-  auto scope = opentelemetry::trace::Scope(span);
-
-  if (!config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)) {
-    // This find absl_log.h first instead of glog.
-    // change back to `DFATAL` once it is in absl release (already in HEAD)
-    ABSL_LOG(ERROR) << "Expected encryption to be enabled";
-  }
-
   grpc::Status decrypt_status = DecryptRequest();
 
   // Populates the logging context needed for request tracing. should be called
@@ -488,13 +456,18 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
         }
       },
       protected_auction_input_);
+
+  if (!is_protected_audience_enabled_ &&
+      get_bids_request->mutable_buyer_input()->interest_groups_size() > 0) {
+    PS_VLOG(3) << "Clearing interest groups in the input since protected "
+                  "audience support is disabled";
+    get_bids_request->mutable_buyer_input()->clear_interest_groups();
+  }
   return get_bids_request;
 }
 
 void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
                                const BuyerInput& buyer_input) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("FetchBid"));
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
   if (buyer_client == nullptr) {
     PS_VLOG(2, log_context_)
@@ -582,12 +555,12 @@ void SelectAdReactor::OnFetchBidsDone(
     PS_VLOG(2, log_context_) << "\nGetBidsResponse:\n"
                              << found_response->DebugString();
     if (found_response->has_debug_info()) {
-      DebugInfo& bfe_log =
+      server_common::DebugInfo& bfe_log =
           *response_->mutable_debug_info()->add_downstream_servers();
       bfe_log = std::move(*found_response->mutable_debug_info());
       bfe_log.set_server_name(buyer_ig_owner);
     }
-    if (found_response->bids().empty() &&
+    if ((!is_protected_audience_enabled_ || found_response->bids().empty()) &&
         (!is_pas_enabled_ ||
          found_response->protected_app_signals_bids().empty())) {
       PS_VLOG(2, log_context_) << "Skipping buyer " << buyer_ig_owner
@@ -642,7 +615,99 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-  FetchScoringSignals();
+
+  // Must fulfill preconditions:
+  // That the shared_buyer_bids_map_ is non-empty was just checked above
+  // That each buyer has bids was checked in OnFetchBidsDone().
+  // Thus the preconditions of the following method are satisfied.
+  if (is_protected_audience_enabled_ && !FilterBidsWithMismatchingCurrency()) {
+    PS_VLOG(2, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
+    FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT,
+                                  kAllBidsRejectedBuyerCurrencyMismatch));
+  } else {
+    FetchScoringSignals();
+  }
+}
+
+bool SelectAdReactor::FilterBidsWithMismatchingCurrency() {
+  DCHECK(!shared_buyer_bids_map_.empty())
+      << "PRECONDITION 1: shared_buyer_bids_map_ must have at least one entry.";
+  DCHECK(([shared_buyer_bids_map_ptr = &(this->shared_buyer_bids_map_),
+           is_pas_enabled = this->is_pas_enabled_]() {
+    for (const auto& [buyer_ig_owner, get_bid_response] :
+         *shared_buyer_bids_map_ptr) {
+      // Check if no bids are present.
+      if (get_bid_response->bids().empty() &&
+          (!is_pas_enabled ||
+           get_bid_response->protected_app_signals_bids().empty())) {
+        return false;
+      }
+    }
+    return true;
+  }()))
+      << "PRECONDITION 2: each buyer in shared_buyer_bids_map must be "
+         "non-empty.";
+  bool any_valid_bids = false;
+  // Check that each AdWithBid's currency is as-expected.
+  // Throw out the AdWithBids which do not match.
+  for (auto& [buyer_ig_owner, get_bid_response] : shared_buyer_bids_map_) {
+    // It is possible for a buyer to have no buyer_config.
+    const auto& buyer_config_itr =
+        request_->auction_config().per_buyer_config().find(buyer_ig_owner);
+    if (buyer_config_itr ==
+        request_->auction_config().per_buyer_config().end()) {
+      // Preconditions mean bids must be present.
+      any_valid_bids = true;
+      continue;
+    }
+    // Not all buyers have an expected currency specified.
+    absl::string_view buyer_currency =
+        buyer_config_itr->second.buyer_currency();
+    if (buyer_currency.empty()) {
+      // Preconditions mean bids must be present.
+      any_valid_bids = true;
+      continue;
+    }
+    // Remove each AdWithBid for which its currency does not match.
+    int i = 0, remove_starting_at = get_bid_response->bids_size();
+    while (i < remove_starting_at) {
+      const AdWithBid& ad_with_bid = get_bid_response->bids(i);
+      if (!ad_with_bid.bid_currency().empty() &&
+          buyer_currency != ad_with_bid.bid_currency()) {
+        // Swap to last.
+        get_bid_response->mutable_bids()->SwapElements(
+            i, get_bid_response->bids_size() - 1);
+        // Mark for removal and make sure we don't check it again
+        remove_starting_at--;
+        // TODO: Record metric.
+        // Leave index un-incremented so swapped element is checked.
+      } else {
+        i++;
+      }
+    }
+    // Delete all mismatched bids.
+    if (remove_starting_at < get_bid_response->bids_size()) {
+      get_bid_response->mutable_bids()->DeleteSubrange(
+          remove_starting_at,
+          get_bid_response->bids_size() - remove_starting_at);
+    }
+    // Check if any bids remain.
+    if (!get_bid_response->bids().empty() ||
+        (is_pas_enabled_ &&
+         !get_bid_response->protected_app_signals_bids().empty())) {
+      any_valid_bids = true;
+    }
+  }
+  // Clear buyers with no remaining bids.
+  absl::erase_if(shared_buyer_bids_map_, [is_pas_enabled = is_pas_enabled_](
+                                             const auto& buyer_to_bids_pair) {
+    const auto& get_bid_response = buyer_to_bids_pair.second;
+    // Check if any bids remain.
+    return (get_bid_response->bids().empty() &&
+            (!is_pas_enabled ||
+             get_bid_response->protected_app_signals_bids().empty()));
+  });
+  return any_valid_bids;
 }
 
 void SelectAdReactor::FetchScoringSignals() {
@@ -712,15 +777,22 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
 SelectAdReactor::CreateScoreAdsRequest() {
   auto raw_request = std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>();
-  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
-    for (int i = 0; i < get_bid_response->bids_size(); i++) {
-      AdWithBidMetadata ad_with_bid_metadata =
-          BuildAdWithBidMetadata(get_bid_response->bids().at(i), buyer);
-      raw_request->mutable_ad_bids()->Add(std::move(ad_with_bid_metadata));
+  if (is_protected_audience_enabled_) {
+    // If protected audience support is not enabled then buyers should not
+    // be returning bids anyway for Protected Audience but this check is placed
+    // here for safety as well as efficiency.
+    for (const auto& [buyer_ig_owner, get_bid_response] :
+         shared_buyer_bids_map_) {
+      for (const AdWithBid& ad_with_bid : get_bid_response->bids()) {
+        raw_request->mutable_ad_bids()->Add(
+            BuildAdWithBidMetadata(ad_with_bid, buyer_ig_owner));
+      }
     }
   }
   *raw_request->mutable_auction_signals() =
       request_->auction_config().auction_signals();
+  raw_request->set_seller_currency(
+      request_->auction_config().seller_currency());
   *raw_request->mutable_seller_signals() =
       request_->auction_config().seller_signals();
   raw_request->set_top_level_seller(
@@ -820,18 +892,6 @@ void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
   Finish(status);
 }
 
-std::string SelectAdReactor::GetAccumulatedErrorString(
-    ErrorVisibility error_visibility) {
-  const ErrorAccumulator::ErrorMap& error_map =
-      error_accumulator_.GetErrors(error_visibility);
-  auto it = error_map.find(ErrorCode::CLIENT_SIDE);
-  if (it == error_map.end()) {
-    return "";
-  }
-
-  return absl::StrJoin(it->second, kErrorDelimiter);
-}
-
 void SelectAdReactor::OnScoreAdsDone(
     absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
         response) {
@@ -840,10 +900,9 @@ void SelectAdReactor::OnScoreAdsDone(
     PS_VLOG(3, log_context_)
         << "Finishing the SelectAdRequest RPC with ad server visible error";
 
-    PerformDebugReporting(high_score);
-    FinishWithStatus(grpc::Status(
-        grpc::StatusCode::INVALID_ARGUMENT,
-        GetAccumulatedErrorString(ErrorVisibility::AD_SERVER_VISIBLE)));
+    FinishWithStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                  error_accumulator_.GetAccumulatedErrorString(
+                                      ErrorVisibility::AD_SERVER_VISIBLE)));
     return;
   }
 
@@ -855,7 +914,6 @@ void SelectAdReactor::OnScoreAdsDone(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeScoreAdsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kAs, response.status());
-    PerformDebugReporting(high_score);
     benchmarking_logger_->End();
     // Any INTERNAL errors from auction service will be suppressed by SFE and
     // will cause a chaff to be sent back. Non-INTERNAL errors on the other hand
@@ -878,7 +936,7 @@ void SelectAdReactor::OnScoreAdsDone(
       metric_context_->SetCustomState(kWinningAd, "");
     }
     if (found_response->has_debug_info()) {
-      DebugInfo& auction_log =
+      server_common::DebugInfo& auction_log =
           *response_->mutable_debug_info()->add_downstream_servers();
       auction_log = std::move(*found_response->mutable_debug_info());
       auction_log.set_server_name("auction");
@@ -913,22 +971,13 @@ DecodedBuyerInputs SelectAdReactor::GetDecodedBuyerinputs(
 }
 
 bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
-  std::optional<server_common::PrivateKey> private_key =
-      clients_.key_fetcher_manager_.GetPrivateKey(key_context_.key_id);
-  if (!private_key.has_value()) {
-    PS_VLOG(4, log_context_) << absl::StrFormat(
-        "Encryption key not found during response encryption: (key ID: %s)",
-        key_context_.key_id);
-
-    FinishWithStatus(
-        grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
-    return false;
-  }
-
+  // Encrypt with corresponding private key.
+  // we're now done with the request so we can release context.
   absl::StatusOr<std::string> encapsulated_response =
       server_common::EncryptAndEncapsulateResponse(
-          std::move(plaintext_response), key_context_.private_key,
-          *key_context_.context, key_context_.request_label);
+          std::move(plaintext_response), decrypted_request_->private_key,
+          decrypted_request_->context, decrypted_request_->request_label);
+
   if (!encapsulated_response.ok()) {
     PS_VLOG(4, log_context_)
         << absl::StrFormat("Error during response encryption/encapsulation: %s",
@@ -946,41 +995,62 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
 
 void SelectAdReactor::PerformDebugReporting(
     const std::optional<AdScore>& high_score) {
+  bool enable_debug_reporting = false;
+  std::visit(
+      [&enable_debug_reporting](const auto& protected_auction_input) {
+        enable_debug_reporting =
+            protected_auction_input.enable_debug_reporting();
+      },
+      protected_auction_input_);
+  if (!enable_debug_reporting) {
+    return;
+  }
+
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(high_score);
   for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       const AdWithBid& ad_with_bid = get_bid_response->bids().at(i);
       const auto& ig_name = ad_with_bid.interest_group_name();
-      if (ad_with_bid.has_debug_report_urls()) {
-        auto done_cb = [ig_owner = ig_owner,
-                        ig_name](absl::StatusOr<absl::string_view> result) {
+      if (!ad_with_bid.has_debug_report_urls()) {
+        continue;
+      }
+      absl::string_view debug_url;
+      bool is_win_debug_url = false;
+      if (post_auction_signals.winning_ig_owner == ig_owner &&
+          ad_with_bid.interest_group_name() ==
+              post_auction_signals.winning_ig_name) {
+        debug_url = ad_with_bid.debug_report_urls().auction_debug_win_url();
+        is_win_debug_url = true;
+      } else {
+        debug_url = ad_with_bid.debug_report_urls().auction_debug_loss_url();
+      }
+      if (debug_url.empty()) {
+        continue;
+      }
+
+      absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)> done_cb;
+      if (server_common::log::PS_VLOG_IS_ON(5)) {
+        done_cb = [ig_owner = ig_owner,
+                   ig_name](absl::StatusOr<absl::string_view> result) mutable {
           if (result.ok()) {
-            PS_VLOG(2) << "Performed debug reporting for:" << ig_owner
+            PS_VLOG(5) << "Performed debug reporting for:" << ig_owner
                        << ", interest_group: " << ig_name;
           } else {
-            PS_VLOG(1) << "Error while performing debug reporting for:"
+            PS_VLOG(5) << "Error while performing debug reporting for:"
                        << ig_owner << ", interest_group: " << ig_name
                        << " ,status:" << result.status();
           }
         };
-        absl::string_view debug_url;
-        bool is_win_debug_url = false;
-        if (post_auction_signals.winning_ig_owner == ig_owner &&
-            ad_with_bid.interest_group_name() ==
-                post_auction_signals.winning_ig_name) {
-          debug_url = ad_with_bid.debug_report_urls().auction_debug_win_url();
-          is_win_debug_url = true;
-        } else {
-          debug_url = ad_with_bid.debug_report_urls().auction_debug_loss_url();
-        }
-        HTTPRequest http_request = CreateDebugReportingHttpRequest(
-            debug_url,
-            GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
-                                               post_auction_signals),
-            is_win_debug_url);
-        clients_.reporting->DoReport(http_request, std::move(done_cb));
+      } else {
+        done_cb = [](absl::StatusOr<absl::string_view> result) {};
       }
+      HTTPRequest http_request = CreateDebugReportingHttpRequest(
+          debug_url,
+          GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                             post_auction_signals),
+          is_win_debug_url);
+      clients_.reporting->DoReport(http_request, std::move(done_cb));
     }
   }
 }

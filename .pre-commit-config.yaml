@@ -16,13 +16,13 @@
 # See https://pre-commit.com/hooks.html for more hooks
 exclude: (?x)^(
                bazel-(bin|out|testlogs|workspace)/.*|
-               .bazel_output/.*|
-               version.txt|
+               version\.txt|
+               .*\.patch|
                builders/.*|
                testing/functionaltest-system/.*
          )$
 
-fail_fast: true
+fail_fast: false
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.4.0
@@ -41,7 +41,7 @@ repos:
   - id: check-executables-have-shebangs
   - id: detect-private-key
     exclude: (?x)^(
-                  services/common/test/artifacts/grpc_tls/localhost.key|
+                  services/common/test/artifacts/grpc_tls/localhost\.key|
                   production/deploy/.*|
                   google_internal/kokoro/key/.*
               )$
@@ -62,11 +62,6 @@ repos:
   rev: v1.26.1
   hooks:
   - id: buf-format
-    args:
-    - --config
-    - api/buf.yaml
-    - api/
-  - id: buf-lint
     args:
     - --config
     - api/buf.yaml
@@ -124,9 +119,15 @@ repos:
   rev: v3.0.3
   hooks:
   - id: prettier
-    name: prettier markdown
     types_or:
+    - javascript
     - markdown
+    exclude: (?x)^(
+                 testing/functional/suts/inference/data/seller-auction-service/scoreAd\.js|
+                 testing/functional/suts/basic/data/seller-auction-service/scoreAd\.js|
+                 testing/functional/suts/basic/data/buyer-bidding-service/generateBid\.js|
+                 testing/functional/suts/.*/.*\.reply\.json
+             )$
 
 - repo: https://github.com/DavidAnson/markdownlint-cli2
   rev: v0.10.0
@@ -168,3 +169,18 @@ repos:
   hooks:
   - id: black
     name: black python formatter
+
+- repo: https://github.com/pylint-dev/pylint
+  rev: v3.1.0
+  hooks:
+  - id: pylint
+    types:
+    - python
+    args:
+    - -rn
+    - -sn
+    - --rcfile=.pylintrc
+    - --fail-on=I
+    exclude: (?x)^(
+                 google_internal/.*/preprocessor/.*\.py
+             )$

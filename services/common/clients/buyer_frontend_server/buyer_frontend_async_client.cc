@@ -26,7 +26,6 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
     BuyerServiceClientConfig client_config,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub)
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled,
                              client_config.cloud_platform),
       stub_(std::move(stub)) {
   if (!stub_) {
@@ -44,7 +43,6 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
   stub_->async()->GetBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
         if (!status.ok()) {
           PS_VLOG(1) << "SendRPC completion status not ok: "
                      << server_common::ToAbslStatus(status);

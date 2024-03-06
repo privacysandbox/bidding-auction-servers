@@ -56,14 +56,14 @@ constexpr char kTestReportWinUrlWithSignals[] =
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=false&joinCount=5&"
     "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4";
+    "auctionSignals=3,test,4&desirability=undefined";
 
 constexpr char kTestReportWinUrlWithNoising[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "madeHighestScoringOtherBid=false&"
     "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4";
+    "auctionSignals=3,test,4&desirability=undefined";
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -446,12 +446,10 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -540,12 +538,10 @@ void SellerCodeWrappingTestHelper(
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
@@ -1083,6 +1079,8 @@ TEST_F(AuctionServiceIntegrationTest, PopulatesOutputForComponentAuction) {
   const auto& scoredAd = raw_response.ad_score();
   EXPECT_EQ(scoredAd.desirability(), 1);
   EXPECT_EQ(scoredAd.bid(), 2);
+  EXPECT_EQ(scoredAd.bid_currency(), "USD");
+  EXPECT_FLOAT_EQ(scoredAd.incoming_bid_in_seller_currency(), 1.868);
   EXPECT_TRUE(scoredAd.allow_component_auction());
   EXPECT_EQ(scoredAd.ad_metadata(),
             absl::StrCat("\"", kTestTopLevelSeller, "\""));

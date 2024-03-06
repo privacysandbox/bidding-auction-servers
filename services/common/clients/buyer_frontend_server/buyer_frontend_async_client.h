@@ -37,7 +37,6 @@ struct BuyerServiceClientConfig {
   std::string server_addr;
   bool compression = false;
   bool secure_client = true;
-  bool encryption_enabled = false;
   server_common::CloudPlatform cloud_platform;
 };
 

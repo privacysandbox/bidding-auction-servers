@@ -19,9 +19,9 @@
 #include <string>
 #include <utility>
 
+#include "absl/log/absl_log.h"
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
-#include "glog/logging.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
 #include "services/common/test/utils/ohttp_utils.h"
 

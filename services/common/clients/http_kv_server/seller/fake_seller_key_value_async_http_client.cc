@@ -15,22 +15,32 @@
 
 #include "services/common/clients/http_kv_server/seller/fake_seller_key_value_async_http_client.h"
 
+#include <fstream>
+
+#include "absl/strings/match.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr char kFakeKeyResponse[] =
-    "{\"renderUrls\":{\"https://tdsf.doubleclick.net/td/adfetch/"
-    "gda?adg_id\\u003d132925906942\\u0026cr_id\\u003d656596039390\\u0026cv_"
-    "id\\u003d1\\u0026format\\u003d${AD_WIDTH}x${AD_HEIGHT}\":[[[10009,10406,"
-    "11541,10413,10081,10128,10004,10282,11284,11541,10418,10679,10009,10406,"
-    "10015,10081,10410],[-1,-1]],null,null,null,null,["
-    "\"7576090537747835791\"],null,null,[[65085326,298713704,20285794,"
-    "56012541,95772391,23732678,48716882,8274223,92728324,320674061,"
-    "213448903,86635774,46568855,63968971,77157244,215380158,78777074,"
-    "249425596,210069187,39431335,4022309,311226025,265814569,48572042,"
-    "4001425,57016164,323541854,246969283,4032342,256012103,146728848]],["
-    "\"en\"],null,null,[[\"1922279805320416001\"]]]},"
-    "\"adComponentRenderUrls\":{}}";
+std::string ReadFromFile(absl::string_view f_path) {
+  std::string file_content;
+  std::ifstream inputFile(f_path.data());
+  if (inputFile.is_open()) {
+    file_content.assign((std::istreambuf_iterator<char>(inputFile)),
+                        (std::istreambuf_iterator<char>()));
+    inputFile.close();
+  } else {
+    ABSL_LOG(ERROR) << "Failed to open the file.";
+  }
+  return file_content;
+}
+
+absl::btree_map<std::string, std::string> RequestToPath() {
+  return {
+      // Empty
+  };
+}
+
 }  // namespace
 
 absl::Status FakeSellerKeyValueAsyncHttpClient::Execute(
@@ -48,16 +58,31 @@ absl::Status FakeSellerKeyValueAsyncHttpClient::Execute(
     PS_VLOG(2) << header;
   }
   // Below are faked
+
+  std::string kv_response;
+  for (const auto& [kv_request, kv_signal] : kv_data_) {
+    if (absl::StrContains(request.url, kv_request)) {
+      kv_response = kv_signal;
+    }
+  }
+
   std::unique_ptr<GetSellerValuesOutput> resultUPtr =
       std::make_unique<GetSellerValuesOutput>(
-          GetSellerValuesOutput({kFakeKeyResponse}));
+          GetSellerValuesOutput{std::move(kv_response), 0, 0});
   std::move(on_done)(std::move(resultUPtr));
   PS_VLOG(2) << "E2E testing received hard coded seller kv request";
   return absl::OkStatus();
 }
 
 FakeSellerKeyValueAsyncHttpClient::FakeSellerKeyValueAsyncHttpClient(
-    absl::string_view kv_server_base_address)
-    : kv_server_base_address_(kv_server_base_address) {}
-
+    absl::string_view kv_server_base_address,
+    absl::btree_map<std::string, std::string> request_to_path)
+    : kv_server_base_address_(kv_server_base_address) {
+  if (request_to_path.empty()) {
+    request_to_path = RequestToPath();
+  }
+  for (const auto& [request, path] : request_to_path) {
+    kv_data_[request] = ReadFromFile(path);
+  }
+}
 }  // namespace privacy_sandbox::bidding_auction_servers

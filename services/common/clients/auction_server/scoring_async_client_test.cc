@@ -58,8 +58,7 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
   AuctionServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
       .compression = false,
-      .secure_client = true,
-      .encryption_enabled = true};
+      .secure_client = true};
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -121,12 +120,24 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
 
 TEST(ScoringAsyncClientTest,
      CallServerWithEncryptionEnabled_EncryptionFailure) {
-  // Return an empty key.
+  using ServiceThread =
+      MockServerThread<AuctionServiceMock, ScoreAdsRequest, ScoreAdsResponse>;
+  ScoreAdsResponse mock_server_response;
+
+  // Start a mocked instance Auction Service.
+  auto dummy_service_thread_ = std::make_unique<ServiceThread>(
+      [&](grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response) { return context->DefaultReactor(); });
+
+  AuctionServiceClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .compression = false,
+      .secure_client = true};
+
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPublicKey)
       .WillOnce(testing::Return(absl::InternalError("failure")));
   MockCryptoClientWrapper crypto_client;
-  AuctionServiceClientConfig client_config = {.encryption_enabled = true};
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
 
@@ -163,8 +174,7 @@ TEST(ScoringAsyncClientTest,
   AuctionServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
       .compression = false,
-      .secure_client = true,
-      .encryption_enabled = true};
+      .secure_client = true};
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;

@@ -122,8 +122,9 @@ cc_library(
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/test/utils:ohttp_test_utils",
         "//services/common/util:error_accumulator",
+        "//services/common/util:oblivious_http_utils",
         "//services/seller_frontend_service",
-        "//services/seller_frontend_service:seller_frontend_data",
+        "//services/seller_frontend_service/data:seller_frontend_data",
         "//services/seller_frontend_service/test:app_test_utils",
         "//services/seller_frontend_service/util:framing_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
@@ -175,5 +176,35 @@ cc_test(
         ":key_fetcher_utils",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "encryption_util",
+    srcs = ["encryption_util.cc"],
+    hdrs = [
+        "encryption_util.h",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/encryption:key_fetcher_factory",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "encryption_util_test",
+    size = "small",
+    srcs = ["encryption_util_test.cc"],
+    deps = [
+        ":encryption_util",
+        ":select_ad_reactor_test_utils",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest",
+        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
     ],
 )

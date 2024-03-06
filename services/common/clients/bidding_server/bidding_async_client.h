@@ -45,7 +45,6 @@ struct BiddingServiceClientConfig {
   std::string server_addr;
   bool compression = false;
   bool secure_client = true;
-  bool encryption_enabled = false;
   bool is_pas_enabled = false;
 };
 

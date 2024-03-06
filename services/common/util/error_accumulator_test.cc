@@ -14,9 +14,9 @@
 
 #include "services/common/util/error_accumulator.h"
 
-#include <string>
-
 #include <gmock/gmock-matchers.h>
+
+#include <string>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -65,6 +65,32 @@ TEST(ErrorAccumulatorTest, DeduplicatesErrors) {
   EXPECT_THAT(error_accumulator.GetErrors(ErrorVisibility::CLIENT_VISIBLE),
               IsEmpty());
   EXPECT_TRUE(error_accumulator.HasErrors());
+}
+
+TEST(ErrorAccumulatorTest, ReturnsConcatenatedErrorString) {
+  std::string error_1 = "Bad input.";
+  std::string error_2 = "Bad config.";
+  std::string error_3 = "Bad idea";
+
+  ErrorAccumulator error_accumulator;
+  error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error_1,
+                                ErrorCode::CLIENT_SIDE);
+  error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error_2,
+                                ErrorCode::CLIENT_SIDE);
+  error_accumulator.ReportError(ErrorVisibility::AD_SERVER_VISIBLE, error_1,
+                                ErrorCode::CLIENT_SIDE);
+  error_accumulator.ReportError(ErrorVisibility::AD_SERVER_VISIBLE, error_3,
+                                ErrorCode::CLIENT_SIDE);
+
+  // Reverse the order of reporting.
+  std::string client_visible_error_str = absl::StrCat(error_2, "; ", error_1);
+  std::string server_visible_error_str = absl::StrCat(error_3, "; ", error_1);
+  EXPECT_EQ(error_accumulator.GetAccumulatedErrorString(
+                ErrorVisibility::CLIENT_VISIBLE),
+            client_visible_error_str);
+  EXPECT_EQ(error_accumulator.GetAccumulatedErrorString(
+                ErrorVisibility::AD_SERVER_VISIBLE),
+            server_visible_error_str);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

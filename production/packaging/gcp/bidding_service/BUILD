@@ -22,6 +22,7 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
+    "strip_prefix",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
@@ -38,7 +39,19 @@ pkg_files(
     prefix = "/server/bin",
 )
 
+pkg_files(
+    name = "server_data",
+    srcs = [
+    ] + select({
+        "//conditions:default": [],
+    }),
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/server/data",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
 server_binaries = [
+    ":server_data",
     ":server_executables",
 ]
 
@@ -82,6 +95,8 @@ container_image(
     layers = [
         ":server_binary_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     ports = ["50051"],

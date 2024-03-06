@@ -20,10 +20,6 @@
 #include "absl/flags/flag.h"
 #include "absl/strings/string_view.h"
 
-ABSL_FLAG(
-    std::optional<bool>, enable_encryption, false,
-    "Enable the use of encryption on the server requests/responses. False by "
-    "default.");
 ABSL_FLAG(std::optional<std::string>, public_key_endpoint, std::nullopt,
           "Endpoint serving set of public keys used for encryption");
 ABSL_FLAG(std::optional<std::string>, primary_coordinator_private_key_endpoint,
@@ -84,6 +80,8 @@ ABSL_FLAG(std::optional<bool>, enable_otel_based_logging, false,
           "debugging.");
 ABSL_FLAG(std::optional<bool>, enable_protected_app_signals, false,
           "Enables the protected app signals support.");
+ABSL_FLAG(std::optional<bool>, enable_protected_audience, true,
+          "Enables the protected audience support.");
 ABSL_FLAG(std::optional<int>, ps_verbosity, std::nullopt,
           "verbosity of consented debug logger in prod; or verbosity of all "
           "loggers in non_prod");

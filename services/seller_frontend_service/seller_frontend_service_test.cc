@@ -14,13 +14,14 @@
 
 #include "services/seller_frontend_service/seller_frontend_service.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <grpcpp/server.h>
 
-#include <gmock/gmock-matchers.h>
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/strings/match.h"
@@ -77,13 +78,13 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     config_.SetFlagForTest(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
-    config_.SetFlagForTest(kEmptyValue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kEmptyValue, SELLER_ORIGIN_DOMAIN);
     config_.SetFlagForTest("0", GET_BID_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("0", SCORE_ADS_RPC_TIMEOUT_MS);
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
@@ -94,8 +95,6 @@ using ProtectedAuctionInputTypes =
 TYPED_TEST_SUITE(SellerFrontEndServiceTest, ProtectedAuctionInputTypes);
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-
   server_common::MockKeyFetcherManager key_fetcher_manager;
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
@@ -123,7 +122,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
@@ -161,11 +159,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   ASSERT_EQ(
       status.error_message(),
-      absl::StrFormat(kMissingPrivateKey, absl::StrCat(HpkeKeyset{}.key_id)));
+      absl::StrFormat(kErrorDecryptingCiphertextError,
+                      absl::StrFormat(kMissingPrivateKey,
+                                      absl::StrCat(HpkeKeyset{}.key_id))));
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
@@ -197,7 +196,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -224,11 +222,89 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
       GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
   request.mutable_auction_config()->clear_buyer_list();
+  // This is a valid seller currency and should cause no issues.
+  request.mutable_auction_config()->set_seller_currency("USD");
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   ASSERT_EQ(status.error_message(), kEmptyBuyerList);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsInvalidInputOnInvalidSellerCurrency) {
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
+  auto scoring = ScoringAsyncClientMock();
+  auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
+  ClientRegistry clients{async_provider, scoring, bfe_client,
+                         key_fetcher_manager, std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  grpc::ClientContext context;
+  auto [protected_auction_input, request, encryption_context] =
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
+                                          kSampleSellerDomain);
+  // This is not a valid currency code and should fail validation.
+  request.mutable_auction_config()->set_seller_currency("dollars");
+  SelectAdResponse response;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  ASSERT_EQ(status.error_message(), kInvalidSellerCurrency);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsInvalidInputOnInvalidBuyerCurrency) {
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
+  auto scoring = ScoringAsyncClientMock();
+  auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
+  ClientRegistry clients{async_provider, scoring, bfe_client,
+                         key_fetcher_manager, std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  grpc::ClientContext context;
+  auto [protected_auction_input, request, encryption_context] =
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
+                                          kSampleSellerDomain);
+  SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config;
+  per_buyer_config.set_buyer_signals(R"JSON({"someKey":["some","value"]})JSON");
+  // This is not a valid currency code and should fail validation.
+  per_buyer_config.set_buyer_currency("dollars");
+  request.mutable_auction_config()->mutable_per_buyer_config()->insert(
+      {std::string(kSampleBuyer), per_buyer_config});
+  SelectAdResponse response;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  ASSERT_EQ(status.error_message(), kInvalidBuyerCurrency);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
@@ -238,7 +314,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   // and only a subset have missing inputs, the request should continue
   // with pending bids decreased by the amount of missing inputs.
 
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -279,7 +354,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptAppProtoAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ASSERT_FALSE(auction_result.is_chaff());
   EXPECT_EQ(auction_result.error().message(), kMissingBuyerInputs);
 }
@@ -291,7 +366,6 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   // and only a subset have missing clients, the request should continue
   // with pending bids decreased by the amount of missing clients.
 
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerFrontEndAsyncClientFactoryMock client_factory_mock;
@@ -324,12 +398,11 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ASSERT_TRUE(auction_result.is_chaff());
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
@@ -407,7 +480,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ASSERT_TRUE(auction_result.is_chaff());
 }
 
@@ -456,7 +529,6 @@ void SetupBuyerClientMock(
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
@@ -556,7 +628,6 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
@@ -659,7 +730,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            BuyerClientFailsWithCorrectOverallStatus) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
@@ -735,7 +805,6 @@ TYPED_TEST(SellerFrontEndServiceTest,
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
@@ -795,7 +864,6 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            OneBogusAndOneLegitBuyerWaitsForAllBuyerBids) {
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
@@ -899,14 +967,14 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   const int num_buyers = 3;
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
@@ -1007,7 +1075,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
 
@@ -1016,7 +1084,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
 
 TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   const int num_buyers = 1;
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
@@ -1091,7 +1159,7 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
-      response.auction_result_ciphertext(), encryption_context);
+      *response.mutable_auction_result_ciphertext(), encryption_context);
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_TRUE(auction_result.is_chaff());
 }
@@ -1099,7 +1167,7 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
 TYPED_TEST(SellerFrontEndServiceTest,
            NonInternalErrorsFromScoringSentToAdService) {
   const int num_buyers = 1;
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
@@ -1179,8 +1247,6 @@ TYPED_TEST(SellerFrontEndServiceTest,
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
-  const int num_buyers = 1;
-  this->config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.

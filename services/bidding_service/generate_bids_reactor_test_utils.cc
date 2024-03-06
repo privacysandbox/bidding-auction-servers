@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "google/protobuf/util/json_util.h"
 #include "gtest/gtest.h"
 #include "services/bidding_service/constants.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -27,9 +28,11 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/cpp/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using ::google::protobuf::util::JsonStringToMessage;
 using ::testing::AnyNumber;
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
@@ -78,13 +81,19 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
 GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& auction_signals, const std::string& buyer_signals,
     const ProtectedAppSignals& protected_app_signals, const std::string seller,
-    const std::string publisher_name) {
+    const std::string publisher_name,
+    absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data) {
   GenerateProtectedAppSignalsBidsRawRequest raw_request;
   raw_request.set_auction_signals(auction_signals);
   raw_request.set_buyer_signals(buyer_signals);
   *raw_request.mutable_protected_app_signals() = protected_app_signals;
   raw_request.set_seller(seller);
   raw_request.set_publisher_name(publisher_name);
+  if (contextual_pas_data.has_value()) {
+    *raw_request.mutable_contextual_protected_app_signals_data() =
+        *std::move(contextual_pas_data);
+  }
+  PS_VLOG(1) << "Created request:\n" << raw_request.DebugString();
   return raw_request;
 }
 
@@ -158,6 +167,23 @@ std::string CreateGenerateBidsUdfResponse(
                           debug_reporting_urls);
 }
 
+void SetupContextualProtectedAppSignalsRomaExpectations(
+    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    absl::optional<std::string> generate_bid_udf_response) {
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&num_roma_dispatches, &generate_bid_udf_response](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback batch_callback) {
+        ++num_roma_dispatches;
+        return MockRomaExecution(batch, std::move(batch_callback),
+                                 kGenerateBidEntryFunction,
+                                 kProtectedAppSignalsGenerateBidBlobVersion,
+                                 generate_bid_udf_response.has_value()
+                                     ? *generate_bid_udf_response
+                                     : CreateGenerateBidsUdfResponse());
+      });
+}
+
 void SetupProtectedAppSignalsRomaExpectations(
     MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
     absl::optional<std::string> prepare_data_for_ad_retrieval_udf_response,
@@ -191,36 +217,39 @@ void SetupProtectedAppSignalsRomaExpectations(
       });
 }
 
-absl::StatusOr<AdRetrievalOutput> CreateAdsRetrievalResponse(
-    absl::string_view ads) {
-  return AdRetrievalOutput::FromJson(absl::Substitute(R"JSON(
-  {
-    "singlePartition": {
-      "id": 0,
-      "stringOutput": "$0"
-    }
-  })JSON",
-                                                      ads));
+absl::StatusOr<kv_server::v2::GetValuesResponse>
+CreateAdsRetrievalOrKvLookupResponse(absl::string_view ads) {
+  kv_server::v2::GetValuesResponse response;
+  PS_RETURN_IF_ERROR(JsonStringToMessage(absl::Substitute(R"JSON(
+                                            {
+                                              "singlePartition": {
+                                                "id": 0,
+                                                "stringOutput": "$0"
+                                              }
+                                            })JSON",
+                                                          ads),
+                                         &response));
+  return response;
 }
 
 void SetupAdRetrievalClientExpectations(
-    AsyncClientMock<AdRetrievalInput, AdRetrievalOutput>& ad_retrieval_client,
-    absl::optional<absl::StatusOr<AdRetrievalOutput>> ads_retrieval_response) {
-  EXPECT_CALL(ad_retrieval_client, Execute)
+    KVAsyncClientMock& ad_retrieval_client,
+    absl::optional<absl::StatusOr<GetValuesResponse>> ads_retrieval_response) {
+  EXPECT_CALL(ad_retrieval_client, ExecuteInternal)
       .WillOnce(
           [&ads_retrieval_response](
-              std::unique_ptr<AdRetrievalInput> keys,
+              std::unique_ptr<GetValuesRequest> raw_request,
               const RequestMetadata& metadata,
               absl::AnyInvocable<
-                  void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                  void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                   on_done,
               absl::Duration timeout) {
             auto response = ads_retrieval_response.has_value()
                                 ? *ads_retrieval_response
-                                : CreateAdsRetrievalResponse();
+                                : CreateAdsRetrievalOrKvLookupResponse();
             EXPECT_TRUE(response.ok()) << response.status();
             std::move(on_done)(
-                std::make_unique<AdRetrievalOutput>(*std::move(response)));
+                std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
 }

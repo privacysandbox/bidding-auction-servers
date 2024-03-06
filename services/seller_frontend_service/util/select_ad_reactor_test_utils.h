@@ -55,6 +55,7 @@ constexpr absl::string_view kSampleGenerationId = "a-standard-uuid";
 constexpr absl::string_view kSampleSellerDebugId = "sample-seller-debug-id";
 constexpr absl::string_view kSampleBuyerDebugId = "sample-buyer-debug-id";
 constexpr absl::string_view kSampleBuyerSignals = "[]";
+constexpr absl::string_view kSampleContextualPasAdId = "test-ad-id";
 constexpr float kNonZeroBidValue = 1.0;
 constexpr float kZeroBidValue = 0.0;
 constexpr int kNonZeroDesirability = 1;
@@ -64,6 +65,8 @@ inline constexpr char kTestEvent[] = "click";
 inline constexpr char kTestInteractionUrl[] = "http://click.com";
 inline constexpr char kTestTopLevelSellerReportingUrl[] =
     "http://reportResult.com";
+inline constexpr char kTestComponentSellerReportingUrl[] =
+    "http://componentReportResult.com";
 inline constexpr char kTestBuyerReportingUrl[] = "http://reportWin.com";
 inline constexpr char kTestAdMetadata[] = "testAdMetadata";
 
@@ -80,6 +83,14 @@ struct EncryptedSelectAdRequestWithContext {
 
 absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
     const SelectAdRequest& request);
+
+GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
+    const std::string& ad_url,
+    absl::optional<std::string> interest_group_name = absl::nullopt,
+    absl::optional<float> bid_value = absl::nullopt,
+    const bool enable_event_level_debug_reporting = false,
+    int number_ad_component_render_urls = kDefaultNumAdComponents,
+    absl::optional<std::string> bid_currency = absl::nullopt);
 
 void SetupBuyerClientMock(
     absl::string_view hostname,
@@ -98,12 +109,13 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<absl::string_view> interest_group_name = absl::nullopt,
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
-    int number_ad_component_render_urls = kDefaultNumAdComponents);
+    int number_ad_component_render_urls = kDefaultNumAdComponents,
+    absl::optional<absl::string_view> bid_currency = absl::nullopt);
 
 void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsResponseMap& expected_buyer_bids,
-    const std::optional<std::string>& ad_render_urls,
+    const std::optional<std::string>& scoring_signals_value,
     bool repeated_get_allowed = false,
     const std::optional<absl::Status>& server_error_to_return = std::nullopt,
     int expected_num_bids = -1, std::string seller_egid = "");
@@ -244,7 +256,8 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
-    case CLIENT_TYPE_BROWSER: {
+    case CLIENT_TYPE_BROWSER:
+    default: {
       auto [encrypted_request, context] =
           GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
       if (is_protected_auction_input) {
@@ -261,8 +274,6 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
       return {std::move(protected_auction_input), std::move(request),
               std::move(context)};
     }
-    default:
-      break;
   }
 }
 
@@ -279,7 +290,8 @@ GetSelectAdRequestAndClientRegistryForTest(
     BuyerBidsResponseMap& expected_buyer_bids,
     absl::string_view seller_origin_domain,
     bool expect_all_buyers_solicited = true,
-    absl::string_view top_level_seller = "") {
+    absl::string_view top_level_seller = "", bool enable_reporting = false,
+    bool force_set_modified_bid_to_zero = false) {
   auto encrypted_request_with_context = GetSampleSelectAdRequest<T>(
       client_type, seller_origin_domain,
       /*is_consented_debug=*/false, top_level_seller);
@@ -306,7 +318,8 @@ GetSelectAdRequestAndClientRegistryForTest(
   // Sets up scoring Client
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
-          [bid_value, client_type, top_level_seller](
+          [bid_value, client_type, top_level_seller, enable_reporting,
+           force_set_modified_bid_to_zero](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
               absl::Duration timeout) {
@@ -322,23 +335,41 @@ GetSelectAdRequestAndClientRegistryForTest(
               score->set_buyer_bid(bid_value);
               score->set_interest_group_name(bid.interest_group_name());
               score->set_interest_group_owner(kSampleBuyer);
-              score->mutable_win_reporting_urls()
-                  ->mutable_top_level_seller_reporting_urls()
-                  ->set_reporting_url(kTestTopLevelSellerReportingUrl);
-              score->mutable_win_reporting_urls()
-                  ->mutable_top_level_seller_reporting_urls()
-                  ->mutable_interaction_reporting_urls()
-                  ->try_emplace(kTestEvent, kTestInteractionUrl);
-              score->mutable_win_reporting_urls()
-                  ->mutable_buyer_reporting_urls()
-                  ->set_reporting_url(kTestBuyerReportingUrl);
-              score->mutable_win_reporting_urls()
-                  ->mutable_buyer_reporting_urls()
-                  ->mutable_interaction_reporting_urls()
-                  ->try_emplace(kTestEvent, kTestInteractionUrl);
+              if (enable_reporting) {
+                score->mutable_win_reporting_urls()
+                    ->mutable_top_level_seller_reporting_urls()
+                    ->set_reporting_url(kTestTopLevelSellerReportingUrl);
+                score->mutable_win_reporting_urls()
+                    ->mutable_top_level_seller_reporting_urls()
+                    ->mutable_interaction_reporting_urls()
+                    ->try_emplace(kTestEvent, kTestInteractionUrl);
+                score->mutable_win_reporting_urls()
+                    ->mutable_buyer_reporting_urls()
+                    ->set_reporting_url(kTestBuyerReportingUrl);
+                score->mutable_win_reporting_urls()
+                    ->mutable_buyer_reporting_urls()
+                    ->mutable_interaction_reporting_urls()
+                    ->try_emplace(kTestEvent, kTestInteractionUrl);
+                score->mutable_win_reporting_urls()
+                    ->mutable_component_seller_reporting_urls()
+                    ->set_reporting_url(kTestComponentSellerReportingUrl);
+                score->mutable_win_reporting_urls()
+                    ->mutable_component_seller_reporting_urls()
+                    ->mutable_interaction_reporting_urls()
+                    ->try_emplace(kTestEvent, kTestInteractionUrl);
+              }
               if (!top_level_seller.empty()) {
                 score->set_ad_metadata(kTestAdMetadata);
                 score->set_allow_component_auction(true);
+                // B&A logic makes a modified bid of zero coming out of the
+                // ScoreAdsReactor impossible, so this flag is for testing an
+                // unreachable error case.
+                if (!force_set_modified_bid_to_zero) {
+                  // Normally the ScoreAdsReactor would replace a zero modified
+                  // bid with the nonzero buyer bid, but we mocked it so we need
+                  // to set this to a nonzero value manually.
+                  score->set_bid(kNonZeroBidValue);
+                }
               }
               if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
@@ -376,11 +407,11 @@ SelectAdResponse RunReactorRequest(
 }
 
 AuctionResult DecryptAppProtoAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context);
 
 AuctionResult DecryptBrowserAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context);
 
 absl::StatusOr<std::string> UnframeAndDecompressAuctionResult(

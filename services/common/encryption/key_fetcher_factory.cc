@@ -26,11 +26,11 @@
 
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
-#include "services/common/loggers/request_context_logger.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/cpp/concurrent/event_engine_executor.h"
 #include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 #include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
+#include "src/cpp/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -49,8 +49,7 @@ namespace {
 
 bool IsEncryptionDisabled(
     bidding_auction_servers::TrustedServersConfigClient& config_client) {
-  return (config_client.GetBooleanParameter(TEST_MODE) ||
-          !config_client.GetBooleanParameter(ENABLE_ENCRYPTION));
+  return config_client.GetBooleanParameter(TEST_MODE);
 }
 
 }  // namespace

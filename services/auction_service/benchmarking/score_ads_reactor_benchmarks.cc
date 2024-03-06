@@ -330,12 +330,10 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = true,
       .enable_adtech_code_logging = false,
       .enable_report_result_url_generation = true,
@@ -377,12 +375,10 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = true,
       .enable_adtech_code_logging = true,
       .enable_report_result_url_generation = true,
@@ -413,12 +409,7 @@ BENCHMARK(BM_ScoreAdsProtectedAudience);
 BENCHMARK(BM_ScoreAdsProtectedAudienceAndAppSignals);
 
 // Run the benchmark
-int main(int argc, char* argv[]) {
-  benchmark::Initialize(&argc, argv);
-  benchmark::RunSpecifiedBenchmarks();
-  benchmark::Shutdown();
-  return 0;
-}
+BENCHMARK_MAIN();
 
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers
