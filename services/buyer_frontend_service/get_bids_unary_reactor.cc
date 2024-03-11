@@ -122,6 +122,9 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BfeContextMap()->Remove(request_));
+    if (log_context_.is_consented()) {
+      metric_context_->SetConsented(raw_request_.log_context().generation_id());
+    }
     return absl::OkStatus();
   }()) << "BfeContextMap()->Get(request) should have been called";
 

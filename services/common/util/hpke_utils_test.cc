@@ -53,7 +53,7 @@ MockKeyFetcherReturningPublicKey(
   EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
       .Times(1)
       .WillOnce(
-          [&expected_cp](const server_common::CloudPlatform& cloud_platform) {
+          [expected_cp](const server_common::CloudPlatform& cloud_platform) {
             // Verify cloud platform is sent as is.
             EXPECT_EQ(expected_cp, cloud_platform);
             return MockPublicKey();

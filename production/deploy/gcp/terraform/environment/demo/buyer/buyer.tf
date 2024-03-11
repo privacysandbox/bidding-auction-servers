@@ -70,6 +70,7 @@ module "buyer" {
     # and additional latency for parsing the logs.
     BUYER_CODE_FETCH_CONFIG = "" # Example:
     # "{
+    #    "fetchMode": 0,
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
     #    "protectedAppSignalsBiddingJsUrl": "placeholder",

@@ -71,6 +71,8 @@ module "seller" {
     PS_VERBOSITY                           = "" # Example: "10"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
     TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING              = "" # Example: "true"
+    CONSENTED_DEBUG_TOKEN                  = "" # Example: "123456"
     TEST_MODE                              = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
     # "{

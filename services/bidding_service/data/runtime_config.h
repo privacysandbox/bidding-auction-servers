@@ -19,6 +19,8 @@
 
 #include <string>
 
+#include "services/bidding_service/constants.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 struct BiddingServiceRuntimeConfig {
@@ -54,6 +56,13 @@ struct BiddingServiceRuntimeConfig {
   bool ad_retrieval_kv_server_egress_tls = true;
   // Whether GRPC client to KV server should use TLS.
   bool kv_server_egress_tls = true;
+  // Default UDF versions:
+  std::string default_protected_auction_generate_bid_version =
+      kProtectedAudienceGenerateBidBlobVersion;
+  std::string default_protected_app_signals_generate_bid_version =
+      kProtectedAppSignalsGenerateBidBlobVersion;
+  std::string default_ad_retrieval_version =
+      kPrepareDataForAdRetrievalBlobVersion;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

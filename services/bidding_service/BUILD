@@ -29,6 +29,56 @@ cc_library(
 )
 
 cc_library(
+    name = "buyer_code_fetch_manager",
+    srcs = [
+        "buyer_code_fetch_manager.cc",
+    ],
+    hdrs = [
+        "buyer_code_fetch_manager.h",
+    ],
+    deps = [
+        ":bidding_code_fetch_config_cc_proto",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
+        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/code_fetch:periodic_bucket_fetcher",
+        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/util:file_util",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/blob_storage_client",
+        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "buyer_code_fetch_manager_test",
+    size = "small",
+    srcs = ["buyer_code_fetch_manager_test.cc"],
+    deps = [
+        ":buyer_code_fetch_manager",
+        "//services/bidding_service/code_wrapper:buyer_code_wrapper",
+        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/http:http_fetcher_async",
+        "//services/common/code_fetch:periodic_bucket_fetcher",
+        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/test:mocks",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
+    ],
+)
+
+cc_library(
     name = "generate_bids_reactor",
     srcs = [
         "generate_bids_reactor.cc",
@@ -191,6 +241,7 @@ cc_binary(
     deps = [
         ":bidding_code_fetch_config_cc_proto",
         ":bidding_service",
+        ":buyer_code_fetch_manager",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/bidding_service:bidding_constants",
@@ -213,6 +264,7 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
         "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/cpp/telemetry",

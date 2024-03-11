@@ -334,6 +334,7 @@ class KVServiceMock : public kv_server::v2::KeyValueService::CallbackService {
 
 class MockV8Dispatcher : public V8Dispatcher {
  public:
+  virtual ~MockV8Dispatcher() = default;
   MOCK_METHOD(absl::Status, Init, ());
   MOCK_METHOD(absl::Status, Stop, ());
   MOCK_METHOD(absl::Status, LoadSync,

@@ -277,7 +277,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation,
     server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, absl::string_view version) {
+    const bool enable_adtech_code_logging, const std::string& version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
@@ -419,10 +419,15 @@ GenerateBidsReactor::GenerateBidsReactor(
       benchmarking_logger_(std::move(benchmarking_logger)),
       auction_scope_(raw_request_.top_level_seller().empty()
                          ? AuctionScope::kSingleSeller
-                         : AuctionScope::kDeviceComponentSeller) {
+                         : AuctionScope::kDeviceComponentSeller),
+      protected_auction_generate_bid_version_(
+          runtime_config.default_protected_auction_generate_bid_version) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
+    if (log_context_.is_consented()) {
+      metric_context_->SetConsented(raw_request_.log_context().generation_id());
+    }
     return absl::OkStatus();
   }()) << "BiddingContextMap()->Get(request) should have been called";
 }
@@ -458,7 +463,7 @@ void GenerateBidsReactor::Execute() {
                                 ig_trusted_signals_map.value(),
                                 enable_buyer_debug_url_generation_,
                                 log_context_, enable_adtech_code_logging_,
-                                kProtectedAudienceGenerateBidBlobVersion);
+                                protected_auction_generate_bid_version_);
     if (!generate_bid_request.ok()) {
       PS_VLOG(3, log_context_)
           << "Unable to build GenerateBidRequest: "

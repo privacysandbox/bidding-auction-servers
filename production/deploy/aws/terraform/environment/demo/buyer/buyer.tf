@@ -69,12 +69,15 @@ module "buyer" {
     ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
     PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
     TELEMETRY_CONFIG                              = "" # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING                     = "" # Example: "true"
+    CONSENTED_DEBUG_TOKEN                         = "" # Example: "123456"
     TEST_MODE                                     = "" # Example: "false"
     BUYER_CODE_FETCH_CONFIG                       = "" # Example:
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
     ENABLE_PROTECTED_AUDIENCE                     = "" # Example: "true"
     PS_VERBOSITY                                  = "" # Example: "10"
     # "{
+    #    "fetchMode": 0,
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
     #    "protectedAppSignalsBiddingJsUrl": "placeholder",

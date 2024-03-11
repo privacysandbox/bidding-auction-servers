@@ -33,6 +33,7 @@ export SERVER_START_CMD=$(cat << END
 --telemetry_config="mode: EXPERIMENT" \
 --roma_timeout_ms="120000" \
 --buyer_code_fetch_config='{
+      "fetchMode": 0,
       "biddingJsPath": "",
       "biddingJsUrl": "https://td.doubleclick.net/td/bjs",
       "protectedAppSignalsBiddingJsUrl": "https://td.doubleclick.net/td/bjs",
