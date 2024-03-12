@@ -151,6 +151,10 @@ class ProtectedAppSignalsGenerateBidsReactor
   RequestMetadata metadata_;
   std::vector<DispatchRequest> embeddings_requests_;
   absl::optional<bool> is_contextual_retrieval_request_;
+
+  // UDF versions to use for this request.
+  const std::string& protected_app_signals_generate_bid_version_;
+  const std::string& ad_retrieval_version_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

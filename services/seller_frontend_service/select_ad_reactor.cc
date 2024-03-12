@@ -158,10 +158,6 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   } else {
     encapsulated_req = request_->protected_audience_ciphertext();
   }
-  LogIfError(metric_context_->LogHistogram<metric::kProtectedCiphertextSize>(
-      (int)encapsulated_req.size()));
-  LogIfError(metric_context_->LogHistogram<metric::kAuctionConfigSize>(
-      (int)request_->auction_config().ByteSizeLong()));
 
   PS_VLOG(5) << "Protected "
              << (is_protected_auction_request_ ? "auction" : "audience")
@@ -303,6 +299,25 @@ void SelectAdReactor::Execute() {
             return protected_input.consented_debug_config();
           },
           protected_auction_input_));
+
+  if (log_context_.is_consented()) {
+    std::string generation_id = std::visit(
+        [](const auto& protected_input) -> std::string {
+          return {protected_input.generation_id()};
+        },
+        protected_auction_input_);
+    metric_context_->SetConsented(generation_id);
+  }
+
+  if (is_protected_auction_request_) {
+    LogIfError(metric_context_->LogHistogram<metric::kProtectedCiphertextSize>(
+        (int)request_->protected_auction_ciphertext().size()));
+  } else {
+    LogIfError(metric_context_->LogHistogram<metric::kProtectedCiphertextSize>(
+        (int)request_->protected_audience_ciphertext().size()));
+  }
+  LogIfError(metric_context_->LogHistogram<metric::kAuctionConfigSize>(
+      (int)request_->auction_config().ByteSizeLong()));
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdRequest:\n"
                                     << request_->ShortDebugString();

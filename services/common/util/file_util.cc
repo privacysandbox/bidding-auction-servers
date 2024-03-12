@@ -27,7 +27,7 @@ absl::StatusOr<std::string> GetFileContent(absl::string_view path,
                                            bool log_on_error) {
   std::ifstream ifs(path.data());
   if (!ifs.good()) {
-    std::string err_str = absl::StrCat("Failed to load file from path: ", path);
+    std::string err_str = absl::StrCat(kPathFailed, path);
     ABSL_LOG_IF(ERROR, log_on_error) << err_str;
     return absl::InvalidArgumentError(std::move(err_str));
   }

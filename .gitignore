@@ -60,3 +60,5 @@ terraform.rc
 
 # Docker
 docker-buildx-*.log
+
+core

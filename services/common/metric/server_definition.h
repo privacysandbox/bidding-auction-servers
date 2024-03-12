@@ -778,16 +778,18 @@ inline void AddErrorTypePartition(
 template <typename RequestT, typename ResponseT>
 void LogCommonMetric(const RequestT* request, const ResponseT* response) {
   auto& metric_context = metric::MetricContextMap<RequestT>()->Get(request);
-  LogIfError(metric_context.template LogUpDownCounter<
-             server_common::metrics::kTotalRequestCount>(1));
+  LogIfError(metric_context.template LogUpDownCounterDeferred<
+             server_common::metrics::kTotalRequestCount>(
+      []() -> int { return 1; }));
   LogIfError(metric_context.template LogHistogramDeferred<
              server_common::metrics::kServerTotalTimeMs>(
       [start = absl::Now()]() -> int {
         return (absl::Now() - start) / absl::Milliseconds(1);
       }));
-  LogIfError(metric_context
-                 .template LogHistogram<server_common::metrics::kRequestByte>(
-                     (int)request->ByteSizeLong()));
+  LogIfError(
+      metric_context
+          .template LogHistogramDeferred<server_common::metrics::kRequestByte>(
+              [request]() -> int { return request->ByteSizeLong(); }));
   LogIfError(
       metric_context
           .template LogHistogramDeferred<server_common::metrics::kResponseByte>(

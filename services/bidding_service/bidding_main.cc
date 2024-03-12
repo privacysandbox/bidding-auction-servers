@@ -31,10 +31,12 @@
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
 #include "public/cpio/interface/cpio.h"
+#include "scp/cc/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
+#include "services/bidding_service/buyer_code_fetch_manager.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
@@ -87,14 +89,12 @@ ABSL_FLAG(std::optional<bool>, kv_server_egress_tls, std::nullopt,
 namespace privacy_sandbox::bidding_auction_servers {
 
 using bidding_service::BuyerCodeFetchConfig;
+using ::google::scp::cpio::BlobStorageClientFactory;
 using ::google::scp::cpio::Cpio;
 using ::google::scp::cpio::CpioOptions;
 using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
-
-constexpr int kMinNumCodeBlobs = 1;
-constexpr int kMaxNumCodeBlobs = 2;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     std::string config_param_prefix) {
@@ -180,128 +180,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   return config_client;
 }
 
-absl::StatusOr<std::unique_ptr<CodeFetcherInterface>> StartFetchingCodeBlob(
-    const std::string& js_url, const std::string& wasm_helper_url,
-    const std::string& roma_version, absl::string_view script_logging_name,
-    absl::Duration url_fetch_period_ms, absl::Duration url_fetch_timeout_ms,
-    absl::AnyInvocable<std::string(const std::vector<std::string>&)> wrap_code,
-    V8Dispatcher& dispatcher, server_common::Executor* executor,
-    HttpFetcherAsync* curl_http_fetcher) {
-  if (js_url.empty()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("JS URL for ", script_logging_name, " is missing"));
-  }
-
-  std::vector<std::string> endpoints = {js_url};
-  if (!wasm_helper_url.empty()) {
-    endpoints.emplace_back(wasm_helper_url);
-  }
-  auto code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-      std::move(endpoints), url_fetch_period_ms, curl_http_fetcher, &dispatcher,
-      executor, url_fetch_timeout_ms, std::move(wrap_code), roma_version);
-  code_fetcher->Start();
-  return code_fetcher;
-}
-
-absl::Status StartProtectedAppSignalsUdfFetching(
-    const BuyerCodeFetchConfig& code_fetch_proto, V8Dispatcher& dispatcher,
-    server_common::Executor* executor,
-    std::vector<std::unique_ptr<CodeFetcherInterface>>& code_fetchers,
-    HttpFetcherAsync* curl_http_fetcher) {
-  absl::Duration url_fetch_period_ms =
-      absl::Milliseconds(code_fetch_proto.url_fetch_period_ms());
-  absl::Duration url_fetch_timeout_ms =
-      absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms());
-  PS_ASSIGN_OR_RETURN(
-      auto bidding_code_fetcher,
-      StartFetchingCodeBlob(
-          code_fetch_proto.protected_app_signals_bidding_js_url(),
-          code_fetch_proto.protected_app_signals_bidding_wasm_helper_url(),
-          kProtectedAppSignalsGenerateBidBlobVersion,
-          "protected_app_signals_bidding_js_url", url_fetch_period_ms,
-          url_fetch_timeout_ms,
-          [](const std::vector<std::string>& ad_tech_code_blobs) {
-            DCHECK_GE(ad_tech_code_blobs.size(), kMinNumCodeBlobs);
-            DCHECK_LE(ad_tech_code_blobs.size(), kMaxNumCodeBlobs);
-            return GetBuyerWrappedCode(
-                /*ad_tech_js=*/ad_tech_code_blobs[0],
-                /*ad_tech_wasm=*/
-                ad_tech_code_blobs.size() == 2 ? ad_tech_code_blobs[1] : "",
-                AuctionType::kProtectedAppSignals,
-                /*auction_specific_setup=*/"// No additional setup");
-          },
-          dispatcher, executor, curl_http_fetcher));
-
-  code_fetchers.emplace_back(std::move(bidding_code_fetcher));
-  PS_ASSIGN_OR_RETURN(
-      auto prepare_data_for_ads_code_fetcher,
-      StartFetchingCodeBlob(
-          code_fetch_proto.prepare_data_for_ads_retrieval_js_url(),
-          code_fetch_proto.prepare_data_for_ads_retrieval_wasm_helper_url(),
-          kPrepareDataForAdRetrievalBlobVersion,
-          "prepare_data_for_ads_retrieval_js_url", url_fetch_period_ms,
-          url_fetch_timeout_ms,
-          [](const std::vector<std::string>& ad_tech_code_blobs) {
-            DCHECK_GE(ad_tech_code_blobs.size(), kMinNumCodeBlobs);
-            DCHECK_LE(ad_tech_code_blobs.size(), kMaxNumCodeBlobs);
-            return GetProtectedAppSignalsGenericBuyerWrappedCode(
-                /*ad_tech_js=*/ad_tech_code_blobs[0],
-                /*ad_tech_wasm=*/
-                ad_tech_code_blobs.size() == 2 ? ad_tech_code_blobs[1] : "",
-                kPrepareDataForAdRetrievalHandler,
-                kPrepareDataForAdRetrievalArgs);
-          },
-          dispatcher, executor, curl_http_fetcher));
-  code_fetchers.emplace_back(std::move(prepare_data_for_ads_code_fetcher));
-  return absl::OkStatus();
-}
-
-absl::Status StartProtectedAudienceUdfFetching(
-    const BuyerCodeFetchConfig& code_fetch_proto, V8Dispatcher& dispatcher,
-    server_common::Executor* executor,
-    std::vector<std::unique_ptr<CodeFetcherInterface>>& code_fetchers,
-    HttpFetcherAsync* curl_http_fetcher) {
-  std::string js_url = code_fetch_proto.bidding_js_url();
-  // Starts periodic code blob fetching from an arbitrary url only if js_url is
-  // specified
-  if (!js_url.empty()) {
-    auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
-      return GetBuyerWrappedCode(
-          /*ad_tech_js=*/adtech_code_blobs.at(0),
-          adtech_code_blobs.size() == 2 ? adtech_code_blobs.at(1) : /*wasm=*/"",
-          AuctionType::kProtectedAudience);
-    };
-
-    std::vector<std::string> endpoints = {js_url};
-    if (!code_fetch_proto.bidding_wasm_helper_url().empty()) {
-      endpoints = {std::move(js_url),
-                   code_fetch_proto.bidding_wasm_helper_url()};
-    }
-
-    auto code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-        std::move(endpoints),
-        absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
-        curl_http_fetcher, &dispatcher, executor,
-        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()), wrap_code,
-        kProtectedAudienceGenerateBidBlobVersion);
-
-    code_fetcher->Start();
-    code_fetchers.emplace_back(std::move(code_fetcher));
-  } else if (!code_fetch_proto.bidding_js_path().empty()) {
-    PS_ASSIGN_OR_RETURN(auto adtech_code_blob,
-                        GetFileContent(code_fetch_proto.bidding_js_path(),
-                                       /*log_on_error=*/true));
-    adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
-    PS_RETURN_IF_ERROR(dispatcher.LoadSync(
-        kProtectedAudienceGenerateBidBlobVersion, adtech_code_blob))
-        << "Could not load Adtech untrusted code for bidding.";
-  } else {
-    return absl::UnavailableError(
-        "Code fetching config requires either a path or url.");
-  }
-  return absl::OkStatus();
-}
-
 // Brings up the gRPC BiddingService on FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
@@ -330,40 +208,36 @@ absl::Status RunServer() {
       std::make_unique<server_common::EventEngineExecutor>(
           grpc_event_engine::experimental::CreateEventEngine());
 
-  std::vector<std::unique_ptr<CodeFetcherInterface>> code_fetchers;
-
   // Convert Json string into a BiddingCodeBlobFetcherConfig proto
-  BuyerCodeFetchConfig code_fetch_proto;
+  BuyerCodeFetchConfig udf_config;
   absl::Status result = google::protobuf::util::JsonStringToMessage(
       config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).data(),
-      &code_fetch_proto);
-  CHECK(result.ok()) << "Could not parse BUYER_CODE_FETCH_CONFIG JsonString to "
-                        "a proto message.";
+      &udf_config);
+  PS_RETURN_IF_ERROR(result)
+      << "Could not parse BUYER_CODE_FETCH_CONFIG JsonString to "
+         "a proto message: "
+      << result.message();
 
   auto curl_http_fetcher =
       std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
 
   bool enable_buyer_debug_url_generation =
-      code_fetch_proto.enable_buyer_debug_url_generation();
-  bool enable_adtech_code_logging =
-      code_fetch_proto.enable_adtech_code_logging();
+      udf_config.enable_buyer_debug_url_generation();
+  bool enable_adtech_code_logging = udf_config.enable_adtech_code_logging();
   const bool enable_protected_audience =
       config_client.HasParameter(ENABLE_PROTECTED_AUDIENCE) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  if (enable_protected_audience) {
-    PS_RETURN_IF_ERROR(StartProtectedAudienceUdfFetching(
-        code_fetch_proto, dispatcher, executor.get(), code_fetchers,
-        curl_http_fetcher.get()));
-  }
-
   const bool enable_protected_app_signals =
       config_client.HasParameter(ENABLE_PROTECTED_APP_SIGNALS) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  if (enable_protected_app_signals) {
-    PS_RETURN_IF_ERROR(StartProtectedAppSignalsUdfFetching(
-        code_fetch_proto, dispatcher, executor.get(), code_fetchers,
-        curl_http_fetcher.get()));
-  }
+
+  auto http_fetcher_async =
+      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
+  BuyerCodeFetchManager udf_fetcher(
+      executor.get(), http_fetcher_async.get(), &dispatcher,
+      BlobStorageClientFactory::Create(), udf_config, enable_protected_audience,
+      enable_protected_app_signals);
+  PS_RETURN_IF_ERROR(udf_fetcher.Init()) << "Failed to initialize UDF fetch.";
 
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
@@ -404,7 +278,7 @@ absl::Status RunServer() {
         "least one.");
   }
 
-  const BiddingServiceRuntimeConfig runtime_config = {
+  BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
       .tee_kv_server_addr = std::move(tee_kv_server_addr),
@@ -424,6 +298,19 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(AD_RETRIEVAL_KV_SERVER_EGRESS_TLS),
       .kv_server_egress_tls =
           config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS)};
+
+  if (udf_config.fetch_mode() == bidding_service::FETCH_MODE_BUCKET) {
+    if (enable_protected_audience) {
+      runtime_config.default_protected_auction_generate_bid_version =
+          udf_config.protected_auction_bidding_js_bucket_default_blob();
+    }
+    if (enable_protected_app_signals) {
+      runtime_config.default_protected_app_signals_generate_bid_version =
+          udf_config.protected_app_signals_bidding_js_bucket_default_blob();
+      runtime_config.default_ad_retrieval_version =
+          udf_config.ads_retrieval_bucket_default_blob();
+    }
+  }
 
   auto protected_app_signals_generate_bids_reactor_factory =
       [&client](const grpc::CallbackServerContext* context,
@@ -483,12 +370,7 @@ absl::Status RunServer() {
   // responsible for shutting down the server for this call to ever return.
   PS_VLOG(1) << "Server listening on " << server_address;
   server->Wait();
-  // Ends periodic code blob fetching from an arbitrary url.
-  for (const auto& code_fetcher : code_fetchers) {
-    if (code_fetcher) {
-      code_fetcher->End();
-    }
-  }
+  PS_RETURN_IF_ERROR(udf_fetcher.End()) << "Error shutting down UDF fetcher.";
   PS_RETURN_IF_ERROR(dispatcher.Stop())
       << "Error shutting down code dispatcher.";
   return absl::OkStatus();

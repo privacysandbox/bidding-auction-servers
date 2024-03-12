@@ -31,6 +31,8 @@ processors:
     send_batch_size: 50
   batch/metrics:
     timeout: 60s
+  batch/logs:
+    timeout: 60s
 
 exporters:
   awsxray:
@@ -39,6 +41,9 @@ exporters:
     namespace: '$SERVICE'
     resource_to_telemetry_conversion:
         enabled: true
+  awscloudwatchlogs:
+    log_group_name: "bidding-auction"
+    log_stream_name: "consented-log-stream"
 
 service:
   pipelines:
@@ -50,5 +55,9 @@ service:
       receivers: [otlp]
       processors: [batch/metrics]
       exporters: [awsemf]
+    logs:
+      receivers: [otlp]
+      processors: [batch/logs]
+      exporters: [awscloudwatchlogs]
 
   extensions: [health_check]

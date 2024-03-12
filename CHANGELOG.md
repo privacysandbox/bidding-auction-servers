@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.3.0 (2024-03-11)
+
+
+### Features
+
+* create BuyerCodeFetchManager to handle buyer udf fetching logic
+* enable consented debugging in AWS deployment
+* integrate buyer code fetch management
+* Output raw metric for consented request
+
 ## 3.2.0 (2024-03-06)
 
 

@@ -86,7 +86,10 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
       kv_async_client_(kv_async_client),
       ad_bids_retrieval_timeout_ms_(runtime_config.ad_retrieval_timeout_ms),
       metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
-                                              kBuyerMetadataKeysMap)) {
+                                              kBuyerMetadataKeysMap)),
+      protected_app_signals_generate_bid_version_(
+          runtime_config.default_protected_app_signals_generate_bid_version),
+      ad_retrieval_version_(runtime_config.default_ad_retrieval_version) {
   DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
 }
 
@@ -190,7 +193,7 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
       ArgIndex(GenerateBidsUdfArgs::kFeatureFlags), input);
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
-      .version_string = kProtectedAppSignalsGenerateBidBlobVersion,
+      .version_string = protected_app_signals_generate_bid_version_,
       .handler_name = kDispatchHandlerFunctionNameWithCodeWrapper,
       .input = std::move(input),
   };
@@ -275,7 +278,7 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
       ArgIndex(PrepareDataForRetrievalUdfArgs::kFeatureFlags), input);
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
-      .version_string = kPrepareDataForAdRetrievalBlobVersion,
+      .version_string = ad_retrieval_version_,
       .handler_name = kPrepareDataForAdRetrievalEntryFunctionName,
       .input = std::move(input),
   };

@@ -24,6 +24,8 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+constexpr char kPathFailed[] = "Failed to load file from path: ";
+
 // Gets the contents of the provided path.
 absl::StatusOr<std::string> GetFileContent(absl::string_view path,
                                            bool log_on_error = false);

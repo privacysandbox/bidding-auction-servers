@@ -37,7 +37,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // TODO (b/278899152): get version dynamically
 inline constexpr std::string_view kOpenTelemetryVersion = "1.9.1";
-inline constexpr std::string_view kBuildVersion = "3.2.0";
+inline constexpr std::string_view kBuildVersion = "3.3.0";
 inline constexpr std::string_view kOperator = "operator";
 inline constexpr std::string_view kZone = "zone";
 inline constexpr std::string_view kRegion = "region";
