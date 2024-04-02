@@ -142,9 +142,9 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     CryptoClientWrapperInterface* crypto_client, bool enable_benchmarking)
     : GetBidsUnaryReactor(context, get_bids_request, get_bids_response,
                           bidding_signals_async_provider, bidding_async_client,
-                          config,
-                          /*pas_bidding_client=*/nullptr, key_fetcher_manager,
-                          crypto_client, enable_benchmarking) {}
+                          config, /*pas_bidding_async_client=*/nullptr,
+                          key_fetcher_manager, crypto_client,
+                          enable_benchmarking) {}
 
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   if (context_->IsCancelled()) {
@@ -198,7 +198,7 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   if (!decrypt_response.ok()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
-  hpke_secret_ = std::move(decrypt_response->secret());
+  hpke_secret_ = std::move(*decrypt_response->mutable_secret());
   if (!raw_request_.ParseFromString(decrypt_response->payload())) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }

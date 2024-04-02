@@ -18,7 +18,7 @@
 #define SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
 #include <utility>
 
-#include "src/cpp/util/status_macro/source_location.h"
+#include "src/util/status_macro/source_location.h"
 namespace privacy_sandbox::bidding_auction_servers::log {
 template <class T>
 struct ParamWithSourceLoc {

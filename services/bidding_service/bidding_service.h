@@ -26,9 +26,9 @@
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

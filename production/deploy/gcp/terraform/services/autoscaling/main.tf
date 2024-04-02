@@ -246,6 +246,7 @@ resource "google_compute_instance_template" "backends" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
   metadata = {
+    mesh-name                        = var.mesh_name
     tee-image-reference              = var.backend_tee_image
     tee-container-log-redirect       = true
     tee-impersonate-service-accounts = var.tee_impersonate_service_accounts

@@ -24,9 +24,9 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/util/json_util.h"
 #include "services/seller_frontend_service/runtime_flags.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -92,6 +92,18 @@ CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client) {
       ParseCloudPlatformPublicKeysMap(
           config_client.GetStringParameter(SFE_PUBLIC_KEYS_ENDPOINTS)));
   return PublicKeyFetcherFactory::Create(endpoints_map);
+}
+
+server_common::CloudPlatform ProtoCloudPlatformToScpCloudPlatform(
+    EncryptionCloudPlatform cloud_platform) {
+  switch (cloud_platform) {
+    case EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_AWS:
+      return server_common::CloudPlatform::kAws;
+    case EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP:
+      return server_common::CloudPlatform::kGcp;
+    default:
+      return server_common::CloudPlatform::kLocal;
+  }
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

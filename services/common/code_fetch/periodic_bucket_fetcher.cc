@@ -28,14 +28,14 @@
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
-#include "scp/cc/core/interface/async_context.h"
-#include "scp/cc/core/interface/errors.h"
-#include "scp/cc/public/core/interface/execution_result.h"
-#include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
-#include "scp/cc/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
-#include "src/cpp/logger/request_context_logger.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/core/interface/async_context.h"
+#include "src/core/interface/errors.h"
+#include "src/logger/request_context_logger.h"
+#include "src/public/core/interface/execution_result.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
+#include "src/util/status_macro/status_macros.h"
 
 using ::google::cmrt::sdk::blob_storage_service::v1::BlobMetadata;
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest;
@@ -74,7 +74,7 @@ absl::Status PeriodicBucketFetcher::Start() {
 
 void PeriodicBucketFetcher::End() {
   if (task_id_.has_value()) {
-    executor_.Cancel(*std::move(task_id_));
+    executor_.Cancel(*task_id_);
     task_id_ = absl::nullopt;
   }
 }
@@ -88,8 +88,7 @@ PeriodicBucketFetcher::ListBlobsSync() {
 
   AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
       list_blobs_context(
-          std::move(list_blobs_request),
-          [&notification, &result](auto& context) {
+          list_blobs_request, [&notification, &result](auto& context) {
             if (!context.result.Successful()) {
               std::string error_msg =
                   absl::StrCat("Failed to list available blobs: ",
@@ -162,8 +161,7 @@ void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
         md.bucket_name());
     get_blob_request->mutable_blob_metadata()->set_blob_name(md.blob_name());
     AsyncContext<GetBlobRequest, GetBlobResponse> get_blob_context(
-        std::move(get_blob_request),
-        [&blobs_remaining, this](const auto& context) {
+        get_blob_request, [&blobs_remaining, this](const auto& context) {
           HandleBlobFetchResult(context);
           blobs_remaining.DecrementCount();
         });

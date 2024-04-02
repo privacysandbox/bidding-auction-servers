@@ -23,7 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "src/cpp/logger/request_context_logger.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
@@ -269,7 +269,7 @@ void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
       // Release request data ownership so it can be tracked
       // completely through the curl easy handle. This will be manually cleaned
       // when the request completes or when this class is destroyed.
-      request.release();
+      request.release();  // NOLINT
       return;
     case CURLM_BAD_HANDLE:
     case CURLM_BAD_EASY_HANDLE:
@@ -304,8 +304,8 @@ void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
       CreateCurlRequest(http_request, timeout_ms, keepalive_idle_sec_,
                         keepalive_interval_sec_, std::move(done_callback));
 
-  request->body = std::make_unique<DataToUpload>(
-      DataToUpload{std::move(http_request.body)});
+  request->body =
+      std::make_unique<DataToUpload>(DataToUpload{http_request.body});
   curl_easy_setopt(request->req_handle, CURLOPT_UPLOAD, 1L);
   curl_easy_setopt(request->req_handle, CURLOPT_PUT, 1L);
   curl_easy_setopt(request->req_handle, CURLOPT_POSTFIELDSIZE_LARGE,

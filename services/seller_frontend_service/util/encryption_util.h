@@ -22,9 +22,9 @@
 
 #include "absl/status/statusor.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
-#include "src/cpp/communication/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/logger/request_context_logger.h"
+#include "src/communication/ohttp_utils.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -59,6 +59,10 @@ struct OhttpHpkeDecryptedMessage {
   explicit OhttpHpkeDecryptedMessage(
       quiche::ObliviousHttpRequest& decrypted_request,
       server_common::PrivateKey& private_key, absl::string_view request_label);
+
+  explicit OhttpHpkeDecryptedMessage(
+      std::string plaintext, quiche::ObliviousHttpRequest::Context& context,
+      server_common::PrivateKey& private_key, absl::string_view request_label);
 };
 
 // Decrypt a payload encrypted with OHTTP based HPKE using the common library
@@ -69,6 +73,34 @@ absl::StatusOr<std::unique_ptr<OhttpHpkeDecryptedMessage>>
 DecryptOHTTPEncapsulatedHpkeCiphertext(
     absl::string_view ciphertext,
     server_common::KeyFetcherManagerInterface& key_fetcher_manager);
+
+// This struct holds elements related to an HPKE
+// encrypted message which was encrypted using the OHTTP
+// framing standard. The related artifacts can be used
+// to decrypt responses from the clients who this
+// encrypted message was sent to.
+struct OhttpHpkeEncryptedMessage {
+  // Encrypted message.
+  std::string ciphertext;
+
+  // OHTTP context required for decryption.
+  quiche::ObliviousHttpRequest::Context context;
+
+  explicit OhttpHpkeEncryptedMessage(quiche::ObliviousHttpRequest ohttp_request,
+                                     absl::string_view request_label);
+};
+
+// Encrypt a payload using HPKE key and encapsulate in OHTTP format.
+// It first creates an OHTTP object with CreateClientObliviousRequest
+// and then encrypts it using EncapsulateAndSerialize.
+// This is used for encrypting strings that have already been
+// encoded and compressed as required.
+absl::StatusOr<OhttpHpkeEncryptedMessage> HpkeEncryptAndOHTTPEncapsulate(
+    // Create a copy for the next method since this will be consumed inside this
+    // method.
+    std::string plaintext, absl::string_view request_label,
+    server_common::KeyFetcherManagerInterface& key_fetcher_manager,
+    const server_common::CloudPlatform& cloud_platform);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -o pipefail
+set -o errexit
+
+IMAGE="build-debian"
+VERBOSE=0
+declare -r -a IMAGE_LIST=(
+  "build-debian"
+  "build-amazonlinux2"
+  "build-amazonlinux2023"
+  "presubmit"
+)
+
+declare -a ENV_VARS
+ENV_VARS+=(
+  "BAZEL_STARTUP_ARGS"
+  "BAZEL_EXTRA_ARGS"
+)
+
+function usage() {
+  local exitval=${1-1}
+  cat &>/dev/stderr << USAGE
+usage:
+  $0 <options>
+    --cmd <string>             bash command string to execute within the docker container
+    --cmd-profiler             enable profiler for the command
+    --image <string>           Image name for the build runtime. Valid names:
+USAGE
+
+  for elem in "${IMAGE_LIST[@]}"
+  do
+    if [[ ${elem} == "${IMAGE}" ]]; then
+      default_text=" (default)"
+    fi
+    printf "                                   *  %s%s\n" "${elem}" "${default_text}" &>/dev/stderr
+    default_text=""
+  done
+
+  cat &>/dev/stderr << USAGE
+    --env <key>[=<value>]      Name (or name=value) of exported environment variable, propagated into container
+    --without-shared-cache     Containers will not mount ${HOME}/.cache/bazel
+    --without-embedded-docker  Disable docker client within container
+    --docker-network <value>   Specify docker network type or name, value passed to docker run --network. Default: ${DOCKER_NETWORK}
+    --seccomp-unconfined       Run docker container without a seccomp profile
+    --verbose                  Enable verbose output
+
+Environment variables (all optional):
+    WORKSPACE                  Full path to the workspace (repo root)
+    WORKSPACE_MOUNT            Full path to the workspace on the host filesystem
+    EXTRA_DOCKER_RUN_ARGS      Additional arguments to pass to docker run invocations
+    CBUILD_IMAGE               docker URI to the specific image to run
+    DOCKER_NETWORK             Specify docker network, equivalent of --docker-network flag.
+
+Environment variables propagated into container:
+    BAZEL_STARTUP_ARGS
+    BAZEL_EXTRA_ARGS
+USAGE
+  # shellcheck disable=SC2086
+  exit ${exitval}
+}
+
+declare -i WITH_SHARED_CACHE=1
+declare -i WITH_DOCKER_SOCK=1
+declare -i WITH_CMD_PROFILER=0
+DOCKER_NETWORK="${DOCKER_NETWORK:-bridge}"
+declare -i DOCKER_SECCOMP_UNCONFINED=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cmd)
+      CMD="$2"
+      shift 2 || usage
+      ;;
+    --cmd-profiler)
+      WITH_CMD_PROFILER=1
+      shift
+      ;;
+    --env)
+      ENV_VARS+=("$2")
+      shift 2 || usage
+      ;;
+    --image)
+      IMAGE="$2"
+      shift 2 || usage
+      ;;
+    --without-shared-cache)
+      WITH_SHARED_CACHE=0
+      shift
+      ;;
+    --without-embedded-docker)
+      WITH_DOCKER_SOCK=0
+      shift
+      ;;
+    --docker-network)
+      DOCKER_NETWORK="$2"
+      shift 2 || usage
+      ;;
+    --seccomp-unconfined)
+      DOCKER_SECCOMP_UNCONFINED=1
+      shift
+      ;;
+    --verbose)
+      VERBOSE=1
+      shift
+      ;;
+    -h | --help) usage 0 ;;
+    *)
+      printf "unrecognized arg: %s\n" "$1"
+      usage
+      ;;
+  esac
+done
+
+if [[ -z ${IMAGE} ]]; then
+  printf -- "error: --image must be specified\n" &>/dev/stderr
+  usage 1
+fi
+# shellcheck disable=SC2076
+if ! [[ " ${IMAGE_LIST[*]} " =~ " ${IMAGE} " ]]; then
+    printf -- "error: image [%s] not recognized\n" "${IMAGE}" &>/dev/stderr
+    usage 1
+fi
+
+TOOLS_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+readonly TOOLS_DIR
+# shellcheck disable=SC1090
+source "${TOOLS_DIR}"/builder.sh
+
+trap _cleanup EXIT
+function _cleanup() {
+  local -r -i status=$?
+  "${TOOLS_DIR}"/normalize-bazel-symlinks &>/dev/null || true
+  exit ${status}
+}
+
+WORKSPACE_MOUNT="$(builder::get_docker_workspace_mount)"
+readonly WORKSPACE_MOUNT
+export WORKSPACE_MOUNT
+if [[ ${VERBOSE} -eq 1 ]]; then
+  printf "mounting workspace into container: %s\n" "${WORKSPACE_MOUNT}" &>/dev/stderr
+fi
+
+TOOLS_RELDIR="$(realpath "${TOOLS_DIR}" --relative-to="${PWD}")"
+readonly TOOLS_RELDIR
+
+if [[ -n ${CBUILD_IMAGE} ]]; then
+  IMAGE_TAGGED=${CBUILD_IMAGE}
+else
+  IMAGE_TAGGED=$("${TOOLS_DIR}"/get-builder-image-tagged --image "${IMAGE}")
+fi
+readonly IMAGE_TAGGED
+
+PWD_WORKSPACE_REL_PATH="$(realpath --relative-base="${WORKSPACE}" "${PWD}")"
+readonly PWD_WORKSPACE_REL_PATH
+WORKDIR=/src/workspace
+if [[ ${PWD_WORKSPACE_REL_PATH:0:1} != / ]]; then
+  WORKDIR="/src/workspace/${PWD_WORKSPACE_REL_PATH}"
+fi
+readonly WORKDIR
+
+declare -a DOCKER_RUN_ARGS
+DOCKER_RUN_ARGS+=(
+  "--rm"
+  "--entrypoint=/bin/bash"
+  "--volume=${WORKSPACE_MOUNT}:/src/workspace"
+  "--workdir=${WORKDIR}"
+  "--network=${DOCKER_NETWORK}"
+  "$(echo "${EXTRA_DOCKER_RUN_ARGS}" | envsubst)"
+)
+
+if [[ ${DOCKER_SECCOMP_UNCONFINED} -eq 1 ]]; then
+  DOCKER_RUN_ARGS+=("--security-opt=seccomp=unconfined")
+fi
+
+if [[ ${WITH_CMD_PROFILER} -eq 1 ]]; then
+  if [[ ${IMAGE} != build-debian ]]; then
+    printf "error: --cmd-profiler is only compatible with build-debian\n" &>/dev/stderr
+    usage 1
+  fi
+  DOCKER_RUN_ARGS+=(
+    "--env=CMD_PROFILER=LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libprofiler.so"
+    "--env=CPUPROFILE=benchmark.prof"
+  )
+fi
+
+# inside the docker build images, /bazel_root is the bazel cache dir, per the system-wide bazelrc
+readonly BAZEL_ROOT=/bazel_root
+if [[ ${WITH_SHARED_CACHE} -eq 0 ]]; then
+  # use tmpfs for as temporary, container-bound bazel cache
+  DOCKER_RUN_ARGS+=(
+    "--tmpfs ${BAZEL_ROOT}:exec"
+  )
+else
+  # mount host filesystem for "shared" use by multiple docker container invocations
+  DOCKER_RUN_ARGS+=(
+    "--volume ${HOME}/.cache/bazel:${BAZEL_ROOT}"
+  )
+fi
+if [[ ${WITH_DOCKER_SOCK} -eq 1 ]]; then
+  DOCKER_RUN_ARGS+=(
+    "--volume /var/run/docker.sock:/var/run/docker.sock"
+  )
+fi
+for evar in "${ENV_VARS[@]}"
+do
+  DOCKER_RUN_ARGS+=(
+    "--env=${evar}"
+  )
+done
+if [[ -t 0 ]] && [[ -t 1 ]]; then
+  # stdin and stdout are open, assume it's an interactive tty session
+  DOCKER_RUN_ARGS+=(
+    --interactive
+    --tty
+  )
+fi
+
+if [[ ${VERBOSE} -eq 1 ]]; then
+  set -o xtrace
+fi
+if [[ -z ${CMD} ]]; then
+  # shellcheck disable=SC2068
+  docker run \
+    ${DOCKER_RUN_ARGS[@]} \
+    "${IMAGE_TAGGED}" \
+    --login
+elif [[ ${WITH_CMD_PROFILER} -eq 1 ]]; then
+  # shellcheck disable=SC2068
+  docker run \
+    ${DOCKER_RUN_ARGS[@]} \
+    "${IMAGE_TAGGED}" \
+    --login -c "'${TOOLS_RELDIR}'/normalize-bazel-symlinks; env \${CMD_PROFILER} ${CMD}"
+else
+  # shellcheck disable=SC2068
+  docker run \
+    ${DOCKER_RUN_ARGS[@]} \
+    "${IMAGE_TAGGED}" \
+    --login -c "${CMD}"
+fi

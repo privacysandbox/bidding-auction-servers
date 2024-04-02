@@ -18,7 +18,7 @@ package privacy_sandbox.bidding_auction_servers;
 
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
-import "src/cpp/logger/logger.proto";
+import "src/logger/logger.proto";
 
 // ProtectedAudienceInput is generated and encrypted by the client,
 // passed through the untrusted Seller service, and decrypted by the
@@ -49,6 +49,11 @@ message ProtectedAudienceInput {
 
   // Consented debugging field.
   server_common.ConsentedDebugConfiguration consented_debug_config = 5;
+
+  // Optional.
+  // A boolean value which indicates whether temporary unlimited egress should
+  // be enabled.
+  bool enable_unlimited_egress = 6;
 }
 
 // ProtectedAuctionInput is generated and encrypted by the client,
@@ -79,6 +84,11 @@ message ProtectedAuctionInput {
 
   // Consented debugging field.
   server_common.ConsentedDebugConfiguration consented_debug_config = 5;
+
+  // Optional.
+  // A boolean value which indicates whether temporary unlimited egress should
+  // be enabled.
+  bool enable_unlimited_egress = 6;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -255,6 +265,8 @@ message AuctionResult {
 
   // Map from the buyer participating origin (that participated in the auction)
   // to interest group indices.
+  // Note: This is currently not populated for auctions
+  // originating from mobile devices (CLIENT_TYPE_ANDROID).
   map<string, InterestGroupIndex> bidding_groups = 11;
 
   // In the event of an error during the SelectAd request, an Error object will
@@ -285,7 +297,8 @@ message AuctionResult {
   // Arbitrary metadata to pass to the top-level seller.
   string ad_metadata = 16;
 
-  // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
+  // Optional. Indicates the currency used for the bid price
+  // (expressed as ISO 4217 alpha code).
   string bid_currency = 17;
 
   message AuctionParams {
@@ -307,6 +320,19 @@ message AuctionResult {
   AuctionParams auction_params = 18;
 }
 
+message GetComponentAuctionCiphertextsRequest {
+  // Encrypted ProtectedAuctionInput from the device.
+  bytes protected_auction_ciphertext = 1;
+  // List of partner sellers that will participate in the server orchestrated
+  // component auctions.
+  repeated string component_sellers = 2;
+}
+
+message GetComponentAuctionCiphertextsResponse {
+  // Map of sellers passed in request to their encrypted ProtectedAuctionInput.
+  map<string, bytes> seller_component_ciphertexts = 1;
+}
+
 // SellerFrontEnd service (also known as SFE) operated by SSP / Seller.
 service SellerFrontEnd {
   // Selects a winning remarketing ad for the Publisher ad slot that may be
@@ -314,6 +340,14 @@ service SellerFrontEnd {
   rpc SelectAd(SelectAdRequest) returns (SelectAdResponse) {
     option (google.api.http) = {
       post: "/v1/selectAd"
+      body: "*"
+    };
+  }
+  // Returns encrypted Protected Auction request payload for component level
+  // sellers for server component auctions.
+  rpc GetComponentAuctionCiphertexts(GetComponentAuctionCiphertextsRequest) returns (GetComponentAuctionCiphertextsResponse) {
+    option (google.api.http) = {
+      post: "/v1/getComponentAuctionCiphertexts"
       body: "*"
     };
   }
@@ -640,6 +674,11 @@ message GetBidsRequest {
     // The Id is specified by the buyer to support coordinated experiments
     // with the buyer's Key/Value services.
     optional int32 buyer_kv_experiment_group_id = 13;
+
+    // Optional.
+    // A boolean value which indicates whether temporary unlimited egress should
+    // be enabled.
+    bool enable_unlimited_egress = 14;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -908,6 +947,11 @@ message GenerateProtectedAppSignalsBidsRequest {
 
     // Contextual data regarding PAS ads.
     ContextualProtectedAppSignalsData contextual_protected_app_signals_data = 9;
+
+    // Optional.
+    // A boolean value which indicates whether temporary unlimited egress should
+    // be enabled.
+    bool enable_unlimited_egress = 10;
   }
 
   // Encrypted GenerateProtectedAppSignalsBidsRawRequest.
@@ -1123,6 +1167,9 @@ message ScoreAdsRequest {
 
       // Domain of Buyer who owns app signals used for this ad.
       string owner = 7;
+
+      // Indicates the currency used for the bid price.
+      string bid_currency = 8;
     }
 
     // Ad with bid for protected app signals.

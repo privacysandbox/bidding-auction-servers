@@ -1,0 +1,11 @@
+# Bazel symlinks
+/bazel-*
+
+# Bzlmod files
+/MODULE*
+
+# Docker
+docker-buildx-*.log
+
+# Tests
+/dist

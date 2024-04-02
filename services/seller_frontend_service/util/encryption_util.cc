@@ -19,6 +19,8 @@
 #include <utility>
 
 #include "absl/strings/escaping.h"
+#include "services/common/util/oblivious_http_utils.h"
+#include "src/include/openssl/hpke.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -55,9 +57,8 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
 
   if (!private_key.has_value()) {
     PS_VLOG(2) << "Unable to retrieve private key for key ID: " << str_key_id;
-    return absl::Status(
-        absl::StatusCode::kNotFound,
-        absl::StrFormat(kMissingPrivateKey, std::move(str_key_id)));
+    return absl::Status(absl::StatusCode::kNotFound,
+                        absl::StrFormat(kMissingPrivateKey, str_key_id));
   }
 
   PS_VLOG(3) << "Private Key Id: " << private_key->key_id << ", Key Hex: "
@@ -80,6 +81,57 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
       *ohttp_request, *private_key, parsed_encapsulated_request->request_label);
 }
 
+absl::StatusOr<OhttpHpkeEncryptedMessage> HpkeEncryptAndOHTTPEncapsulate(
+    std::string plaintext, absl::string_view request_label,
+    server_common::KeyFetcherManagerInterface& key_fetcher_manager,
+    const server_common::CloudPlatform& cloud_platform) {
+  if (request_label != server_common::kBiddingAuctionOhttpRequestLabel &&
+      request_label !=
+          quiche::ObliviousHttpHeaderKeyConfig::kOhttpRequestLabel) {
+    return absl::Status(
+        absl::StatusCode::kInvalidArgument,
+        absl::StrCat("Request label must be one of: ",
+                     server_common::kBiddingAuctionOhttpRequestLabel, ", ",
+                     quiche::ObliviousHttpHeaderKeyConfig::kOhttpRequestLabel));
+  }
+  auto public_key = key_fetcher_manager.GetPublicKey(cloud_platform);
+  if (!public_key.ok()) {
+    std::string error =
+        absl::StrCat("Could not find public key for encryption: ",
+                     public_key.status().message());
+    ABSL_LOG(ERROR) << error;
+    return absl::InternalError(std::move(error));
+  }
+
+  std::string unescaped_public_key_bytes;
+  if (!absl::Base64Unescape(public_key->public_key(),
+                            &unescaped_public_key_bytes)) {
+    return absl::InternalError(
+        absl::StrCat("Failed to base64 decode the fetched public key: ",
+                     public_key->public_key()));
+  }
+
+  auto request = ToObliviousHTTPRequest(
+      plaintext, unescaped_public_key_bytes, std::stoi(public_key->key_id()),
+      // Must match the ones used by server_common::DecryptEncapsulatedRequest.
+      EVP_HPKE_DHKEM_X25519_HKDF_SHA256, EVP_HPKE_HKDF_SHA256,
+      EVP_HPKE_AES_256_GCM, request_label);
+  if (!request.ok()) {
+    return request.status();
+  }
+  return OhttpHpkeEncryptedMessage(*std::move(request), request_label);
+}
+
+OhttpHpkeEncryptedMessage::OhttpHpkeEncryptedMessage(
+    quiche::ObliviousHttpRequest ohttp_request, absl::string_view request_label)
+    // Prepend with a zero byte to follow the new B&A request format that uses
+    // custom media types for request encryption/request decryption.
+    : ciphertext(request_label ==
+                         server_common::kBiddingAuctionOhttpRequestLabel
+                     ? '\0' + ohttp_request.EncapsulateAndSerialize()
+                     : ohttp_request.EncapsulateAndSerialize()),
+      context(std::move(ohttp_request).ReleaseContext()) {}
+
 OhttpHpkeDecryptedMessage::OhttpHpkeDecryptedMessage(
     quiche::ObliviousHttpRequest& decrypted_request,
     server_common::PrivateKey& private_key, absl::string_view request_label)
@@ -87,5 +139,13 @@ OhttpHpkeDecryptedMessage::OhttpHpkeDecryptedMessage(
       request_label(request_label),
       plaintext(decrypted_request.GetPlaintextData()),
       context(std::move(decrypted_request).ReleaseContext()) {}
+
+OhttpHpkeDecryptedMessage::OhttpHpkeDecryptedMessage(
+    std::string plaintext, quiche::ObliviousHttpRequest::Context& context,
+    server_common::PrivateKey& private_key, absl::string_view request_label)
+    : private_key(std::move(private_key)),
+      request_label(request_label),
+      plaintext(std::move(plaintext)),
+      context(std::move(context)) {}
 
 }  // namespace privacy_sandbox::bidding_auction_servers

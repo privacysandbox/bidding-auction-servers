@@ -23,9 +23,10 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
+#include "services/seller_frontend_service/util/proto_mapping_util.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/communication/encoding_utils.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -42,7 +43,7 @@ namespace {
 template <typename T>
 T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
                                         bool fail_fast,
-                                        ReportErrorSignature ReportError,
+                                        const ReportErrorSignature& ReportError,
                                         ErrorAccumulator& error_accumulator) {
   absl::StatusOr<server_common::DecodedRequest> decoded_request =
       server_common::DecodeRequestPayload(encoded_data);
@@ -66,56 +67,55 @@ SelectAdReactorForWeb::SelectAdReactorForWeb(
     : SelectAdReactor(context, request, response, clients, config_client,
                       fail_fast, max_buyers_solicited) {}
 
-BiddingGroupsMap SelectAdReactorForWeb::GetBiddingGroups() {
-  BiddingGroupsMap bidding_groups;
-  for (const auto& [buyer, ad_with_bids] : shared_buyer_bids_map_) {
-    // Mapping from buyer to interest groups that are associated with non-zero
-    // bids.
-    absl::flat_hash_set<absl::string_view> buyer_interest_groups;
-    for (const auto& ad_with_bid : ad_with_bids->bids()) {
-      if (ad_with_bid.bid() > 0) {
-        buyer_interest_groups.insert(ad_with_bid.interest_group_name());
-      }
-    }
-    const auto& buyer_input = buyer_inputs_->at(buyer);
-    AuctionResult::InterestGroupIndex ar_interest_group_index;
-    int ig_index = 0;
-    for (const auto& interest_group : buyer_input.interest_groups()) {
-      // If the interest group name is one of the groups returned by the bidding
-      // service then record its index.
-      if (buyer_interest_groups.contains(interest_group.name())) {
-        ar_interest_group_index.add_index(ig_index);
-      }
-      ig_index++;
-    }
-    bidding_groups.try_emplace(buyer, std::move(ar_interest_group_index));
-  }
-  return bidding_groups;
-}
-
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error) {
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
   std::string encoded_data;
+  const auto decode_lambda = [&encoded_data]() {
+    auto result = CborDecodeAuctionResultToProto(encoded_data);
+    return result.ok() ? result->DebugString() : result.status().ToString();
+  };
+
   if (auction_scope_ ==
       AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
     PS_ASSIGN_OR_RETURN(
         encoded_data,
-        EncodeComponent(request_->auction_config().top_level_seller(),
-                        high_score, GetBiddingGroups(), error, error_handler));
+        EncodeComponent(
+            request_->auction_config().top_level_seller(), high_score,
+            GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_), error,
+            error_handler));
+    PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());
+  } else if (auction_scope_ ==
+             AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
+    // If this is server component auction, serialize as proto.
+    AuctionResult auction_result;
+    if (high_score.has_value()) {
+      auction_result = AdScoreToAuctionResult(
+          high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
+          error, auction_scope_, request_->auction_config().seller(),
+          protected_auction_input_,
+          request_->auction_config().top_level_seller());
+    } else {
+      auction_result = AdScoreToAuctionResult(
+          high_score, std::nullopt, error, auction_scope_,
+          request_->auction_config().seller(), protected_auction_input_);
+    }
+    // Serialized the data to bytes array.
+    encoded_data = auction_result.SerializeAsString();
+
+    PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
+                                  << auction_result.DebugString();
   } else {
-    PS_ASSIGN_OR_RETURN(encoded_data, Encode(high_score, GetBiddingGroups(),
-                                             error, error_handler));
+    // SINGLE_SELLER or SERVER_TOP_LEVEL Auction
+    PS_ASSIGN_OR_RETURN(
+        encoded_data,
+        Encode(high_score,
+               GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_), error,
+               error_handler));
+    PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());
   }
-  PS_VLOG(kPlain, log_context_)
-      << "AuctionResult:\n"
-      << ([&]() {
-           auto result = CborDecodeAuctionResultToProto(encoded_data);
-           return result.ok() ? result->DebugString()
-                              : result.status().ToString();
-         }());
 
   absl::string_view data_to_compress = absl::string_view(
       reinterpret_cast<char*>(encoded_data.data()), encoded_data.size());

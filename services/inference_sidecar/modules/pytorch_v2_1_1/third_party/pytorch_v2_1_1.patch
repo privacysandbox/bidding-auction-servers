@@ -1,0 +1,265 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+index 8776fcb2ecf..0ef44a5b738 100644
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -26,6 +26,7 @@ COMMON_COPTS = [
+     "-DAT_PER_OPERATOR_HEADERS",
+     "-DATEN_THREADING=NATIVE",
+     "-DNO_CUDNN_DESTROY_HANDLE",
++    "-DC10_DISABLE_LEGACY_IMPORT"
+ ] + if_cuda([
+     "-DUSE_CUDA",
+     "-DUSE_CUDNN",
+@@ -187,7 +187,6 @@ filegroup(
+     name = "aten_native_mkl_cpp",
+     srcs = glob([
+         "aten/src/ATen/native/mkl/*.cpp",
+-        "aten/src/ATen/mkl/*.cpp",
+     ]),
+ )
+
+@@ -264,16 +263,16 @@ header_template_rule(
+     out = "aten/src/ATen/Config.h",
+     include = "aten/src",
+     substitutions = {
+-        "@AT_MKLDNN_ENABLED@": "1",
++        "@AT_MKLDNN_ENABLED@": "0",
+         "@AT_MKLDNN_ACL_ENABLED@": "0",
+-        "@AT_MKL_ENABLED@": "1",
++        "@AT_MKL_ENABLED@": "0",
+         "@AT_MKL_SEQUENTIAL@": "0",
+         "@AT_FFTW_ENABLED@": "0",
+         "@AT_POCKETFFT_ENABLED@": "0",
+         "@AT_NNPACK_ENABLED@": "0",
+         "@CAFFE2_STATIC_LINK_CUDA_INT@": "0",
+-        "@AT_BUILD_WITH_BLAS@": "1",
+-        "@AT_BUILD_WITH_LAPACK@": "1",
++        "@AT_BUILD_WITH_BLAS@": "0",
++        "@AT_BUILD_WITH_LAPACK@": "0",
+         "@AT_PARALLEL_OPENMP@": "0",
+         "@AT_PARALLEL_NATIVE@": "1",
+         "@AT_PARALLEL_NATIVE_TBB@": "0",
+@@ -336,7 +335,6 @@ intern_build_aten_ops(
+     deps = [
+         ":aten_headers",
+         "@fbgemm",
+-        "@mkl",
+         "@sleef",
+     ],
+ )
+@@ -371,7 +369,6 @@ cc_library(
+         ":caffe2_for_aten_headers",
+         ":torch_headers",
+         "@fbgemm",
+-        "@ideep",
+     ],
+     alwayslink = True,
+ )
+@@ -448,6 +445,7 @@ CAFFE2_COPTS = COMMON_COPTS + [
+     "-Dcaffe2_EXPORTS",
+     "-DCAFFE2_USE_GLOO",
+     "-DCAFFE2_USE_CUDNN",
++    "-DCAFFE2_USE_EIGEN_FOR_BLAS",
+     "-DCAFFE2_BUILD_MAIN_LIB",
+     "-fvisibility-inlines-hidden",
+     "-fno-math-errno",
+@@ -570,7 +569,7 @@ filegroup(
+ filegroup(
+     name = "caffe2_onnx_srcs",
+     srcs = [
+-        "caffe2/onnx/backend.cc",
++        # "caffe2/onnx/backend.cc",
+         "caffe2/onnx/backend_rep.cc",
+         "caffe2/onnx/device.cc",
+         "caffe2/onnx/helper.cc",
+@@ -1388,7 +1386,6 @@ cc_library(
+         ":caffe2_contrib_srcs",
+         ":caffe2_core_srcs",
+         ":caffe2_distributed_srcs",
+-        ":caffe2_ideep_srcs",
+         ":caffe2_onnx_srcs",
+         ":caffe2_operators_srcs",
+         ":caffe2_opt_srcs",
+@@ -1625,7 +1623,11 @@ cc_library(
+             "torch/csrc/distributed/c10d/quantization/quantization_gpu.cu",
+         ],
+     )) + torch_sources,
+-    copts = TORCH_COPTS,
++    copts = TORCH_COPTS + ["-I.",
++              "-fopenmp=libgomp",
++              "-isystembazel-out/k8-opt/bin",
++              "-isystembazel-out/k8-dbg/bin",
++              ],
+     defines = [
+         "CAFFE2_NIGHTLY_VERSION=20200115",
+     ],
+@@ -1640,6 +1642,9 @@ cc_library(
+         "@cutlass",
+     ]),
+     alwayslink = True,
++    linkopts = ["-ldl",
++                "-fopenmp=libgomp",
++                ],
+ )
+
+ cc_library(
+diff --git a/aten.bzl b/aten.bzl
+index 9c6325d16ab..055d1da40b1 100644
+--- a/aten.bzl
++++ b/aten.bzl
+@@ -69,7 +69,7 @@ def generate_aten_impl(ctx):
+         command = ctx.executable.generator.path + " $@",
+         arguments = [
+             "--source-path",
+-            "aten/src/ATen",
++            "external/pytorch_v2_1_1/aten/src/ATen",
+             "--per-operator-headers",
+             "--install_dir",
+             install_dir,
+diff --git a/build.bzl b/build.bzl
+index 1324323bb2c..60dbfe98434 100644
+--- a/build.bzl
++++ b/build.bzl
+@@ -22,7 +22,6 @@ def define_targets(rules):
+             "CAFFE2_PERF_WITH_AVX512",
+             "CAFFE2_USE_EXCEPTION_PTR",
+             "CAFFE2_USE_CUDNN",
+-            "USE_MKLDNN",
+             "CAFFE2_USE_ITT",
+             "TORCH_DISABLE_GPU_ASSERTS",
+             "EIGEN_MPL2_ONLY",
+diff --git a/build_variables.bzl b/build_variables.bzl
+index bf9cf2b46e1..cb0a7045e14 100644
+--- a/build_variables.bzl
++++ b/build_variables.bzl
+@@ -671,7 +671,6 @@ libtorch_extra_sources = libtorch_core_jit_sources + [
+     "torch/csrc/jit/serialization/export_bytecode.cpp",
+     "torch/csrc/jit/serialization/export_module.cpp",
+     "torch/csrc/jit/serialization/flatbuffer_serializer.cpp",
+-    "torch/csrc/jit/serialization/import_legacy.cpp",
+     "torch/csrc/utils/byte_order.cpp",
+     "torch/csrc/utils/out_types.cpp",
+ ]
+diff --git a/c10/BUILD.bazel b/c10/BUILD.bazel
+index aadcf5ee3e5..dc7e1fa9476 100644
+--- a/c10/BUILD.bazel
++++ b/c10/BUILD.bazel
+@@ -16,7 +16,7 @@ bool_flag(
+
+ bool_flag(
+     name = "use_glog",
+-    build_setting_default = True,
++    build_setting_default = False,
+ )
+
+ config_setting(
+@@ -26,5 +26,5 @@ config_setting(
+
+ config_setting(
+     name = "using_glog",
+-    flag_values = {":use_glog": "true"},
++    flag_values = {":use_glog": "false"},
+ )
+diff --git a/c10/util/build.bzl b/c10/util/build.bzl
+index fb06a151783..6a06212e8ba 100644
+--- a/c10/util/build.bzl
++++ b/c10/util/build.bzl
+@@ -43,6 +43,7 @@ def define_targets(rules):
+             "//c10:using_glog": ["@com_github_glog//:glog"],
+             "//conditions:default": [],
+         }),
++        includes = ["../.."],
+         # This library uses flags and registration. Do not let the
+         # linker remove them.
+         alwayslink = True,
+diff --git a/third_party/sleef.BUILD b/third_party/sleef.BUILD
+index 573f9c5b54a..eac2f252bc2 100644
+--- a/third_party/sleef.BUILD
++++ b/third_party/sleef.BUILD
+@@ -36,8 +36,8 @@ SLEEF_PUBLIC_HEADERS = [
+ ]
+
+ SLEEF_PRIVATE_INCLUDES = [
+-    "-Iexternal/sleef/src/arch",
+-    "-Iexternal/sleef/src/common",
++    "-Iexternal/pytorch_v2_1_1_sleef/src/arch",
++    "-Iexternal/pytorch_v2_1_1_sleef/src/common",
+ ]
+
+ SLEEF_PUBLIC_INCLUDES = [
+diff --git a/third_party/tbb.BUILD b/third_party/tbb.BUILD
+index b11e6584733..70e5cab4103 100644
+--- a/third_party/tbb.BUILD
++++ b/third_party/tbb.BUILD
+@@ -5,7 +5,7 @@ licenses(["notice"])  # Apache 2.0
+
+ template_rule(
+     name = "version_string",
+-    src = "@//:aten/src/ATen/cpu/tbb/extra/version_string.ver.in",
++    src = "@pytorch_v2_1_1//:aten/src/ATen/cpu/tbb/extra/version_string.ver.in",
+     out = "version_string.h",
+     substitutions = {
+         "@CMAKE_SYSTEM_NAME@": "Unknown",
+@@ -42,8 +42,8 @@ cc_library(
+         exclude = ["include/tbb/scalable_allocator.h"],
+     ),
+     copts = [
+-        "-Iexternal/tbb/src/rml/include",
+-        "-Iexternal/tbb/src",
++        "-Iexternal/pytorch_v2_1_1_tbb/src/rml/include",
++        "-Iexternal/pytorch_v2_1_1_tbb/src",
+         "-pthread",
+         "-DDO_ITT_NOTIFY=1",
+         "-DUSE_PTHREAD=1",
+diff --git a/tools/config/defs.bzl b/tools/config/defs.bzl
+index 6ddd0e99156..97bd4f02077 100644
+--- a/tools/config/defs.bzl
++++ b/tools/config/defs.bzl
+@@ -8,7 +8,7 @@ load("@bazel_skylib//lib:selects.bzl", "selects")
+ def if_cuda(if_true, if_false = []):
+     """Helper for selecting based on the whether CUDA is configured. """
+     return selects.with_or({
+-        "@//tools/config:cuda_enabled_and_capable": if_true,
++        "@pytorch_v2_1_1//tools/config:cuda_enabled_and_capable": if_true,
+         "//conditions:default": if_false,
+     })
+
+diff --git a/tools/setup_helpers/generate_code.py b/tools/setup_helpers/generate_code.py
+index afdd168d179..656759cf89a 100644
+--- a/tools/setup_helpers/generate_code.py
++++ b/tools/setup_helpers/generate_code.py
+@@ -12,8 +12,8 @@ try:
+ except ImportError:
+     from yaml import SafeLoader as YamlLoader  # type: ignore[assignment, misc]
+
+-NATIVE_FUNCTIONS_PATH = "aten/src/ATen/native/native_functions.yaml"
+-TAGS_PATH = "aten/src/ATen/native/tags.yaml"
++NATIVE_FUNCTIONS_PATH = "external/pytorch_v2_1_1/aten/src/ATen/native/native_functions.yaml"
++TAGS_PATH = "external/pytorch_v2_1_1/aten/src/ATen/native/tags.yaml"
+
+
+ def generate_code(
+@@ -201,8 +201,8 @@ def main() -> None:
+     if options.gen_lazy_ts_backend:
+         aten_path = os.path.dirname(os.path.dirname(options.native_functions_path))
+         ts_backend_yaml = os.path.join(aten_path, "native/ts_native_functions.yaml")
+-        ts_native_functions = "torch/csrc/lazy/ts_backend/ts_native_functions.cpp"
+-        ts_node_base = "torch/csrc/lazy/ts_backend/ts_node.h"
++        ts_native_functions = "external/pytorch_v2_1_1/torch/csrc/lazy/ts_backend/ts_native_functions.cpp"
++        ts_node_base = "external/pytorch_v2_1_1/torch/csrc/lazy/ts_backend/ts_node.h"
+         install_dir = options.install_dir or os.fspath(options.gen_dir / "torch/csrc")
+         lazy_install_dir = os.path.join(install_dir, "lazy/generated")
+         os.makedirs(lazy_install_dir, exist_ok=True)
+diff --git a/torchgen/gen_lazy_tensor.py b/torchgen/gen_lazy_tensor.py
+index 3e4e4b04142..bbe19ce284c 100644
+--- a/torchgen/gen_lazy_tensor.py
++++ b/torchgen/gen_lazy_tensor.py
+@@ -134,7 +134,7 @@ def validate_shape_inference_header(
+     shape_inference_hdr: str, expected_shape_infr_decls: List[str]
+ ) -> None:
+     try:
+-        with open(shape_inference_hdr) as f:
++        with open("external/pytorch_v2_1_1/" + shape_inference_hdr) as f:
+             shape_infr_decls = f.read()
+             shape_infr_decl_lines = set(shape_infr_decls.split("\n"))
+     except OSError as e:

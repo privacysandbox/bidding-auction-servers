@@ -4,6 +4,7 @@ build --config=clang
 build --compilation_mode=opt
 build --output_filter='^//((?!(third_party):).)*$'`
 build --color=yes
+build --workspace_status_command="bash tools/get_workspace_status"
 
 build:run_all_tests --cache_test_results=no
 test:run_all_tests --test_verbose_timeout_warnings
@@ -16,11 +17,14 @@ build --copt=-DENABLE_LOGS_PREVIEW
 # Avoid linking to ICU shared libs for googleurl
 build --@com_google_googleurl//build_config:system_icu=0
 
+build:clang --config=cpp_no_warn
 build:clang --cxxopt=-fbracket-depth=512
 build:clang --client_env=CC=clang
 build:clang --cxxopt=-std=c++17
 build:clang --host_cxxopt=-std=c++17
 build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
+# Makes thread safety analysis warnings into errors.
+build:clang --copt=-Werror=thread-safety
 #disable the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
 build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
 
@@ -37,23 +41,28 @@ build:cpp_no_warn --per_file_copt=services/common/telemetry/.*_test.cc@-Wno-unus
 # Compiler complains about main function being unused in the micro-benchmarks.
 build:cpp_no_warn --per_file_copt=services/.*_benchmarks.cc@-Wno-unused-function
 
+# Enable clang-tidy
+build:clang-tidy --aspects @bazel_clang_tidy//clang_tidy:clang_tidy.bzl%clang_tidy_aspect
+build:clang-tidy --output_groups=report
+build:clang-tidy --@bazel_clang_tidy//:clang_tidy_config=//:clang_tidy_config
+
 test --test_verbose_timeout_warnings
 
-build:instance_local --//:instance=local --config=cpp_no_warn
+build:instance_local --//:instance=local
 build:instance_local --@google_privacysandbox_servers_common//:instance=local
 
-build:instance_gcp --//:instance=gcp --config=cpp_no_warn
+build:instance_gcp --//:instance=gcp
 build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
 
-build:instance_aws --//:instance=aws --config=cpp_no_warn
+build:instance_aws --//:instance=aws
 build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
 
-build:platform_local --//:platform=local --config=cpp_no_warn
+build:platform_local --//:platform=local
 
-build:platform_aws --//:platform=aws --config=cpp_no_warn
+build:platform_aws --//:platform=aws
 build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
 
-build:platform_gcp --//:platform=gcp --config=cpp_no_warn
+build:platform_gcp --//:platform=gcp
 build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
 
 build:local_aws --config=instance_local
@@ -129,6 +138,7 @@ test:coretests --test_tag_filters=-flaky
 
 build:small-tests --action_env=PRIVACY_SANDBOX_SERVERS_SMALL_TESTS=1
 build:small-tests --compilation_mode=dbg
+build:small-tests --fission=yes
 test:small-tests --build_tests_only
 test:small-tests --test_size_filters=-large,-enormous
 test:small-tests --test_tag_filters=-requires-network

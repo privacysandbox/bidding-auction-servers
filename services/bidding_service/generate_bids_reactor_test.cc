@@ -36,7 +36,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -123,7 +123,7 @@ class GenerateBidsReactorTest : public testing::Test {
   }
 
   void CheckGenerateBids(const RawRequest& raw_request,
-                         Response expected_response,
+                         const Response& expected_response,
                          bool enable_buyer_debug_url_generation = false,
                          bool enable_adtech_code_logging = false) {
     Response response;
@@ -135,8 +135,7 @@ class GenerateBidsReactorTest : public testing::Test {
     request_.set_request_ciphertext(raw_request.SerializeAsString());
     GenerateBidsReactor reactor(
         dispatcher_, &request_, &response, std::move(benchmarkingLogger),
-        key_fetcher_manager_.get(), crypto_client_.get(),
-        std::move(runtime_config));
+        key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
     reactor.Execute();
     google::protobuf::util::MessageDifferencer diff;
     std::string diff_output;
@@ -678,8 +677,8 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         auto input = batch.at(0).input;
         IGForBidding received;
         EXPECT_EQ(*input[3], expected_signals);
-        // Check that browser signals are an empty JSON string.
-        EXPECT_EQ(*input[4], R"JSON("")JSON");
+        // Check that device signals are an empty JSON object.
+        EXPECT_EQ(*input[4], R"JSON("{}")JSON");
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
   RawRequest raw_request;
@@ -833,10 +832,9 @@ TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {
   BiddingServiceRuntimeConfig runtime_config = {
       .enable_buyer_debug_url_generation = false,
   };
-  GenerateBidsReactor reactor(dispatcher_, &request_, &response,
-                              std::move(benchmarkingLogger),
-                              key_fetcher_manager_.get(), crypto_client_.get(),
-                              std::move(runtime_config));
+  GenerateBidsReactor reactor(
+      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
+      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 }
@@ -876,10 +874,9 @@ TEST_F(GenerateBidsReactorTest,
       std::make_unique<BiddingNoOpLogger>();
 
   BiddingServiceRuntimeConfig runtime_config;
-  GenerateBidsReactor reactor(dispatcher_, &request_, &response,
-                              std::move(benchmarkingLogger),
-                              key_fetcher_manager_.get(), crypto_client_.get(),
-                              std::move(runtime_config));
+  GenerateBidsReactor reactor(
+      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
+      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 

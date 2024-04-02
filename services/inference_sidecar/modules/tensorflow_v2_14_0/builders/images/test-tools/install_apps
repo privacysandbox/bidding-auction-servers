@@ -1,0 +1,28 @@
+#!/bin/busybox sh
+
+set -o errexit
+
+install_packages() {
+  apk --no-cache add \
+    bash~=5 \
+    curl~=8 \
+    jq~=1 \
+    libstdc++
+}
+
+install_nghttp2() {
+  apk --no-cache add \
+    nghttp2~=1
+  h2load --version
+}
+
+install_apache2_utils() {
+  apk --no-cache add \
+    apache2-utils~=2.4
+  ab -V
+}
+
+apk --no-cache update
+install_packages
+install_nghttp2
+install_apache2_utils

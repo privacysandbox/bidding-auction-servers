@@ -1,0 +1,146 @@
+#!/bin/bash
+
+set -o pipefail
+set -o errexit
+
+declare -i VERBOSE=0
+declare INSTALL_LOCALE=en_US.UTF-8
+declare -r -i CLANG_VER=15
+
+usage() {
+  local exitval=${1-1}
+  cat >&2 << USAGE
+usage:
+  $0 <options>
+    --locale <value>              Set locale. Default: ${INSTALL_LOCALE}
+    --verbose                     Emit verbose info. Default: false
+USAGE
+  # shellcheck disable=SC2086
+  exit ${exitval}
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --locale)
+      INSTALL_LOCALE="$2"
+      shift 2 || usage
+      ;;
+    --verbose)
+      VERBOSE=1
+      shift
+      ;;
+    -h | --help) usage 0 ;;
+    *) usage 0 ;;
+  esac
+done
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+readonly SCRIPT_DIR
+# shellcheck disable=SC1090
+. "${SCRIPT_DIR}"/install_go.sh
+
+function apt_update() {
+  apt-get --quiet -o 'Acquire::https::No-Cache=True' -o 'Acquire::http::No-Cache=True' update
+}
+
+function install_python() {
+  DEBIAN_FRONTEND=noninteractive apt-get --quiet install -y --no-install-recommends \
+    python3.9-venv="3.9.*" python3.9-dev
+  mkdir -p /opt/bin
+  update-alternatives \
+    --force \
+    --install /opt/bin/python3 python3-opt /usr/bin/python3.9 100 \
+    --slave /usr/bin/python3 python3-usr /usr/bin/python3.9 \
+    --slave /usr/bin/python python-usr /usr/bin/python3.9 \
+    --slave /opt/bin/python python /usr/bin/python3.9
+  curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+  /usr/bin/python3 /tmp/get-pip.py
+  rm -f /tmp/get-pip.py
+  /usr/bin/python3 -m pip --version
+  /usr/bin/python3 -m pip install \
+    "libclang~=${CLANG_VER}.0" \
+    "numpy~=1.25"
+}
+
+function install_misc() {
+  DEBIAN_FRONTEND=noninteractive apt-get --quiet install -y --no-install-recommends \
+    apt-transport-https="2.0.*" \
+    bsdmainutils \
+    ca-certificates \
+    chrpath="0.16-*" \
+    libcurl4="7.68.*" \
+    curl="7.68.*" \
+    file="1:5.*" \
+    gettext="0.19.*" \
+    git="1:2.25.*" \
+    gnupg="2.2.*" \
+    google-perftools="2.*" \
+    locales="2.31-*" \
+    lsb-release="11.1.*" \
+    openssh-client="1:8.2*" \
+    patch="2.7.*" \
+    rename="1.10-*" \
+    software-properties-common="0.99.*" \
+    unzip="6.0-*" \
+    wget="1.20.*" \
+    xz-utils="5.2.*" \
+    zip="3.0-*"
+  if [[ -n ${INSTALL_LOCALE} ]]; then
+    printf "\nSetting locale to: %s\n" "${INSTALL_LOCALE}"
+    locale-gen "${INSTALL_LOCALE}"
+    update-locale LANG="${INSTALL_LOCALE}"
+  fi
+}
+
+function install_clang() {
+  curl --silent --fail --show-error --location --remote-name https://apt.llvm.org/llvm.sh
+  chmod +x llvm.sh
+  ./llvm.sh ${CLANG_VER}
+  apt-get --quiet install -y --no-install-recommends libc++-${CLANG_VER}-dev
+  for prog in clang lldb lld ld.lld llvm-cov llvm-profdata; do
+    update-alternatives --install /usr/bin/${prog} ${prog} /usr/bin/${prog}-${CLANG_VER} 100
+  done
+  rm -f llvm.sh
+
+  clang --version
+  llvm-cov --version
+  llvm-profdata show --version
+}
+
+# Install Docker (https://docs.docker.com/engine/install/debian/)
+function install_docker() {
+  declare -r arch="$1"
+  apt-get --quiet remove docker docker.io containerd runc
+  mkdir -p /etc/apt/keyrings
+  declare -r dist=ubuntu
+  curl --silent --fail --show-error --location https://download.docker.com/linux/${dist}/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  declare lsb_release
+  lsb_release="$(lsb_release -cs)"
+  echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${dist} ${lsb_release} stable" \
+    | tee /etc/apt/sources.list.d/docker.list
+  apt_update
+  apt-get --quiet install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
+}
+
+function cleanup() {
+  apt-get --quiet autoremove -y
+  apt-get autoclean
+  apt-get clean
+  rm -rf /var/lib/apt/lists
+  cd /
+  go clean -cache
+}
+
+if [[ ${VERBOSE} -eq 1 ]]; then
+  printf "=== SHELL ENVIRONMENT ===\n"
+  env
+fi
+
+apt_update
+install_misc
+install_clang
+install_golang "${BUILD_ARCH}"
+install_docker "${BUILD_ARCH}"
+install_python # should run after other install_*
+cleanup

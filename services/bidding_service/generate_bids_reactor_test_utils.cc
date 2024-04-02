@@ -27,8 +27,8 @@
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -80,8 +80,8 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
 
 GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& auction_signals, const std::string& buyer_signals,
-    const ProtectedAppSignals& protected_app_signals, const std::string seller,
-    const std::string publisher_name,
+    const ProtectedAppSignals& protected_app_signals, const std::string& seller,
+    const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data) {
   GenerateProtectedAppSignalsBidsRawRequest raw_request;
   raw_request.set_auction_signals(auction_signals);

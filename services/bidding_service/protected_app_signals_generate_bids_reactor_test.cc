@@ -37,15 +37,16 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/util/json_util.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr int kPreparedRetrievalDataIndex = 0;
 constexpr int kContextualSignalsIndex = 2;
-constexpr int kAdRenderIdsIndex = 3;
-constexpr int kNumAdRetrievalOrKvLookupUdfArguments = 4;
+constexpr int kAdRenderIdsIndex = 0;
+constexpr int kNumAdRetrievalUdfArguments = 4;
+constexpr int kNumKVLookupUdfArguments = 1;
 constexpr char kTestAdRenderId[] = "TestAdId";
 
 using Request = GenerateProtectedAppSignalsBidsRequest;
@@ -228,7 +229,7 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
                    absl::Duration timeout) {
         EXPECT_EQ(raw_request->partitions().size(), 1);
         const auto& udf_arguments = raw_request->partitions()[0].arguments();
-        EXPECT_EQ(udf_arguments.size(), kNumAdRetrievalOrKvLookupUdfArguments);
+        EXPECT_EQ(udf_arguments.size(), kNumAdRetrievalUdfArguments);
         auto parsed_retrieval_data = ParseJsonString(
             udf_arguments[kPreparedRetrievalDataIndex].data().string_value());
         auto decoded_signals_itr =
@@ -565,17 +566,7 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
             EXPECT_EQ(raw_request->partitions().size(), 1);
             const auto& udf_arguments =
                 raw_request->partitions()[0].arguments();
-            EXPECT_EQ(udf_arguments.size(),
-                      kNumAdRetrievalOrKvLookupUdfArguments);
-            EXPECT_TRUE(udf_arguments[kPreparedRetrievalDataIndex]
-                            .data()
-                            .string_value()
-                            .empty());
-
-            EXPECT_EQ(std::string(udf_arguments[kContextualSignalsIndex]
-                                      .data()
-                                      .string_value()),
-                      kTestBuyerSignals);
+            EXPECT_EQ(udf_arguments.size(), kNumKVLookupUdfArguments);
 
             const auto& ad_render_ids =
                 udf_arguments[kAdRenderIdsIndex].data().list_value().values();

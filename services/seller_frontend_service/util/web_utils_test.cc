@@ -445,7 +445,7 @@ TEST(ChromeResponseUtils, VerifyBiddingGroupBuyerOriginOrdering) {
   // Convert the bidding group map to CBOR.
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](grpc::Status status) {};
+  auto err_handler = [](const grpc::Status& status) {};
   auto result = CborSerializeBiddingGroups(bidding_group_map, err_handler,
                                            *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -573,7 +573,7 @@ TEST(ChromeResponseUtils, CborSerializeWinReportingUrls) {
 
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](grpc::Status status) {};
+  auto err_handler = [](const grpc::Status& status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -600,7 +600,7 @@ TEST(ChromeResponseUtils, NoCborGeneratedWithEmptyWinReportingUrl) {
   WinReportingUrls win_reporting_urls;
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](grpc::Status status) {};
+  auto err_handler = [](const grpc::Status& status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -632,7 +632,7 @@ TEST(ChromeResponseUtils, CborWithOnlySellerReprotingUrls) {
 
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](grpc::Status status) {};
+  auto err_handler = [](const grpc::Status& status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -659,7 +659,7 @@ TEST(ChromeResponseUtils, CborWithNoInteractionReportingUrls) {
       ->set_reporting_url(kTestReportResultUrl);
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumWinReportingUrlsKeys));
   auto* cbor_internal = cbor_data_root.get();
-  auto err_handler = [](grpc::Status status) {};
+  auto err_handler = [](const grpc::Status& status) {};
   auto result = CborSerializeWinReportingUrls(win_reporting_urls, err_handler,
                                               *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
@@ -722,8 +722,8 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
   bidding_group_map.try_emplace(interest_group_owner, std::move(ig_indices));
 
   auto response_with_cbor =
-      Encode(winner, std::move(bidding_group_map), /*error=*/std::nullopt,
-             [](grpc::Status status) {});
+      Encode(winner, bidding_group_map, /*error=*/std::nullopt,
+             [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -801,8 +801,8 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   bidding_group_map.try_emplace(interest_group_owner, std::move(ig_indices));
 
   auto response_with_cbor =
-      Encode(winner, std::move(bidding_group_map), /*error=*/std::nullopt,
-             [](grpc::Status status) {});
+      Encode(winner, bidding_group_map, /*error=*/std::nullopt,
+             [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -867,9 +867,9 @@ TEST(ChromeResponseUtils, CborEncodesComponentAuctionResult) {
   bidding_group_map.try_emplace(winner.interest_group_owner(),
                                 std::move(ig_indices));
 
-  auto response_with_cbor =
-      EncodeComponent(top_level_seller, winner, std::move(bidding_group_map),
-                      /*error=*/std::nullopt, [](grpc::Status status) {});
+  auto response_with_cbor = EncodeComponent(
+      top_level_seller, winner, bidding_group_map,
+      /*error=*/std::nullopt, [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   absl::StatusOr<AuctionResult> decoded_result =
@@ -935,8 +935,8 @@ TEST(ChromeResponseUtils, VerifyCBOREncodedError) {
   AuctionResult::Error error;
   error.set_message(kSampleErrorMessage);
   error.set_code(kSampleErrorCode);
-  auto response_with_cbor = Encode(winner, std::move(bidding_group_map), error,
-                                   [](grpc::Status status) {});
+  auto response_with_cbor = Encode(winner, bidding_group_map, error,
+                                   [](const grpc::Status& status) {});
 
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);
@@ -964,7 +964,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
                                       sizeof(kPublisher) - 1)),
       cbor_move(
           cbor_build_stringn(kSamplePublisher, sizeof(kSamplePublisher) - 1))};
-  EXPECT_TRUE(cbor_map_add(*protected_auction_input, std::move(publisher_kv)));
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input, publisher_kv));
   expected_errors.emplace(ErrStr(/*field_name=*/kRootCborKey,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypeByteString));
@@ -975,7 +975,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
       cbor_move(cbor_build_bytestring(
           reinterpret_cast<cbor_data>(kSampleGenerationId),
           sizeof(kSampleGenerationId) - 1))};
-  EXPECT_TRUE(cbor_map_add(*protected_auction_input, std::move(gen_id_kv)));
+  EXPECT_TRUE(cbor_map_add(*protected_auction_input, gen_id_kv));
   expected_errors.emplace(ErrStr(/*field_name=*/kGenerationId,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypeByteString));
@@ -987,7 +987,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
   cbor_pair ig_name_kv = {
       cbor_move(cbor_build_stringn(kName, sizeof(kName) - 1)),
       cbor_move(cbor_build_uint32(1))};
-  EXPECT_TRUE(cbor_map_add(interest_group, std::move(ig_name_kv)));
+  EXPECT_TRUE(cbor_map_add(interest_group, ig_name_kv));
   expected_errors.emplace(ErrStr(/*field_name=*/kIgName,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypePositiveInt));
@@ -999,7 +999,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
       cbor_move(cbor_build_stringn(kBrowserSignalsKey,
                                    sizeof(kBrowserSignalsKey) - 1)),
       cbor_move(browser_signals_array)};
-  EXPECT_TRUE(cbor_map_add(interest_group, std::move(browser_signals_kv)));
+  EXPECT_TRUE(cbor_map_add(interest_group, browser_signals_kv));
   expected_errors.emplace(ErrStr(/*field_name=*/kBrowserSignalsKey,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypePositiveInt));
@@ -1011,7 +1011,7 @@ TEST(WebRequestUtils, Decode_FailsAndGetsAllErrors) {
       cbor_move(cbor_build_stringn(kBiddingSignalsKeys,
                                    sizeof(kBiddingSignalsKeys) - 1)),
       cbor_move(bidding_signals_array)};
-  EXPECT_TRUE(cbor_map_add(interest_group, std::move(bidding_signals_kv)));
+  EXPECT_TRUE(cbor_map_add(interest_group, bidding_signals_kv));
   expected_errors.emplace(ErrStr(/*field_name=*/kIgBiddingSignalKeysEntry,
                                  /*expected_type=*/kCborTypeString,
                                  /*observed_type=*/kCborTypePositiveInt));
@@ -1177,8 +1177,8 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret = Encode(std::move(winner), std::move(bidding_group_map),
-                    std::nullopt, [](auto error) {});
+  auto ret = Encode(std::move(winner), bidding_group_map, std::nullopt,
+                    [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(
@@ -1232,9 +1232,9 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret = EncodeComponent("https://top-level-adtech.com", std::move(winner),
-                             std::move(bidding_group_map), std::nullopt,
-                             [](auto error) {});
+  auto ret =
+      EncodeComponent("https://top-level-adtech.com", std::move(winner),
+                      bidding_group_map, std::nullopt, [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(
@@ -1290,9 +1290,9 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncodingNoBidCurrency) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret = EncodeComponent("https://top-level-adtech.com", std::move(winner),
-                             std::move(bidding_group_map), std::nullopt,
-                             [](auto error) {});
+  auto ret =
+      EncodeComponent("https://top-level-adtech.com", std::move(winner),
+                      bidding_group_map, std::nullopt, [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "services/bidding_service/inference/inference_flags.h"
 #include "services/common/constants/common_service_flags.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -56,6 +57,10 @@ inline std::vector<absl::string_view> GetServiceFlags() {
   std::vector<absl::string_view> flags(kFlags, kFlags + size);
 
   for (absl::string_view flag : kCommonServiceFlags) {
+    flags.push_back(flag);
+  }
+
+  for (absl::string_view flag : kInferenceFlags) {
     flags.push_back(flag);
   }
 

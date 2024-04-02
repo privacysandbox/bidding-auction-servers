@@ -117,7 +117,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       "interestGroupNames=ig_name_likes_boots"));
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
-  const std::string expectedResult = R"json({
+  const std::string expected_result = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -136,10 +136,9 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  const std::string actualResult = expectedResult;
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expectedResult}));
+          GetBuyerValuesOutput({expected_result}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -167,14 +166,14 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expected_urls](
-                    HTTPRequest request, int timeout_ms,
+      .WillOnce([actual_result = expected_result, &expected_urls](
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);
@@ -305,7 +304,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
       .WillOnce([actualResult, &expected_urls](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url)) << request.url;
@@ -333,7 +332,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -348,7 +347,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -362,7 +361,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
@@ -384,7 +383,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // testing to always include a client_type.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
@@ -415,7 +414,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
                    "?client_type=1&keys=clementine,lloyd_george,birkenhead")};
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expected_urls](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
@@ -466,20 +465,21 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
 
-  std::vector<std::string> expectedHeaders;
+  std::vector<std::string> expected_headers;
+  expected_headers.reserve(kMandatoryHeaders.size());
   for (const auto& mandatory_header : kMandatoryHeaders) {
-    expectedHeaders.push_back(absl::StrCat(mandatory_header, ":"));
+    expected_headers.push_back(absl::StrCat(mandatory_header, ":"));
   }
   // Assert that the mocked fetcher will have the method FetchUrl called on it,
   // with the metadata.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
-      .WillOnce([&expectedHeaders](
+      .WillOnce([&expected_headers](
                     HTTPRequest request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
-        std::sort(expectedHeaders.begin(), expectedHeaders.end());
+        std::sort(expected_headers.begin(), expected_headers.end());
         std::sort(request.headers.begin(), request.headers.end());
-        EXPECT_EQ(expectedHeaders, request.headers);
+        EXPECT_EQ(expected_headers, request.headers);
       });
 
   absl::AnyInvocable<
@@ -514,7 +514,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
   // Note that this test is trivial; we use the same string
-  const std::string expectedResult = R"json({
+  const std::string expected_result = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -526,10 +526,9 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
             },
           })json";
 
-  const std::string actualResult = expectedResult;
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expectedResult}));
+          GetBuyerValuesOutput({expected_result}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -557,14 +556,14 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expectedUrl](
-                    HTTPRequest request, int timeout_ms,
+      .WillOnce([actual_result = expected_result, &expectedUrl](
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_EQ(request.url, expectedUrl);
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);

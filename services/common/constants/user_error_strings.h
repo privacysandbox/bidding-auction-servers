@@ -28,6 +28,8 @@ inline constexpr char kMalformedCiphertext[] = "Malformed request ciphertext.";
 inline constexpr char kMissingInputs[] = "Missing inputs";
 
 inline constexpr char kInternalServerError[] = "Internal server error.";
+inline constexpr char kSellerDomainEmpty[] =
+    "Seller domain in server must be configured.";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

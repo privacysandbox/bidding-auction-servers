@@ -45,18 +45,63 @@ inline constexpr char kNonEmptyBuyerInputMalformed[] =
     "BuyerInput map is present but malformed: %s";
 inline constexpr char kBadProtectedAudienceBinaryProto[] =
     "Unable to decode ProtectedAudienceInput binary proto";
+inline constexpr char kBadBinaryProto[] = "Unable to decode binary proto";
 inline constexpr char kBadCompressedBuyerInput[] =
     "Unable to decompress buyer input for buyer: %s";
 inline constexpr char kBadBuyerInputProto[] =
     "Unable to decode BuyerInput binary proto for buyer: %s";
+inline constexpr char kPASSignalsForComponentAuction[] =
+    "Unsupported component auction input (protected signals) for buyer: %s";
 inline constexpr char kMalformedBuyerInput[] = "Malformed buyer input.";
+inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
+    "protected_auction_ciphertext must be non-null.";
+inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
 inline constexpr char kErrorDecryptingCiphertextError[] =
     "Error while decrypting protected_auction_ciphertext: %s.";
+inline constexpr char kErrorDecryptingAuctionResultError[] =
+    "Error while decrypting auction_result_ciphertext: %s.";
+inline constexpr char kErrorDecodingAuctionResultError[] =
+    "Error while decoding component auction_result: %s.";
+inline constexpr char kErrorInAuctionResult[] =
+    "Error while validating component auction_result: %s.";
+inline constexpr char kMismatchedGenerationIdInAuctionResultError[] =
+    "Mismatched generationId.";
+inline constexpr char kEmptyComponentSellerInAuctionResultError[] =
+    "Component Seller Auction Result must contain component seller domain";
+inline constexpr char kMismatchedTopLevelSellerInAuctionResultError[] =
+    "Mismatched top level seller.";
+inline constexpr char kUnsupportedAdTypeInAuctionResultError[] =
+    "Unsupported ad type.";
+inline constexpr char kTopLevelWinReportingUrlsInAuctionResultError[] =
+    "Top Level Win Reporting URLs should not be present.";
 
 // Server side errors listed here.
 inline constexpr char kInternalError[] = "Internal Error";
 inline constexpr char kEncryptionFailed[] = "Encryption Failure.";
 inline constexpr char kRequestCancelled[] = "Request Cancelled by Client.";
+
+// Constants for bad Ad server provided inputs.
+inline constexpr char kEmptySellerSignals[] =
+    "Seller signals missing in auction config";
+inline constexpr char kEmptyAuctionSignals[] =
+    "Auction signals missing in auction config";
+inline constexpr char kEmptyBuyerList[] = "No buyers specified";
+inline constexpr char kEmptySeller[] =
+    "Seller origin missing in auction config";
+inline constexpr char kEmptyBuyerSignals[] =
+    "Buyer signals missing in auction config for buyer: %s";
+inline constexpr char kUnknownClientType[] =
+    "Unknown client type in SelectAdRequest";
+inline constexpr char kWrongSellerDomain[] =
+    "Seller domain passed in request does not match this server's domain";
+inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
+    "One or more buyer keys are empty in per buyer config map";
+inline constexpr char kDeviceComponentAuctionWithAndroid[] =
+    "Device orchestrated Component Auctions not supported for Android";
+inline constexpr char kNoComponentAuctionResults[] =
+    "No Component Auction Results for Top Level Seller auction";
+inline constexpr char kEmptyComponentAuctionResults[] =
+    "Empty Component Auction Results for Top Level Seller auction";
 
 // Error handling related constants.
 inline constexpr char kErrorDelimiter[] = "; ";

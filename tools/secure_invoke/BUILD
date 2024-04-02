@@ -34,7 +34,7 @@ cc_library(
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "//tools/secure_invoke/payload_generator:payload_packaging_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
     ],
 )
 
@@ -56,7 +56,7 @@ cc_binary(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_utils",
     ],
 )
 

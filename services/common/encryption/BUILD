@@ -51,11 +51,11 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:private_key_fetcher",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:public_key_fetcher",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:private_key_fetcher",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:public_key_fetcher",
     ],
 )
 
@@ -66,10 +66,10 @@ cc_library(
     ],
     deps = [
         "@com_google_absl//absl/status:statusor",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/crypto_client",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:public_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:private_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:public_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/crypto_client",
+        "@google_privacysandbox_servers_common//src/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
     ],
 )
 
@@ -85,10 +85,10 @@ cc_library(
     deps = [
         ":crypto_client_wrapper_interface",
         "@com_google_absl//absl/status:statusor",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/crypto_client",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:private_key_fetcher_interface",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:private_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/crypto_client",
+        "@google_privacysandbox_servers_common//src/public/cpio/proto/crypto_service/v1:crypto_service_cc_proto",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 

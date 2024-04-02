@@ -22,6 +22,10 @@
 
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "include/grpcpp/create_channel.h"
+#include "include/grpcpp/security/credentials.h"
+#include "include/grpcpp/server.h"
+#include "include/grpcpp/server_builder.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

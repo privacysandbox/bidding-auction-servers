@@ -24,7 +24,7 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
-#include "src/cpp/logger/request_context_logger.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -61,7 +61,7 @@ absl::Status PeriodicCodeFetcher::Start() {
 
 void PeriodicCodeFetcher::End() {
   if (task_id_.has_value()) {
-    executor_.Cancel(*std::move(task_id_));
+    executor_.Cancel(*task_id_);
     task_id_ = absl::nullopt;
   }
 }
@@ -70,7 +70,7 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
   absl::Notification notification;
   auto done_callback =
       [&notification,
-       this](std::vector<absl::StatusOr<std::string>> results) mutable {
+       this](const std::vector<absl::StatusOr<std::string>>& results) mutable {
         bool all_status_ok = true;
         std::vector<std::string> results_value;
 
@@ -108,10 +108,10 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
 
   // Create a HTTPRequest object from the url_endpoint_
   std::vector<HTTPRequest> requests;
-  for (std::string endpoint : url_endpoints_) {
+  for (const std::string& endpoint : url_endpoints_) {
     HTTPRequest request;
-    PS_VLOG(1) << "Requesting UDF from: " << std::string(endpoint);
-    request.url = std::string(endpoint);
+    PS_VLOG(1) << "Requesting UDF from: " << endpoint;
+    request.url = endpoint;
     requests.push_back(request);
   }
 

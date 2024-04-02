@@ -23,7 +23,7 @@
 #include "services/buyer_frontend_service/data/get_bids_config.h"
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -56,7 +56,7 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
       const GetBidsConfig config, bool enable_benchmarking = false);
 
   explicit BuyerFrontEndService(ClientRegistry client_registry,
-                                GetBidsConfig config,
+                                const GetBidsConfig config,
                                 bool enable_benchmarking = false);
 
   // Returns bid for the top eligible ad candidate.

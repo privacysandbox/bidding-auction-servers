@@ -18,27 +18,21 @@ package(default_visibility = ["//:__subpackages__"])
 
 cc_library(
     name = "v8_dispatcher",
-    srcs = [
-        "v8_dispatcher.cc",
-    ],
-    hdrs = [
-        "v8_dispatcher.h",
-    ],
+    srcs = ["v8_dispatcher.cc"],
+    hdrs = ["v8_dispatcher.h"],
     deps = [
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
-        "@google_privacysandbox_servers_common//scp/cc/roma/roma_service:roma_service_lib",
+        "@com_google_absl//absl/synchronization",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/roma/roma_service",
     ],
 )
 
 cc_library(
     name = "code_dispatch_client",
-    srcs = [
-        "code_dispatch_client.cc",
-    ],
-    hdrs = [
-        "code_dispatch_client.h",
-    ],
+    srcs = ["code_dispatch_client.cc"],
+    hdrs = ["code_dispatch_client.h"],
     deps = [
         ":v8_dispatcher",
         "@com_google_absl//absl/functional:any_invocable",

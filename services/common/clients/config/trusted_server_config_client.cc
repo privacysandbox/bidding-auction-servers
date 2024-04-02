@@ -25,10 +25,10 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
-#include "scp/cc/core/interface/errors.h"
-#include "scp/cc/public/core/interface/execution_result.h"
-#include "scp/cc/public/cpio/interface/parameter_client/parameter_client_interface.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/core/interface/errors.h"
+#include "src/public/core/interface/execution_result.h"
+#include "src/public/cpio/interface/parameter_client/parameter_client_interface.h"
+#include "src/util/status_macro/status_macros.h"
 
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterRequest;
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterResponse;

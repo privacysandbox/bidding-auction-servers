@@ -14,8 +14,8 @@
 
 #include <memory>
 
-#include "scp/cc/cpio/client_providers/instance_client_provider/src/gcp/gcp_instance_client_utils.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
+#include "src/cpio/client_providers/instance_client_provider/gcp/gcp_instance_client_utils.h"
 
 using google::scp::cpio::client_providers::GcpInstanceClientUtils;
 using google::scp::cpio::client_providers::GcpInstanceResourceNameDetails;
@@ -30,5 +30,9 @@ void TrustedServerConfigUtil::ComputeZone(absl::string_view resource_name) {
   // The region is of the form 'us-central1', which is the first 11 characters
   // of the zone id.
   region_ = zone_.substr(0, zone_.size() - 2);
+}
+absl::btree_map<std::string, std::string>
+TrustedServerConfigUtil::GetAttribute() const {
+  return {{kZone.data(), TrustedServerConfigUtil::GetZone().data()}};
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

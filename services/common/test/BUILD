@@ -39,7 +39,7 @@ cc_library(
         "//services/common/reporters:async_reporter",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_grpc",
         "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
     ],

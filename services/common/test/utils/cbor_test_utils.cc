@@ -32,7 +32,7 @@
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 #include "cbor.h"
 
@@ -56,7 +56,7 @@ absl::Status CborSerializeKeyValue(absl::string_view key, T invocable_builder,
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value =
           cbor_move(invocable_builder(std::forward<ValueArgs>(value_args)...))};
-  if (!cbor_map_add(&map, std::move(kv))) {
+  if (!cbor_map_add(&map, kv)) {
     return absl::InternalError(
         absl::StrCat("Failed to serialize ", key, " to CBOR"));
   }
@@ -98,7 +98,7 @@ absl::Status CborSerializeStringArray(
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *array_encoded};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     return absl::InternalError(
         absl::StrCat("Failed to add serialized  ", key, " to overall CBOR"));
   }
@@ -170,7 +170,7 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
     struct cbor_pair kv = {
         .key = cbor_move(cbor_build_stringn(kPrevWins, sizeof(kPrevWins) - 1)),
         .value = *wins};
-    if (!cbor_map_add(*browser_signals_map, std::move(kv))) {
+    if (!cbor_map_add(*browser_signals_map, kv)) {
       return absl::InvalidArgumentError(
           "Unable to serialize the complete prev wins data");
     }
@@ -178,7 +178,7 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *browser_signals_map};
-  if (!cbor_map_add(&interest_group_root, std::move(kv))) {
+  if (!cbor_map_add(&interest_group_root, kv)) {
     return absl::InternalError(
         absl::StrCat("Failed to serialize ", key, " to CBOR"));
   }
@@ -227,7 +227,7 @@ absl::Status CborSerializeBuyerInput(const BuyerInputMapEncoded& buyer_inputs,
   struct cbor_pair kv = {.key = cbor_move(cbor_build_stringn(
                              kInterestGroups, sizeof(kInterestGroups) - 1)),
                          .value = cbor_move(serialized_buyer_input)};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     return absl::InternalError(
         absl::StrCat("Failed to serialize ", kInterestGroups, " to CBOR"));
   }
@@ -256,7 +256,7 @@ absl::Status CborSerializeConsentedDebugConfig(
                                           sizeof(kConsentedDebugConfig) - 1)),
       .value = *serialized_consented_debug_config,
   };
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     return absl::InternalError(absl::StrCat("Failed to serialize ",
                                             kConsentedDebugConfig, " to CBOR"));
   }

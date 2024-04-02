@@ -34,10 +34,11 @@
 #include "services/common/util/auction_scope_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/communication/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "src/communication/ohttp_utils.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -60,6 +61,7 @@ SelectAdReactor::SelectAdReactor(
       response_(response),
       clients_(clients),
       config_client_(config_client),
+      auction_scope_(GetAuctionScope(*request_)),
       // TODO(b/278039901): Add integration test for metadata forwarding.
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
                                                     kBuyerMetadataKeysMap)),
@@ -68,12 +70,13 @@ SelectAdReactor::SelectAdReactor(
       error_accumulator_(&log_context_),
       fail_fast_(fail_fast),
       is_protected_auction_request_(false),
+      // PAS should only be enabled for single seller auctions.
       is_pas_enabled_(
-          config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)),
+          config_client_.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS) &&
+          (auction_scope_ == AuctionScope::AUCTION_SCOPE_SINGLE_SELLER)),
       is_protected_audience_enabled_(
           config_client_.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE)),
       max_buyers_solicited_(max_buyers_solicited),
-      auction_scope_(GetAuctionScope(*request_)),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -109,8 +112,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   const BuyerInput& buyer_input =
       buyer_inputs_->find(interest_group_owner)->second;
   for (const auto& interest_group : buyer_input.interest_groups()) {
-    if (std::strcmp(interest_group.name().c_str(),
-                    result.interest_group_name().c_str())) {
+    if (interest_group.name() == result.interest_group_name()) {
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
         PS_VLOG(1, log_context_) << "BrowserSignal: Recency:"
@@ -362,8 +364,7 @@ void SelectAdReactor::Execute() {
 
     std::visit(
         [this](const auto& protected_auction_input) {
-          ValidateProtectedAuctionInput(protected_auction_input,
-                                        auction_scope_);
+          ValidateProtectedAuctionInput(protected_auction_input);
         },
         protected_auction_input_);
   }
@@ -635,7 +636,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
   // That the shared_buyer_bids_map_ is non-empty was just checked above
   // That each buyer has bids was checked in OnFetchBidsDone().
   // Thus the preconditions of the following method are satisfied.
-  if (is_protected_audience_enabled_ && !FilterBidsWithMismatchingCurrency()) {
+  if (!FilterBidsWithMismatchingCurrency()) {
     PS_VLOG(2, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
     FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT,
                                   kAllBidsRejectedBuyerCurrencyMismatch));
@@ -644,15 +645,42 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
   }
 }
 
+template <typename T>
+void FilterBidsWithMismatchingCurrencyHelper(
+    google::protobuf::RepeatedPtrField<T>* ads_with_bids,
+    absl::string_view buyer_currency) {
+  int i = 0;
+  int remove_starting_at = ads_with_bids->size();
+  while (i < remove_starting_at) {
+    const T& ad_with_bid = (*ads_with_bids)[i];
+    if (!ad_with_bid.bid_currency().empty() &&
+        buyer_currency != ad_with_bid.bid_currency()) {
+      // Swap to last. Mark for removal and make sure we don't check it again
+      ads_with_bids->SwapElements(i, --remove_starting_at);
+      // TODO: Record metric.
+      // Leave index un-incremented so swapped element is checked.
+    } else {
+      i++;
+    }
+  }
+  // Delete all mismatched pas_bids.
+  if (remove_starting_at < ads_with_bids->size()) {
+    ads_with_bids->DeleteSubrange(remove_starting_at,
+                                  ads_with_bids->size() - remove_starting_at);
+  }
+}
+
 bool SelectAdReactor::FilterBidsWithMismatchingCurrency() {
   DCHECK(!shared_buyer_bids_map_.empty())
       << "PRECONDITION 1: shared_buyer_bids_map_ must have at least one entry.";
-  DCHECK(([shared_buyer_bids_map_ptr = &(this->shared_buyer_bids_map_),
-           is_pas_enabled = this->is_pas_enabled_]() {
+  DCHECK(([shared_buyer_bids_map_ptr = &(shared_buyer_bids_map_),
+           is_protected_audience_enabled = is_protected_audience_enabled_,
+           is_pas_enabled = is_pas_enabled_]() {
     for (const auto& [buyer_ig_owner, get_bid_response] :
          *shared_buyer_bids_map_ptr) {
       // Check if no bids are present.
-      if (get_bid_response->bids().empty() &&
+      if ((!is_protected_audience_enabled ||
+           get_bid_response->bids().empty()) &&
           (!is_pas_enabled ||
            get_bid_response->protected_app_signals_bids().empty())) {
         return false;
@@ -665,7 +693,7 @@ bool SelectAdReactor::FilterBidsWithMismatchingCurrency() {
   bool any_valid_bids = false;
   // Check that each AdWithBid's currency is as-expected.
   // Throw out the AdWithBids which do not match.
-  for (auto& [buyer_ig_owner, get_bid_response] : shared_buyer_bids_map_) {
+  for (auto& [buyer_ig_owner, get_bids_raw_response] : shared_buyer_bids_map_) {
     // It is possible for a buyer to have no buyer_config.
     const auto& buyer_config_itr =
         request_->auction_config().per_buyer_config().find(buyer_ig_owner);
@@ -683,45 +711,32 @@ bool SelectAdReactor::FilterBidsWithMismatchingCurrency() {
       any_valid_bids = true;
       continue;
     }
-    // Remove each AdWithBid for which its currency does not match.
-    int i = 0, remove_starting_at = get_bid_response->bids_size();
-    while (i < remove_starting_at) {
-      const AdWithBid& ad_with_bid = get_bid_response->bids(i);
-      if (!ad_with_bid.bid_currency().empty() &&
-          buyer_currency != ad_with_bid.bid_currency()) {
-        // Swap to last.
-        get_bid_response->mutable_bids()->SwapElements(
-            i, get_bid_response->bids_size() - 1);
-        // Mark for removal and make sure we don't check it again
-        remove_starting_at--;
-        // TODO: Record metric.
-        // Leave index un-incremented so swapped element is checked.
-      } else {
-        i++;
-      }
-    }
-    // Delete all mismatched bids.
-    if (remove_starting_at < get_bid_response->bids_size()) {
-      get_bid_response->mutable_bids()->DeleteSubrange(
-          remove_starting_at,
-          get_bid_response->bids_size() - remove_starting_at);
-    }
+
+    FilterBidsWithMismatchingCurrencyHelper<AdWithBid>(
+        get_bids_raw_response->mutable_bids(), buyer_currency);
+    FilterBidsWithMismatchingCurrencyHelper<ProtectedAppSignalsAdWithBid>(
+        get_bids_raw_response->mutable_protected_app_signals_bids(),
+        buyer_currency);
+
     // Check if any bids remain.
-    if (!get_bid_response->bids().empty() ||
+    if ((is_protected_audience_enabled_ &&
+         !get_bids_raw_response->bids().empty()) ||
         (is_pas_enabled_ &&
-         !get_bid_response->protected_app_signals_bids().empty())) {
+         !get_bids_raw_response->protected_app_signals_bids().empty())) {
       any_valid_bids = true;
     }
   }
   // Clear buyers with no remaining bids.
-  absl::erase_if(shared_buyer_bids_map_, [is_pas_enabled = is_pas_enabled_](
-                                             const auto& buyer_to_bids_pair) {
-    const auto& get_bid_response = buyer_to_bids_pair.second;
-    // Check if any bids remain.
-    return (get_bid_response->bids().empty() &&
-            (!is_pas_enabled ||
-             get_bid_response->protected_app_signals_bids().empty()));
-  });
+  absl::erase_if(
+      shared_buyer_bids_map_,
+      [is_p_aud_enabled = is_protected_audience_enabled_,
+       is_pas_enabled = is_pas_enabled_](const auto& buyer_to_bids_pair) {
+        const auto& get_bids_raw_response = buyer_to_bids_pair.second;
+        // Check if any bids remain.
+        return ((!is_p_aud_enabled || get_bids_raw_response->bids().empty()) &&
+                (!is_pas_enabled ||
+                 get_bids_raw_response->protected_app_signals_bids().empty()));
+      });
   return any_valid_bids;
 }
 
@@ -964,7 +979,7 @@ void SelectAdReactor::OnScoreAdsDone(
     error = std::move(error_);
   }
   absl::StatusOr<std::string> non_encrypted_response =
-      GetNonEncryptedResponse(high_score, std::move(error));
+      GetNonEncryptedResponse(high_score, error);
   if (!non_encrypted_response.ok()) {
     return;
   }
@@ -986,12 +1001,30 @@ DecodedBuyerInputs SelectAdReactor::GetDecodedBuyerinputs(
 }
 
 bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
-  // Encrypt with corresponding private key.
-  // we're now done with the request so we can release context.
-  absl::StatusOr<std::string> encapsulated_response =
-      server_common::EncryptAndEncapsulateResponse(
-          std::move(plaintext_response), decrypted_request_->private_key,
-          decrypted_request_->context, decrypted_request_->request_label);
+  absl::StatusOr<std::string> encapsulated_response;
+  if (auction_scope_ ==
+      AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
+    // If this will be decrypted by another SFE, encrypt with public key.
+    auto encrypted_request =
+        HpkeEncrypt(plaintext_response, *clients_.crypto_client_ptr_,
+                    clients_.key_fetcher_manager_,
+                    ProtoCloudPlatformToScpCloudPlatform(
+                        request_->auction_config().top_level_cloud_platform()));
+    if (!encrypted_request.ok()) {
+      PS_VLOG(1, log_context_) << "Error while encrypting response: "
+                               << encrypted_request.status().message();
+      FinishWithStatus(
+          grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
+      return false;
+    }
+    encapsulated_response = std::move(encrypted_request->ciphertext);
+    *response_->mutable_key_id() = std::move(encrypted_request->key_id);
+  } else {
+    // Decrypted by device -> Encrypt with corresponding private key.
+    encapsulated_response = server_common::EncryptAndEncapsulateResponse(
+        std::move(plaintext_response), decrypted_request_->private_key,
+        decrypted_request_->context, decrypted_request_->request_label);
+  }
 
   if (!encapsulated_response.ok()) {
     PS_VLOG(4, log_context_)
@@ -1010,6 +1043,16 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
 
 void SelectAdReactor::PerformDebugReporting(
     const std::optional<AdScore>& high_score) {
+  // Create new metric context.
+  metric::MetricContextMap<SelectAdRequest>()->Get(request_);
+  // Make metric_context a unique_ptr by releasing the ownership of the context
+  // from ContextMap.
+  absl::StatusOr<std::unique_ptr<metric::SfeContext>> metric_context =
+      metric::MetricContextMap<SelectAdRequest>()->Remove(request_);
+  CHECK_OK(metric_context);
+  std::shared_ptr<metric::SfeContext> shared_context =
+      *std::move(metric_context);
+
   bool enable_debug_reporting = false;
   std::visit(
       [&enable_debug_reporting](const auto& protected_auction_input) {
@@ -1046,19 +1089,20 @@ void SelectAdReactor::PerformDebugReporting(
 
       absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)> done_cb;
       if (server_common::log::PS_VLOG_IS_ON(5)) {
-        done_cb = [ig_owner = ig_owner,
-                   ig_name](absl::StatusOr<absl::string_view> result) mutable {
-          if (result.ok()) {
-            PS_VLOG(5) << "Performed debug reporting for:" << ig_owner
-                       << ", interest_group: " << ig_name;
-          } else {
-            PS_VLOG(5) << "Error while performing debug reporting for:"
-                       << ig_owner << ", interest_group: " << ig_name
-                       << " ,status:" << result.status();
-          }
-        };
+        done_cb =
+            [ig_owner = ig_owner, ig_name](
+                absl::StatusOr<absl::string_view> result) mutable {  // NOLINT
+              if (result.ok()) {
+                PS_VLOG(5) << "Performed debug reporting for:" << ig_owner
+                           << ", interest_group: " << ig_name;
+              } else {
+                PS_VLOG(5) << "Error while performing debug reporting for:"
+                           << ig_owner << ", interest_group: " << ig_name
+                           << " ,status:" << result.status();
+              }
+            };
       } else {
-        done_cb = [](absl::StatusOr<absl::string_view> result) {};
+        done_cb = [](absl::StatusOr<absl::string_view> result) {};  // NOLINT
       }
       HTTPRequest http_request = CreateDebugReportingHttpRequest(
           debug_url,

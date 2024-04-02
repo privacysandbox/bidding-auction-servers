@@ -113,6 +113,10 @@ module "buyer" {
     BFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
+
+    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.

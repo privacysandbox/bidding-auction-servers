@@ -574,7 +574,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
                   .number_value(),
               1.0);
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,
@@ -662,7 +661,6 @@ TEST_F(GenerateBidsReactorIntegrationTest,
                   .number_value(),
               1.0);
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
@@ -733,7 +731,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
         ad_with_bid.ad().struct_value().fields().at("tbsLength").number_value(),
         1);
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
@@ -806,7 +803,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
               raw_request.interest_group_for_bidding(0)
                   .trusted_bidding_signals_keys_size());
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 /*
@@ -900,7 +896,6 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   // All instances of the script should have crashed; no bids should have been
   // generated.
   ASSERT_EQ(raw_response.bids_size(), 0);
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
@@ -997,7 +992,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
                   .number_value(),
               1.0);
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 void GenerateBidCodeWrapperTestHelper(
@@ -1059,7 +1053,7 @@ void GenerateBidCodeWrapperTestHelper(
       key_fetcher_manager = CreateKeyFetcherManager(
           config_client, /* public_key_fetcher= */ nullptr);
 
-  const BiddingServiceRuntimeConfig& runtime_config = {
+  BiddingServiceRuntimeConfig runtime_config{
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .enable_adtech_code_logging = enable_adtech_code_logging};
   BiddingService service(
@@ -1069,7 +1063,6 @@ void GenerateBidCodeWrapperTestHelper(
   service.GenerateBids(&context, &request, response);
   std::this_thread::sleep_for(
       absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest, BuyerDebugUrlGenerationDisabled) {

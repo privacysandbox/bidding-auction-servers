@@ -38,7 +38,7 @@
 #include "services/common/test/utils/service_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -104,8 +104,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -144,8 +148,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -175,8 +183,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -209,8 +221,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -246,8 +262,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /*crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -282,8 +302,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /*crypto_client_ptr = */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -327,8 +351,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider, scoring, bfe_client,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -381,8 +409,12 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   auto async_provider =
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
-  ClientRegistry clients{async_provider, scoring, client_factory_mock,
-                         key_fetcher_manager, std::move(async_reporter)};
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         client_factory_mock,
+                         key_fetcher_manager,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -465,9 +497,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -611,9 +644,10 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -711,9 +745,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -786,9 +821,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -846,9 +882,10 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -951,9 +988,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -1004,8 +1042,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
                          /*repeated_get_allowed=*/false,
-                         /*each_call_required=*/false,
-                         /*buyer_calls_counter=*/&buyer_calls_counter);
+                         /*expect_all_buyers_solicited=*/false,
+                         /*num_buyers_solicited=*/&buyer_calls_counter);
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1059,9 +1097,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -1113,7 +1152,7 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
                          /*repeated_get_allowed=*/false,
-                         /*each_call_required=*/false);
+                         /*expect_all_buyers_solicited=*/false);
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1144,9 +1183,10 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -1196,7 +1236,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
                          /*repeated_get_allowed=*/false,
-                         /*each_call_required=*/false);
+                         /*expect_all_buyers_solicited=*/false);
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1228,9 +1268,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
@@ -1276,9 +1317,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, key_fetcher_manager,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,     scoring_client,           buyer_clients,
+      key_fetcher_manager,
+      /* crypto_client= */ nullptr, std::move(async_reporter)};
 
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));

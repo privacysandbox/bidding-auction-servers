@@ -34,6 +34,7 @@ ABSL_DECLARE_FLAG(std::string, client_type);
 ABSL_DECLARE_FLAG(bool, insecure);
 ABSL_DECLARE_FLAG(std::string, target_service);
 ABSL_DECLARE_FLAG(std::string, public_key);
+ABSL_DECLARE_FLAG(std::string, private_key);
 ABSL_DECLARE_FLAG(std::string, key_id);
 ABSL_DECLARE_FLAG(bool, enable_debug_reporting);
 ABSL_DECLARE_FLAG(std::string, pas_buyer_input_json);

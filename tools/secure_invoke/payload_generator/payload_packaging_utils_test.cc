@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <memory>
 #include <vector>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -23,13 +24,19 @@
 #include "include/gmock/gmock.h"
 #include "include/gtest/gtest.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/encryption/crypto_client_factory.h"
+#include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/test/random.h"
+#include "services/common/util/hpke_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
+#include "services/seller_frontend_service/util/proto_mapping_util.h"
+#include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/communication/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/communication/encoding_utils.h"
+#include "src/communication/ohttp_utils.h"
+#include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -134,7 +141,7 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   // Encode.
   auto encoded_data =
       Encode(input, expected.bidding_groups(), /*error=*/std::nullopt,
-             [](grpc::Status status) {});
+             [](const grpc::Status& status) {});
   ASSERT_TRUE(encoded_data.ok()) << encoded_data.status();
 
   // Compress.
@@ -261,6 +268,61 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
   absl::StatusOr<AuctionResult> actual =
       UnpackageAuctionResult(*encrypted_response, CLIENT_TYPE_ANDROID,
                              input_ctxt_pair->second, keyset);
+  ASSERT_TRUE(actual.ok()) << actual.status();
+
+  google::protobuf::util::MessageDifferencer diff;
+  std::string difference;
+  diff.ReportDifferencesToString(&difference);
+  EXPECT_TRUE(diff.Compare(*actual, expected)) << difference;
+}
+
+TEST(PackageServerComponentAuctionResultTest, GeneratesAValidResponse) {
+  AuctionResult expected = MakeARandomComponentAuctionResult(
+      MakeARandomString(), MakeARandomString());
+  HpkeKeyset hardcoded_keyset;
+  auto output = PackageServerComponentAuctionResult(expected, hardcoded_keyset);
+  ASSERT_TRUE(output.ok()) << output.status();
+  SelectAdRequest::ComponentAuctionResult car;
+  car.set_key_id(output->key_id);
+  car.set_auction_result_ciphertext(output->ciphertext);
+
+  // Decrypt.
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          hardcoded_keyset.public_key, hardcoded_keyset.private_key,
+          std::to_string(hardcoded_keyset.key_id));
+  auto crypto_client = CreateCryptoClient();
+  auto actual = UnpackageServerAuctionComponentResult(car, *crypto_client,
+                                                      *key_fetcher_manager);
+  ASSERT_TRUE(actual.ok()) << actual.status();
+
+  google::protobuf::util::MessageDifferencer diff;
+  std::string difference;
+  diff.ReportDifferencesToString(&difference);
+  EXPECT_TRUE(diff.Compare(*actual, expected)) << difference;
+}
+
+TEST(UnpackageResultForServerComponentAuctionTest, UnpacksPayloadSuccessfully) {
+  AuctionResult expected = MakeARandomComponentAuctionResult(
+      MakeARandomString(), MakeARandomString());
+  // Encode
+  std::string plaintext_response =
+      FrameAndCompressProto(expected.SerializeAsString());
+  // Encrypt
+  HpkeKeyset hardcoded_keyset;
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          hardcoded_keyset.public_key, hardcoded_keyset.private_key,
+          std::to_string(hardcoded_keyset.key_id));
+  auto crypto_client = CreateCryptoClient();
+  auto output_hpke =
+      HpkeEncrypt(plaintext_response, *crypto_client, *key_fetcher_manager,
+                  server_common::CloudPlatform::kGcp);
+  ASSERT_TRUE(output_hpke.ok()) << output_hpke.status();
+  ASSERT_EQ(output_hpke->key_id, std::to_string(hardcoded_keyset.key_id));
+
+  auto actual = UnpackageResultForServerComponentAuction(
+      output_hpke->ciphertext, output_hpke->key_id, hardcoded_keyset);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;

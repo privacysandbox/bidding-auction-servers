@@ -123,7 +123,7 @@ inline constexpr auto kComparator = [](absl::string_view a,
 };
 
 #define RETURN_IF_PREV_ERRORS(error_accumulator, should_fail_fast, to_return) \
-  if (error_accumulator.HasErrors() && should_fail_fast) {                    \
+  if ((error_accumulator).HasErrors() && (should_fail_fast)) {                \
     return to_return;                                                         \
   }
 

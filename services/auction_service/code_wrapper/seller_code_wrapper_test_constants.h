@@ -140,7 +140,7 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -164,9 +164,9 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
-        ad: device_signals["topLevelSeller"],
+        ad: bid_metadata["topLevelSeller"],
         desirability: 1,
         bid: 2,
         incomingBidInSellerCurrency: 1.868,
@@ -188,9 +188,9 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
-        ad: device_signals["topLevelSeller"],
+        ad: bid_metadata["topLevelSeller"],
         desirability: 1,
         allowComponentAuction: true
       }
@@ -209,12 +209,31 @@ constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kSkipAdComponentAuctionCode = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
-        ad: device_signals["topLevelSeller"],
+        ad: bid_metadata["topLevelSeller"],
         desirability: 1,
         bid: 2,
         allowComponentAuction: false
+      }
+    }
+)JS_CODE";
+
+constexpr absl::string_view kTopLevelAuctionCode = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      let desirability = 0;
+
+      if (bid_metadata["componentSeller"] !== undefined &&
+       bid_metadata["componentSeller"].length > 0) {
+        desirability = 1;
+      }
+      return {
+        ad: bid_metadata["componentSeller"],
+        desirability: desirability,
+        incomingBidInSellerCurrency: 1.868,
+        bidCurrency: "USD",
+        bid: bid,
+        allowComponentAuction: true
       }
     }
 )JS_CODE";
@@ -451,7 +470,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -823,7 +842,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -990,7 +1009,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -1071,7 +1090,7 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")

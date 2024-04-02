@@ -148,6 +148,44 @@ absl::StatusOr<rapidjson::Document> AddComponentSignals(
   return combined_signals_for_this_bid;
 }
 
+// Create bid metadata json string but doesn't close the json object
+// for adding more fields.
+std::string MakeOpenBidMetadataJson(
+    absl::string_view publisher_hostname,
+    absl::string_view interest_group_owner, absl::string_view render_url,
+    const google::protobuf::RepeatedPtrField<std::string>&
+        ad_component_render_urls,
+    absl::string_view bid_currency) {
+  std::string bid_metadata = "{";
+  if (!interest_group_owner.empty()) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON", kIGOwnerPropertyForScoreAd,
+                    R"JSON(":")JSON", interest_group_owner, R"JSON(",)JSON");
+  }
+  if (!publisher_hostname.empty()) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kTopWindowHostnamePropertyForScoreAd, R"JSON(":")JSON",
+                    publisher_hostname, R"JSON(",)JSON");
+  }
+  if (!ad_component_render_urls.empty()) {
+    absl::StrAppend(&bid_metadata, R"("adComponents":[)");
+    for (int i = 0; i < ad_component_render_urls.size(); i++) {
+      absl::StrAppend(&bid_metadata, "\"", ad_component_render_urls.at(i),
+                      "\"");
+      if (i != ad_component_render_urls.size() - 1) {
+        absl::StrAppend(&bid_metadata, ",");
+      }
+    }
+    absl::StrAppend(&bid_metadata, R"(],)");
+  }
+  // Only add bid currency to bid metadata if it's non-empty.
+  if (!bid_currency.empty()) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
+                    bid_currency, R"JSON(",)JSON");
+  }
+  return bid_metadata;
+}
+
 }  // namespace
 
 void MayLogScoreAdsInput(const std::vector<std::shared_ptr<std::string>>& input,
@@ -160,8 +198,8 @@ void MayLogScoreAdsInput(const std::vector<std::shared_ptr<std::string>>& input,
       << *(input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)])
       << "\nScoring Signals:\n"
       << *(input[ScoreArgIndex(ScoreAdArgs::kScoringSignals)])
-      << "\nDevice Signals:\n"
-      << *(input[ScoreArgIndex(ScoreAdArgs::kDeviceSignals)])
+      << "\nBid Metadata:\n"
+      << *(input[ScoreArgIndex(ScoreAdArgs::kBidMetadata)])
       << "\nDirectFromSellerSignals:\n"
       << (input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)]);
 }
@@ -178,42 +216,41 @@ std::shared_ptr<std::string> BuildAuctionConfig(
       "}"));
 }
 
-std::string MakeDeviceSignals(
+std::string MakeBidMetadata(
     absl::string_view publisher_hostname,
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
     absl::string_view top_level_seller, absl::string_view bid_currency) {
-  std::string device_signals =
-      absl::StrCat("{", R"("interestGroupOwner":")", interest_group_owner, "\"",
-                   R"(,"topWindowHostname":")", publisher_hostname, "\"");
-
-  if (!ad_component_render_urls.empty()) {
-    absl::StrAppend(&device_signals, R"(,"adComponents":[)");
-    for (int i = 0; i < ad_component_render_urls.size(); i++) {
-      absl::StrAppend(&device_signals, "\"", ad_component_render_urls.at(i),
-                      "\"");
-      if (i != ad_component_render_urls.size() - 1) {
-        absl::StrAppend(&device_signals, ",");
-      }
-    }
-    absl::StrAppend(&device_signals, R"(])");
-  }
-  // Only add bid currency to device signals if it's non-empty.
-  if (!bid_currency.empty()) {
-    absl::StrAppend(&device_signals, R"JSON(,")JSON",
-                    kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
-                    bid_currency, R"JSON(")JSON");
-  }
-  // Only add top level seller to device signals if it's non empty.
+  std::string bid_metadata = MakeOpenBidMetadataJson(
+      publisher_hostname, interest_group_owner, render_url,
+      ad_component_render_urls, bid_currency);
+  // Only add top level seller to bid metadata if it's non empty.
   if (!top_level_seller.empty()) {
-    absl::StrAppend(&device_signals, R"JSON(,")JSON",
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                     kTopLevelSellerFieldPropertyForScoreAd, R"JSON(":")JSON",
-                    top_level_seller, R"JSON(")JSON");
+                    top_level_seller, R"JSON(",)JSON");
   }
-  absl::StrAppend(&device_signals, ",\"", kRenderUrlsPropertyForScoreAd,
-                  "\":\"", render_url, "\"}");
-  return device_signals;
+  absl::StrAppend(&bid_metadata, R"JSON(")JSON", kRenderUrlsPropertyForScoreAd,
+                  R"JSON(":")JSON", render_url, R"JSON("})JSON");
+  return bid_metadata;
+}
+
+std::string MakeBidMetadataForTopLevelAuction(
+    absl::string_view publisher_hostname,
+    absl::string_view interest_group_owner, absl::string_view render_url,
+    const google::protobuf::RepeatedPtrField<std::string>&
+        ad_component_render_urls,
+    absl::string_view component_seller, absl::string_view bid_currency) {
+  std::string bid_metadata = MakeOpenBidMetadataJson(
+      publisher_hostname, interest_group_owner, render_url,
+      ad_component_render_urls, bid_currency);
+  absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                  kComponentSellerFieldPropertyForScoreAd, R"JSON(":")JSON",
+                  component_seller, R"JSON(",)JSON");
+  absl::StrAppend(&bid_metadata, R"JSON(")JSON", kRenderUrlsPropertyForScoreAd,
+                  R"JSON(":")JSON", render_url, R"JSON("})JSON");
+  return bid_metadata;
 }
 
 absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
@@ -422,6 +459,7 @@ absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
   }
 
   // Parse component auction fields.
+  // For now this is only valid for ProtectedAuction ads.
   if (device_component_auction) {
     auto component_auction_itr =
         score_ad_resp.FindMember(kAllowComponentAuctionPropertyForScoreAd);
@@ -502,6 +540,62 @@ absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
   }
   *score_ads_response.mutable_debug_report_urls() = debug_report_urls;
   return score_ads_response;
+}
+
+absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
+    absl::string_view ad_render_url, absl::string_view ad_metadata_json,
+    absl::string_view scoring_signals, float ad_bid,
+    const std::shared_ptr<std::string>& auction_config,
+    absl::string_view bid_metadata,
+    server_common::log::ContextImpl& log_context,
+    const bool enable_adtech_code_logging, const bool enable_debug_reporting) {
+  // Construct the wrapper struct for our V8 Dispatch Request.
+  DispatchRequest score_ad_request;
+  // TODO(b/250893468) Revisit dispatch id.
+  score_ad_request.id = ad_render_url;
+  // TODO(b/258790164) Update after code is fetched periodically.
+  score_ad_request.version_string = "v1";
+  score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
+
+  score_ad_request.input = std::vector<std::shared_ptr<std::string>>(
+      kArgSizeWithWrapper);  // ScoreAdArgs size
+
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)] =
+      std::make_shared<std::string>(ad_metadata_json);
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kBid)] =
+      std::make_shared<std::string>(std::to_string(ad_bid));
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)] =
+      auction_config;
+  // TODO(b/258697130): Roma client string support bug
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kScoringSignals)] =
+      std::make_shared<std::string>(scoring_signals);
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kBidMetadata)] =
+      std::make_shared<std::string>(bid_metadata);
+  // This is only added to prevent errors in the score ad script, and
+  // will always be an empty object.
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)] =
+      std::make_shared<std::string>("{}");
+  score_ad_request.input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)] =
+      std::make_shared<std::string>(GetFeatureFlagJson(
+          enable_adtech_code_logging, enable_debug_reporting));
+
+  MayLogScoreAdsInput(score_ad_request.input, log_context);
+  return score_ad_request;
+}
+
+std::unique_ptr<AdWithBidMetadata> MapAuctionResultToAdWithBidMetadata(
+    AuctionResult& auction_result) {
+  auto ad = std::make_unique<AdWithBidMetadata>();
+  ad->set_bid(auction_result.bid());
+  ad->set_allocated_render(auction_result.release_ad_render_url());
+  ad->mutable_ad_components()->Swap(
+      auction_result.mutable_ad_component_render_urls());
+  ad->set_allocated_interest_group_name(
+      auction_result.release_interest_group_name());
+  ad->set_allocated_interest_group_owner(
+      auction_result.release_interest_group_owner());
+  ad->set_allocated_bid_currency(auction_result.release_bid_currency());
+  return ad;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

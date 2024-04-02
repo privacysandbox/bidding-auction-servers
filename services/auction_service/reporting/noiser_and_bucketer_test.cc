@@ -64,7 +64,7 @@ TEST(RandGenerator, RandGeneratorIsUniform) {
   // way, so that's what we use in the test.
   constexpr uint64_t kTopOfRange =
       (std::numeric_limits<uint64_t>::max() / 4ULL) * 3ULL;
-  constexpr double kExpectedAverage = static_cast<double>(kTopOfRange / 2);
+  constexpr double kExpectedAverage = static_cast<double>(kTopOfRange) / 2.0;
   constexpr double kAllowedVariance = kExpectedAverage / 50.0;  // +/- 2%
   constexpr int kMinAttempts = 1000;
   constexpr int kMaxAttempts = 1000000;

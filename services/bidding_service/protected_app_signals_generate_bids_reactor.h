@@ -72,10 +72,12 @@ class ProtectedAppSignalsGenerateBidsReactor
   void StartNonContextualAdsRetrieval();
 
   using AdRenderIds = google::protobuf::RepeatedPtrField<std::string>;
-  std::unique_ptr<kv_server::v2::GetValuesRequest>
-  CreateAdsRetrievalOrKVLookupRequest(
+  std::unique_ptr<kv_server::v2::GetValuesRequest> CreateAdsRetrievalRequest(
       const std::string& prepare_data_for_ads_retrieval_response,
       absl::optional<AdRenderIds> ad_render_ids = absl::nullopt);
+
+  std::unique_ptr<kv_server::v2::GetValuesRequest> CreateKVLookupRequest(
+      const AdRenderIds& ad_render_ids);
 
   void FetchAds(const std::string& prepare_data_for_ads_retrieval_response);
   void FetchAdsMetadata(

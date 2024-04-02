@@ -25,7 +25,7 @@ proto_library(
     deps = [
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_protobuf//:struct_proto",
-        "@google_privacysandbox_servers_common//src/cpp/logger:logger_proto",
+        "@google_privacysandbox_servers_common//src/logger:logger_proto",
     ],
 )
 

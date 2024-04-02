@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.57.0 (2024-03-10)
+
+
+### Features
+
+* Add a generic pylintrc
+* Add clang-tidy to build-debian
+
 ## 0.56.0 (2024-02-29)
 
 

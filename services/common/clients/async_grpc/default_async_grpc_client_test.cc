@@ -119,7 +119,7 @@ class TestDefaultAsyncGrpcClient
       absl::Duration expected_timeout)
       : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client),
         notification_(notification),
-        req_(req),
+        req_(std::move(req)),
         expected_timeout_(expected_timeout) {}
 
   void SendRpc(const std::string& hpke_secret,

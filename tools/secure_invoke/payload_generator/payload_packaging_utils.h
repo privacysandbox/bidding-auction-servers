@@ -23,6 +23,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
 #include "services/common/test/utils/ohttp_utils.h"
+#include "services/common/util/hpke_utils.h"
 
 // The methods in this util file can be used for packaging
 // raw requests for testing. The packaging is done as follows -
@@ -83,6 +84,17 @@ PackageBuyerInputsForApp(
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
     std::string& auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
+    const HpkeKeyset& keyset);
+
+// Returns an encoded, compressed and encrypted auction result
+// for a server component auction.
+absl::StatusOr<HpkeMessage> PackageServerComponentAuctionResult(
+    const AuctionResult& auction_result, const HpkeKeyset& keyset);
+
+// Returns a decrypted, decompressed and decoded proto response
+// for response strings generated for a server component auction.
+absl::StatusOr<AuctionResult> UnpackageResultForServerComponentAuction(
+    absl::string_view ciphertext, absl::string_view key_id,
     const HpkeKeyset& keyset);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

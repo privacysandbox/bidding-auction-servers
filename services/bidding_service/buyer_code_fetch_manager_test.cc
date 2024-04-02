@@ -24,14 +24,14 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "gtest/gtest.h"
-#include "scp/cc/core/interface/async_context.h"
-#include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
-#include "scp/cc/public/cpio/interface/cpio.h"
-#include "scp/cc/public/cpio/interface/error_codes.h"
-#include "scp/cc/public/cpio/mock/blob_storage_client/mock_blob_storage_client.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/common/test/mocks.h"
 #include "services/common/util/file_util.h"
+#include "src/core/interface/async_context.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/public/cpio/interface/error_codes.h"
+#include "src/public/cpio/mock/blob_storage_client/mock_blob_storage_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -188,16 +188,16 @@ TEST_F(BuyerCodeFetchManagerTest,
             context.Finish(SuccessExecutionResult());
             return SuccessExecutionResult();
           })
-      .WillOnce(
-          [&](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
-                  context) {
-            EXPECT_EQ(context.request->blob_metadata().bucket_name(),
-                      ads_bucket);
-            return FailureExecutionResult(SC_UNKNOWN);
-          });
+      .WillOnce([&ads_bucket](
+                    const AsyncContext<ListBlobsMetadataRequest,
+                                       ListBlobsMetadataResponse>& context) {
+        EXPECT_EQ(context.request->blob_metadata().bucket_name(), ads_bucket);
+        return FailureExecutionResult(SC_UNKNOWN);
+      });
   EXPECT_CALL(*blob_storage_client_, GetBlob)
       .WillOnce(
-          [&](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
+          [&pas_bucket, &pas_object, &pas_data](
+              AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
             auto async_bucket_name =
                 async_context.request->blob_metadata().bucket_name();
             auto async_blob_name =
@@ -214,7 +214,8 @@ TEST_F(BuyerCodeFetchManagerTest,
           });
 
   EXPECT_CALL(*dispatcher_, LoadSync)
-      .WillOnce([&](std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&pas_object, &pas_data](std::string_view version,
+                                         absl::string_view blob_data) {
         EXPECT_EQ(version, pas_object);
         EXPECT_EQ(
             blob_data,
@@ -264,24 +265,27 @@ TEST_F(BuyerCodeFetchManagerTest, FetchModeUrlTriesUrlLoad) {
 
   EXPECT_CALL(*dispatcher_, LoadSync)
       .WillRepeatedly(
-          [&](std::string_view version, absl::string_view blob_data) {
+          [](std::string_view version, absl::string_view blob_data) {
             return absl::OkStatus();
           });
 
   EXPECT_CALL(*http_fetcher_, FetchUrls)
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&pa_wasm_url, &pa_url](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url, pa_url);
         EXPECT_EQ(requests[1].url, pa_wasm_url);
         std::move(done_callback)({""});
       })
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&pas_url, &pas_wasm_url](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url, pas_url);
         EXPECT_EQ(requests[1].url, pas_wasm_url);
         std::move(done_callback)({""});
       })
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&ads_retrieval_wasm_url, &ads_retrieval_url](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url, ads_retrieval_url);
         EXPECT_EQ(requests[1].url, ads_retrieval_wasm_url);

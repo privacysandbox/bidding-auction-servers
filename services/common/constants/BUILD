@@ -36,7 +36,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry/flag:telemetry_flag",
+        "@google_privacysandbox_servers_common//src/telemetry/flag:telemetry_flag",
     ],
 )
 

@@ -30,7 +30,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/test_utils.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -382,8 +382,8 @@ TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
   EXPECT_CALL(
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
-          Pointee(EqGenerateProtectedAppSignalsBidsRawRequest(
-              std::move(expected_request))),
+          Pointee(
+              EqGenerateProtectedAppSignalsBidsRawRequest(expected_request)),
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<

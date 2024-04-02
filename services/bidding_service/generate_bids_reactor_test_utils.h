@@ -79,8 +79,8 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client);
 // provided parameters.
 GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& auction_signals, const std::string& buyer_signals,
-    const ProtectedAppSignals& protected_app_signals, const std::string seller,
-    const std::string publisher_name,
+    const ProtectedAppSignals& protected_app_signals, const std::string& seller,
+    const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data =
         absl::nullopt);
 

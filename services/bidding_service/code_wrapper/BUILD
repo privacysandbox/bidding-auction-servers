@@ -30,7 +30,7 @@ cc_library(
         "//services/common/constants:common_service_flags",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
     ],
 )
 

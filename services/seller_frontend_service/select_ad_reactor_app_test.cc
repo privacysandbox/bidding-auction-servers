@@ -41,10 +41,10 @@
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/communication/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/communication/encoding_utils.h"
+#include "src/communication/ohttp_utils.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -127,15 +127,10 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
-  // Unframe the framed response.
-  absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(*decrypted_response);
-  ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
-
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(unframed_response->compressed_data);
-  EXPECT_TRUE(decompressed_response.ok())
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  ASSERT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
   AuctionResult deserialized_auction_result;
   EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
@@ -258,6 +253,69 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
             kTestInteractionUrl);
 }
 
+TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
+      .WillOnce(Return(google::cmrt::sdk::public_key_service::v1::PublicKey()));
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCrytoClient(crypto_client);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+          CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          {&crypto_client,
+           EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP});
+
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          this->config_, clients, request_with_context.select_ad_request);
+  ASSERT_FALSE(encrypted_response.auction_result_ciphertext().empty());
+
+  // Decrypt the response.
+  absl::string_view decrypted_response =
+      encrypted_response.auction_result_ciphertext();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response.size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok())
+      << decompressed_response.status().message();
+  AuctionResult deserialized_auction_result;
+  EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
+      decompressed_response->data(), decompressed_response->size()));
+  EXPECT_EQ(deserialized_auction_result.ad_type(),
+            AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
+
+  // Validate chaff bit is not set and error is not populated.
+  EXPECT_FALSE(deserialized_auction_result.is_chaff());
+  EXPECT_FALSE(deserialized_auction_result.has_error());
+
+  // Validate server component auction fields.
+  EXPECT_EQ(deserialized_auction_result.auction_params().component_seller(),
+            kSellerOriginDomain);
+  EXPECT_EQ(
+      deserialized_auction_result.auction_params().ciphertext_generation_id(),
+      kSampleGenerationId);
+}
+
 TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -291,15 +349,10 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
-  // Unframe the framed response.
-  absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(*decrypted_response);
-  ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
-
-  // Decompress the encoded response.
+  // Unframe and decompress the framed response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(unframed_response->compressed_data);
-  EXPECT_TRUE(decompressed_response.ok())
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  ASSERT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
   AuctionResult deserialized_auction_result;
   EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
@@ -362,16 +415,10 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
-  // Unframe the framed response.
-  absl::StatusOr<server_common::DecodedRequest> unframed_response =
-      server_common::DecodeRequestPayload(*decrypted_response);
-  ASSERT_TRUE(unframed_response.ok()) << unframed_response.status().message();
-
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      GzipDecompress(unframed_response->compressed_data);
-  EXPECT_TRUE(decompressed_response.ok())
-      << decompressed_response.status().message();
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  ASSERT_TRUE(decompressed_response.ok());
 
   // Validate the error message returned in the response.
   AuctionResult deserialized_auction_result;
@@ -497,7 +544,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
       std::optional<absl::string_view> app_install_signals = std::nullopt) {
     auto [request, protected_auction_input] = CreateRawSelectAdRequest(
         seller_origin_domain, add_interest_group, add_protected_app_signals,
-        std::move(app_install_signals));
+        app_install_signals);
     auto [encrypted_request, context] =
         GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
     *request.mutable_protected_auction_ciphertext() =
@@ -531,9 +578,11 @@ class SelectAdReactorPASTest : public ::testing::Test {
   BuyerBidsResponseMap expected_buyer_bids_;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager_ =
       std::make_unique<server_common::MockKeyFetcherManager>();
-  ClientRegistry clients_{scoring_signals_provider_, scoring_client_,
+  ClientRegistry clients_{scoring_signals_provider_,
+                          scoring_client_,
                           buyer_front_end_async_client_factory_mock_,
                           *key_fetcher_manager_,
+                          /* *crypto_client = */ nullptr,
                           std::make_unique<MockAsyncReporter>(
                               std::make_unique<MockHttpFetcherAsync>())};
 

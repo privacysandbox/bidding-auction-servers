@@ -21,8 +21,9 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "services/seller_frontend_service/util/proto_mapping_util.h"
+#include "src/communication/encoding_utils.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -42,7 +43,7 @@ namespace {
 template <typename T>
 T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
                                         bool fail_fast,
-                                        ReportErrorSignature ReportError,
+                                        const ReportErrorSignature& ReportError,
                                         ErrorAccumulator& error_accumulator) {
   T protected_auction_input;
   absl::StatusOr<server_common::DecodedRequest> decoded_request =
@@ -63,32 +64,6 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
   return protected_auction_input;
 }
 
-void SetReportingUrls(const WinReportingUrls& win_reporting_urls,
-                      AuctionResult& auction_result) {
-  auto* mutable_win_reporting_urls =
-      auction_result.mutable_win_reporting_urls();
-  mutable_win_reporting_urls->mutable_buyer_reporting_urls()->set_reporting_url(
-      win_reporting_urls.buyer_reporting_urls().reporting_url());
-  *mutable_win_reporting_urls->mutable_buyer_reporting_urls()
-       ->mutable_interaction_reporting_urls() =
-      win_reporting_urls.buyer_reporting_urls().interaction_reporting_urls();
-  mutable_win_reporting_urls->mutable_top_level_seller_reporting_urls()
-      ->set_reporting_url(
-          win_reporting_urls.top_level_seller_reporting_urls().reporting_url());
-  *mutable_win_reporting_urls->mutable_top_level_seller_reporting_urls()
-       ->mutable_interaction_reporting_urls() =
-      win_reporting_urls.top_level_seller_reporting_urls()
-          .interaction_reporting_urls();
-  mutable_win_reporting_urls->mutable_component_seller_reporting_urls()
-      ->set_reporting_url(
-          win_reporting_urls.component_seller_reporting_urls().reporting_url());
-
-  *mutable_win_reporting_urls->mutable_component_seller_reporting_urls()
-       ->mutable_interaction_reporting_urls() =
-      win_reporting_urls.component_seller_reporting_urls()
-          .interaction_reporting_urls();
-}
-
 }  // namespace
 
 SelectAdReactorForApp::SelectAdReactorForApp(
@@ -102,25 +77,19 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error) {
   AuctionResult auction_result;
-  if (error.has_value()) {
-    *auction_result.mutable_error() = *error;
-  } else if (high_score.has_value()) {
-    auction_result.set_is_chaff(false);
-    auction_result.set_bid(high_score->bid());
-    auction_result.set_score(high_score->desirability());
-    auction_result.set_interest_group_name(
-        std::move(high_score->interest_group_name()));
-    auction_result.set_interest_group_owner(
-        std::move(high_score->interest_group_owner()));
-    auction_result.set_ad_render_url(std::move(high_score->render()));
-    SetReportingUrls(high_score->win_reporting_urls(), auction_result);
-    *auction_result.mutable_ad_component_render_urls() =
-        high_score->component_renders();
-    auction_result.set_ad_type(high_score->ad_type());
+  if (high_score.has_value()) {
+    auction_result = AdScoreToAuctionResult(
+        high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
+        error, auction_scope_, request_->auction_config().seller(),
+        protected_auction_input_,
+        request_->auction_config().top_level_seller());
   } else {
-    auction_result.set_is_chaff(true);
+    auction_result = AdScoreToAuctionResult(
+        high_score, /*maybe_bidding_groups=*/std::nullopt, error,
+        auction_scope_, request_->auction_config().seller(),
+        protected_auction_input_,
+        request_->auction_config().top_level_seller());
   }
-
   PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
                                 << auction_result.DebugString();
 
@@ -130,8 +99,8 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
   // Compress the bytes array before framing it with pre-amble and padding.
   absl::StatusOr<std::string> compressed_data = GzipCompress(serialized_result);
   if (!compressed_data.ok()) {
-    std::string error = "Failed to compress the serialized response data\n";
-    FinishWithStatus(grpc::Status(grpc::INTERNAL, error));
+    std::string error_str = "Failed to compress the serialized response data\n";
+    FinishWithStatus(grpc::Status(grpc::INTERNAL, error_str));
     return absl::InternalError("");
   }
 
@@ -182,7 +151,7 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
       continue;
     }
 
-    decoded_buyer_inputs.insert({std::move(owner), std::move(buyer_input)});
+    decoded_buyer_inputs.insert({owner, std::move(buyer_input)});
   }
 
   return decoded_buyer_inputs;
@@ -261,7 +230,7 @@ SelectAdReactorForApp::CreateScoreAdsRequest() {
 
 ProtectedAppSignalsAdWithBidMetadata
 SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
-    absl::string_view buyer, const ProtectedAppSignalsAdWithBid& input) {
+    absl::string_view buyer_owner, const ProtectedAppSignalsAdWithBid& input) {
   ProtectedAppSignalsAdWithBidMetadata result;
   if (input.has_ad()) {
     *result.mutable_ad() = input.ad();
@@ -271,7 +240,8 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   result.set_modeling_signals(input.modeling_signals());
   result.set_ad_cost(input.ad_cost());
   result.set_egress_features(input.egress_features());
-  result.set_owner(buyer);
+  result.set_owner(buyer_owner);
+  result.set_bid_currency(input.bid_currency());
   return result;
 }
 
@@ -285,11 +255,11 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
 
   PS_VLOG(3, log_context_) << "Protected App signals, may add protected app "
                               "signals bids to score ads request";
-  for (const auto& [buyer, get_bid_response] : shared_buyer_bids_map_) {
+  for (const auto& [buyer_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
          i++) {
       auto ad_with_bid_metadata = BuildProtectedAppSignalsAdWithBidMetadata(
-          buyer, get_bid_response->protected_app_signals_bids().at(i));
+          buyer_owner, get_bid_response->protected_app_signals_bids().at(i));
       score_ads_raw_request->mutable_protected_app_signals_ad_bids()->Add(
           std::move(ad_with_bid_metadata));
     }

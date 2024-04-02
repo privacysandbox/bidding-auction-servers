@@ -22,7 +22,6 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
-    "strip_prefix",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
@@ -31,27 +30,26 @@ load("//:config.bzl", "LOG_ENV_VARS")
 pkg_files(
     name = "server_executables",
     srcs = [
+        "bin/init_server_basic",
         "//services/bidding_service:server",
+        "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
     ] + select({
+        "//:inference_noop": [
+            "@inference_common//:inference_sidecar_test_target",
+        ],
+        "//:inference_pytorch": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar",
+        ],
+        "//:inference_tensorflow": [
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar",
+        ],
         "//conditions:default": [],
     }),
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/server/bin",
 )
 
-pkg_files(
-    name = "server_data",
-    srcs = [
-    ] + select({
-        "//conditions:default": [],
-    }),
-    attributes = pkg_attributes(mode = "0555"),
-    prefix = "/server/data",
-    strip_prefix = strip_prefix.from_pkg(),
-)
-
 server_binaries = [
-    ":server_data",
     ":server_executables",
 ]
 
@@ -85,10 +83,10 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "--init_config_client=true",
+        "/server/bin/init_server_basic",
     ],
     entrypoint = [
-        "/server/bin/server",
+        "sh",
     ],
     env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},

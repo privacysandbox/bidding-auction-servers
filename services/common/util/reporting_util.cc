@@ -23,7 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "services/common/util/json_util.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -188,7 +188,9 @@ SellerRejectionReason ToSellerRejectionReason(
     absl::string_view rejection_reason_str) {
   if (rejection_reason_str.empty()) {
     return SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
-  } else if (kRejectionReasonInvalidBid == rejection_reason_str) {
+  }
+
+  if (kRejectionReasonInvalidBid == rejection_reason_str) {
     return SellerRejectionReason::INVALID_BID;
   } else if (kRejectionReasonBidBelowAuctionFloor == rejection_reason_str) {
     return SellerRejectionReason::BID_BELOW_AUCTION_FLOOR;

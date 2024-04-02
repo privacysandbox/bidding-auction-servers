@@ -1,0 +1,54 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+build --announce_rc
+build --verbose_failures
+build --config=clang
+build --compilation_mode=opt
+build --output_filter='^//((?!(third_party):).)*$'`
+build --color=yes
+
+build:clang --cxxopt=-fbracket-depth=512
+build:clang --client_env=CC=clang
+build:clang --cxxopt=-std=c++17
+build:clang --host_cxxopt=-std=c++17
+build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
+# Makes thread safety analysis warnings into errors.
+build:clang --copt=-Werror=thread-safety
+
+# Address sanitizer, set action_env to segregate cache entries
+build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1
+build:asan --strip=never
+build:asan --compilation_mode=dbg
+build:asan --copt=-fsanitize=address
+build:asan --copt=-DADDRESS_SANITIZER
+build:asan --copt=-O1
+build:asan --copt=-g
+build:asan --copt=-fno-omit-frame-pointer
+build:asan --linkopt=-fsanitize=address
+build:asan --linkopt=-fuse-ld=lld
+build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
+
+# Thread sanitizer, set action_env to segregate cache entries
+build:tsan --action_env=PRIVACY_SANDBOX_SERVERS_TSAN=1
+build:tsan --strip=never
+build:tsan --copt=-fsanitize=thread
+build:tsan --copt=-fno-omit-frame-pointer
+build:tsan --copt=-DGPR_NO_DIRECT_SYSCALLS
+build:tsan --copt=-DGRPC_TSAN
+build:tsan --copt=-g
+build:tsan --linkopt=-fsanitize=thread
+# This is needed to address false positive problem with abseil.
+# https://github.com/google/sanitizers/issues/953
+build:tsan --test_env=TSAN_OPTIONS=report_atomic_races=0

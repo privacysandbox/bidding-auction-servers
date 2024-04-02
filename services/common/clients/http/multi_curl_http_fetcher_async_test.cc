@@ -107,6 +107,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest,
 TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesTimeoutByReturningError) {
   std::string msg;
   absl::BlockingCounter done(1);
+  // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
     done.DecrementCount();
     ASSERT_FALSE(result.ok());
@@ -120,6 +121,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesTimeoutByReturningError) {
 TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesMalformattedUrlByReturningError) {
   std::string msg;
   absl::BlockingCounter done(1);
+  // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
     done.DecrementCount();
     ASSERT_FALSE(result.ok());
@@ -158,9 +160,9 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
   std::vector<HTTPRequest> test_requests = {
       {kUrlA.begin(), {}}, {kUrlB.begin(), {}}, {kUrlC.begin(), {}}};
   auto done_cb = [&done, &test_requests](
-                     std::vector<absl::StatusOr<std::string>> results) {
+                     const std::vector<absl::StatusOr<std::string>>& results) {
     EXPECT_EQ(results.size(), test_requests.size());
-    for (auto result : results) {
+    for (const auto& result : results) {
       ASSERT_TRUE(result.ok()) << result.status();
     }
     done.DecrementCount();
@@ -188,6 +190,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
   std::string msg;
   absl::Notification notification;
+  // NOLINTNEXTLINE
   auto done_cb = [&notification](absl::StatusOr<std::string> result) {
     EXPECT_FALSE(result.ok()) << result.status();
     EXPECT_THAT(result.status().message(),

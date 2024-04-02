@@ -25,7 +25,7 @@ This method expects a plaintext json with the following fields.
               ....
           }}
           .....
-    }
+    },
     "raw_protected_audience_input": {
         "raw_buyer_input" : {"buyer1": {
             "interest_groups": [{
@@ -36,7 +36,48 @@ This method expects a plaintext json with the following fields.
         }},
         "publisher_name": "testPublisher.com",
         .....
-    }
+    },
+    "raw_component_auction_results": [
+        {
+            "ad_render_url": "URL",
+
+        },
+        ...
+    ]
+ }
+```
+
+### Top Level Auction [SelectAdRequest] to SFE
+
+This method expects a plaintext json with the following fields.
+
+```json
+ {
+    "auction_config" : {
+          "seller_signals": "...",
+          .....
+    },
+    "raw_protected_audience_input": {
+        "publisher_name": "testPublisher.com",
+        .....
+    },
+    "raw_component_auction_results": [{
+            "ad_render_url": "URL",
+            "interest_group_origin": "testIG.com",
+            "interest_group_name": "testIG",
+            "interest_group_owner": "testIG.com",
+            "bidding_groups": {},
+            "score": 4.9,
+            "bid": 0.2,
+            "bid_currency": "USD",
+            "ad_metadata": "{}",
+            "top_level_seller": "SFE-domain.com",
+            "auction_params": {
+                "component_seller": "test_seller.com"
+            }
+        },
+        .....
+    ]
  }
 ```
 
@@ -131,7 +172,7 @@ Notes:
 ### Using Custom Keys
 
 By default, the tool uses the keys found
-[here](https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h#L29C34-L29C34).
+[here](https://github.com/privacysandbox/data-plane-shared-libraries/blob/f5fda1d87f9dc86a1dc21b92338c460b4ebdc8e6/src/encryption/key_fetcher/fake_key_fetcher_manager.h#L27-L33).
 
 If you want to send a request to servers running keys other than the `TEST_MODE=true` keys, you'll
 need to specify the keys.

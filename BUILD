@@ -174,6 +174,60 @@ config_setting(
 )
 
 string_flag(
+    name = "inference_build",
+    build_setting_default = "no",
+    values = [
+        "yes",
+        "no",
+    ],
+)
+
+config_setting(
+    name = "inference",
+    flag_values = {
+        ":inference_build": "yes",
+    },
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "inference_runtime",
+    build_setting_default = "noop",
+    values = [
+        "noop",
+        "pytorch",
+        "tensorflow",
+    ],
+)
+
+config_setting(
+    name = "inference_noop",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "noop",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "inference_pytorch",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "pytorch",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "inference_tensorflow",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "tensorflow",
+    },
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
     name = "build_for_test",
     build_setting_default = "non_test",
     values = [
@@ -194,4 +248,10 @@ filegroup(
     name = "version_data",
     srcs = ["version.txt"],
     visibility = ["//services/common/telemetry:__pkg__"],
+)
+
+filegroup(
+    name = "clang_tidy_config",
+    srcs = [".clang-tidy"],
+    visibility = ["//visibility:public"],
 )

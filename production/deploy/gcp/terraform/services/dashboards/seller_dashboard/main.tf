@@ -342,7 +342,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.bfe.errors_count_by_status [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.errors_count_by_status [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -356,12 +356,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.bfe.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
-                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
@@ -387,7 +387,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "js_execution.error.count [MEAN]",
+          "title": "js_execution.errors_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -401,7 +401,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/js_execution.error.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/js_execution.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -431,7 +431,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 16,
         "widget": {
-          "title": "business_logic.auction.bids.count [MEAN]",
+          "title": "auction.business_logic.bids_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -445,7 +445,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/business_logic.auction.bids.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bids_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -474,7 +474,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 16,
         "widget": {
-          "title": "business_logic.auction.bid_rejected.count [MEAN]",
+          "title": "auction.business_logic.bid_rejected_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -488,7 +488,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/business_logic.auction.bid_rejected.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bid_rejected_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -519,7 +519,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.kv.duration_ms [95TH PERCENTILE]",
+          "title": "initiated_request.to_kv.duration_ms [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -542,7 +542,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.kv.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.to_kv.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -558,7 +558,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.count_by_server [MEAN]",
+          "title": "initiated_request.count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -572,7 +572,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.count_by_server\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -602,7 +602,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "business_logic.auction.bid_rejected.percent [95TH PERCENTILE]",
+          "title": "auction.business_logic.bid_rejected_percent [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -625,7 +625,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/business_logic.auction.bid_rejected.percent\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bid_rejected_percent\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -641,7 +641,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.auction.size_bytes [95TH PERCENTILE]",
+          "title": "sfe.initiated_request.to_auction.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -664,7 +664,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.auction.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_auction.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -680,7 +680,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.auction.duration_ms [95TH PERCENTILE]",
+          "title": "sfe.initiated_request.to_auction.duration_ms [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -703,7 +703,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.auction.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_auction.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -719,7 +719,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.kv.size_bytes [95TH PERCENTILE]",
+          "title": "initiated_request.to_kv.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -742,7 +742,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"  metric.label.\"service_name\"=\"sfe\""
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.to_kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"  metric.label.\"service_name\"=\"sfe\""
                   }
                 }
               }
@@ -758,7 +758,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_response.kv.size_bytes [95TH PERCENTILE]",
+          "title": "sfe.initiated_response.to_kv.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -781,7 +781,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_response.kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"  metric.label.\"service_name\"=\"sfe\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_response.to_kv.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"  metric.label.\"service_name\"=\"sfe\""
                   }
                 }
               }
@@ -797,7 +797,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.error_code [MEAN]",
+          "title": "sfe.errors_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -811,7 +811,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.error_code\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -841,7 +841,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "auction.error_code [MEAN]",
+          "title": "auction.errors_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -855,7 +855,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/auction.error_code\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/auction.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -886,7 +886,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
   {
         "height": 19,
         "widget": {
-          "title": "initiated_request.kv.errors_count_by_status [MEAN]",
+          "title": "initiated_request.to_kv.errors_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -900,12 +900,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.kv.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.to_kv.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
-                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
@@ -931,7 +931,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.auction.errors_count_by_status [MEAN]",
+          "title": "sfe.initiated_request.to_auction.errors_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -945,12 +945,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_request.auction.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_auction.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
-                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
@@ -976,7 +976,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "request.failed_count_by_status [MEAN]",
+          "title": "request.failed_count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -990,12 +990,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/request.failed_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/request.failed_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
-                        "metric.label.\"error_status_code\"",
+                        "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
@@ -1020,7 +1020,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "initiated_response.auction.size_bytes [95TH PERCENTILE]",
+          "title": "sfe.initiated_response.to_auction.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1043,7 +1043,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/initiated_response.auction.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_response.to_auction.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -1101,7 +1101,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.errors_count_by_buyer [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.errors_count_by_buyer [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1115,7 +1115,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.errors_count_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.errors_count_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -1146,7 +1146,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.count_by_buyer [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.count [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1160,7 +1160,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.count_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -1191,7 +1191,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.duration_by_buyer [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.duration_ms [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1199,7 +1199,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.duration_by_buyer'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.count_by_buyer' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div",
+                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.duration_ms'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.count' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div",
                   "unitOverride": ""
                 }
               }
@@ -1215,7 +1215,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-            "title": "sfe.initiated_request.size_by_buyer [MEAN]",
+            "title": "sfe.initiated_request.to_bfe.size_bytes [MEAN]",
             "xyChart": {
               "chartOptions": {},
               "dataSets": [
@@ -1229,7 +1229,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "alignmentPeriod": "60s",
                         "perSeriesAligner": "ALIGN_RATE"
                       },
-                      "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.size_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                      "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                       "secondaryAggregation": {
                         "alignmentPeriod": "60s",
                         "crossSeriesReducer": "REDUCE_MEAN",
@@ -1259,7 +1259,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_response.size_by_buyer [MEAN]",
+          "title": "sfe.initiated_response.to_bfe.size_bytes [MEAN]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1273,7 +1273,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_response.size_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_response.to_bfe.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -1465,7 +1465,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "business_logic.sfe.request_with_winner.count",
+          "title": "sfe.business_logic.request_with_winner_count",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1479,7 +1479,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/business_logic.sfe.request_with_winner.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.business_logic.request_with_winner_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
                       "crossSeriesReducer": "REDUCE_MEAN",
@@ -1509,7 +1509,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "business_logic.sfe.request_with_winner.duration_ms [95TH PERCENTILE]",
+          "title": "sfe.business_logic.request_with_winner.duration_ms [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1532,7 +1532,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/business_logic.sfe.request_with_winner.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.business_logic.request_with_winner.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -1549,7 +1549,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "protected_ciphertext.size_bytes [95TH PERCENTILE]",
+          "title": "sfe.protected_ciphertext.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1572,7 +1572,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/protected_ciphertext.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.protected_ciphertext.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }
@@ -1589,7 +1589,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
       {
         "height": 19,
         "widget": {
-          "title": "auction_config.size_bytes [95TH PERCENTILE]",
+          "title": "sfe.auction_config.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1612,7 +1612,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
                     },
-                    "filter": "metric.type=\"workload.googleapis.com/auction_config.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                    "filter": "metric.type=\"workload.googleapis.com/sfe.auction_config.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
                   }
                 }
               }

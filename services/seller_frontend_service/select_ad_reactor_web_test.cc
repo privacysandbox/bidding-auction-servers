@@ -77,11 +77,9 @@ class SelectAdReactorForWebTest : public ::testing::Test {
                                      SelectAdRequest& select_ad_request) {
     const auto* descriptor = protected_auction_input.GetDescriptor();
     if (descriptor->name() == kProtectedAuctionInput) {
-      *select_ad_request.mutable_protected_auction_ciphertext() =
-          std::move(ciphertext);
+      *select_ad_request.mutable_protected_auction_ciphertext() = ciphertext;
     } else {
-      *select_ad_request.mutable_protected_audience_ciphertext() =
-          std::move(ciphertext);
+      *select_ad_request.mutable_protected_audience_ciphertext() = ciphertext;
     }
   }
 
@@ -250,9 +248,12 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
                          buyer_front_end_async_client_factory_mock,
-                         *key_fetcher_manager, std::move(async_reporter)};
+                         *key_fetcher_manager,
+                         /* *crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   // Setup expectation on buyer client to receive appropriate log context from
   // SFE.
@@ -278,7 +279,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
        &MockGetBids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
         EXPECT_CALL(*buyer,
                     ExecuteInternal(Pointee(EqGetBidsRawRequestWithLogContext(
-                                        std::move(expected_get_bid_request))),
+                                        expected_get_bid_request)),
                                     _, _, _))
             .WillRepeatedly(MockGetBids);
         return buyer;
@@ -587,9 +588,12 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
                          buyer_front_end_async_client_factory_mock,
-                         *key_fetcher_manager, std::move(async_reporter)};
+                         *key_fetcher_manager,
+                         /* *crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   // Setup expectation on buyer client from SFE.
   GetBidsRequest::GetBidsRawRequest expected_get_bid_request;
@@ -616,7 +620,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
         EXPECT_CALL(
             *buyer,
             ExecuteInternal(Pointee(EqGetBidsRawRequestWithConsentedDebugConfig(
-                                std::move(expected_get_bid_request))),
+                                expected_get_bid_request)),
                             _, _, _))
             .WillRepeatedly(MockGetBids);
         return buyer;
@@ -673,7 +677,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
       RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
 }
 
-TYPED_TEST(SelectAdReactorForWebTest, VerifyComponentAuctionCborEncoding) {
+TYPED_TEST(SelectAdReactorForWebTest,
+           VerifyDeviceComponentAuctionCborEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -755,6 +760,7 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
+
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
@@ -775,6 +781,71 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       *response_with_cbor.mutable_auction_result_ciphertext(),
       request_with_context.context, kBiddingAuctionOhttpResponseLabel);
   EXPECT_FALSE(decrypted_response.ok()) << decrypted_response.status();
+}
+TYPED_TEST(SelectAdReactorForWebTest,
+           VerifyServerComponentAuctionProtoEncoding) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+
+  EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
+      .WillOnce(Return(google::cmrt::sdk::public_key_service::v1::PublicKey()));
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCrytoClient(crypto_client);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          {&crypto_client,
+           EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP});
+
+  SelectAdResponse response_with_proto =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_proto);
+  ASSERT_FALSE(response_with_proto.auction_result_ciphertext().empty());
+
+  // Decrypt the response.
+  absl::string_view decrypted_response =
+      response_with_proto.auction_result_ciphertext();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response.size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  // Validate the error message returned in the response.
+  AuctionResult deserialized_auction_result;
+  EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
+      decompressed_response->data(), decompressed_response->size()));
+
+  // Validate chaff bit is not set if there was an input validation error.
+  EXPECT_FALSE(deserialized_auction_result.is_chaff());
+  EXPECT_FALSE(deserialized_auction_result.has_error());
+
+  // Validate server component auction fields.
+  EXPECT_EQ(deserialized_auction_result.auction_params().component_seller(),
+            kSellerOriginDomain);
+  EXPECT_EQ(
+      deserialized_auction_result.auction_params().ciphertext_generation_id(),
+      kSampleGenerationId);
 }
 
 }  // namespace

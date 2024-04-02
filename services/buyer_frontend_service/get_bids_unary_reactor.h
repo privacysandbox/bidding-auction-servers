@@ -37,8 +37,8 @@
 #include "services/common/loggers/benchmarking_logger.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/logger/request_context_impl.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

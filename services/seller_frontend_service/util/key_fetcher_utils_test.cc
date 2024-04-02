@@ -68,5 +68,24 @@ TEST(KeyFetcherUtilsTest,
   EXPECT_EQ(map.status().message(), kEmptyEndpointError);
 }
 
+TEST(ProtoCloudPlatformToScpCloudPlatformTest, ReturnsGcpForGcp) {
+  EXPECT_EQ(server_common::CloudPlatform::kGcp,
+            ProtoCloudPlatformToScpCloudPlatform(
+                EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP));
+}
+
+TEST(ProtoCloudPlatformToScpCloudPlatformTest, ReturnsAwsForAws) {
+  EXPECT_EQ(server_common::CloudPlatform::kAws,
+            ProtoCloudPlatformToScpCloudPlatform(
+                EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_AWS));
+}
+
+TEST(ProtoCloudPlatformToScpCloudPlatformTest, ReturnsLocalForUnspecified) {
+  EXPECT_EQ(
+      server_common::CloudPlatform::kLocal,
+      ProtoCloudPlatformToScpCloudPlatform(
+          EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

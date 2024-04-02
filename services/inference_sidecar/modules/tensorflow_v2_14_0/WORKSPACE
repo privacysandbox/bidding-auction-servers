@@ -1,0 +1,134 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("//builders/bazel:deps.bzl", "python_deps")
+
+python_deps("//builders/bazel")
+
+http_archive(
+    name = "com_google_absl",
+    # commit f845e60 2023-12-05
+    sha256 = "b1e113eaf442b817f2a9e3bb471cb36129cd456dd999b0e0360fa891f177013b",
+    strip_prefix = "abseil-cpp-f845e60acd880dbf07788a5a2c0dbad0f9c57231",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/f845e60acd880dbf07788a5a2c0dbad0f9c57231.zip"],
+)
+
+http_archive(
+    name = "google_privacysandbox_servers_common",
+    patch_args = ["-p1"],
+    patches = [
+        "@//third_party:google_privacysandbox_servers_common.patch",
+    ],
+    sha256 = "0a0bbe51c193f9dbbd0c17ff96db9883d3cd4980df150c8747d8520071dce0a7",
+    strip_prefix = "data-plane-shared-libraries-a7515f845ef463450baddff60099a78a2e8eadc3",
+    urls = [
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/a7515f845ef463450baddff60099a78a2e8eadc3.zip",
+    ],
+)
+
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+
+http_archive(
+    name = "org_tensorflow",
+    patch_args = [
+        "-p1",
+    ],
+    patches = [
+        "@//third_party:org_tensorflow_compatibility_fixes.diff",
+    ],
+    sha256 = "ce357fd0728f0d1b0831d1653f475591662ec5bca736a94ff789e6b1944df19f",
+    strip_prefix = "tensorflow-2.14.0",
+    urls = [
+        "https://github.com/tensorflow/tensorflow/archive/refs/tags/v2.14.0.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "org_kernel_libcap",
+    build_file = "@com_google_sandboxed_api//sandboxed_api:bazel/external/libcap.BUILD",
+    sha256 = "260b549c154b07c3cdc16b9ccc93c04633c39f4fb6a4a3b8d1fa5b8a9c3f5fe8",  # 2019-04-16
+    strip_prefix = "libcap-2.27",
+    urls = ["https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.27.tar.gz"],
+)
+
+# Copied from `@org_tensorflow//:WORKSPACE`.
+load("@rules_python//python:repositories.bzl", "py_repositories", "python_register_toolchains")
+
+py_repositories()
+
+load("@org_tensorflow//tensorflow/tools/toolchains/python:python_repo.bzl", "python_repository")
+
+python_repository(name = "python_version_repo")
+
+# TF workspace scripts below requires `@python` toolchains repo.
+# Toolchain setup here is to please the TF workspace scripts,
+# and we do not use this Python version to build pip packages.
+python_register_toolchains(
+    name = "python",
+    ignore_root_user_error = True,
+    python_version = "3.9",
+)
+
+load("@org_tensorflow//tensorflow:workspace3.bzl", "tf_workspace3")
+
+tf_workspace3()
+
+load("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")
+
+tf_workspace2()
+
+load("@org_tensorflow//tensorflow:workspace1.bzl", "tf_workspace1")
+
+tf_workspace1(with_rules_cc = False)
+
+load("@org_tensorflow//tensorflow:workspace0.bzl", "tf_workspace0")
+
+tf_workspace0()
+
+local_repository(
+    name = "inference_common",
+    path = "../../common",
+)
+
+maybe(
+    http_archive,
+    name = "rapidjson",
+    build_file = "@inference_common//:third_party/rapidjson.BUILD.bazel",
+    sha256 = "bf7ced29704a1e696fbccf2a2b4ea068e7774fa37f6d7dd4039d0787f8bed98e",
+    strip_prefix = "rapidjson-1.1.0",
+    url = "https://github.com/Tencent/rapidjson/archive/v1.1.0.tar.gz",
+)
+
+load(
+    "@google_privacysandbox_servers_common//third_party:cpp_deps.bzl",
+    data_plane_shared_deps_cpp = "cpp_dependencies",
+)
+
+data_plane_shared_deps_cpp()
+
+load("@google_privacysandbox_servers_common//third_party:deps1.bzl", data_plane_shared_deps1 = "deps1")
+
+data_plane_shared_deps1()
+
+load("@google_privacysandbox_servers_common//build_defs/cc/shared:sandboxed_api.bzl", "sandboxed_api")
+
+sandboxed_api()
+
+load("@com_google_sandboxed_api//sandboxed_api/bazel:llvm_config.bzl", "llvm_disable_optional_support_deps")
+load("@com_google_sandboxed_api//sandboxed_api/bazel:sapi_deps.bzl", "sapi_deps")
+
+llvm_disable_optional_support_deps()
+
+sapi_deps()

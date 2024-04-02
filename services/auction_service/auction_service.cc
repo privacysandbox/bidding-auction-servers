@@ -18,7 +18,7 @@
 
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/metric/server_definition.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

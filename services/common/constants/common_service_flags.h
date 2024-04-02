@@ -22,7 +22,7 @@
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
-#include "src/cpp/telemetry/flag/telemetry_flag.h"
+#include "src/telemetry/flag/telemetry_flag.h"
 
 ABSL_DECLARE_FLAG(std::optional<bool>, test_mode);
 ABSL_DECLARE_FLAG(std::optional<std::string>, public_key_endpoint);

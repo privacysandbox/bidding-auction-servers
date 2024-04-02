@@ -80,7 +80,7 @@ constexpr absl::string_view js_code = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals
     ) {
       // Do a random amount of work to generate the score:
@@ -104,7 +104,7 @@ constexpr absl::string_view js_code_with_debug_urls = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals
     ) {
       // Do a random amount of work to generate the score:
@@ -142,7 +142,7 @@ constexpr absl::string_view js_code_with_very_large_debug_urls = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals
     ) {
       // Do a random amount of work to generate the score:
@@ -167,7 +167,7 @@ constexpr absl::string_view js_code_with_global_this_debug_urls = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals
     ) {
       // Do a random amount of work to generate the score:
@@ -192,7 +192,7 @@ constexpr absl::string_view js_code_throws_exception = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals) {
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
@@ -211,7 +211,7 @@ constexpr absl::string_view js_code_throws_exception_with_debug_urls =
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals) {
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
@@ -254,7 +254,7 @@ constexpr absl::string_view js_code_with_reject_reasons = R"JS_CODE(
                       bid,
                       auction_config,
                       scoring_signals,
-                      device_signals,
+                      bid_metadata,
                       direct_from_seller_signals
     ) {
       // Do a random amount of work to generate the score:
@@ -476,7 +476,6 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
     EXPECT_EQ(scoredAd.render(),
               interest_group_to_ad.at(scoredAd.interest_group_name()).render());
   }
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 void SellerCodeWrappingTestHelper(
@@ -498,7 +497,7 @@ void SellerCodeWrappingTestHelper(
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   raw_request.ParseFromString(request->request_ciphertext());
   if (enable_report_win_url_generation) {
-    for (auto ad_bid : raw_request.ad_bids()) {
+    for (const auto& ad_bid : raw_request.ad_bids()) {
       if (enable_report_win_input_noising) {
         buyer_origin_code_map.try_emplace(ad_bid.interest_group_owner(),
                                           kBuyerBaseCodeWithValidation);
@@ -556,7 +555,6 @@ void SellerCodeWrappingTestHelper(
   service.ScoreAds(&context, request, response);
   std::this_thread::sleep_for(absl::ToChronoSeconds(absl::Seconds(2)));
   // This line may NOT break if the ad_score() object is empty.
-  EXPECT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
@@ -1060,7 +1058,8 @@ TEST_F(AuctionServiceIntegrationTest, CapturesRejectionReasonForRejectedAds) {
     // in response.
     EXPECT_NE(ad_rejection_reason.rejection_reason(),
               SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
-    std::string interest_group_name = ad_rejection_reason.interest_group_name();
+    const std::string& interest_group_name =
+        ad_rejection_reason.interest_group_name();
     EXPECT_EQ(ad_rejection_reason.rejection_reason(),
               interest_group_to_rejection_reason.at(interest_group_name));
   }
@@ -1098,5 +1097,45 @@ TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_FALSE(raw_response.has_ad_score());
 }
+
+void BuildTopLevelAuctionScoreAdsRequest(
+    ScoreAdsRequest* request, bool enable_debug_reporting = false,
+    int desired_ad_count = 20, absl::string_view seller = kTestSeller) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  std::string generation_id = MakeARandomString();
+  for (int i = 0; i < desired_ad_count; i++) {
+    auto auction_result =
+        MakeARandomComponentAuctionResult(generation_id, absl::StrCat(seller));
+    *raw_request.mutable_component_auction_results()->Add() = auction_result;
+  }
+  if (enable_debug_reporting) {
+    raw_request.set_enable_debug_reporting(enable_debug_reporting);
+  }
+  raw_request.set_seller(seller);
+  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request->set_key_id(kKeyId);
+}
+
+TEST_F(AuctionServiceIntegrationTest,
+       ProcessTopLevelAuctionInputAndReturnWinner) {
+  ScoreAdsRequest request;
+  BuildTopLevelAuctionScoreAdsRequest(&request);
+  ScoreAdsResponse response;
+  SellerCodeWrappingTestHelper(&request, &response, kTopLevelAuctionCode,
+                               /*enable_seller_debug_url_generation=*/false,
+                               /*enable_debug_reporting=*/false);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scoredAd = raw_response.ad_score();
+  EXPECT_GT(scoredAd.desirability(), 0);
+  EXPECT_FLOAT_EQ(scoredAd.incoming_bid_in_seller_currency(), 1.868);
+
+  // Should not be populated.
+  EXPECT_FALSE(scoredAd.allow_component_auction());
+  EXPECT_TRUE(scoredAd.ad_metadata().empty());
+  EXPECT_EQ(scoredAd.bid(), 0);
+  EXPECT_TRUE(scoredAd.bid_currency().empty());
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

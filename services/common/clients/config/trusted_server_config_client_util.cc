@@ -24,8 +24,8 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
-#include "scp/cc/public/core/interface/execution_result.h"
-#include "scp/cc/public/cpio/interface/instance_client/instance_client_interface.h"
+#include "src/public/core/interface/execution_result.h"
+#include "src/public/cpio/interface/instance_client/instance_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -62,7 +62,7 @@ absl::Status HandleFailure(absl::string_view error) noexcept {
 }
 
 absl::StatusOr<std::string> GetResourceName(
-    std::shared_ptr<InstanceClientInterface> client) {
+    std::shared_ptr<InstanceClientInterface> client) {  // NOLINT
   std::string resource_name;
 
   absl::Notification done;
@@ -103,8 +103,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   }
 
   std::shared_ptr<InstanceClientInterface> client =
-      google::scp::cpio::InstanceClientFactory::Create(
-          std::move(InstanceClientOptions()));
+      google::scp::cpio::InstanceClientFactory::Create(InstanceClientOptions());
   client->Init();
   absl::StatusOr<std::string> resource_name = GetResourceName(client);
   CHECK_OK(resource_name) << "Could not fetch host resource name.";
@@ -138,7 +137,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   }
 }
 
-// Returns the string to preprend the names of all keys/flags fetched from the
+// Returns the string to prepend the names of all keys/flags fetched from the
 // Parameter Store. The prepended string follows the format
 // "{operator}-{environment}-" where {operator} and {environment} are values for
 // the EC2 tag keys by these names.

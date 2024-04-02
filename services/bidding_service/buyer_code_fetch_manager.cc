@@ -27,8 +27,9 @@
 #include "services/common/code_fetch/periodic_bucket_fetcher.h"
 #include "services/common/code_fetch/periodic_code_fetcher.h"
 #include "services/common/util/file_util.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/concurrent/event_engine_executor.h"
+#include "src/logger/request_context_logger.h"
+#include "src/util/status_macro/status_macros.h"
 
 #include "buyer_code_fetch_manager.h"
 
@@ -41,7 +42,15 @@ constexpr int kMinNumCodeBlobs = 1;
 constexpr int kMaxNumCodeBlobs = 2;
 constexpr char kUnusedWasmBlob[] = "";
 
+using ::google::scp::core::errors::GetErrorMessage;
+
 }  // namespace
+
+BuyerCodeFetchManager::~BuyerCodeFetchManager() {
+  if (absl::Status shutdown = End(); !shutdown.ok()) {
+    PS_VLOG(1) << "BuyerCodeFetchManager shutdown failed. " << shutdown;
+  }
+}
 
 absl::Status BuyerCodeFetchManager::Init() {
   switch (udf_config_.fetch_mode()) {

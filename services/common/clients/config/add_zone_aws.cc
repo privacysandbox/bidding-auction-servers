@@ -14,8 +14,8 @@
 
 #include <memory>
 
-#include "scp/cc/cpio/client_providers/instance_client_provider/src/aws/aws_instance_client_utils.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
+#include "src/cpio/client_providers/instance_client_provider/aws/aws_instance_client_utils.h"
 
 using google::scp::cpio::client_providers::AwsInstanceClientUtils;
 using google::scp::cpio::client_providers::AwsResourceNameDetails;
@@ -25,5 +25,9 @@ void TrustedServerConfigUtil::ComputeZone(absl::string_view resource_name) {
   AwsResourceNameDetails details;
   AwsInstanceClientUtils::GetResourceNameDetails(resource_name, details);
   region_ = details.region;
+}
+absl::btree_map<std::string, std::string>
+TrustedServerConfigUtil::GetAttribute() const {
+  return {};
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

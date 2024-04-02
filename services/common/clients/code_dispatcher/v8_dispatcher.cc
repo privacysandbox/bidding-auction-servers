@@ -20,8 +20,9 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "absl/synchronization/blocking_counter.h"
-#include "scp/cc/roma/interface/roma.h"
+#include "absl/synchronization/notification.h"
+#include "src/logger/request_context_logger.h"
+#include "src/roma/interface/roma.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -32,33 +33,37 @@ using LoadDoneCallback = ::google::scp::roma::Callback;
 V8Dispatcher::V8Dispatcher(DispatchConfig&& config)
     : roma_service_(std::move(config)) {}
 
-absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }
+V8Dispatcher::~V8Dispatcher() {
+  PS_VLOG(1) << "Stopping roma service...";
+  absl::Status stop_status = roma_service_.Stop();
+  PS_VLOG(1) << "Roma service stop status: " << stop_status;
+}
 
-absl::Status V8Dispatcher::Stop() { return roma_service_.Stop(); }
+absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }
 
 absl::Status V8Dispatcher::LoadSync(absl::string_view version,
                                     absl::string_view js) {
-  LoadRequest request;
-  request.version_string = version;
-  request.js = js;
-  absl::BlockingCounter is_loading(1);
-
+  auto request = std::make_unique<LoadRequest>(LoadRequest{
+      .version_string = std::string(version),
+      .js = std::string(js),
+  });
+  absl::Notification load_finished;
   absl::Status load_status;
-  absl::Status try_load = roma_service_.LoadCodeObj(
-      std::make_unique<LoadRequest>(request),
-      [&is_loading, &load_status](const absl::StatusOr<LoadResponse>& res) {
-        if (!res.ok()) {
-          load_status.Update(res.status());
-        }
-        is_loading.DecrementCount();
-      });
-  if (!try_load.ok()) {
+  if (absl::Status try_load = roma_service_.LoadCodeObj(
+          std::move(request),
+          [&load_finished,
+           &load_status](absl::StatusOr<LoadResponse> res) {  // NOLINT
+            if (!res.ok()) {
+              load_status.Update(res.status());
+            }
+            load_finished.Notify();
+          });
+      !try_load.ok()) {
     // Load callback won't be called, we can return.
     return try_load;
-  } else {
-    is_loading.Wait();
-    return load_status;
   }
+  load_finished.WaitForNotification();
+  return load_status;
 }
 
 absl::Status V8Dispatcher::Execute(std::unique_ptr<DispatchRequest> request,

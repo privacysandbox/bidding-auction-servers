@@ -27,7 +27,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "services/common/compression/gzip.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 #include "cbor.h"
 
@@ -239,7 +239,7 @@ absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = cbor_move(cbor_build_stringn(value.data(), value.size()))};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
     return absl::InternalError("");
@@ -254,7 +254,7 @@ absl::Status CborSerializeFloat(absl::string_view key, double value,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = cbor_move(float_val)};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
     return absl::InternalError("");
@@ -268,7 +268,7 @@ absl::Status CborSerializeBool(absl::string_view key, bool value,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = cbor_move(cbor_build_bool(value))};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
     return absl::InternalError("");
@@ -297,7 +297,7 @@ absl::Status CborSerializeAdComponentUrls(
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *serialized_component_renders};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
     return absl::InternalError("");
@@ -404,7 +404,7 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
   struct cbor_pair code_kv = {
       .key = cbor_move(cbor_build_stringn(kCode, sizeof(kCode) - 1)),
       .value = cbor_move(cbor_build_uint(error.code()))};
-  if (!cbor_map_add(*serialized_error_map, std::move(code_kv))) {
+  if (!cbor_map_add(*serialized_error_map, code_kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL,
         absl::StrCat("Failed to serialize error ", kCode, " to CBOR")));
@@ -415,7 +415,7 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
   struct cbor_pair message_kv = {
       .key = cbor_move(cbor_build_stringn(kMessage, sizeof(kMessage) - 1)),
       .value = cbor_move(cbor_build_stringn(message.data(), message.size()))};
-  if (!cbor_map_add(*serialized_error_map, std::move(message_kv))) {
+  if (!cbor_map_add(*serialized_error_map, message_kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL,
         absl::StrCat("Failed to serialize error ", kMessage, " to CBOR")));
@@ -425,7 +425,7 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(kError, sizeof(kError) - 1)),
       .value = *serialized_error_map};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(
         grpc::Status(grpc::INTERNAL,
                      absl::StrCat("Failed to serialize ", kError, " to CBOR")));
@@ -707,7 +707,7 @@ EncodedBuyerInputs DecodeBuyerInputKeys(
       continue;
     }
 
-    const std::string owner = DecodeCborString(interest_group.key);
+    std::string owner = DecodeCborString(interest_group.key);
     // The value is a gzip compressed bytestring.
     bool is_ig_val_valid_type =
         IsTypeValid(&cbor_isa_bytestring, interest_group.value, kIgValue,
@@ -720,7 +720,7 @@ EncodedBuyerInputs DecodeBuyerInputKeys(
     const std::string compressed_igs(
         reinterpret_cast<char*>(cbor_bytestring_handle(interest_group.value)),
         cbor_bytestring_length(interest_group.value));
-    encoded_buyer_inputs.insert({std::move(owner), std::move(compressed_igs)});
+    encoded_buyer_inputs.insert({std::move(owner), compressed_igs});
   }
 
   return encoded_buyer_inputs;
@@ -854,7 +854,7 @@ absl::Status CborSerializeBiddingGroups(const BiddingGroupMap& bidding_groups,
     struct cbor_pair kv = {
         .key = cbor_move(cbor_build_stringn(origin.data(), origin.size())),
         .value = *serialized_group_indices};
-    if (!cbor_map_add(*serialized_group_map, std::move(kv))) {
+    if (!cbor_map_add(*serialized_group_map, kv)) {
       error_handler(grpc::Status(
           grpc::INTERNAL,
           "Failed to serialize an <origin, bidding group array> pair to CBOR"));
@@ -864,7 +864,7 @@ absl::Status CborSerializeBiddingGroups(const BiddingGroupMap& bidding_groups,
   struct cbor_pair kv = {.key = cbor_move(cbor_build_stringn(
                              kBiddingGroups, sizeof(kBiddingGroups) - 1)),
                          .value = *serialized_group_map};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL,
         absl::StrCat("Failed to serialize ", kBiddingGroups, " to CBOR")));
@@ -892,7 +892,7 @@ absl::Status CborSerializeInteractionReportingUrls(
       .key = cbor_move(cbor_build_stringn(
           kInteractionReportingUrls, sizeof(kInteractionReportingUrls) - 1)),
       .value = *serialized_interaction_url_map};
-  if (!cbor_map_add(&root, std::move(kv))) {
+  if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ",
                                      kInteractionReportingUrls, " to CBOR")));
@@ -1138,7 +1138,7 @@ absl::Status CborSerializeReportingUrls(
       .value = *serialized_reporting_urls,
   };
 
-  if (!cbor_map_add(&root, std::move(serialized_reporting_urls_kv))) {
+  if (!cbor_map_add(&root, serialized_reporting_urls_kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
     return absl::InternalError("");
@@ -1178,7 +1178,7 @@ absl::Status CborSerializeWinReportingUrls(
           cbor_build_stringn(kWinReportingUrls, sizeof(kWinReportingUrls) - 1)),
       .value = *serialized_win_reporting_urls,
   };
-  if (!cbor_map_add(&root, std::move(serialized_win_reporting_urls_kv))) {
+  if (!cbor_map_add(&root, serialized_win_reporting_urls_kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL,
         absl::StrCat("Failed to serialize ", kWinReportingUrls, " to CBOR")));

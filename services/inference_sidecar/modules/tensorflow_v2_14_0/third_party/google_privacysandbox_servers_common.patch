@@ -1,0 +1,22 @@
+diff --git a/src/util/status_macro/status_util.h b/src/util/status_macro/status_util.h
+index 68688367..3268233f 100644
+--- a/src/util/status_macro/status_util.h
++++ b/src/util/status_macro/status_util.h
+@@ -17,6 +17,8 @@
+ #ifndef FLEDGE_SERVICES_COMMON_UTIL_STATUS_UTIL_H_
+ #define FLEDGE_SERVICES_COMMON_UTIL_STATUS_UTIL_H_
+ 
++#include <string>
++
+ #include "absl/status/status.h"
+ #include "google/rpc/status.pb.h"
+ #include "include/grpcpp/grpcpp.h"
+@@ -32,7 +34,7 @@ absl::Status ToAbslStatus(const grpc::Status& status);
+ inline google::rpc::Status SaveStatusAsRpcStatus(const absl::Status& status) {
+   google::rpc::Status ret;
+   ret.set_code(static_cast<int>(status.code()));
+-  ret.set_message(status.message());
++  ret.set_message(std::string(status.message()));
+   return ret;
+ }
+ 

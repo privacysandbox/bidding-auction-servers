@@ -48,8 +48,12 @@ rapidjson::Document ParseRequestInputJson(absl::string_view json_contents) {
     (*document)[kProtectedAuctionInputField].RemoveMember(
         kOldBuyerInputMapField);
   }
-  CHECK((*document)[kProtectedAuctionInputField].HasMember(kBuyerInputMapField))
-      << kProtectedAuctionInputField << " must contain buyer input map";
+
+  CHECK(
+      (*document)[kProtectedAuctionInputField].HasMember(kBuyerInputMapField) ||
+      (*document).HasMember(kComponentAuctionsField))
+      << kProtectedAuctionInputField
+      << " must contain buyer input map or component auctions.";
   return std::move(document.value());
 }
 
@@ -169,6 +173,33 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
                                                         buyer_input_map.end());
 }
 
+SelectAdRequest::ComponentAuctionResult GetComponentAuctionResult(
+    rapidjson::Value* component_auction_json, absl::string_view generation_id,
+    const HpkeKeyset& keyset) {
+  CHECK(component_auction_json != nullptr) << "Input JSON must be non null";
+  AuctionResult auction_result;
+  std::string auction_result_json_str = ValueToJson(component_auction_json);
+  google::protobuf::json::ParseOptions parse_options;
+  parse_options.ignore_unknown_fields = true;
+  auto auction_result_parse = google::protobuf::util::JsonStringToMessage(
+      auction_result_json_str, &auction_result, parse_options);
+  CHECK(auction_result_parse.ok()) << auction_result_parse;
+  auction_result.mutable_auction_params()->set_ciphertext_generation_id(
+      generation_id);
+
+  // Encode, compress and encrypt Auction Result.
+  auto encrypted_request =
+      PackageServerComponentAuctionResult(auction_result, keyset);
+  CHECK(encrypted_request.ok()) << encrypted_request.status();
+
+  SelectAdRequest::ComponentAuctionResult component_auction_result;
+  *component_auction_result.mutable_key_id() =
+      std::move(encrypted_request.value().key_id);
+  *component_auction_result.mutable_auction_result_ciphertext() =
+      std::move(encrypted_request.value().ciphertext);
+  return component_auction_result;
+}
+
 }  // namespace
 
 std::pair<std::unique_ptr<SelectAdRequest>,
@@ -179,32 +210,44 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 bool enable_debug_reporting,
                                 absl::string_view protected_app_signals_json) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
-  google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
-      GetBuyerInputMap(client_type, &input_json, protected_app_signals_json);
-  // Encode buyer map.
-  absl::StatusOr<google::protobuf::Map<std::string, std::string>>
-      encoded_buyer_map;
-  switch (client_type) {
-    case CLIENT_TYPE_BROWSER:
-      encoded_buyer_map = PackageBuyerInputsForBrowser(buyer_map_proto);
-      break;
-    case CLIENT_TYPE_ANDROID:
-      encoded_buyer_map = PackageBuyerInputsForApp(buyer_map_proto);
-    default:
-      break;
-  }
-  CHECK(encoded_buyer_map.ok()) << encoded_buyer_map.status();
-
+  auto select_ad_request = std::make_unique<SelectAdRequest>();
   ProtectedAuctionInput protected_auction_input =
       GetProtectedAuctionInput(&input_json, enable_debug_reporting);
-  // Set encoded BuyerInput.
-  protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
+  if (input_json.HasMember(kComponentAuctionsField)) {
+    for (auto& component_auction_json :
+         input_json[kComponentAuctionsField].GetArray()) {
+      if (component_auction_json.ObjectEmpty()) {
+        continue;
+      }
+      *select_ad_request->mutable_component_auction_results()->Add() =
+          GetComponentAuctionResult(&component_auction_json,
+                                    protected_auction_input.generation_id(),
+                                    keyset);
+    }
+  } else {
+    google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
+        GetBuyerInputMap(client_type, &input_json, protected_app_signals_json);
+    // Encode buyer map.
+    absl::StatusOr<google::protobuf::Map<std::string, std::string>>
+        encoded_buyer_map;
+    switch (client_type) {
+      case CLIENT_TYPE_BROWSER:
+        encoded_buyer_map = PackageBuyerInputsForBrowser(buyer_map_proto);
+        break;
+      case CLIENT_TYPE_ANDROID:
+        encoded_buyer_map = PackageBuyerInputsForApp(buyer_map_proto);
+      default:
+        break;
+    }
+    CHECK(encoded_buyer_map.ok()) << encoded_buyer_map.status();
+    // Set encoded BuyerInput.
+    protected_auction_input.mutable_buyer_input()->swap(*encoded_buyer_map);
+  }
   // Package protected_auction_input.
   auto pa_ciphertext_encryption_context_pair =
       PackagePayload(protected_auction_input, client_type, keyset);
   CHECK(pa_ciphertext_encryption_context_pair.ok())
       << pa_ciphertext_encryption_context_pair.status();
-  auto select_ad_request = std::make_unique<SelectAdRequest>();
   *(select_ad_request->mutable_auction_config()) =
       GetAuctionConfig(&input_json);
   select_ad_request->set_protected_auction_ciphertext(

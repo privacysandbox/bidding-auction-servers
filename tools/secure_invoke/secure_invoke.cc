@@ -23,7 +23,7 @@
 #include "absl/synchronization/notification.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/test/utils/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_utils.h"
+#include "src/encryption/key_fetcher/key_fetcher_utils.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/secure_invoke_lib.h"
@@ -75,13 +75,18 @@ int main(int argc, char** argv) {
       << "Failed to unescape public key.";
   std::string public_key_hex = absl::BytesToHexString(public_key_bytes);
 
+  std::string private_key_bytes;
+  CHECK(absl::Base64Unescape(absl::GetFlag(FLAGS_private_key),
+                             &private_key_bytes))
+      << "Failed to unescape private key.";
+  std::string private_key_hex = absl::BytesToHexString(private_key_bytes);
+
   std::string id =
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
-  uint8_t key_id = stoi(id);
   const HpkeKeyset keyset = {
-      .public_key = public_key_hex,
-      .private_key = "unused",
-      .key_id = key_id,
+      .public_key = std::move(public_key_hex),
+      .private_key = std::move(private_key_hex),
+      .key_id = static_cast<uint8_t>(stoi(id)),
   };
 
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);

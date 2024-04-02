@@ -26,8 +26,8 @@
 #include "absl/strings/string_view.h"
 #include "services/common/loggers/source_location_context.h"
 #include "services/common/util/error_reporter.h"
-#include "src/cpp/logger/request_context_impl.h"
-#include "src/cpp/util/status_macro/source_location.h"
+#include "src/logger/request_context_impl.h"
+#include "src/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

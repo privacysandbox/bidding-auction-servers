@@ -28,6 +28,7 @@ constexpr char kRenderUrlsPropertyForKVResponse[] = "renderUrls";
 // The following fields are expected to returned by ScoreAd response
 constexpr char kRenderUrlsPropertyForScoreAd[] = "renderUrl";
 constexpr char kTopLevelSellerFieldPropertyForScoreAd[] = "topLevelSeller";
+constexpr char kComponentSellerFieldPropertyForScoreAd[] = "componentSeller";
 constexpr char kAuctionDebugLossUrlPropertyForScoreAd[] = "auctionDebugLossUrl";
 constexpr char kAuctionDebugWinUrlPropertyForScoreAd[] = "auctionDebugWinUrl";
 constexpr char kRejectReasonPropertyForScoreAd[] = "rejectReason";
@@ -39,6 +40,9 @@ constexpr char kAdMetadataForComponentAuction[] = "ad";
 constexpr char kModifiedBidForComponentAuction[] = "bid";
 constexpr char kIncomingBidInSellerCurrency[] = "incomingBidInSellerCurrency";
 constexpr char kDebugReportUrlsPropertyForScoreAd[] = "debugReportUrls";
+constexpr char kScoreAdBlobVersion[] = "v1";
+constexpr char kIGOwnerPropertyForScoreAd[] = "interestGroupOwner";
+constexpr char kTopWindowHostnamePropertyForScoreAd[] = "topWindowHostname";
 
 constexpr int kArgSizeWithWrapper = 7;
 // Acceptable error margin for float currency comparisons.
@@ -53,7 +57,7 @@ enum class ScoreAdArgs : int {
   kBid,
   kAuctionConfig,
   kScoringSignals,
-  kDeviceSignals,
+  kBidMetadata,
   // This is only added to prevent errors in the score ad script, and
   // will always be an empty object.
   kDirectFromSellerSignals,
