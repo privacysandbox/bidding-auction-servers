@@ -87,6 +87,7 @@ module "load_balancing" {
   collector_service_name             = "collector"
   collector_service_port             = var.collector_service_port
   region_config                      = var.region_config
+  xlb_timeout_sec                    = var.xlb_timeout_sec
 }
 
 module "buyer_dashboard" {
