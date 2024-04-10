@@ -127,6 +127,7 @@ module "buyer" {
   use_confidential_space_debug_image = false # Example: false
   tee_impersonate_service_accounts   = "a-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com,b-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com"
   collector_service_port             = 4317
+  xlb_timeout_sec                    = 10
   collector_startup_script = templatefile("../../../services/autoscaling/collector_startup.tftpl", {
     collector_port           = 4317
     otel_collector_image_uri = "otel/opentelemetry-collector-contrib:0.81.0"
