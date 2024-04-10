@@ -112,11 +112,6 @@ variable "collector_service_port" {
   type        = number
 }
 
-variable "xlb_timeout_sec" {
-  description = "Timeout for XLB in seconds."
-  type        = number
-}
-
 variable "region_config" {
   description = "Map of region configs. Each key should be a region name. The value is the autoscaling configuration for the region."
   type = map(object({

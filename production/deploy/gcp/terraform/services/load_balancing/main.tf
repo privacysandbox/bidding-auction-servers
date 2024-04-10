@@ -173,7 +173,7 @@ resource "google_compute_backend_service" "default" {
   protocol              = "HTTP2"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   locality_lb_policy    = "ROUND_ROBIN"
-  timeout_sec           = var.xlb_timeout_sec
+  timeout_sec           = 10
   health_checks         = [google_compute_health_check.frontend.id]
   dynamic "backend" {
     for_each = var.frontend_instance_group_managers

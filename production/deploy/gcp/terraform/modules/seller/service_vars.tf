@@ -144,8 +144,3 @@ variable "fast_nat" {
   type        = bool
   default     = false
 }
-
-variable "xlb_timeout_sec" {
-  description = "Timeout for XLB in seconds."
-  type        = number
-}
