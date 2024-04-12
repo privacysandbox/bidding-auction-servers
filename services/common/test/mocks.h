@@ -43,7 +43,7 @@
 #include "services/common/concurrent/local_cache.h"
 #include "services/common/providers/async_provider.h"
 #include "services/common/reporters/async_reporter.h"
-#include "src/cpp/concurrent/executor.h"
+#include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -376,8 +376,7 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
       const AsyncReporter* async_reporter, absl::string_view js)
       : ScoreAdsReactor(dispatcher, request, response,
                         std::move(benchmarking_logger), key_fetcher_manager,
-                        crypto_client, async_reporter,
-                        std::move(runtime_config)) {}
+                        crypto_client, async_reporter, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 
@@ -392,7 +391,7 @@ class MockGenerateBidsReactor : public GenerateBidsReactor {
       const BiddingServiceRuntimeConfig& runtime_config)
       : GenerateBidsReactor(dispatcher, request, response,
                             std::move(benchmarkingLogger), key_fetcher_manager,
-                            crypto_client_, std::move(runtime_config)) {}
+                            crypto_client_, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 

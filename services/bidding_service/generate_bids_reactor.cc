@@ -29,8 +29,8 @@
 #include "services/bidding_service/constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/cpp/util/status_macro/status_macros.h"
-#include "src/cpp/util/status_macro/status_util.h"
+#include "src/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -115,6 +115,7 @@ constexpr char kJsonStringValueStart[] = R"JSON(":")JSON";
 constexpr char kJsonValueStart[] = R"JSON(":)JSON";
 constexpr char kJsonValueEnd[] = R"JSON(,")JSON";
 constexpr char kJsonEmptyString[] = R"JSON("")JSON";
+constexpr char kEmptyDeviceSignals[] = R"JSON("{}")JSON";
 
 std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
                                         absl::string_view seller,
@@ -139,7 +140,8 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
 }
 
 absl::StatusOr<std::string> SerializeRepeatedStringField(
-    google::protobuf::RepeatedPtrField<std::string> repeated_string_field) {
+    const google::protobuf::RepeatedPtrField<std::string>&
+        repeated_string_field) {
   rapidjson::Document json_array;
   json_array.SetArray();
   for (const auto& item : repeated_string_field) {
@@ -161,7 +163,7 @@ constexpr char kUserBiddingSignals[] = "userBiddingSignals";
 // No default, null, or dummy values are filled in.
 // Device signals are not serialized since they are passed to generateBid()
 // in a different parameter.
-absl::StatusOr<std::string> SerializeIG(IGForBidding ig) {
+absl::StatusOr<std::string> SerializeIG(const IGForBidding& ig) {
   // Insert the name in quotes.
   std::string serialized_ig =
       absl::StrFormat(R"JSON({"%s":"%s")JSON", kName, ig.name());
@@ -327,11 +329,11 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
                         ProtoToJson(interest_group.android_signals()));
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>((serialized_android_signals.empty())
-                                          ? R"JSON("")JSON"
+                                          ? kEmptyDeviceSignals
                                           : serialized_android_signals);
   } else {
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
-        std::make_shared<std::string>(R"JSON("")JSON");
+        std::make_shared<std::string>(kEmptyDeviceSignals);
   }
   generate_bid_request.input[ArgIndex(GenerateBidArgs::kFeatureFlags)] =
       std::make_shared<std::string>(

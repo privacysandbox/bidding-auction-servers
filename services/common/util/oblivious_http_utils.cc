@@ -16,9 +16,9 @@
 
 #include "absl/strings/escaping.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
-#include "src/cpp/logger/request_context_logger.h"
-#include "src/cpp/util/status_macro/status_macros.h"
 #include "src/include/openssl/hpke.h"
+#include "src/logger/request_context_logger.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

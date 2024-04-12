@@ -27,7 +27,7 @@ cc_library(
         "//services/common/encryption:crypto_client_wrapper_interface",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )

@@ -14,7 +14,7 @@
 
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 
-#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -67,7 +67,7 @@ void BiddingAsyncGrpcClient::SendRpc(
   PS_VLOG(5) << "BiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [this, params, hpke_secret](grpc::Status status) {
+      [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateBidsRequest, GenerateBidsResponse,
                   GenerateBidsResponse::GenerateBidsRawResponse>(
             status, params,
@@ -92,7 +92,7 @@ void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
   PS_VLOG(5) << "ProtectedAppSignalsBiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateProtectedAppSignalsBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [this, params, hpke_secret](grpc::Status status) {
+      [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateProtectedAppSignalsBidsRequest,
                   GenerateProtectedAppSignalsBidsResponse,
                   GenerateProtectedAppSignalsBidsRawResponse>(

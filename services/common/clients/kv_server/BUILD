@@ -75,6 +75,6 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
     ],
 )

@@ -14,7 +14,9 @@
 
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -26,8 +28,8 @@
 #include "services/common/util/json_util.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/communication/ohttp_utils.h"
+#include "src/communication/encoding_utils.h"
+#include "src/communication/ohttp_utils.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -55,22 +57,34 @@ rapidjson::Document ProtoToDocument(const google::protobuf::Message& message) {
 }
 
 // Creates a valid input json doc.
-std::string GetValidInput(const SelectAdRequest& expected_output) {
-  rapidjson::Document input;
-  input.SetObject();
+std::string GetValidInput(
+    const SelectAdRequest& expected_output,
+    const std::vector<AuctionResult>& component_auction_results = {}) {
+  rapidjson::Document input(rapidjson::kObjectType);
 
   rapidjson::Value protected_audience_doc;
   protected_audience_doc.SetObject();
-  rapidjson::Value buyerMapValue;
-  buyerMapValue.SetObject();
-  protected_audience_doc.AddMember(kBuyerInputMapField, buyerMapValue,
-                                   input.GetAllocator());
+  if (component_auction_results.empty()) {
+    rapidjson::Value buyer_map_value(rapidjson::kObjectType);
+    protected_audience_doc.AddMember(kBuyerInputMapField, buyer_map_value,
+                                     input.GetAllocator());
+  } else {
+    rapidjson::Value component_auction_arr(rapidjson::kArrayType);
+    input.AddMember(kComponentAuctionsField, component_auction_arr,
+                    input.GetAllocator());
+    for (auto& car : component_auction_results) {
+      rapidjson::Value car_val;
+      car_val.CopyFrom(ProtoToDocument(car), input.GetAllocator());
+      input[kComponentAuctionsField].PushBack(car_val, input.GetAllocator());
+    }
+  }
+
+  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
+                  input.GetAllocator());
 
   // Copy auction config from expected output.
   auto document = ProtoToDocument(expected_output.auction_config());
   input.AddMember(kAuctionConfigField, document, input.GetAllocator());
-  input.AddMember(kProtectedAuctionInputField, protected_audience_doc,
-                  input.GetAllocator());
 
   auto input_str = SerializeJsonDoc(input);
   CHECK(input_str.ok()) << input_str.status();
@@ -118,7 +132,8 @@ TEST(PaylodPackagingTest, FailsOnInputJsonMissingProtectedAudience) {
                "");
 }
 
-TEST(PaylodPackagingTest, FailsOnInputJsonMissingBuyerInputMap) {
+TEST(PaylodPackagingTest,
+     FailsOnInputJsonMissingBuyerInputMapAndComponentAuctionResults) {
   rapidjson::Document input;
   input.SetObject();
 
@@ -222,6 +237,30 @@ TEST(PaylodPackagingTest, PassesTopLevelSellerForComponentAuction) {
       google::protobuf::util::JsonStringToMessage(output, &actual);
   ASSERT_TRUE(parse_output.ok()) << parse_output;
   EXPECT_EQ(actual.auction_config().top_level_seller(), top_level_seller);
+}
+
+TEST(PaylodPackagingTest,
+     PassesTopLevelSellerAndCloudPlatformForServerComponentAuction) {
+  absl::string_view top_level_seller = "https://toplevel-seller.com";
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
+  SelectAdRequest expected =
+      MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
+  expected.mutable_auction_config()->set_top_level_seller(top_level_seller);
+  expected.mutable_auction_config()->set_top_level_cloud_platform(
+      EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP);
+  std::string input = GetValidInput(expected);
+
+  HpkeKeyset keyset;
+  std::string output =
+      PackagePlainTextSelectAdRequestToJson(input, CLIENT_TYPE_BROWSER, keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+  EXPECT_EQ(actual.auction_config().top_level_seller(), top_level_seller);
+  EXPECT_EQ(actual.auction_config().top_level_cloud_platform(),
+            EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP);
 }
 
 TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
@@ -371,6 +410,109 @@ TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
   EXPECT_TRUE(!decoded_buyer_input.protected_app_signals()
                    .app_install_signals()
                    .empty());
+}
+
+TEST(PaylodPackagingTest, PopulatesComponentAuctionResultsForTopLevelAuction) {
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
+  protected_audience_input.clear_buyer_input();
+  SelectAdRequest expected =
+      MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
+  std::vector<AuctionResult> expected_component_auctions = {
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain),
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain)};
+  std::string input = GetValidInput(expected, expected_component_auctions);
+
+  HpkeKeyset hardcoded_keyset;
+  std::string output = PackagePlainTextSelectAdRequestToJson(
+      input, CLIENT_TYPE_BROWSER, hardcoded_keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+  // Actual encoding tested by payload_packaging_util_test.
+  ASSERT_EQ(actual.component_auction_results_size(),
+            expected_component_auctions.size());
+  for (auto& car : actual.component_auction_results()) {
+    EXPECT_FALSE(car.key_id().empty());
+    EXPECT_FALSE(car.auction_result_ciphertext().empty());
+  }
+}
+
+TEST(PaylodPackagingTest, PopulatesAuctionConfigForTopLevelAuction) {
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
+  protected_audience_input.clear_buyer_input();
+  SelectAdRequest expected =
+      MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
+  std::vector<AuctionResult> expected_component_auctions = {
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain),
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain)};
+  std::string input = GetValidInput(expected, expected_component_auctions);
+
+  HpkeKeyset hardcoded_keyset;
+  std::string output = PackagePlainTextSelectAdRequestToJson(
+      input, CLIENT_TYPE_BROWSER, hardcoded_keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+
+  google::protobuf::util::MessageDifferencer diff;
+  std::string difference;
+  diff.ReportDifferencesToString(&difference);
+  EXPECT_TRUE(diff.Compare(actual.auction_config(), expected.auction_config()))
+      << difference;
+}
+
+TEST(PaylodPackagingTest, PopulatesProtectedAuctionInputForTopLevelAuction) {
+  auto protected_audience_input =
+      MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
+  protected_audience_input.clear_buyer_input();
+  SelectAdRequest expected =
+      MakeARandomSelectAdRequest(kSellerOriginDomain, protected_audience_input);
+  std::vector<AuctionResult> expected_component_auctions = {
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain),
+      MakeARandomComponentAuctionResult(
+          protected_audience_input.generation_id(), kSellerOriginDomain)};
+  std::string input = GetValidInput(expected, expected_component_auctions);
+
+  HpkeKeyset hardcoded_keyset;
+  std::string output = PackagePlainTextSelectAdRequestToJson(
+      input, CLIENT_TYPE_BROWSER, hardcoded_keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+
+  EXPECT_FALSE(actual.protected_auction_ciphertext().empty());
+}
+
+TEST(PaylodPackagingTest,
+     IgnoresEmptyComponentAuctionResultsForTopLevelAuction) {
+  std::string input = R"JSON(
+    {
+       "auction_config" : {},
+       "client_type" : "CLIENT_TYPE_ANDROID",
+       "raw_protected_audience_input" : {
+          "generation_id" : "1"
+       },
+       "raw_component_auction_results": [{}]
+    })JSON";
+
+  HpkeKeyset hardcoded_keyset;
+  std::string output = PackagePlainTextSelectAdRequestToJson(
+      input, CLIENT_TYPE_BROWSER, hardcoded_keyset);
+  SelectAdRequest actual;
+  auto parse_output =
+      google::protobuf::util::JsonStringToMessage(output, &actual);
+  ASSERT_TRUE(parse_output.ok()) << parse_output;
+  EXPECT_EQ(actual.component_auction_results_size(), 0);
 }
 
 }  // namespace

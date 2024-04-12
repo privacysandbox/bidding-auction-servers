@@ -41,7 +41,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/service_utils.h"
 #include "services/common/test/utils/test_utils.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

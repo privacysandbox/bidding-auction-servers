@@ -55,10 +55,6 @@ class SelectAdReactorForWeb : public SelectAdReactor {
   absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
-
-  // Gets the bidding groups after scoring is done.
-  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
-  GetBiddingGroups();
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

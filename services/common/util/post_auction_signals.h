@@ -20,6 +20,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
+#include "api/bidding_auction_servers.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 // Captures the signals from the auction winner.

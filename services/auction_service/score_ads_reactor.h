@@ -39,8 +39,8 @@
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/logger/request_context_impl.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -49,6 +49,8 @@ inline constexpr char kDeviceComponentAuctionWithPAS[] =
     "Device Component Auction";
 inline constexpr char kNoAdsWithValidScoringSignals[] =
     "No ads with valid scoring signals.";
+inline constexpr char kNoValidComponentAuctions[] =
+    "No component auction results in request.";
 
 // An aggregate of the data we track when scoring all the ads.
 struct ScoringData {
@@ -91,7 +93,7 @@ class ScoreAdsReactor
       const AuctionServiceRuntimeConfig& runtime_config);
 
   // Initiates the asynchronous execution of the ScoreAdsRequest.
-  virtual void Execute();
+  void Execute() override;
 
  private:
   using AdWithBidMetadata =
@@ -144,7 +146,7 @@ class ScoreAdsReactor
 
   void DispatchReportingRequestForPA(
       const ScoreAdsResponse::AdScore& winning_ad_score,
-      std::shared_ptr<std::string> auction_config,
+      const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata) {
     ReportingDispatchRequestData dispatch_request_data = {
         .handler_name = kReportingDispatchHandlerFunctionName,
@@ -171,7 +173,7 @@ class ScoreAdsReactor
 
   void DispatchReportingRequestForPAS(
       const ScoreAdsResponse::AdScore& winning_ad_score,
-      std::shared_ptr<std::string> auction_config,
+      const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata,
       std::string_view egress_features) {
     DispatchReportingRequest(
@@ -225,11 +227,32 @@ class ScoreAdsReactor
   void ReportingCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
+  // Creates and populates dispatch requests using AdWithBidMetadata objects
+  // in the input proto for single seller and component auctions.
+  void PopulateProtectedAudienceDispatchRequests(
+      bool enable_debug_reporting,
+      const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
+          scoring_signals,
+      const std::shared_ptr<std::string>& auction_config,
+      google::protobuf::RepeatedPtrField<AdWithBidMetadata>& ads);
+
+  // Creates and populates dispatch requests using ComponentAuctionResult
+  // objects in the input proto for top-level auctions.
+  absl::Status PopulateTopLevelAuctionDispatchRequests(
+      bool enable_debug_reporting,
+      const std::shared_ptr<std::string>& auction_config,
+      google::protobuf::RepeatedPtrField<AuctionResult>&
+          component_auction_results);
+
+  // Creates and populates dispatch requests using
+  // ProtectedAppSignalsAdWithBidMetadata objects
+  // in the input proto for single seller auctions auctions
+  // if the feature flag is enabled.
   void MayPopulateProtectedAppSignalsDispatchRequests(
       bool enable_debug_reporting,
       const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
           scoring_signals,
-      std::shared_ptr<std::string> auction_config,
+      const std::shared_ptr<std::string>& auction_config,
       google::protobuf::RepeatedPtrField<ProtectedAppSignalsAdWithBidMetadata>&
           protected_app_signals_ad_bids);
 
@@ -282,6 +305,13 @@ class ScoreAdsReactor
   // Impacts the creation of scoreAd input params and
   // parsing of scoreAd output.
   AuctionScope auction_scope_;
+
+  google::protobuf::RepeatedPtrField<std::string>
+  GetEmptyAdComponentRenderUrls() {
+    static google::protobuf::RepeatedPtrField<std::string>
+        empty_ad_component_render_urls;
+    return empty_ad_component_render_urls;
+  }
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

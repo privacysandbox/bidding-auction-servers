@@ -23,7 +23,7 @@
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/cpp/logger/request_context_impl.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

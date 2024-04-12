@@ -49,3 +49,27 @@ cc_test(
         "@rapidjson",
     ],
 )
+
+cc_library(
+    name = "buyer_reporting_fetcher",
+    srcs = ["buyer_reporting_fetcher.cc"],
+    hdrs = [
+        "buyer_reporting_fetcher.h",
+    ],
+    deps = [
+        "//services/auction_service:auction_code_fetch_config_cc_proto",
+        "//services/common/clients/http:http_fetcher_async",
+        "//services/common/code_fetch:code_fetcher_interface",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
+    ],
+)

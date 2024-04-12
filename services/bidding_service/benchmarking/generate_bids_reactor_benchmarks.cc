@@ -30,7 +30,7 @@
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
+#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

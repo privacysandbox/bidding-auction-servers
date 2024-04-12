@@ -28,8 +28,8 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/logger/request_context_logger.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -113,7 +113,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
       return false;
     }
 
-    hpke_secret_ = std::move(decrypt_response->secret());
+    hpke_secret_ = std::move(*decrypt_response->mutable_secret());
     return raw_request_.ParseFromString(decrypt_response->payload());
   }
 

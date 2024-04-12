@@ -36,7 +36,7 @@ cc_library(
         "//services/common/loggers:timer",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )
 
@@ -56,6 +56,6 @@ cc_library(
         "source_location_context.h",
     ],
     deps = [
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
+        "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )

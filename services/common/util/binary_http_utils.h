@@ -23,8 +23,8 @@
 #include "absl/status/statusor.h"
 #include "google/protobuf/util/json_util.h"
 #include "quiche/binary_http/binary_http_message.h"
-#include "src/cpp/logger/request_context_logger.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/logger/request_context_logger.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

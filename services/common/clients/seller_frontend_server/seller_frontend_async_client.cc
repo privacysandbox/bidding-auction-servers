@@ -34,7 +34,7 @@ SellerFrontEndGrpcClient::SellerFrontEndGrpcClient(
     args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
   }
   stub_ = SellerFrontEnd::NewStub(grpc::CreateCustomChannel(
-      absl::StrCat(client_config.server_addr), std::move(creds), args));
+      absl::StrCat(client_config.server_addr), creds, args));
   absl::MutexLock l(&active_calls_mutex_);
   active_calls_count_ = 0;
 }
@@ -53,7 +53,7 @@ absl::Status SellerFrontEndGrpcClient::Execute(
   ++active_calls_count_;
   stub_->async()->SelectAd(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [params_ptr = params.release(), this](grpc::Status status) {
+      [params_ptr = params.release(), this](const grpc::Status& status) {
         params_ptr->OnDone(status);
         absl::MutexLock l(&active_calls_mutex_);
         --active_calls_count_;

@@ -48,17 +48,13 @@
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 inline constexpr absl::string_view kProtectedAudienceInput =
     "ProtectedAudienceInput";
-
-inline constexpr char kEurosIsoCode[] = "EUR";
-inline constexpr char kUsdIsoCode[] = "USD";
-inline constexpr char kYenIsoCode[] = "JPY";
 
 using ::google::protobuf::TextFormat;
 using ::testing::_;
@@ -97,7 +93,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(context));
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
@@ -135,9 +131,9 @@ class SellerFrontEndServiceTest : public ::testing::Test {
   void SetProtectedAuctionCipherText(const std::string& ciphertext) {
     const auto* descriptor = protected_auction_input_.GetDescriptor();
     if (descriptor->name() == kProtectedAudienceInput) {
-      *request_.mutable_protected_audience_ciphertext() = std::move(ciphertext);
+      *request_.mutable_protected_audience_ciphertext() = ciphertext;
     } else {
-      *request_.mutable_protected_auction_ciphertext() = std::move(ciphertext);
+      *request_.mutable_protected_auction_ciphertext() = ciphertext;
     }
   }
 
@@ -244,8 +240,12 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         this->key_fetcher_manager_, std::move(async_reporter)};
+  ClientRegistry clients{scoring_provider,
+                         scoring_client,
+                         buyer_clients,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
@@ -343,8 +343,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         this->key_fetcher_manager_, std::move(async_reporter)};
+  ClientRegistry clients{scoring_provider,
+                         scoring_client,
+                         buyer_clients,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
       this->config_, clients, this->request_, /*max_buyers_solicited=*/3);
@@ -423,8 +427,12 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         this->key_fetcher_manager_, std::move(async_reporter)};
+  ClientRegistry clients{scoring_provider,
+                         scoring_client,
+                         buyer_clients,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
@@ -493,8 +501,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{scoring_provider, scoring_client, buyer_clients,
-                         this->key_fetcher_manager_, std::move(async_reporter)};
+  ClientRegistry clients{scoring_provider,
+                         scoring_client,
+                         buyer_clients,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response =
@@ -509,7 +521,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 TYPED_TEST(SellerFrontEndServiceTest,
            FetchesScoringSignalsWithBidResponseAdRenderUrls) {
   this->SetupRequest(/*num_buyers=*/2, /*set_buyer_egid=*/false,
-                     /*set_seller_egid=*/true, /*buyer_currency=*/kUsdIsoCode);
+                     /*set_seller_egid=*/true, /*seller_currency=*/kUsdIsoCode);
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   // Expects no calls because we do not finish fetching the decision logic
@@ -540,7 +552,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   SetupScoringProviderMock(
       /*provider=*/scoring_signals_provider,
       /*expected_buyer_bids=*/expected_buyer_bids,
-      /*ad_render_urls=*/std::nullopt,
+      /*scoring_signals_value=*/std::nullopt,
       /*repeated_get_allowed=*/false,
       /*server_error_to_return=*/std::nullopt,
       /*expected_num_bids=*/-1,
@@ -553,9 +565,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
@@ -645,9 +658,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
 }
@@ -690,9 +704,10 @@ TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   // Decrypt to examine whether the result really is chaff.
@@ -766,8 +781,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
           EXPECT_EQ(decoded_buyer_input.interest_groups_size(), 1);
           for (const BuyerInput::InterestGroup& interest_group :
                decoded_buyer_input.interest_groups()) {
-            if (std::strcmp(interest_group.name().c_str(),
-                            bid.interest_group_name().c_str())) {
+            if (interest_group.name() == bid.interest_group_name()) {
               EXPECT_EQ(bid.join_count(),
                         interest_group.browser_signals().join_count());
               EXPECT_EQ(bid.recency(),
@@ -799,9 +813,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.Wait();
@@ -832,6 +847,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::string decision_logic = "function scoreAds(){}";
 
   const int num_buyers = 2;
+  const int num_ad_with_bids = 40;
+  const int num_mismatched = 2;
+  // (Do not modify this line obviously.)
+  const int num_matched = num_ad_with_bids - num_mismatched;
 
   // By setting the buyer_currency to USD, we ensure the bids will undergo
   // currency checking, since they will have currencies set on them below.
@@ -855,64 +874,125 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ASSERT_EQ(decoded_buyer_inputs.size(), num_buyers);
   for (const auto& [buyer, buyerInput] : decoded_buyer_inputs) {
     EXPECT_EQ(buyerInput.interest_groups_size(), 1);
-    // Set the bid currency on the AdWithBids to EUR.
-    auto actual_bids_for_mock_to_return = BuildGetBidsResponseWithSingleAd(
-        /*ad_url = */ absl::StrCat(buyer_to_ad_url.at(buyer),
-                                   "/wrong_currency_eur"),
-        /*interest_group = */ buyerInput.interest_groups().Get(0).name(),
-        /*bid_value = */ 1,
-        /*enable_event_level_debug_reporting = */ false,
-        /*number_ad_component_render_urls = */ kDefaultNumAdComponents,
-        /*bid_currency = */ kEurosIsoCode);  // This is NOT USD!
-    // The above AwB has a mismatched currency:
-    // euros do not match specified buyer currency of USD.
-    // Neither does yen below.
-    // So the below AwBs which are USD should be the only ones not being
-    // filtered out by buyer currency match checking.
-    auto first_USD_AwB = BuildNewAdWithBid(
-        absl::StrCat(buyer_to_ad_url.at(buyer), "/right_currency_usd_1"),
-        std::move(buyerInput.interest_groups().Get(0).name()),
-        /*bid_value=*/1,
-        /*enable_event_level_debug_reporting=*/false,
-        /*number_ad_component_render_urls=*/kDefaultNumAdComponents,
-        kUsdIsoCode);
-    auto yen_AwB = BuildNewAdWithBid(
-        absl::StrCat(buyer_to_ad_url.at(buyer), "/wrong_currency_yen"),
-        std::move(buyerInput.interest_groups().Get(0).name()),
-        /*bid_value=*/1,
-        /*enable_event_level_debug_reporting=*/false,
-        /*number_ad_component_render_urls=*/kDefaultNumAdComponents,
-        kYenIsoCode);
-    auto second_USD_AwB = BuildNewAdWithBid(
-        absl::StrCat(buyer_to_ad_url.at(buyer), "/right_currency_usd_2"),
-        std::move(buyerInput.interest_groups().Get(0).name()),
-        /*bid_value=*/1,
-        /*enable_event_level_debug_reporting=*/false,
-        /*number_ad_component_render_urls=*/kDefaultNumAdComponents,
-        kUsdIsoCode);
-    // Add all AwBs so all are returned by mock.
-    actual_bids_for_mock_to_return.mutable_bids()->Add()->CopyFrom(
-        first_USD_AwB);
-    actual_bids_for_mock_to_return.mutable_bids()->Add()->CopyFrom(yen_AwB);
-    actual_bids_for_mock_to_return.mutable_bids()->Add()->CopyFrom(
-        second_USD_AwB);
-    // In fetching scoring signals we expect only the bids with matching
-    // currency (and they will be in reversed order).
+    std::vector<AdWithBid> ads_with_bids = GetAdWithBidsInMultipleCurrencies(
+        num_ad_with_bids, num_mismatched,
+        /*matching_currency=*/kUsdIsoCode,
+        /*mismatching_currency=*/kEurosIsoCode, buyer_to_ad_url.at(buyer),
+        buyerInput.interest_groups().Get(0).name());
+    std::vector<ProtectedAppSignalsAdWithBid> pas_ads_with_bids =
+        GetPASAdWithBidsInMultipleCurrencies(
+            num_ad_with_bids, num_mismatched,
+            /*matching_currency=*/kUsdIsoCode,
+            /*mismatching_currency=*/kEurosIsoCode, buyer_to_ad_url.at(buyer));
+    GetBidsResponse::GetBidsRawResponse actual_bids_for_mock_to_return;
     GetBidsResponse::GetBidsRawResponse expected_bids_once_filtered;
-    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(second_USD_AwB);
-    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(first_USD_AwB);
+    // Add all AwBs so all are returned by mock.
+    for (const auto& ad_with_bid : ads_with_bids) {
+      actual_bids_for_mock_to_return.mutable_bids()->Add()->CopyFrom(
+          ad_with_bid);
+    }
+    for (const auto& pas_ad_with_bid : pas_ads_with_bids) {
+      actual_bids_for_mock_to_return.mutable_protected_app_signals_bids()
+          ->Add()
+          ->CopyFrom(pas_ad_with_bid);
+    }
 
-    // Check that everything was constructed correctly.
-    ASSERT_EQ(actual_bids_for_mock_to_return.bids_size(), 4);
+    // The check function in scoringSignalsMock cares about order.
+    // Thus we construct the expected bids list in the order in which it will
+    // come from the reactor. If nothing else this demonstrates that the
+    // swap-and-delete algorithm works as expected.
+    // First for protected audience.
+    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(
+        ads_with_bids[0]);
+    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(
+        ads_with_bids[39]);
+    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(
+        ads_with_bids[2]);
+    expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(
+        ads_with_bids[38]);
+    for (int i = 4; i < num_matched; i++) {
+      expected_bids_once_filtered.mutable_bids()->Add()->CopyFrom(
+          ads_with_bids[i]);
+    }
+    // Then PAS.
+    expected_bids_once_filtered.mutable_protected_app_signals_bids()
+        ->Add()
+        ->CopyFrom(pas_ads_with_bids[0]);
+    expected_bids_once_filtered.mutable_protected_app_signals_bids()
+        ->Add()
+        ->CopyFrom(pas_ads_with_bids[39]);
+    expected_bids_once_filtered.mutable_protected_app_signals_bids()
+        ->Add()
+        ->CopyFrom(pas_ads_with_bids[2]);
+    expected_bids_once_filtered.mutable_protected_app_signals_bids()
+        ->Add()
+        ->CopyFrom(pas_ads_with_bids[38]);
+    for (int i = 4; i < num_matched; i++) {
+      expected_bids_once_filtered.mutable_protected_app_signals_bids()
+          ->Add()
+          ->CopyFrom(pas_ads_with_bids[i]);
+    }
+
+    ASSERT_EQ(expected_bids_once_filtered.bids_size(), num_matched);
+    ASSERT_EQ(expected_bids_once_filtered.protected_app_signals_bids_size(),
+              num_matched);
+    // Check a few.
+    ASSERT_EQ(expected_bids_once_filtered.bids(0).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/0_USD"));
+    ASSERT_EQ(expected_bids_once_filtered.bids(1).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/39_USD"));
+    ASSERT_EQ(expected_bids_once_filtered.bids(2).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/2_USD"));
+    ASSERT_EQ(expected_bids_once_filtered.bids(3).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/38_USD"));
+    ASSERT_EQ(expected_bids_once_filtered.bids(4).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/4_USD"));
+    ASSERT_EQ(expected_bids_once_filtered.bids(37).render(),
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/37_USD"));
+    // And for PAS.
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(0).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/0_USD"));
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(1).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/39_USD"));
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(2).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/2_USD"));
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(3).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/38_USD"));
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(4).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/4_USD"));
+    ASSERT_EQ(
+        expected_bids_once_filtered.protected_app_signals_bids(37).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/37_USD"));
+
+    // Check that a few were constructed correctly.
+    ASSERT_EQ(actual_bids_for_mock_to_return.bids_size(), num_ad_with_bids);
+    ASSERT_EQ(actual_bids_for_mock_to_return.protected_app_signals_bids_size(),
+              num_ad_with_bids);
     ASSERT_EQ(actual_bids_for_mock_to_return.bids(0).render(),
-              absl::StrCat(buyer_to_ad_url.at(buyer), "/wrong_currency_eur"));
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/0_USD"));
     ASSERT_EQ(actual_bids_for_mock_to_return.bids(1).render(),
-              absl::StrCat(buyer_to_ad_url.at(buyer), "/right_currency_usd_1"));
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/1_EUR"));
     ASSERT_EQ(actual_bids_for_mock_to_return.bids(2).render(),
-              absl::StrCat(buyer_to_ad_url.at(buyer), "/wrong_currency_yen"));
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/2_USD"));
     ASSERT_EQ(actual_bids_for_mock_to_return.bids(3).render(),
-              absl::StrCat(buyer_to_ad_url.at(buyer), "/right_currency_usd_2"));
-    ASSERT_EQ(expected_bids_once_filtered.bids_size(), 2);
+              absl::StrCat(buyer_to_ad_url.at(buyer), "/3_EUR"));
+    ASSERT_EQ(
+        actual_bids_for_mock_to_return.protected_app_signals_bids(0).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/0_USD"));
+    ASSERT_EQ(
+        actual_bids_for_mock_to_return.protected_app_signals_bids(1).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/1_EUR"));
+    ASSERT_EQ(
+        actual_bids_for_mock_to_return.protected_app_signals_bids(2).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/2_USD"));
+    ASSERT_EQ(
+        actual_bids_for_mock_to_return.protected_app_signals_bids(3).render(),
+        absl::StrCat(buyer_to_ad_url.at(buyer), "/3_EUR"));
 
     SetupBuyerClientMock(buyer, buyer_clients, actual_bids_for_mock_to_return);
     expected_filtered_buyer_bids_map.try_emplace(
@@ -950,9 +1030,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
-        // Exactly two AdWithBids per buyer (of which there are two) should have
-        // survived filtering.
-        EXPECT_EQ(score_ads_request->ad_bids_size(), num_buyers * 2);
+        EXPECT_EQ(score_ads_request->ad_bids_size(), num_buyers * num_matched);
         // Last ad_with_bid_metadata wins.
         for (const auto& ad_with_bid_metadata : score_ads_request->ad_bids()) {
           EXPECT_FALSE(ad_with_bid_metadata.render().empty());
@@ -969,9 +1047,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
           EXPECT_EQ(decoded_buyer_input.interest_groups_size(), 1);
           for (const BuyerInput::InterestGroup& interest_group :
                decoded_buyer_input.interest_groups()) {
-            if (std::strcmp(
-                    interest_group.name().c_str(),
-                    ad_with_bid_metadata.interest_group_name().c_str())) {
+            if (interest_group.name() ==
+                ad_with_bid_metadata.interest_group_name()) {
               EXPECT_EQ(ad_with_bid_metadata.join_count(),
                         interest_group.browser_signals().join_count());
               EXPECT_EQ(ad_with_bid_metadata.recency(),
@@ -1005,9 +1082,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   // Filtered bids checked above in the scoring signals provider mock.
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
@@ -1085,11 +1163,11 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   for (const auto& [local_buyer, unused] :
        this->protected_auction_input_.buyer_input()) {
     AdUrl url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid1 = BuildNewAdWithBid(url, std::move(expected_ig_1), 1);
-    AdWithBid bid2 = BuildNewAdWithBid(url, std::move(expected_ig_2), 10);
-    AdWithBid bid3 = BuildNewAdWithBid(url, std::move(unexpected_ig_1), 0);
+    AdWithBid bid1 = BuildNewAdWithBid(url, expected_ig_1, 1);
+    AdWithBid bid2 = BuildNewAdWithBid(url, expected_ig_2, 10);
+    AdWithBid bid3 = BuildNewAdWithBid(url, unexpected_ig_1, 0);
     GetBidsResponse::GetBidsRawResponse response;
-    auto mutable_bids = response.mutable_bids();
+    auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid1));
     mutable_bids->Add(std::move(bid2));
     mutable_bids->Add(std::move(bid3));
@@ -1139,9 +1217,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   auto [encrypted_protected_auction_input, encrypted_context] =
       GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
           this->protected_auction_input_);
@@ -1255,9 +1334,10 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
           });
 
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
 
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
@@ -1317,9 +1397,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
   EXPECT_CALL(*async_reporter, DoReport).Times(0);
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.WaitForNotification();
@@ -1385,12 +1466,89 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_signals_provider, scoring_client,
-                         buyer_clients, this->key_fetcher_manager_,
-                         std::move(async_reporter)};
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
   Response response =
       RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
   scoring_done.WaitForNotification();
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
+  std::string top_level_seller = "top_level_seller";
+  this->SetupRequest(/*num_buyers=*/2);
+  this->request_.mutable_auction_config()->set_top_level_seller(
+      top_level_seller);
+  this->request_.mutable_auction_config()->set_top_level_cloud_platform(
+      EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP);
+  absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  absl::flat_hash_map<AdUrl, AdWithBid> bids;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    AdUrl url = buyer_to_ad_url.at(buyer);
+    GetBidsResponse::GetBidsRawResponse response =
+        BuildGetBidsResponseWithSingleAd(url);
+    bids.insert_or_assign(url, response.bids().at(0));
+    SetupBuyerClientMock(buyer, buyer_clients, response,
+                         /*repeated_get_allowed = */ false,
+                         /*expect_all_buyers_solicited =*/true,
+                         /*num_buyers_solicited =*/nullptr, top_level_seller);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // Scoring signals must be nonzero for scoring to be attempted.
+  std::string scoring_signals_value =
+      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
+  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                           scoring_signals_value);
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce([&top_level_seller, &scoring_done](
+                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                        score_ads_request,
+                    const RequestMetadata& metadata,
+                    ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+        EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+        scoring_done.Notify();
+        return absl::OkStatus();
+      });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  google::cmrt::sdk::public_key_service::v1::PublicKey key;
+  key.set_key_id("key_id");
+  EXPECT_CALL(this->key_fetcher_manager_, GetPublicKey).WillOnce(Return(key));
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCrytoClient(crypto_client);
+
+  // Client Registry
+  ClientRegistry clients{
+      scoring_signals_provider,   scoring_client, buyer_clients,
+      this->key_fetcher_manager_, &crypto_client, std::move(async_reporter)};
+  Response response =
+      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  scoring_done.WaitForNotification();
+  ASSERT_FALSE(response.auction_result_ciphertext().empty());
+  EXPECT_EQ(response.key_id(), key.key_id());
 }
 
 }  // namespace

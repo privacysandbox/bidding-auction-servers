@@ -30,9 +30,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-#define PS_ASSIGN_IF_PRESENT(dst, src, key, getter)           \
-  if (auto it = src.FindMember(key); it != src.MemberEnd()) { \
-    dst = it->value.getter();                                 \
+#define PS_ASSIGN_IF_PRESENT(dst, src, key, getter)               \
+  if (auto it = (src).FindMember(key); it != (src).MemberEnd()) { \
+    (dst) = it->value.getter();                                   \
   }
 
 inline constexpr char kMissingMember[] = "Missing %s in the JSON document";

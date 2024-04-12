@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# environment variables supported by cbuild (all optional):
+#     WORKSPACE                    Set the path to the workspace (repo root)
+#     AWS_ACCESS_KEY_ID            AWS auth token
+#     AWS_SECRET_ACCESS_KEY        AWS auth token
+#     BAZEL_STARTUP_ARGS           Additional startup arguments to pass to bazel invocations
+#     BAZEL_EXTRA_ARGS             Additional command arguments to pass to bazel invocations
+#     EXTRA_DOCKER_RUN_ARGS        Additional arguments to pass to docker run invocations
+
+set -o pipefail
+set -o errexit
+
+function partition_array() {
+  if [[ ${#@} -ne 3 ]]; then
+    printf "insufficient args\n" &>/dev/stderr
+    return 1
+  fi
+  declare -n arr=$1
+  declare -n pre=$2
+  declare -n post=$3
+  if [[ ${#arr[@]} -eq 0 ]]; then
+    return
+  fi
+
+  declare -r delim="--"
+  declare target=pre
+  for i in "${!arr[@]}"; do
+    if [[ ${arr[$i]} == "${delim}" ]]; then
+      target=post
+    fi
+    if [[ ${target} == pre ]]; then
+      pre+=("${arr[$i]}")
+    else
+      post+=("${arr[$i]}")
+    fi
+  done
+}
+
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_NAME
+readonly IMAGE=build-"${SCRIPT_NAME/bazel-}"
+CBUILD=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/cbuild
+readonly CBUILD
+
+# partition the command-line args into "bazel args" and "app args", where the
+# app args are all those after the presence of the "--" arg, if any
+declare -a BAZEL_ARGS
+declare -a APP_ARGS
+# shellcheck disable=SC2034,SC2206
+declare -r -a ARGLIST=("$@")
+partition_array ARGLIST BAZEL_ARGS APP_ARGS
+
+"${CBUILD}" --seccomp-unconfined --image "${IMAGE}" --cmd "
+printf 'bazel output_base: [%s]\n' \"\$(bazel info output_base 2>/dev/null)\"
+bazel ${BAZEL_STARTUP_ARGS} ${BAZEL_ARGS[*]@Q} ${BAZEL_EXTRA_ARGS} ${APP_ARGS[*]@Q}
+"

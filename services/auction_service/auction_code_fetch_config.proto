@@ -18,11 +18,24 @@ syntax = "proto3";
 
 package privacy_sandbox.bidding_auction_servers.auction_service;
 
+// Specify how to fetch the code blob.
+enum FetchMode {
+   // Fetch a single blob from an arbitrary url.
+   FETCH_MODE_URL = 0;
+   // Fetch all blobs from a specified bucket
+   // and rely on a default blob specification.
+   FETCH_MODE_BUCKET = 1;
+   // Fetch a blob from a local path. Dev-only.
+   FETCH_MODE_LOCAL = 2;
+}
+
 message SellerCodeFetchConfig {
 
+   // Required if fetch_mode = FETCH_MODE_LOCAL.
    // The javascript generateBid script.
    string auction_js_path = 1;
 
+   // Required if fetch_mode = FETCH_MODE_URL.
    // URL endpoint for fetching AdTech code blob, js file.
    string auction_js_url = 2;
 
@@ -31,6 +44,20 @@ message SellerCodeFetchConfig {
 
    // A time out limit for HttpsFetcherAsync client to stop executing FetchUrl.
    int64 url_fetch_timeout_ms = 4;
+
+   // Required if fetch_mode = FETCH_MODE_BUCKET.
+   // The name of a bucket from which to fetch code blobs.
+   // All blobs will be fetched from this bucket.
+   string auction_js_bucket = 11;
+
+   // Required if fetch_mode = FETCH_MODE_BUCKET.
+   // The name of the bucket's default code blob to use.
+   // The default will be used if the scoring request does not specify a version.
+   string auction_js_bucket_default_blob = 12;
+
+   // Required.
+   // Specifies which mode to use when fetching UDF blobs.
+   FetchMode fetch_mode = 13;
 
    // Allow seller debug URL generation.
    bool enable_seller_debug_url_generation = 5;

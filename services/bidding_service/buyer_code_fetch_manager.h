@@ -26,8 +26,8 @@
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/code_fetch/periodic_bucket_fetcher.h"
 #include "services/common/code_fetch/periodic_code_fetcher.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/concurrent/event_engine_executor.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -57,7 +57,7 @@ class BuyerCodeFetchManager {
       V8Dispatcher* dispatcher,
       std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
           blob_storage_client,
-      const bidding_service::BuyerCodeFetchConfig udf_config,
+      const bidding_service::BuyerCodeFetchConfig& udf_config,
       bool enable_protected_audience, bool enable_protected_app_signals)
       : executor_(*executor),
         http_fetcher_(*http_fetcher),
@@ -66,6 +66,8 @@ class BuyerCodeFetchManager {
         udf_config_(udf_config),
         enable_protected_audience_(enable_protected_audience),
         enable_protected_app_signals_(enable_protected_app_signals) {}
+
+  ~BuyerCodeFetchManager();
 
   // Not copyable or movable.
   BuyerCodeFetchManager(const BuyerCodeFetchManager&) = delete;
@@ -76,13 +78,13 @@ class BuyerCodeFetchManager {
   // A successful Init means that Roma has succeeded in loading a UDF.
   absl::Status Init();
 
+ private:
   // Must be called exactly once. This should only be called on server shutdown,
   // and only after Init has returned (either a success or error is fine).
   // Failure to End means there was an issue releasing resources and should
   // be investigated to ensure that requests are being terminated gracefully.
   absl::Status End();
 
- private:
   absl::Status InitializeLocalCodeFetch();
 
   absl::Status InitBucketClient();

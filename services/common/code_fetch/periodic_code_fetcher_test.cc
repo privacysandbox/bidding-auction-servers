@@ -23,7 +23,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
 #include "services/common/test/mocks.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
+#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -224,7 +224,7 @@ TEST(PeriodicCodeFetcherTest, LoadFetchFrequencyMustBeGreaterThan1Min) {
       {"fake-test-code-blob.com"}, absl::Minutes(1), curl_http_fetcher.get(),
       &dispatcher, executor.get(), absl::Milliseconds(100),
       [](const std::vector<std::string>& ad_tech_code_blobs) { return ""; },
-      /*version_num=*/"v25");
+      /*version=*/"v25");
   EXPECT_DEATH(auto status = code_fetcher.Start(), "");
 }
 

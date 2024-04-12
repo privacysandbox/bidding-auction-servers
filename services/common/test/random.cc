@@ -450,7 +450,7 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
   ad_score.set_interest_group_owner(MakeARandomString());
   ad_score.set_ad_metadata(MakeARandomString());
   ad_score.set_allow_component_auction(false);
-  ad_score.set_bid(bid);
+  ad_score.set_bid(MakeARandomNumber<float>(1, 2.5));
   *ad_score.mutable_debug_report_urls() = MakeARandomDebugReportUrls();
   *ad_score.mutable_win_reporting_urls() = MakeARandomWinReportingUrls();
   for (int index = 0; index < hob_buyer_entries; index++) {
@@ -520,7 +520,7 @@ GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest() {
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_publisher_name("publisher_name");
   raw_request.set_allocated_auction_signals(
-      std::move(MakeARandomStructJsonString(1).release()));
+      MakeARandomStructJsonString(1).release());
   return raw_request;
 }
 
@@ -583,19 +583,42 @@ ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type) {
   return input;
 }
 
-AuctionResult MakeARandomSingleSellerAuctionResult() {
+AuctionResult MakeARandomSingleSellerAuctionResult(
+    std::vector<std::string> buyer_list) {
   AuctionResult result;
   result.set_ad_render_url(MakeARandomString());
   result.set_interest_group_name(MakeARandomString());
   result.set_interest_group_owner(MakeARandomString());
   result.set_score(MakeARandomNumber<float>(0.0, 1.0));
 
-  AuctionResult::InterestGroupIndex ig_indices;
-  ig_indices.add_index(MakeARandomInt(1, 5));
-  result.mutable_bidding_groups()->try_emplace(MakeARandomString(),
-                                               std::move(ig_indices));
+  if (buyer_list.empty()) {
+    buyer_list.push_back(MakeARandomString());
+  }
+  for (const auto& buyer : buyer_list) {
+    AuctionResult::InterestGroupIndex ig_indices;
+    ig_indices.add_index(MakeARandomInt(1, 5));
+    result.mutable_bidding_groups()->try_emplace(buyer, std::move(ig_indices));
+  }
+
   // TODO(b/287074572): Add reporting URLs and other reporting fields here
   // when adding support for reporting.
+  return result;
+}
+
+AuctionResult MakeARandomComponentAuctionResult(
+    std::string generation_id, std::string top_level_seller,
+    std::vector<std::string> buyer_list) {
+  AuctionResult result =
+      MakeARandomSingleSellerAuctionResult(std::move(buyer_list));
+  result.set_top_level_seller(std::move(top_level_seller));
+  result.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
+  result.mutable_auction_params()->set_ciphertext_generation_id(
+      std::move(generation_id));
+  result.mutable_auction_params()->set_component_seller(MakeARandomString());
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.set_bid(MakeARandomNumber<float>(0.1, 1.0));
+  result.set_bid_currency(MakeARandomString());
   return result;
 }
 

@@ -27,7 +27,7 @@
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
-#include "src/cpp/concurrent/executor.h"
+#include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -22,7 +22,7 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )
 
@@ -43,9 +43,9 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_impl",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@rapidjson",
     ],
 )
@@ -59,7 +59,7 @@ cc_library(
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@com_google_absl//absl/random",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 
@@ -82,7 +82,7 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@rapidjson",
     ],
 )
@@ -100,7 +100,7 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )

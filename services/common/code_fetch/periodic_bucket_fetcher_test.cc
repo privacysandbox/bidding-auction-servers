@@ -25,12 +25,12 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "gtest/gtest.h"
-#include "scp/cc/core/interface/async_context.h"
-#include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
-#include "scp/cc/public/cpio/interface/cpio.h"
-#include "scp/cc/public/cpio/interface/error_codes.h"
-#include "scp/cc/public/cpio/mock/blob_storage_client/mock_blob_storage_client.h"
 #include "services/common/test/mocks.h"
+#include "src/core/interface/async_context.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/public/cpio/interface/error_codes.h"
+#include "src/public/cpio/mock/blob_storage_client/mock_blob_storage_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

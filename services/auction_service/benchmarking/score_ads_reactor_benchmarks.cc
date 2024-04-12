@@ -241,6 +241,7 @@ ProtectedAppSignalsAdWithBidMetadata BuildProtectedAppSignalsAdWithBid(int id) {
 std::vector<AdWithBidMetadata> BuildAdWithBids(
     int num_interest_groups = kNumInterestGroups) {
   std::vector<AdWithBidMetadata> ads_with_bid_metadata;
+  ads_with_bid_metadata.reserve(num_interest_groups);
   for (int i = 0; i < num_interest_groups; ++i) {
     ads_with_bid_metadata.emplace_back(BuildAdWithBid(i, kNumComponentsPerAd));
   }
@@ -251,6 +252,7 @@ std::vector<ProtectedAppSignalsAdWithBidMetadata>
 BuildProtectedAppSignalsAdWithBids(int num_pas_ads = kNumPasAds) {
   std::vector<ProtectedAppSignalsAdWithBidMetadata>
       protected_app_signals_ads_with_bid_metadata;
+  protected_app_signals_ads_with_bid_metadata.reserve(num_pas_ads);
   for (int i = 0; i < num_pas_ads; ++i) {
     protected_app_signals_ads_with_bid_metadata.emplace_back(
         BuildProtectedAppSignalsAdWithBid(i));
@@ -262,6 +264,7 @@ std::string BuildScoringSignals(int num_interest_groups = kNumInterestGroups,
                                 int num_pas_ads = kNumPasAds) {
   std::vector<std::string> scoring_signals;
   absl::BitGen bit_gen;
+  scoring_signals.reserve(num_interest_groups + num_pas_ads);
   for (int i = 0; i < num_interest_groups; ++i) {
     scoring_signals.emplace_back(absl::StrFormat(
         kScoringSignalKvTemplate, absl::StrFormat(kRenderUrlTemplate, i),

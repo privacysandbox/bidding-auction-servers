@@ -22,7 +22,7 @@
 #include "public/constants.h"
 #include "quiche/oblivious_http/common/oblivious_http_header_key_config.h"
 #include "services/common/test/utils/ohttp_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

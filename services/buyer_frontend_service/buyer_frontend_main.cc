@@ -28,7 +28,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "scp/cc/public/cpio/interface/cpio.h"
 #include "services/buyer_frontend_service/buyer_frontend_service.h"
 #include "services/buyer_frontend_service/providers/http_bidding_signals_async_provider.h"
 #include "services/buyer_frontend_service/runtime_flags.h"
@@ -41,11 +40,12 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/util/rlimit_core_config.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/util/rlimit_core_config.h"
+#include "src/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -93,7 +93,7 @@ using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
-    std::string config_param_prefix) {
+    absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);

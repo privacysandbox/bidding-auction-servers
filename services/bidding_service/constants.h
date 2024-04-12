@@ -19,6 +19,8 @@
 
 #include <cstdint>
 
+#include "absl/strings/string_view.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr char kProtectedAudienceGenerateBidBlobVersion[] = "v1";

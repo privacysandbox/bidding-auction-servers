@@ -1,4 +1,6 @@
 bazel-bidding-auction-server
+services/inference_sidecar/common
+services/inference_sidecar/modules
 google_internal/tools/cost
 production/aws/terraform
 scp

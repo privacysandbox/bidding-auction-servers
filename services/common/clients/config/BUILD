@@ -29,9 +29,9 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/instance_client",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/instance_client",
     ],
 )
 
@@ -46,11 +46,11 @@ cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:str_format",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:errors",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/parameter_client",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry/flag:telemetry_flag",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/parameter_client",
+        "@google_privacysandbox_servers_common//src/telemetry/flag:telemetry_flag",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 
@@ -64,7 +64,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/mock/parameter_client:parameter_client_mock",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/public/cpio/mock/parameter_client:parameter_client_mock",
     ],
 )

@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "scp/cc/roma/interface/roma.h"
-#include "scp/cc/roma/roma_service/roma_service.h"
+#include "src/roma/interface/roma.h"
+#include "src/roma/roma_service/roma_service.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -45,6 +45,8 @@ class V8Dispatcher {
  public:
   explicit V8Dispatcher(DispatchConfig&& config = DispatchConfig());
 
+  ~V8Dispatcher();
+
   // Init the dispatcher. Note that this call may bring up multiple processes,
   // which can be slow and should only happen on server startup.
   //
@@ -53,14 +55,6 @@ class V8Dispatcher {
   // return: a status indicated success or failure in starting. If startup
   // fails, a client may retry.
   absl::Status Init();
-
-  // Stop the dispatcher. Note that this call may bring down multiple processes,
-  // which can be slow and should only happen on server shutdown.
-  //
-  // This will clean up all running processes the dispatcher owns.
-  // return: a status indicated success or failure in stopping. If stopping
-  // fails, a client may retry.
-  absl::Status Stop();
 
   // Load new execution code synchronously. This is a blocking wrapper around
   // the google::scp::roma::LoadCodeObj method.

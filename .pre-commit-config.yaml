@@ -19,6 +19,9 @@ exclude: (?x)^(
                version\.txt|
                .*\.patch|
                builders/.*|
+               services/inference_sidecar/common/builders/.*|
+               services/inference_sidecar/modules/pytorch_v2_1_1/builders/.*|
+               services/inference_sidecar/modules/tensorflow_v2_14_0/builders/.*|
                testing/functionaltest-system/.*
          )$
 

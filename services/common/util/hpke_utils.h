@@ -22,7 +22,7 @@
 #include "absl/status/statusor.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -22,6 +22,11 @@ fileExistenceTests:
     shouldExist: true
     isExecutableBy: any
 
+  - name: init_server_basic
+    path: /server/bin/init_server_basic
+    shouldExist: true
+    isExecutableBy: any
+
   - name: ca-certs
     path: /etc/ssl/certs/ca-certificates.crt
     shouldExist: true

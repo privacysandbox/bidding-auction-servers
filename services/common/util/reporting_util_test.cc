@@ -159,8 +159,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidSuccess) {
       .rejection_reason =
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   expected_url = "https://wikipedia.org?hob=2.18&m_hob=false";
-  request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_2), true);
+  request = CreateDebugReportingHttpRequest(url, placeholder_2, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -178,7 +177,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidAsZero) {
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 }
 

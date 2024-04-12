@@ -29,7 +29,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 // helper functions to generate random objects for testing
 namespace privacy_sandbox::bidding_auction_servers {
@@ -224,8 +224,14 @@ BuyerInput MakeARandomBuyerInput();
 
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
 
-AuctionResult MakeARandomSingleSellerAuctionResult();
+// Populates fields for a auction result object for a single seller auction.
+AuctionResult MakeARandomSingleSellerAuctionResult(
+    std::vector<std::string> buyer_list = {});
 
+// Populates fields for a auction result object for a component seller auction.
+AuctionResult MakeARandomComponentAuctionResult(
+    std::string generation_id, std::string top_level_seller,
+    std::vector<std::string> buyer_list = {});
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_TEST_RANDOM_H_

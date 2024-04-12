@@ -30,8 +30,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "public/cpio/interface/cpio.h"
-#include "scp/cc/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
@@ -52,10 +50,20 @@
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/util/rlimit_core_config.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/concurrent/event_engine_executor.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
+#include "src/util/rlimit_core_config.h"
+#include "src/util/status_macro/status_macros.h"
+
+#ifdef PS_INFERENCE_NON_PROD
+#include "sandbox/sandbox_executor.h"
+#include "sandboxed_api/sandbox2/comms.h"
+#include "services/bidding_service/inference/inference_utils.h"
+#include "services/common/blob_fetch/blob_fetcher.h"
+#endif
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -90,6 +98,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using bidding_service::BuyerCodeFetchConfig;
 using ::google::scp::cpio::BlobStorageClientFactory;
+using ::google::scp::cpio::BlobStorageClientInterface;
 using ::google::scp::cpio::Cpio;
 using ::google::scp::cpio::CpioOptions;
 using ::google::scp::cpio::LogOption;
@@ -97,7 +106,7 @@ using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
-    std::string config_param_prefix) {
+    absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
@@ -154,6 +163,14 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_ad_retrieval_kv_server_egress_tls,
                         AD_RETRIEVAL_KV_SERVER_EGRESS_TLS);
   config_client.SetFlag(FLAGS_kv_server_egress_tls, KV_SERVER_EGRESS_TLS);
+  config_client.SetFlag(FLAGS_inference_sidecar_binary_path,
+                        INFERENCE_SIDECAR_BINARY_PATH);
+  config_client.SetFlag(FLAGS_inference_model_local_paths,
+                        INFERENCE_MODEL_LOCAL_PATHS);
+  config_client.SetFlag(FLAGS_inference_model_bucket_name,
+                        INFERENCE_MODEL_BUCKET_NAME);
+  config_client.SetFlag(FLAGS_inference_model_bucket_paths,
+                        INFERENCE_MODEL_BUCKET_PATHS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -180,6 +197,14 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   return config_client;
 }
 
+absl::string_view GetStringParameter(const TrustedServersConfigClient& client,
+                                     absl::string_view name) {
+  if (client.HasParameter(name)) {
+    return client.GetStringParameter(name);
+  }
+  return "";
+}
+
 // Brings up the gRPC BiddingService on FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
@@ -192,12 +217,40 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty())
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  auto dispatcher = V8Dispatcher([&config_client]() {
+  std::string_view inference_sidecar_binary_path =
+      GetStringParameter(config_client, INFERENCE_SIDECAR_BINARY_PATH);
+  const bool enable_inference = !inference_sidecar_binary_path.empty();
+
+  auto dispatcher = V8Dispatcher([&config_client, &enable_inference]() {
     DispatchConfig config;
     config.worker_queue_max_items =
         config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
     config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
 
+    if (enable_inference) {
+#ifdef PS_INFERENCE_NON_PROD
+      PS_VLOG(1) << "Register runInference API.";
+      auto run_inference_function_object =
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<>>();
+      run_inference_function_object->function_name =
+          std::string(inference::kInferenceFunctionName);
+      run_inference_function_object->function = inference::RunInference;
+      config.RegisterFunctionBinding(std::move(run_inference_function_object));
+      PS_VLOG(1) << "RunInference registered.";
+
+      PS_VLOG(1) << "Start the inference sidecar.";
+      // This usage of flag is not consistent with rest of the codebase, where
+      // we use the parameter from the config client directly instead of passing
+      // it back to the absl flag.
+      absl::SetFlag(
+          &FLAGS_inference_sidecar_binary_path,
+          config_client.GetStringParameter(INFERENCE_SIDECAR_BINARY_PATH)
+              .data());
+      inference::SandboxExecutor& inference_executor = inference::Executor();
+      CHECK_EQ(inference_executor.StartSandboxee().code(),
+               absl::StatusCode::kOk);
+#endif
+    }
     return config;
   }());
   CodeDispatchClient client(dispatcher);
@@ -218,9 +271,6 @@ absl::Status RunServer() {
          "a proto message: "
       << result.message();
 
-  auto curl_http_fetcher =
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
-
   bool enable_buyer_debug_url_generation =
       udf_config.enable_buyer_debug_url_generation();
   bool enable_adtech_code_logging = udf_config.enable_adtech_code_logging();
@@ -238,6 +288,42 @@ absl::Status RunServer() {
       BlobStorageClientFactory::Create(), udf_config, enable_protected_audience,
       enable_protected_app_signals);
   PS_RETURN_IF_ERROR(udf_fetcher.Init()) << "Failed to initialize UDF fetch.";
+
+#ifdef PS_INFERENCE_NON_PROD
+  bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
+  if (enable_inference) {
+    if (init_config_client) {
+      PS_VLOG(1) << "Start blob fetcher to read from a cloud bucket.";
+      std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
+          BlobStorageClientFactory::Create();
+      std::string_view bucket_name =
+          GetStringParameter(config_client, INFERENCE_MODEL_BUCKET_NAME);
+      std::string_view bucket_paths =
+          GetStringParameter(config_client, INFERENCE_MODEL_BUCKET_PATHS);
+      std::vector<std::string> models = absl::StrSplit(bucket_paths, ',');
+
+      auto blob_fetcher = std::make_unique<BlobFetcher>(
+          bucket_name, executor.get(), std::move(blob_storage_client));
+      CHECK(blob_fetcher->FetchSync().ok()) << "FetchSync() failed.";
+      const std::vector<BlobFetcher::Blob>& files = blob_fetcher->snapshot();
+      PS_VLOG(1) << "Register models from bucket.";
+      if (absl::Status status =
+              inference::RegisterModelsFromBucket(bucket_name, models, files);
+          !status.ok()) {
+        PS_VLOG(1) << "Skip registering models from bucket: "
+                   << status.message();
+      }
+    }
+    PS_VLOG(1) << "Register models from local.";
+    std::string_view local_paths =
+        GetStringParameter(config_client, INFERENCE_MODEL_LOCAL_PATHS);
+    if (absl::Status status = inference::RegisterModelsFromLocal(
+            absl::StrSplit(local_paths, ','));
+        !status.ok()) {
+      PS_VLOG(1) << "Skip registering models from local: " << status.message();
+    }
+  }
+#endif
 
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
@@ -370,9 +456,6 @@ absl::Status RunServer() {
   // responsible for shutting down the server for this call to ever return.
   PS_VLOG(1) << "Server listening on " << server_address;
   server->Wait();
-  PS_RETURN_IF_ERROR(udf_fetcher.End()) << "Error shutting down UDF fetcher.";
-  PS_RETURN_IF_ERROR(dispatcher.Stop())
-      << "Error shutting down code dispatcher.";
   return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

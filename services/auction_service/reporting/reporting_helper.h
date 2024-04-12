@@ -26,8 +26,8 @@
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/util/post_auction_signals.h"
-#include "src/cpp/logger/request_context_impl.h"
-#include "src/cpp/util/status_macro/status_util.h"
+#include "src/logger/request_context_impl.h"
+#include "src/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -123,7 +123,7 @@ struct ReportingDispatchRequestData {
   absl::string_view egress_features;
 };
 
-// Device signals passed as input to reportResult and reportWin
+// Bid metadata passed as input to reportResult and reportWin
 struct SellerReportingMetadata {
   std::string top_window_hostname;
   std::string top_level_seller;

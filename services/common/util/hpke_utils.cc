@@ -25,7 +25,7 @@ absl::StatusOr<HpkeMessage> HpkeEncrypt(
     const server_common::CloudPlatform& cloud_platform) {
   auto key = key_fetcher_manager.GetPublicKey(cloud_platform);
   if (!key.ok()) {
-    const std::string error =
+    std::string error =
         absl::StrCat("Could not find public key for HPKE encryption: ",
                      key.status().message());
     ABSL_LOG(ERROR) << error;
@@ -35,8 +35,8 @@ absl::StatusOr<HpkeMessage> HpkeEncrypt(
   auto encrypt_response = crypto_client.HpkeEncrypt(key.value(), plaintext);
 
   if (!encrypt_response.ok()) {
-    const std::string error = absl::StrCat("Failed encrypting request: ",
-                                           encrypt_response.status().message());
+    std::string error = absl::StrCat("Failed encrypting request: ",
+                                     encrypt_response.status().message());
     ABSL_LOG(ERROR) << error;
     return absl::InternalError(std::move(error));
   }
@@ -67,8 +67,8 @@ absl::StatusOr<std::string> HpkeDecrypt(
   }
   auto decrypt_response = crypto_client.HpkeDecrypt(*private_key, ciphertext);
   if (!decrypt_response.ok()) {
-    const std::string error = absl::StrCat("Failed decrypting request: ",
-                                           decrypt_response.status().message());
+    std::string error = absl::StrCat("Failed decrypting request: ",
+                                     decrypt_response.status().message());
     ABSL_LOG(ERROR) << error;
     return absl::Status(absl::StatusCode::kInvalidArgument, std::move(error));
   }

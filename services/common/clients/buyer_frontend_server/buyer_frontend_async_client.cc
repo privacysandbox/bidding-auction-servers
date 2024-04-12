@@ -14,7 +14,7 @@
 
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 
-#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -23,7 +23,7 @@ using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
 BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
-    BuyerServiceClientConfig client_config,
+    const BuyerServiceClientConfig& client_config,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub)
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
                              client_config.cloud_platform),
@@ -42,7 +42,7 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
   PS_VLOG(5) << "BuyerFrontEndAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GetBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [this, params, hpke_secret](grpc::Status status) {
+      [this, params, hpke_secret](const grpc::Status& status) {
         if (!status.ok()) {
           PS_VLOG(1) << "SendRPC completion status not ok: "
                      << server_common::ToAbslStatus(status);

@@ -1,0 +1,11 @@
+# Bazel symlinks
+/bazel-*
+
+# Docker
+docker-buildx-*.log
+
+# Artifacts
+/artifacts
+
+# Tests
+/dist

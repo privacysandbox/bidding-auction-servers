@@ -25,10 +25,10 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "scp/cc/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
-#include "src/cpp/concurrent/executor.h"
+#include "src/concurrent/executor.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

@@ -34,7 +34,7 @@ TEST(FakeBuyerKeyValueAsyncHttpClient, match_request) {
   auto buyer_input = std::make_unique<GetBuyerValuesInput>();
   absl::btree_set<absl::string_view> interest_group = {"1j386134098"};
   buyer_input->interest_group_names = interest_group;
-  buyer_input->buyer_kv_experiment_group_id = 100;
+  buyer_input->buyer_kv_experiment_group_id = "100";
 
   FakeBuyerKeyValueAsyncHttpClient client("not used", RequestToPath());
 }

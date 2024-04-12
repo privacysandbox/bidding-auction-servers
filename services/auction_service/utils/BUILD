@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//services/auction_service:__pkg__"])
 
@@ -35,8 +35,22 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_impl",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "proto_utils_test",
+    srcs = [
+        "proto_utils_test.cc",
+    ],
+    deps = [
+        ":proto_utils",
+        "//services/auction_service:score_ads_reactor_test_util",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
     ],
 )

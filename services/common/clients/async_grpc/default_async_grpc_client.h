@@ -26,9 +26,9 @@
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/util/error_categories.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/logger/request_context_logger.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/logger/request_context_logger.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -166,7 +166,7 @@ inline std::shared_ptr<grpc::Channel> CreateChannel(
     // Set the default compression algorithm for the channel.
     args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
   }
-  return grpc::CreateCustomChannel(server_addr.data(), std::move(creds), args);
+  return grpc::CreateCustomChannel(server_addr.data(), creds, args);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

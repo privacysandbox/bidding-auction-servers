@@ -17,19 +17,61 @@
 #ifndef SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_TEST_UTIL_H_
 #define SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_TEST_UTIL_H_
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
+#include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/encryption/mock_crypto_client_wrapper.h"
+#include "services/common/test/mocks.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 
+constexpr char kKeyId[] = "keyid";
+constexpr char kSecret[] = "secret";
 constexpr float kTestBid = 1.25;
 constexpr char kTestProtectedAppSignalsAdOwner[] = "https://PAS-Ad-Owner.com";
 
 ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
     absl::string_view render_url, float bid = kTestBid);
+
+void SetupTelemetryCheck(const ScoreAdsRequest& request);
+
+class ScoreAdsReactorTestHelper {
+ public:
+  ScoreAdsReactorTestHelper();
+
+  ScoreAdsResponse ExecuteScoreAds(
+      const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
+      MockCodeDispatchClient& dispatcher,
+      const AuctionServiceRuntimeConfig& runtime_config =
+          AuctionServiceRuntimeConfig(),
+      bool enable_report_result_url_generation = false);
+  ScoreAdsRequest request_;
+  TrustedServersConfigClient config_client_{{}};
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  MockCryptoClientWrapper crypto_client_;
+  std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger_ =
+      std::make_unique<ScoreAdsNoOpLogger>();
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager_;
+};
+
+absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback,
+                         std::vector<std::string> json,
+                         const bool call_wrapper_method = false,
+                         const bool enable_adtech_code_logging = false);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

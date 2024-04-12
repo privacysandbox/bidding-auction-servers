@@ -30,7 +30,7 @@ pkg_zip(
     name = "nonenclave_artifacts",
     srcs = [
         ":ami_config_group",
-        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxy",
+        "@google_privacysandbox_servers_common//src/aws/proxy",
     ],
 )
 

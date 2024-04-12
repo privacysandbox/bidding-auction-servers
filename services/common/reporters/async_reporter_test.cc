@@ -46,6 +46,7 @@ class AsyncReporterTest : public ::testing::Test {
 
 TEST_F(AsyncReporterTest, DoReportSuccessfully) {
   absl::BlockingCounter done(1);
+  // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<absl::string_view> result) {
     done.DecrementCount();
     ASSERT_TRUE(result.ok());
@@ -57,6 +58,7 @@ TEST_F(AsyncReporterTest, DoReportSuccessfully) {
 
 TEST_F(AsyncReporterTest, DoReportEmptyUrl) {
   absl::BlockingCounter done(1);
+  // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<absl::string_view> result) {
     done.DecrementCount();
     ASSERT_FALSE(result.ok());
@@ -68,6 +70,7 @@ TEST_F(AsyncReporterTest, DoReportEmptyUrl) {
 
 TEST_F(AsyncReporterTest, DoReportMalformedUrl) {
   absl::BlockingCounter done(1);
+  // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<absl::string_view> result) {
     done.DecrementCount();
     ASSERT_FALSE(result.ok());

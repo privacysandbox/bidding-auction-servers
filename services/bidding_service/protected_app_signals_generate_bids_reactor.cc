@@ -30,7 +30,7 @@
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_metadata.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -108,7 +108,7 @@ absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
 }
 
 std::unique_ptr<kv_server::v2::GetValuesRequest>
-ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalOrKVLookupRequest(
+ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalRequest(
     const std::string& prepare_data_for_ads_retrieval_response,
     absl::optional<ProtectedAppSignalsGenerateBidsReactor::AdRenderIds>
         ad_render_ids) {
@@ -126,13 +126,24 @@ ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalOrKVLookupRequest(
           raw_request_.buyer_signals(), std::move(ad_render_ids_list)));
 }
 
+std::unique_ptr<kv_server::v2::GetValuesRequest>
+ProtectedAppSignalsGenerateBidsReactor::CreateKVLookupRequest(
+    const ProtectedAppSignalsGenerateBidsReactor::AdRenderIds& ad_render_ids) {
+  std::vector<std::string> ad_render_ids_list =
+      std::vector<std::string>(ad_render_ids.begin(), ad_render_ids.end());
+  auto request = std::make_unique<kv_server::v2::GetValuesRequest>(
+      kv_server::application_pas::BuildLookupRequest(
+          std::move(ad_render_ids_list)));
+  PS_VLOG(8) << __func__
+             << " Created KV lookup request: " << request->DebugString();
+  return request;
+}
+
 void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
     const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__;
   auto status = ad_retrieval_async_client_->ExecuteInternal(
-      CreateAdsRetrievalOrKVLookupRequest(
-          prepare_data_for_ads_retrieval_response),
-      {},
+      CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response), {},
       [this, prepare_data_for_ads_retrieval_response](
           KVLookUpResult ad_retrieval_result) {
         if (!ad_retrieval_result.ok()) {
@@ -346,11 +357,10 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
                                       .ad_render_ids(),
                                   ", ");
   auto status = kv_async_client_->ExecuteInternal(
-      CreateAdsRetrievalOrKVLookupRequest(
-          prepare_data_for_ads_retrieval_response, ad_render_ids),
-      {},
+      CreateKVLookupRequest(ad_render_ids), {},
       [this, prepare_data_for_ads_retrieval_response](
           KVLookUpResult kv_look_up_result) {
+        PS_VLOG(8) << "On KV response";
         if (!kv_look_up_result.ok()) {
           PS_VLOG(2, log_context_)
               << "KV metadata request failed: " << kv_look_up_result.status();

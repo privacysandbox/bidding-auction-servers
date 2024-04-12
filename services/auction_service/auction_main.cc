@@ -32,7 +32,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "public/cpio/interface/cpio.h"
 #include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
@@ -47,11 +46,12 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/util/rlimit_core_config.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/util/rlimit_core_config.h"
+#include "src/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -83,7 +83,7 @@ using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
-    std::string config_param_prefix) {
+    absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
@@ -259,7 +259,7 @@ absl::Status RunServer() {
               << " and blobs count:" << ad_tech_code_blobs.size();
           // Collect code blobs for protected audience.
           auto buyer_origin_code_map = GetCodeBlobMap(
-              /*start=*/0, num_protected_audience_endpoints, buyer_origins,
+              /*first=*/0, num_protected_audience_endpoints, buyer_origins,
               ad_tech_code_blobs, "buyer_report_win_js_urls");
           // Collect code blobs for protected app signals.
           absl::flat_hash_map<std::string, std::string>
@@ -382,8 +382,6 @@ absl::Status RunServer() {
   if (code_fetcher) {
     code_fetcher->End();
   }
-  PS_RETURN_IF_ERROR(dispatcher.Stop())
-      << "Error shutting down code dispatcher.";
   return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

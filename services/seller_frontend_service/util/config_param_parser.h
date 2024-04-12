@@ -21,7 +21,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
-#include "src/cpp/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
+#include "src/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

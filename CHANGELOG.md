@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.4.0 (2024-04-02)
+
+
+### Features
+
+* Add Bid Currency to PAS bidMetadata for scoreAd()
+* Add blob fetch library
+* Adds API for generating ciphertexts for server component auctions
+* Adds proto mapping functions for top level auction reactor
+* Adds reactor for handling top level auction in SFE
+* Adds utility for re-encrypting ciphertexts from device
+* Adds validator functions for top level auction reactor
+* Build version dynamically for telemetry
+* Check Bid Currency on Protected App Signals AdWithBids
+* create SellerCodeFetchManager for auction service UDF fetching logic
+* Enable cpp_no_warn mode by default
+* Enable ML inference in B&A
+* Implements server component auctions feature in SFE
+* Implements support for server component auctions in secure invoke
+* Implements top level auction feature in auction service
+* Implements top level auctions support in secure invoke
+
+
+### Bug Fixes
+
+* Add get_workspace_status script to github repo
+* Create extra function to only add zone attribute to gcp deployment
+* Delete Right AdWithBids for Currency Mismatch in SFE
+* Do not check trailing space for patch files
+* improve graceful shutdown of bidding server
+* Simplify V8Dispatcher::LoadSync, switch to absl::Notification
+* Update data plane library dependency
+* update generate bid to receive empty json object when no device signals are present
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.57.0
+
 ## 3.3.0 (2024-03-11)
 
 

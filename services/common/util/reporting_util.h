@@ -24,7 +24,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/util/post_auction_signals.h"
-#include "src/cpp/logger/request_context_impl.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

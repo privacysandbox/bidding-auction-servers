@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# environment variables (all optional):
+#     WORKSPACE                    Set the path to the workspace (repo root)
+
+set -o pipefail
+set -o errexit
+
+trap _cleanup EXIT
+function _cleanup() {
+  declare -r -i STATUS=$?
+  if [[ ${STATUS} -ne 0 ]]; then
+    printf "collect-logs exit code: %d\n" ${STATUS} &>/dev/stderr
+    sleep 5s
+  fi
+  exit ${STATUS}
+}
+
+function copy_log_outputs() {
+  declare -r _rootdest="$1"
+  declare -r _prune_to_dir="$2"
+  declare -r _filepath="$3"
+  declare -r _logpath="${_filepath##*/${_prune_to_dir}/}"
+  declare -r _destdir="${_rootdest}/${_logpath%/*}"
+  declare -r _fname="${_filepath##*/}"
+  declare -r _destfname="${_fname/#test./sponge_log.}"
+  mkdir -p "${_destdir}"
+  cp "${_filepath}" "${_destdir}/${_destfname}"
+}
+export -f copy_log_outputs
+
+function extract_test_outputs() {
+  declare -r _rootdest="$1"
+  declare -r _filepath="$2"
+  declare -r _logpath="${_filepath##*bazel-testlogs/}"
+  declare -r _destdir="${_rootdest}/${_logpath%/*/*}"
+  mkdir -p "${_destdir}"
+  unzip  -q -d "${_destdir}" "${_filepath}"
+}
+export -f extract_test_outputs
+
+
+declare ZIP_FILENAME="$1"
+if [[ ${ZIP_FILENAME##*.} != zip ]]; then
+  ZIP_FILENAME=logs.zip
+fi
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+readonly SCRIPT_DIR
+WORKSPACE="${WORKSPACE-"$(readlink -f "${SCRIPT_DIR}"/..)"}"
+readonly WORKSPACE
+OUTDIR="$(mktemp --directory)"
+readonly OUTDIR
+export OUTDIR
+mkdir -p "${OUTDIR}"/{test,other}
+
+if [[ -d "${WORKSPACE}"/bazel-testlogs ]]; then
+  # copy all test.log and test.xml files
+  find -L "${WORKSPACE}"/bazel-testlogs -type f '(' -name test.log -o -name test.xml ')' -exec bash -c 'copy_log_outputs "${OUTDIR}"/test bazel-testlogs "$0"' {} ';'
+  # extract test outputs
+  find -L "${WORKSPACE}"/bazel-testlogs -type f -name outputs.zip -exec bash -c 'extract_test_outputs "${OUTDIR}"/test "$0"' {} ';'
+fi
+if [[ -d "${WORKSPACE}"/bazel-out ]]; then
+  # copy log files under bazel-out (except for test.log)
+  find -L "${WORKSPACE}"/bazel-out -type f -name "*.log" ! -name test.log -exec bash -c 'copy_log_outputs "${OUTDIR}"/other bazel-out "$0"' {} ';'
+fi
+
+declare -r DISTDIR="${WORKSPACE}"/dist
+mkdir -p "${DISTDIR}"
+(
+  cd "${OUTDIR}"
+  zip -r -q "${DISTDIR}/${ZIP_FILENAME}" -- *
+)
+printf "stored bazel logs to %s\n" "${DISTDIR}/${ZIP_FILENAME}" &>/dev/stderr
+unzip -Z -h "${DISTDIR}/${ZIP_FILENAME}" &>/dev/stderr
+rm -rf "${OUTDIR}"

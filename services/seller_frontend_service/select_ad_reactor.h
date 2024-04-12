@@ -49,29 +49,7 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
                               {"x-user-agent", "x-user-agent"},
                               {"x-bna-client-ip", "x-bna-client-ip"}}};
 
-// Constants for user errors.
-inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
-    "protected_auction_ciphertext must be non-null.";
-inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
-
-// Constants for bad Ad server provided inputs.
-inline constexpr char kEmptySellerSignals[] =
-    "Seller signals missing in auction config";
-inline constexpr char kEmptyAuctionSignals[] =
-    "Auction signals missing in auction config";
-inline constexpr char kEmptyBuyerList[] = "No buyers specified";
-inline constexpr char kEmptySeller[] =
-    "Seller origin missing in auction config";
-inline constexpr char kEmptyBuyerSignals[] =
-    "Buyer signals missing in auction config for buyer: %s";
-inline constexpr char kUnknownClientType[] =
-    "Unknown client type in SelectAdRequest";
-inline constexpr char kWrongSellerDomain[] =
-    "Seller domain passed in request does not match this server's domain";
-inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
-    "One or more buyer keys are empty in per buyer config map";
-inline constexpr char kDeviceComponentAuctionWithAndroid[] =
-    "Device orchestrated Component Auctions not supported for Android";
+// Constants for service errors.
 inline constexpr char kInvalidBuyerCurrency[] = "Invalid Buyer Currency";
 inline constexpr char kInvalidSellerCurrency[] = "Invalid Seller Currency";
 
@@ -149,8 +127,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
   template <typename T>
-  void ValidateProtectedAuctionInput(const T& protected_auction_input,
-                                     AuctionScope auction_scope) {
+  void ValidateProtectedAuctionInput(const T& protected_auction_input) {
     if (protected_auction_input.generation_id().empty()) {
       ReportError(ErrorVisibility::CLIENT_VISIBLE, kMissingGenerationId,
                   ErrorCode::CLIENT_SIDE);
@@ -179,18 +156,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
           observed_errors.insert(absl::StrFormat(
               kMissingInterestGroupsAndProtectedSignals, buyer));
           any_error = true;
-        }
-        if (!buyer_input.protected_app_signals()
-                 .app_install_signals()
-                 .empty() &&
-            auction_scope ==
-                AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
-          // Invalid input. Device component auctions can't contain PAS
-          // audience. This path should not be possible since app install
-          // signals will not be created for web reactor and
-          // DeviceComponentSeller cannot be conducted for app reactor.
-          PS_VLOG(2, log_context_)
-              << "Device component auctions can't contain PAS audience";
         }
         if (any_error) {
           continue;
@@ -321,6 +286,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   AuctionResult::Error error_;
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
+  // Scope for current auction (single seller, top level or component)
+  const AuctionScope auction_scope_;
 
   // Key Value Fetch Result.
   std::unique_ptr<ScoringSignals> scoring_signals_;
@@ -372,9 +339,6 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
-
-  // Scope for current auction (single seller, top level or component)
-  const AuctionScope auction_scope_;
 
  private:
   // Keeps track of how many buyer bids were expected initially and how many

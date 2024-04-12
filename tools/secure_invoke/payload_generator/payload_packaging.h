@@ -29,10 +29,12 @@ const char kAuctionConfigField[] = "auction_config";
 const char kProtectedAuctionInputField[] = "raw_protected_audience_input";
 const char kOldBuyerInputMapField[] = "buyer_input";
 const char kBuyerInputMapField[] = "raw_buyer_input";
+const char kComponentAuctionsField[] = "raw_component_auction_results";
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// This method expects a plaintext json with the following fields.
+// This method expects a plaintext json. For single seller/component
+// auctions, it expects the following fields -
 // {
 //    "auction_config" : {
 //          "seller_signals": "...",
@@ -54,22 +56,71 @@ namespace privacy_sandbox::bidding_auction_servers {
 //        .....
 //    }
 // }
-// It returns a SelectAdRequest for testing B&A servers in "test_mode"
+// For this input, it returns a SelectAdRequest for testing B&A servers
 // by performing the following operations with the input fields -
-// 1. Create a ProtectedAudienceInput object.
+// 1. Create a ProtectedAuctionInput object.
 // 2. Encode and compress the Buyer Input Map, and copy over to the
-// ProtectedAudienceInput object from 1.
+// ProtectedAuctionInput object from 1.
 // 3. Copy over the other fields from raw_protected_audience_input into the
-// ProtectedAudienceInput object from 1.
-// 4. Encode the ProtectedAudienceInput object from 1.
-// 5. Encrypt the ProtectedAudienceInput object from 1 using the B&A "test_mode"
+// ProtectedAuctionInput object from 1.
+// 4. Encode the ProtectedAuctionInput object from 1.
+// 5. Encrypt the ProtectedAuctionInput object from 1 using the B&A "test_mode"
 // hardcoded keys.
-// 6. Copy the encrypted ProtectedAudienceInput object and auction_config from
+// 6. Copy the encrypted ProtectedAuctionInput object and auction_config from
 // the input JSON to a SelectAdRequest object.
 // 7. Convert the SelectAdRequest object to a JSON string.
 // The protected_audience_ciphertext is encoded, encrypted and compressed in the
 // same format as expected in the ciphertext from a CLIENT_TYPE_BROWSER.
 // This will extended in the future to support CLIENT_TYPE_ANDROID as well.
+
+// For top level auctions, this method expects a plaintext json
+// with the following fields -
+// {
+//    "auction_config" : {
+//          "seller_signals": "...",
+//          "per_buyer_config": {"buyer1" : {
+//              "buyer_signals": "...",
+//              ....
+//          }}
+//          .....
+//    }
+//    "raw_protected_audience_input": {
+//     "publisher_name": "testPublisher.com",
+//     .....
+// },
+// "raw_component_auction_results": [{
+//         "ad_render_url": "URL",
+//         "interest_group_origin": "testIG.com",
+//         "interest_group_name": "testIG",
+//         "interest_group_owner": "testIG.com",
+//         "bidding_groups": {},
+//         "score": 4.9,
+//         "bid": 0.2,
+//         "bid_currency": "USD",
+//         "ad_metadata": "{}",
+//         "top_level_seller": "SFE-domain.com",
+//         "auction_params": {
+//             "component_seller": "test_seller.com"
+//         }
+//     },
+//     .....
+// ]
+// }
+// For this input, it returns a SelectAdRequest for testing B&A servers
+// by performing the following operations with the input fields -
+// 1. Create a ProtectedAuctionInput object with empty Buyer Input Map.
+// 2. Copy over the other fields from raw_protected_audience_input into the
+// ProtectedAuctionInput object from 1.
+// 3. Encode the ProtectedAuctionInput object from 1.
+// 4. Encrypt the ProtectedAuctionInput object from 1 using the provided keys.
+// 5. Copy the encrypted ProtectedAuctionInput object and auction_config from
+// the input JSON to a SelectAdRequest object.
+// 6. Create ComponentAuctionResults from the raw_component_auction_results
+// field.
+// 7. Encode, compress and HPKE encrypt the ComponentAuctionResults in step 6.
+// 8. Convert the SelectAdRequest object to a JSON string.
+// The protected_audience_ciphertext is encoded, encrypted and compressed in the
+// same format as expected in the ciphertext from a Server Component Auction.
 std::pair<std::unique_ptr<SelectAdRequest>,
           quiche::ObliviousHttpRequest::Context>
 PackagePlainTextSelectAdRequest(

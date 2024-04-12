@@ -17,9 +17,12 @@
 
 #include <string>
 
+#include "absl/container/btree_map.h"
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+inline constexpr std::string_view kZone = "zone";
 
 class TrustedServerConfigUtil {
  public:
@@ -41,6 +44,8 @@ class TrustedServerConfigUtil {
   absl::string_view GetRegion() const { return region_; }
 
   void ComputeZone(absl::string_view resource_name);
+
+  absl::btree_map<std::string, std::string> GetAttribute() const;
 
   // Returns a config param prefix that is to be prepended to all keys fetched
   // from the metadata store.

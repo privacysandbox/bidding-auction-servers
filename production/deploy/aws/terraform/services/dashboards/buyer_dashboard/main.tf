@@ -76,7 +76,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"request.failed_count_by_status\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error_status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"request.failed_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -88,7 +88,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "request.failed_count_by_status [MEAN]"
+                "title": "request.failed_count [MEAN]"
             }
         },
         {
@@ -260,7 +260,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.count_by_server\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.server name')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.server name')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -272,7 +272,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.count_by_server [MEAN]"
+                "title": "initiated_request.count [MEAN]"
             }
         },
         {
@@ -352,7 +352,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.error_code\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -364,7 +364,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "bfe.error_code [MEAN]"
+                "title": "bfe.errors_count [MEAN]"
             }
         },
         {
@@ -375,7 +375,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.error_code\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -387,7 +387,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "bidding.error_code [MEAN]"
+                "title": "bidding.errors_count [MEAN]"
             }
         },
         {
@@ -398,7 +398,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.bidding.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.initiated_request.to_bidding.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -410,7 +410,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.bidding.duration_ms [MEAN]"
+                "title": "bfe.initiated_request.to_bidding.duration_ms [MEAN]"
             }
         },
         {
@@ -421,7 +421,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.bidding.errors_count_by_status\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error_status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.initiated_request.to_bidding.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -433,7 +433,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.bidding.errors_count_by_status [MEAN]"
+                "title": "bfe.initiated_request.to_bidding.errors_count [MEAN]"
             }
         },
         {
@@ -444,7 +444,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.bidding.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.initiated_request.to_bidding.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -456,7 +456,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.bidding.size_bytes [MEAN]"
+                "title": "bfe.initiated_request.to_bidding.size_bytes [MEAN]"
             }
         },
         {
@@ -467,7 +467,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.kv.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.to_kv.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -479,7 +479,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.kv.duration_ms [MEAN]"
+                "title": "initiated_request.to_kv.duration_ms [MEAN]"
             }
         },
         {
@@ -490,7 +490,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.kv.errors_count_by_status\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.error_status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.to_kv.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.status_code')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -502,7 +502,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.kv.errors_count_by_status [MEAN]"
+                "title": "initiated_request.to_kv.errors_count [MEAN]"
             }
         },
         {
@@ -513,7 +513,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.kv.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_request.to_kv.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -525,7 +525,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_request.kv.size_bytes [MEAN]"
+                "title": "initiated_request.to_kv.size_bytes [MEAN]"
             }
         },
         {
@@ -536,7 +536,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_response.bidding.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.initiated_response.to_bidding.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -548,7 +548,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_response.bidding.size_bytes [MEAN]"
+                "title": "bfe.initiated_response.to_bidding.size_bytes [MEAN]"
             }
         },
         {
@@ -559,7 +559,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"initiated_response.kv.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bfe\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bfe.initiated_response.to_kv.size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -571,7 +571,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "initiated_response.kv.size_bytes [MEAN]"
+                "title": "bfe.initiated_response.to_kv.size_bytes [MEAN]"
             }
         },
         {
@@ -605,7 +605,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"js_execution.error.count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"js_execution.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -617,7 +617,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "js_execution.error.count [MEAN]"
+                "title": "js_execution.errors_count [MEAN]"
             }
         },
         {
@@ -628,7 +628,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"business_logic.bidding.bids.count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.bids_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -640,7 +640,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "business_logic.bidding.bids.count [MEAN]"
+                "title": "bidding.business_logic.bids_count [MEAN]"
             }
         },
         {
@@ -651,7 +651,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"business_logic.bidding.zero_bid.count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.seller_rejection_reason')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.zero_bid_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.seller_rejection_reason')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -663,7 +663,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "business_logic.bidding.zero_bid.count [MEAN]"
+                "title": "bidding.business_logic.zero_bid_count [MEAN]"
             }
         },
         {
@@ -674,7 +674,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"business_logic.bidding.zero_bid.percent\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.seller_rejection_reason')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.zero_bid_percent\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.seller_rejection_reason')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -686,7 +686,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "business_logic.bidding.zero_bid.percent [MEAN]"
+                "title": "bidding.business_logic.zero_bid_percent [MEAN]"
             }
         }
     ]

@@ -22,7 +22,6 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
-    "strip_prefix",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
@@ -33,6 +32,15 @@ pkg_files(
     srcs = [
         "//services/bidding_service:server",
     ] + select({
+        "//:inference_noop": [
+            "@inference_common//:inference_sidecar_test_target",
+        ],
+        "//:inference_pytorch": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar",
+        ],
+        "//:inference_tensorflow": [
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar",
+        ],
         "//conditions:default": [],
     }),
     attributes = pkg_attributes(mode = "0555"),
@@ -40,20 +48,9 @@ pkg_files(
 )
 
 pkg_files(
-    name = "server_data",
-    srcs = [
-    ] + select({
-        "//conditions:default": [],
-    }),
-    attributes = pkg_attributes(mode = "0555"),
-    prefix = "/server/data",
-    strip_prefix = strip_prefix.from_pkg(),
-)
-
-pkg_files(
     name = "kmstool_enclave_executable",
     srcs = [
-        "@google_privacysandbox_servers_common//scp/cc/cpio/client_providers/kms_client_provider/src/aws:kms_cli",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_cli",
     ],
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/",
@@ -61,7 +58,6 @@ pkg_files(
 
 server_binaries = [
     ":kmstool_enclave_executable",
-    ":server_data",
     ":server_executables",
 ]
 
@@ -79,7 +75,7 @@ pkg_tar(
 pkg_tar(
     name = "libnsm-tar",
     srcs = [
-        "@google_privacysandbox_servers_common//scp/cc/cpio/client_providers/kms_client_provider/src/aws:libnsm_so",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:libnsm_so",
     ],
     mode = "0644",
     # TODO(b/294113069): Remove arch-specific path.
@@ -131,9 +127,11 @@ container_image(
     ],
     env = LOG_ENV_VARS,
     layers = [
-        "@google_privacysandbox_servers_common//scp/cc/aws/proxy/src:proxify_layer",
         ":server_binary_layer",
         ":kmstool_enclave_cli_layer",
+    ],
+    tars = [
+        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
     ],
 )
 

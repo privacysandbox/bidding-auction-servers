@@ -19,7 +19,7 @@
 
 #include "gtest/gtest.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

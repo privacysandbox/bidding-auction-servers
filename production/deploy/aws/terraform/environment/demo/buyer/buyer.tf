@@ -97,7 +97,6 @@ module "buyer" {
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
 
-
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
@@ -112,5 +111,9 @@ module "buyer" {
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
+
+    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
   }
 }

@@ -35,6 +35,7 @@ cc_library(
         "select_ad_reactor_app.cc",
         "select_ad_reactor_invalid_client.cc",
         "select_ad_reactor_web.cc",
+        "select_auction_result_reactor.cc",
         "seller_frontend_service.cc",
     ],
     hdrs = [
@@ -42,6 +43,7 @@ cc_library(
         "select_ad_reactor_app.h",
         "select_ad_reactor_invalid_client.h",
         "select_ad_reactor_web.h",
+        "select_auction_result_reactor.h",
         "seller_frontend_service.h",
     ],
     deps = [
@@ -71,6 +73,8 @@ cc_library(
         "//services/seller_frontend_service/providers:seller_frontend_providers",
         "//services/seller_frontend_service/util:encryption_util",
         "//services/seller_frontend_service/util:framing_utils",
+        "//services/seller_frontend_service/util:key_fetcher_utils",
+        "//services/seller_frontend_service/util:proto_mapping_util",
         "//services/seller_frontend_service/util:startup_param_parser",
         "//services/seller_frontend_service/util:web_utils",
         "@aws_sdk_cpp//:core",
@@ -79,13 +83,14 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/telemetry",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@libcbor//:cbor",
     ],
 )
@@ -112,9 +117,9 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
-        "@google_privacysandbox_servers_common//src/cpp/util:rlimit_core_config",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/telemetry",
+        "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -134,7 +139,7 @@ cc_test(
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "//services/seller_frontend_service/util:web_utils",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -153,9 +158,29 @@ cc_test(
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
         "@libcbor//:cbor",
+    ],
+)
+
+cc_test(
+    name = "select_auction_result_reactor_test",
+    size = "small",
+    srcs = [
+        "select_auction_result_reactor_test.cc",
+    ],
+    deps = [
+        ":seller_frontend_service",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -176,7 +201,7 @@ cc_test(
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -196,8 +221,8 @@ cc_test(
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

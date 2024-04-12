@@ -17,5 +17,9 @@
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+absl::btree_map<std::string, std::string>
+TrustedServerConfigUtil::GetAttribute() const {
+  return {};
+}
 void TrustedServerConfigUtil::ComputeZone(absl::string_view resource_name) {}
 }  // namespace privacy_sandbox::bidding_auction_servers

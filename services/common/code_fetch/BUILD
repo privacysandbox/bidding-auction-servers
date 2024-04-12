@@ -20,6 +20,9 @@ cc_library(
     name = "code_fetcher_interface",
     hdrs = ["code_fetcher_interface.h"],
     visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/status",
+    ],
 )
 
 cc_library(
@@ -36,8 +39,8 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )
 
@@ -55,13 +58,13 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:errors",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/blob_storage_client",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/logger:request_context_logger",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )
 
@@ -78,7 +81,7 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
     ],
 )
 
@@ -97,12 +100,12 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//scp/cc/core/interface:async_context_lib",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:errors",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/blob_storage_client",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/core/interface:async_context",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+        "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],
 )

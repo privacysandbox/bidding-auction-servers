@@ -22,7 +22,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/buyer_frontend_service/get_bids_unary_reactor.h"
 #include "services/common/metric/server_definition.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -35,7 +35,7 @@ BuyerFrontEndService::BuyerFrontEndService(
     const GetBidsConfig config, bool enable_benchmarking)
     : bidding_signals_async_provider_(
           std::move(bidding_signals_async_provider)),
-      config_(std::move(config)),
+      config_(config),
       enable_benchmarking_(enable_benchmarking),
       key_fetcher_manager_(std::move(key_fetcher_manager)),
       crypto_client_(std::move(crypto_client)),
@@ -54,11 +54,11 @@ BuyerFrontEndService::BuyerFrontEndService(
 }
 
 BuyerFrontEndService::BuyerFrontEndService(ClientRegistry client_registry,
-                                           GetBidsConfig config,
+                                           const GetBidsConfig config,
                                            bool enable_benchmarking)
     : bidding_signals_async_provider_(
           std::move(client_registry.bidding_signals_async_provider)),
-      config_(std::move(config)),
+      config_(config),
       enable_benchmarking_(enable_benchmarking),
       key_fetcher_manager_(std::move(client_registry.key_fetcher_manager)),
       crypto_client_(std::move(client_registry.crypto_client)),

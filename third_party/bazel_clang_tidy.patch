@@ -1,0 +1,18 @@
+diff --git a/clang_tidy/run_clang_tidy.sh b/clang_tidy/run_clang_tidy.sh
+index 5cddb59..c33d0cf 100755
+--- a/clang_tidy/run_clang_tidy.sh
++++ b/clang_tidy/run_clang_tidy.sh
+@@ -35,6 +35,13 @@ trap 'if (($?)); then cat "$logfile" 1>&2; fi; rm "$logfile"' EXIT
+ set -- \
+   --checks=-clang-diagnostic-builtin-macro-redefined \
+   --warnings-as-errors=-clang-diagnostic-builtin-macro-redefined \
++  -extra-arg=-Wno-unknown-warning-option \
++  -extra-arg=-Wno-unused-result \
++  -extra-arg=-Wno-macro-redefined \
++  -extra-arg=-Wno-deprecated-declarations \
++  -extra-arg=-Wno-unused-const-variable \
++  -extra-arg=-Wno-format \
++  -extra-arg=-Wno-unused-function \
+    "$@"
+ 
+ "${CLANG_TIDY_BIN}" "$@" >"$logfile" 2>&1

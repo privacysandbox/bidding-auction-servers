@@ -17,9 +17,9 @@
 #include <grpcpp/grpcpp.h>
 
 #include "include/grpcpp/support/status_code_enum.h"
-#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
-#include "scp/cc/public/cpio/proto/public_key_service/v1/public_key_service.pb.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
+#include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "src/public/cpio/proto/public_key_service/v1/public_key_service.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -49,7 +49,7 @@ void KVAsyncGrpcClient::SendRpc(
   stub_->async()->ObliviousGetValues(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [captured_oblivious_http_context = oblivious_http_context.release(),
-       params](grpc::Status status) {
+       params](const grpc::Status& status) {
         auto oblivious_http_request_uptr =
             ObliviousHttpRequestUptr(captured_oblivious_http_context);
         if (!status.ok()) {

@@ -79,7 +79,6 @@ TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
 
   ASSERT_TRUE(status.ok());
   done.Wait();
-  ASSERT_TRUE(dispatcher.Stop().ok());
 }
 
 TEST(CodeDispatchClientTest, RunsLatestCodeVersion) {
@@ -108,7 +107,6 @@ TEST(CodeDispatchClientTest, RunsLatestCodeVersion) {
     ASSERT_TRUE(status.ok());
     done.Wait();
   }
-  ASSERT_TRUE(dispatcher.Stop().ok());
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers
