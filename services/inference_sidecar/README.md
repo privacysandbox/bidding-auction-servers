@@ -42,9 +42,12 @@ variable with `--//:inference_runtime=pytorch`.
 ## Start the B&A servers in GCP
 
 -   Create a GCS bucket and store ML models into it.
--   Set runtime flags: `INFERENCE_SIDECAR_BINARY_PATH`, `INFERENCE_MODEL_BUCKET_NAME`, and
-    `INFERENCE_MODEL_BUCKET_PATHS`.
+-   Set runtime flags: `INFERENCE_SIDECAR_BINARY_PATH`, `INFERENCE_MODEL_BUCKET_NAME`,
+    `INFERENCE_MODEL_BUCKET_PATHS`, and `INFERENCE_SIDECAR_RUNTIME_CONFIG`.
     -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar`.
+    -   `INFERENCE_SIDECAR_RUNTIME_CONFIG` has the following format: { "num_interop_threads":
+        <integer_value>, "num_intraop_threads": <integer_value>, "module_name": <string_value>, }
+        Currently "module_name" can be one of "test", "tensorflow_v2_14_0", "pytorch_v2_1_1".
 -   Refer to
     [README.md](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
 
@@ -53,7 +56,7 @@ variable with `--//:inference_runtime=pytorch`.
 The servers run locally and the ML models are directly read from the local disk.
 
 -   Use the command-line flags: `--inference_sidecar_binary_path` and
-    `--inference_model_local_paths`.
+    `--inference_model_local_paths`, `--inference_sidecar_runtime_config`.
 -   Utilize services/inference_sidecar/common/tools/debug/start_inference script.
 
 ## Trigger ML Inference
@@ -133,36 +136,36 @@ See an example of a Batch Inference Request in a JSON format with 2 models:
 
 ```json
 {
-  "request" : [
-    {
-      "model_path" : "my_bucket/models/pcvr/1/",
-      "tensors" : [
+    "request": [
         {
-          "tensor_name": "feature1",
-          "data_type": "DOUBLE",
-          "tensor_shape": [2, 1],
-          "tensor_content": ["0.454920", "-0.25752"]
-        }
-      ]
-    },
-    {
-      "model_path" : "my_bucket/models/pctr/2/",
-      "tensors" : [
-        {
-          "tensor_name": "feature1",
-          "data_type": "INT32",
-          "tensor_shape": [2, 1],
-          "tensor_content": ["5", "6"]
+            "model_path": "my_bucket/models/pcvr/1/",
+            "tensors": [
+                {
+                    "tensor_name": "feature1",
+                    "data_type": "DOUBLE",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": ["0.454920", "-0.25752"]
+                }
+            ]
         },
         {
-          "tensor_name": "feature2",
-          "data_type": "FLOAT",
-          "tensor_shape": [2, 3],
-          "tensor_content": ["0.5", "0.6", "0.7", "0.8". "0.21", "-0.99"]
+            "model_path": "my_bucket/models/pctr/2/",
+            "tensors": [
+                {
+                    "tensor_name": "feature1",
+                    "data_type": "INT32",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": ["5", "6"]
+                },
+                {
+                    "tensor_name": "feature2",
+                    "data_type": "FLOAT",
+                    "tensor_shape": [2, 3],
+                    "tensor_content": ["0.5", "0.6", "0.7", "0.8", "0.21", "-0.99"]
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
 ```
 

@@ -58,6 +58,7 @@ constexpr absl::string_view kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
     "bid-from-score-ad-failed-currency-check";
 
 constexpr float kDefaultWinningBid = 0.0;
+constexpr char kEmptyBidCurrencyCode[] = "???";
 constexpr float kDefaultWinningScore = 0.0;
 inline constexpr char kDefaultWinningAdRenderUrl[] = "";
 inline constexpr char kDefaultWinningInterestGroupName[] = "";
@@ -65,6 +66,9 @@ inline constexpr char kDefaultWinningInterestGroupOwner[] = "";
 inline constexpr char kDefaultHighestScoringOtherBidInterestGroupOwner[] = "";
 inline constexpr char kDefaultHighestScoringOtherBid[] = "0.00";
 inline constexpr char kDefaultHasHighestScoringOtherBid[] = "false";
+inline constexpr char kFeatureLogging[] = "enable_logging";
+inline constexpr char kFeatureDebugUrlGeneration[] =
+    "enable_debug_url_generation";
 
 // Captures placeholder data for debug reporting.
 struct DebugReportingPlaceholder {
@@ -84,7 +88,8 @@ struct DebugReportingPlaceholder {
 // Returns post auction signals from winning ad score.
 // If there is no winning ad, default values are returned.
 PostAuctionSignals GeneratePostAuctionSignals(
-    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
+    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
+    absl::string_view seller_currency);
 
 // Returns a http request object for debug reporting after replacing placeholder
 // data in the url.
@@ -120,6 +125,10 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
     server_common::log::ContextImpl& log_context);
+
+// Returns a JSON string for feature flags to be used by the wrapper script.
+std::string GetFeatureFlagJson(bool enable_logging,
+                               bool enable_debug_url_generation);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

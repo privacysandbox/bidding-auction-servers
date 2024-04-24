@@ -42,7 +42,6 @@ using google::cmrt::sdk::instance_service::v1::GetTagsByResourceNameResponse;
 using ::google::scp::core::ExecutionResult;
 using ::google::scp::core::errors::GetErrorMessage;
 using ::google::scp::cpio::InstanceClientInterface;
-using ::google::scp::cpio::InstanceClientOptions;
 
 namespace {
 
@@ -66,9 +65,10 @@ absl::StatusOr<std::string> GetResourceName(
   std::string resource_name;
 
   absl::Notification done;
-  const auto& result = client->GetCurrentInstanceResourceName(
+  absl::Status status = client->GetCurrentInstanceResourceName(
       GetCurrentInstanceResourceNameRequest(),
-      [&](const ExecutionResult& result,
+      [&resource_name, &done](
+          const ExecutionResult& result,
           const GetCurrentInstanceResourceNameResponse& response) {
         if (result.Successful()) {
           resource_name = std::string{response.instance_resource_name()};
@@ -80,9 +80,9 @@ absl::StatusOr<std::string> GetResourceName(
         done.Notify();
       });
 
-  if (!result.Successful()) {
-    return HandleFailure(absl::StrFormat(kResourceNameFetchError,
-                                         GetErrorMessage(result.status_code)));
+  if (!status.ok()) {
+    return HandleFailure(
+        absl::StrFormat(kResourceNameFetchError, status.message()));
   }
 
   done.WaitForNotification();
@@ -103,8 +103,8 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   }
 
   std::shared_ptr<InstanceClientInterface> client =
-      google::scp::cpio::InstanceClientFactory::Create(InstanceClientOptions());
-  client->Init();
+      google::scp::cpio::InstanceClientFactory::Create();
+  client->Init().IgnoreError();
   absl::StatusOr<std::string> resource_name = GetResourceName(client);
   CHECK_OK(resource_name) << "Could not fetch host resource name.";
   ComputeZone(resource_name.value());
@@ -112,10 +112,10 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   GetInstanceDetailsByResourceNameRequest request;
   request.set_instance_resource_name(resource_name.value());
 
-  const auto result = client->GetInstanceDetailsByResourceName(
+  absl::Status status = client->GetInstanceDetailsByResourceName(
       std::move(request),
-      [&](const ExecutionResult& result,
-          const GetInstanceDetailsByResourceNameResponse& response) {
+      [this, &done](const ExecutionResult& result,
+                    const GetInstanceDetailsByResourceNameResponse& response) {
         if (result.Successful()) {
           ABSL_LOG(INFO) << response.DebugString();
           instance_id_ = std::string{response.instance_details().instance_id()};
@@ -129,9 +129,9 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
         }
         done.Notify();
       });
-  if (!result.Successful()) {
+  if (!status.ok()) {
     ABSL_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
-                                       GetErrorMessage(result.status_code));
+                                       status.message());
   } else {
     done.WaitForNotification();
   }

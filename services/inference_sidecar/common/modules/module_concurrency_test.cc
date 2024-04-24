@@ -74,7 +74,8 @@ RegisterModelRequest CreateNewRegisterRequest(
 }
 
 TEST(ModuleConcurrencyTest, RegisterModel_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -99,7 +100,8 @@ TEST(ModuleConcurrencyTest, RegisterModel_Success) {
 }
 
 TEST(ModuleConcurrencyTest, Predict_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -121,7 +123,8 @@ TEST(ModuleConcurrencyTest, Predict_Success) {
 }
 
 TEST(ModuleConcurrencyTest, RegisterModel_Predict_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());

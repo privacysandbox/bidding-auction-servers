@@ -20,6 +20,7 @@
 #include "rapidjson/document.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/reporting_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

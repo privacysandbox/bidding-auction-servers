@@ -83,6 +83,36 @@ std::string GetTestResponse(absl::string_view render, float bid) {
                           render, bid);
 }
 
+std::string GetTestResponseWithBuyerReportingId(
+    absl::string_view render, float bid, absl::string_view buyer_reporting_id) {
+  return absl::Substitute(R"JSON({
+    "response": {
+      "render": "$0",
+      "bid": $1,
+      "buyerReportingId": "$2"
+    },
+    "logs": [],
+    "errors": [],
+    "warnings":[]
+  })JSON",
+                          render, bid, buyer_reporting_id);
+}
+
+std::string GetTestResponseWithUnknownField(absl::string_view render,
+                                            float bid) {
+  return absl::Substitute(R"JSON({
+    "response": {
+      "render": "$0",
+      "bid": $1,
+      "buyer_reporting_ids": "abcdef"
+    },
+    "logs": [],
+    "errors": [],
+    "warnings":[]
+  })JSON",
+                          render, bid);
+}
+
 std::string GetComponentAuctionResponse(absl::string_view render, float bid,
                                         bool allow_component_auction) {
   return absl::Substitute(R"JSON({
@@ -308,6 +338,65 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
   bool enable_buyer_debug_url_generation = false;
   bool enable_adtech_code_logging = true;
   std::string response_json = GetTestResponse(kTestRenderUrl, 1);
+  AdWithBid bid;
+  bid.set_render(kTestRenderUrl);
+  bid.set_bid(1);
+  bid.set_interest_group_name("ig_name_Bar");
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = bid;
+  Response ads;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs;
+  igs.push_back(GetIGForBiddingBar());
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([response_json](std::vector<DispatchRequest>& batch,
+                                BatchDispatchDoneCallback batch_callback) {
+        return FakeExecute(batch, std::move(batch_callback), response_json);
+      });
+  RawRequest raw_request;
+  BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
+                  kTestBiddingSignals, raw_request, enable_debug_reporting);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation,
+                    enable_adtech_code_logging);
+}
+
+TEST_F(GenerateBidsReactorTest, BuyerReportingIdSetInResponse) {
+  bool enable_debug_reporting = false;
+  bool enable_buyer_debug_url_generation = false;
+  bool enable_adtech_code_logging = true;
+  std::string response_json = GetTestResponseWithBuyerReportingId(
+      kTestRenderUrl, 1, kTestBuyerReportingId);
+  AdWithBid bid;
+  bid.set_render(kTestRenderUrl);
+  bid.set_bid(1);
+  bid.set_interest_group_name("ig_name_Bar");
+  bid.set_buyer_reporting_id(kTestBuyerReportingId);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = bid;
+  Response ads;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs;
+  igs.push_back(GetIGForBiddingBar());
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([response_json](std::vector<DispatchRequest>& batch,
+                                BatchDispatchDoneCallback batch_callback) {
+        return FakeExecute(batch, std::move(batch_callback), response_json);
+      });
+  RawRequest raw_request;
+  BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
+                  kTestBiddingSignals, raw_request, enable_debug_reporting);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation,
+                    enable_adtech_code_logging);
+}
+
+TEST_F(GenerateBidsReactorTest, UnknownFieldInResponseParsedSuccessfully) {
+  bool enable_debug_reporting = false;
+  bool enable_buyer_debug_url_generation = false;
+  bool enable_adtech_code_logging = true;
+  std::string response_json =
+      GetTestResponseWithUnknownField(kTestRenderUrl, 1);
   AdWithBid bid;
   bid.set_render(kTestRenderUrl);
   bid.set_bid(1);

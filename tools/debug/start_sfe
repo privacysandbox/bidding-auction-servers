@@ -27,6 +27,7 @@ export SERVER_START_CMD=$(cat << END
 --auction_server_host="127.0.0.1:50061" \
 --key_value_signals_host="https://pubads.g.doubleclick.net/td/sts" \
 --seller_origin_domain="https://securepubads.g.doubleclick.net" \
+--seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
 --buyer_server_hosts='{
   "https://td.doubleclick.net": {
     "url": "127.0.0.1:50051",

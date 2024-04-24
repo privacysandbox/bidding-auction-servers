@@ -17,7 +17,7 @@
 #include <future>
 #include <istream>
 
-#include <torch/script.h>
+#include <torch/torch.h>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
@@ -71,8 +71,37 @@ absl::StatusOr<torch::IValue> PredictInternal(torch::jit::script::Module* model,
   }
 }
 
+// Initializes PyTorch runtime inter-operations and intra-operations parallelism
+// threading configurations.
+absl::Status InitRuntimeThreadConfig(
+    const InferenceSidecarRuntimeConfig& config) {
+  try {
+    // `set_num_interop_threads` needs to be called before `set_num_threads`.
+    if (config.num_interop_threads() != 0) {
+      at::set_num_interop_threads(config.num_interop_threads());
+    }
+    if (config.num_intraop_threads() != 0) {
+      at::set_num_threads(config.num_intraop_threads());
+    }
+  } catch (const std::exception& e) {
+    return absl::InternalError(absl::StrCat(
+        "Error setting PyTorch threading runtime configs: ", e.what()));
+  } catch (...) {
+    return absl::InternalError(
+        "Unknown error during while setting PyTorch threading runtime "
+        "config.");
+  }
+  return absl::OkStatus();
+}
+
 class PyTorchModule final : public ModuleInterface {
  public:
+  explicit PyTorchModule(const InferenceSidecarRuntimeConfig& config) {
+    absl::Status init_result = InitRuntimeThreadConfig(config);
+    CHECK(init_result.ok())
+        << "Could not initialize runtime flags: " << init_result;
+  }
+
   absl::StatusOr<PredictResponse> Predict(
       const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
   absl::StatusOr<RegisterModelResponse> RegisterModel(
@@ -168,8 +197,13 @@ absl::StatusOr<RegisterModelResponse> PyTorchModule::RegisterModel(
 
 }  // namespace
 
-std::unique_ptr<ModuleInterface> ModuleInterface::Create() {
-  return std::make_unique<PyTorchModule>();
+std::unique_ptr<ModuleInterface> ModuleInterface::Create(
+    const InferenceSidecarRuntimeConfig& config) {
+  return std::make_unique<PyTorchModule>(config);
+}
+
+absl::string_view ModuleInterface::GetModuleVersion() {
+  return "pytorch_v2_1_1";
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

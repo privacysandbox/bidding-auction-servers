@@ -90,7 +90,7 @@ static void ExportMetrics(benchmark::State& state) {
 }
 
 static void BM_Multiworker_Predict_GRPC(benchmark::State& state) {
-  SandboxExecutor executor(kGrpcInferenceSidecarBinary, {""});
+  SandboxExecutor executor(kGrpcInferenceSidecarBinary, {"{}"});
   CHECK_EQ(executor.StartSandboxee().code(), absl::StatusCode::kOk);
 
   std::shared_ptr<grpc::Channel> client_channel =
@@ -133,7 +133,7 @@ static void BM_Predict_GRPC(benchmark::State& state) {
   static std::unique_ptr<InferenceService::StubInterface> stub = nullptr;
 
   if (state.thread_index() == 0) {
-    const std::vector<std::string> arg = {""};
+    const std::vector<std::string> arg = {"{}"};
     executor =
         std::make_unique<SandboxExecutor>(kGrpcInferenceSidecarBinary, arg);
     CHECK_EQ(executor->StartSandboxee().code(), absl::StatusCode::kOk);
@@ -177,7 +177,7 @@ static void BM_Predict_GRPC(benchmark::State& state) {
 }
 
 static void BM_Multiworker_Predict_IPC(benchmark::State& state) {
-  SandboxExecutor executor(kIpcInferenceSidecarBinary, {""});
+  SandboxExecutor executor(kIpcInferenceSidecarBinary, {"{}"});
   CHECK_EQ(executor.StartSandboxee().code(), absl::StatusCode::kOk);
   sandbox2::Comms comms(executor.FileDescriptor());
 
@@ -216,7 +216,7 @@ static void BM_Predict_IPC(benchmark::State& state) {
   static std::unique_ptr<sandbox2::Comms> comms = nullptr;
 
   if (state.thread_index() == 0) {
-    const std::vector<std::string> arg = {""};
+    const std::vector<std::string> arg = {"{}"};
     executor =
         std::make_unique<SandboxExecutor>(kIpcInferenceSidecarBinary, arg);
     CHECK_EQ(executor->StartSandboxee().code(), absl::StatusCode::kOk);
@@ -261,7 +261,7 @@ static void BM_Predict_IPC(benchmark::State& state) {
 // BM_Register_IPC is not implemented. It's too slow to run the microbenchmark
 // because it requires a new sandbox worker per model registration.
 static void BM_Register_GRPC(benchmark::State& state) {
-  SandboxExecutor executor(kGrpcInferenceSidecarBinary, {""});
+  SandboxExecutor executor(kGrpcInferenceSidecarBinary, {"{}"});
   CHECK_EQ(executor.StartSandboxee().code(), absl::StatusCode::kOk);
 
   std::shared_ptr<grpc::Channel> client_channel =

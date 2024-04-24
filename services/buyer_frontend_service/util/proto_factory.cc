@@ -187,6 +187,9 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
   generate_bids_raw_request->set_enable_debug_reporting(
       raw_request.enable_debug_reporting());
 
+  generate_bids_raw_request->set_enable_unlimited_egress(
+      raw_request.enable_unlimited_egress());
+
   return generate_bids_raw_request;
 }
 

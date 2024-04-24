@@ -182,14 +182,6 @@ string_flag(
     ],
 )
 
-config_setting(
-    name = "inference",
-    flag_values = {
-        ":inference_build": "yes",
-    },
-    visibility = ["//visibility:public"],
-)
-
 string_flag(
     name = "inference_runtime",
     build_setting_default = "noop",
@@ -203,7 +195,6 @@ string_flag(
 config_setting(
     name = "inference_noop",
     flag_values = {
-        ":inference_build": "yes",
         ":inference_runtime": "noop",
     },
     visibility = ["//visibility:public"],

@@ -134,7 +134,7 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
 // Must manually delete/take ownership of underlying pointer
 // build_android_signals: If false, will build browser signals instead.
 std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
-    bool build_android_signals);
+    bool for_android);
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromAndroid();

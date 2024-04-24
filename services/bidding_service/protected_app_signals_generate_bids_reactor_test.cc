@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/synchronization/notification.h"
 #include "gmock/gmock.h"
@@ -33,6 +34,7 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
+#include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
@@ -339,7 +341,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
   ASSERT_EQ(num_roma_dispatches, 2);
 }
 
-TEST_F(GenerateBidsReactorTest, EgressFeaturesAreNotPopulated) {
+TEST_F(GenerateBidsReactorTest, egressPayloadAreNotPopulated) {
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
@@ -373,7 +375,7 @@ TEST_F(GenerateBidsReactorTest, EgressFeaturesAreNotPopulated) {
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
   EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 
-  ASSERT_EQ(generated_bid.egress_features().size(), 0);
+  ASSERT_EQ(generated_bid.egress_payload().size(), 0);
 }
 
 TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
@@ -397,7 +399,7 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
               kProtectedAppSignalsGenerateBidBlobVersion,
               CreateGenerateBidsUdfResponse(
                   kTestRenderUrl, /*bid=*/0.0,
-                  /*egress_features_hex_string=*/"",
+                  /*egress_payload_hex_string=*/"",
                   /*debug_reporting_urls=*/"RJSON({})JSON"));
         }
       });
@@ -597,6 +599,125 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
   const auto& generated_bid = raw_response.bids()[0];
   EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
   EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+}
+
+TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
+  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
+  // is expected.
+  ASSERT_EQ(num_roma_dispatches, 2);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  EXPECT_GT(generated_bid.temporary_unlimited_egress_payload().size(), 0);
+}
+
+TEST_F(GenerateBidsReactorTest,
+       TemporaryEgressVectorNotPopulatedWhenNotEnabled) {
+  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/false);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
+  // is expected.
+  ASSERT_EQ(num_roma_dispatches, 2);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload().size(), 0);
+}
+
+TEST_F(GenerateBidsReactorTest,
+       TemporaryEgressVectorNotPopulatedWhenFeatureIsOff) {
+  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, false);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce(
+          [](std::unique_ptr<GetValuesRequest> raw_request,
+             const RequestMetadata& metadata,
+             absl::AnyInvocable<
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+                 on_done,
+             absl::Duration timeout) {
+            auto response = CreateAdsRetrievalOrKvLookupResponse();
+            EXPECT_TRUE(response.ok()) << response.status();
+            std::move(on_done)(
+                std::make_unique<GetValuesResponse>(*std::move(response)));
+            return absl::OkStatus();
+          });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
+  // is expected.
+  ASSERT_EQ(num_roma_dispatches, 2);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload().size(), 0);
 }
 
 }  // namespace

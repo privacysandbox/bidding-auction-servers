@@ -27,6 +27,8 @@
 #include "sandbox/sandbox_executor.h"
 #include "utils/file_util.h"
 
+#include "test_constants.h"
+
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
@@ -53,7 +55,8 @@ TEST(InferenceSidecarTest, RegisterModelAndRunInference_Grpc) {
   absl::FlagSaver flag_saver;
   absl::SetFlag(&FLAGS_testonly_allow_policies_for_bazel, true);
 
-  SandboxExecutor executor(kInferenceSidecarBinary, {""});
+  SandboxExecutor executor(kInferenceSidecarBinary,
+                           {std::string(kRuntimeConfig)});
   ASSERT_EQ(executor.StartSandboxee().code(), absl::StatusCode::kOk);
 
   std::shared_ptr<grpc::Channel> client_channel =

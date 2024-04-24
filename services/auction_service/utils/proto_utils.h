@@ -118,7 +118,8 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
     const std::shared_ptr<std::string>& auction_config,
     absl::string_view bid_metadata,
     server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, const bool enable_debug_reporting);
+    const bool enable_adtech_code_logging, const bool enable_debug_reporting,
+    absl::string_view code_version);
 
 /**
  * Builds ScoreAdInput with AdWithBid or ProtectedAppSignalsAdWithBid.
@@ -130,18 +131,15 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
         scoring_signals,
     const bool enable_debug_reporting,
     server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, absl::string_view bid_metadata) {
-  std::string ad_metadata_as_json;
-  const auto& it = ad.ad().struct_value().fields().find("metadata");
-  if (it != ad.ad().struct_value().fields().end()) {
-    PS_RETURN_IF_ERROR(google::protobuf::util::MessageToJsonString(
-        it->second, &ad_metadata_as_json));
-  }
-  return BuildScoreAdRequest(ad.render(), ad_metadata_as_json,
-                             scoring_signals.at(ad.render()).GetString(),
-                             ad.bid(), auction_config, bid_metadata,
-                             log_context, enable_adtech_code_logging,
-                             enable_debug_reporting);
+    const bool enable_adtech_code_logging, absl::string_view bid_metadata,
+    absl::string_view code_version) {
+  std::string ad_object_json;
+  PS_RETURN_IF_ERROR(
+      google::protobuf::util::MessageToJsonString(ad.ad(), &ad_object_json));
+  return BuildScoreAdRequest(
+      ad.render(), ad_object_json, scoring_signals.at(ad.render()).GetString(),
+      ad.bid(), auction_config, bid_metadata, log_context,
+      enable_adtech_code_logging, enable_debug_reporting, code_version);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

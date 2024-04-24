@@ -355,7 +355,8 @@ inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
         kWinReportingUrls,    // 9
         kAdMetadata,          // 10
         kTopLevelSeller,      // 11
-        kBidCurrency          // 12
+        kBidCurrency,         // 12
+        kBuyerReportingId     // 13
 };
 
 template <std::size_t Size>

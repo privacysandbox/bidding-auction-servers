@@ -29,9 +29,11 @@ class ModuleInterface {
   // Different implementations of ModuleInterface return specialized modules,
   // for example, Tensorflow module and PyTorch module. These specialized
   // modules can only be called with the methods defined by this interface.
-  static std::unique_ptr<ModuleInterface> Create();
+  static std::unique_ptr<ModuleInterface> Create(
+      const InferenceSidecarRuntimeConfig& config);
+  // Gets inference backend module version.
+  static absl::string_view GetModuleVersion();
   virtual ~ModuleInterface() = default;
-
   // Executes inference on a registered ML model.
   virtual absl::StatusOr<PredictResponse> Predict(
       const PredictRequest& request) = 0;

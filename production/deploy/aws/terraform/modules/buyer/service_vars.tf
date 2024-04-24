@@ -145,6 +145,8 @@ variable "vpc_interface_endpoint_services" {
   default = [
     "ec2",
     "ssm",
+    "ec2messages",
+    "ssmmessages",
     "autoscaling",
     "monitoring",
     "xray",

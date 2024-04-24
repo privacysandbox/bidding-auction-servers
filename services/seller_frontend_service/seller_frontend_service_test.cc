@@ -36,8 +36,10 @@
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/test/utils/service_utils.h"
+#include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
+#include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -68,6 +70,19 @@ using ScoreAdsDoneCallback =
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
+// Maintains ownership of clients
+struct SellerFrontEndClientOwner {
+  // Setup buyer client.
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+
+  // Scoring signals provider mock.
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+
+  server_common::FakeKeyFetcherManager key_fetcher_manager;
+};
+
 template <typename T>
 class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
@@ -85,9 +100,21 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetFlagForTest("{}", SELLER_CLOUD_PLATFORMS_MAP);
+  }
+
+  ClientRegistry CreateValidClientRegistry() {
+    return {valid_clients_.scoring_signals_provider,
+            valid_clients_.scoring_client, valid_clients_.buyer_clients,
+            valid_clients_.key_fetcher_manager,
+            /* crypto_client= */ nullptr,
+            // Reporting Client.
+            std::make_unique<MockAsyncReporter>(
+                std::make_unique<MockHttpFetcherAsync>())};
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
+  SellerFrontEndClientOwner valid_clients_;
 };
 
 using ProtectedAuctionInputTypes =
@@ -1334,6 +1361,167 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   EXPECT_TRUE(absl::StrContains(status.error_message(),
                                 kDeviceComponentAuctionWithAndroid));
+}
+
+static const char kTestComponentSeller[] = "seller1.example.com";
+static const char kSampleCloudPlatformMap[] = R"JSON({
+    "seller1.example.com" :"GCP",
+    "seller2.example.com":"AWS"
+    })JSON";
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    GetComponentAuctionCiphertexts_ReturnsErrorForEmptySellerCloudPlatforms) {
+  GetComponentAuctionCiphertextsRequest request;
+  request.set_protected_auction_ciphertext(MakeARandomString());
+  request.add_component_sellers(MakeARandomString());
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, this->CreateValidClientRegistry());
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::UNIMPLEMENTED);
+  EXPECT_TRUE(absl::StrContains(status.error_message(), kDisabledError));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    GetComponentAuctionCiphertexts_ReturnsInvalidArgumentForEmptyCiphertext) {
+  GetComponentAuctionCiphertextsRequest request;
+  request.add_component_sellers(MakeARandomString());
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
+                               SELLER_CLOUD_PLATFORMS_MAP);
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, this->CreateValidClientRegistry());
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_TRUE(absl::StrContains(status.error_message(), kEmptyInputFieldError));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    GetComponentAuctionCiphertexts_ReturnsInvalidArgumentForEmptySellerList) {
+  GetComponentAuctionCiphertextsRequest request;
+  request.set_protected_auction_ciphertext(MakeARandomString());
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
+                               SELLER_CLOUD_PLATFORMS_MAP);
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, this->CreateValidClientRegistry());
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_TRUE(absl::StrContains(status.error_message(), kEmptyInputFieldError));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    GetComponentAuctionCiphertexts_ReturnsInvalidArgumentForInvalidCiphertext) {
+  GetComponentAuctionCiphertextsRequest request;
+  request.set_protected_auction_ciphertext(MakeARandomString());
+  request.add_component_sellers(MakeARandomString());
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
+                               SELLER_CLOUD_PLATFORMS_MAP);
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, this->CreateValidClientRegistry());
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_TRUE(absl::StrContains(status.error_message(),
+                                kCiphertextDecryptionFailureError));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           GetComponentAuctionCiphertexts_ReturnsResponseForComponentSeller) {
+  GetComponentAuctionCiphertextsRequest request;
+  TypeParam protected_auction_input =
+      MakeARandomProtectedAuctionInput<TypeParam>();
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  request.set_protected_auction_ciphertext(encrypted_protected_auction_input);
+  request.add_component_sellers(kTestComponentSeller);
+  request.add_component_sellers(MakeARandomString());
+
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
+                               SELLER_CLOUD_PLATFORMS_MAP);
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, this->CreateValidClientRegistry());
+
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::OK);
+  ASSERT_EQ(response.seller_component_ciphertexts().size(), 1);
+  ASSERT_TRUE(
+      response.seller_component_ciphertexts().contains(kTestComponentSeller));
+  EXPECT_NE(response.seller_component_ciphertexts().at(kTestComponentSeller),
+            encrypted_protected_auction_input);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           GetComponentAuctionCiphertexts_ReturnsInternalErrorForKeyNotFound) {
+  GetComponentAuctionCiphertextsRequest request;
+  TypeParam protected_auction_input =
+      MakeARandomProtectedAuctionInput<TypeParam>();
+  auto [encrypted_protected_auction_input, encryption_context] =
+      GetCborEncodedEncryptedInputAndOhttpContext(protected_auction_input);
+  request.set_protected_auction_ciphertext(encrypted_protected_auction_input);
+  request.add_component_sellers(kTestComponentSeller);
+
+  GetComponentAuctionCiphertextsResponse response;
+  grpc::ClientContext context;
+
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
+                               SELLER_CLOUD_PLATFORMS_MAP);
+
+  // Key fetcher manager does not serve public key.
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  SellerFrontEndService seller_frontend_service(
+      &this->config_, {this->valid_clients_.scoring_signals_provider,
+                       this->valid_clients_.scoring_client,
+                       this->valid_clients_.buyer_clients, key_fetcher_manager,
+                       /* crypto_client= */ nullptr,
+                       std::make_unique<MockAsyncReporter>(
+                           std::make_unique<MockHttpFetcherAsync>())});
+
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+  grpc::Status status =
+      stub->GetComponentAuctionCiphertexts(&context, request, &response);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
+  EXPECT_TRUE(
+      absl::StrContains(status.error_message(), kCiphertextEncryptionError));
 }
 
 }  // namespace

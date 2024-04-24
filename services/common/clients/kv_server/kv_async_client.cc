@@ -53,8 +53,8 @@ void KVAsyncGrpcClient::SendRpc(
         auto oblivious_http_request_uptr =
             ObliviousHttpRequestUptr(captured_oblivious_http_context);
         if (!status.ok()) {
-          PS_VLOG(1) << "SendRPC completion status not ok: "
-                     << server_common::ToAbslStatus(status);
+          PS_LOG(ERROR) << "SendRPC completion status not ok: "
+                        << server_common::ToAbslStatus(status);
           params->OnDone(status);
           return;
         }
@@ -64,7 +64,8 @@ void KVAsyncGrpcClient::SendRpc(
             FromObliviousHTTPResponse(*params->ResponseRef()->mutable_data(),
                                       *captured_oblivious_http_context);
         if (!plain_text_binary_http_response.ok()) {
-          PS_VLOG(1) << "KVAsyncGrpcClient failed to get binary HTTP response";
+          PS_LOG(ERROR)
+              << "KVAsyncGrpcClient failed to get binary HTTP response";
           params->OnDone(grpc::Status(
               grpc::StatusCode::INVALID_ARGUMENT,
               plain_text_binary_http_response.status().ToString()));
@@ -72,10 +73,10 @@ void KVAsyncGrpcClient::SendRpc(
         }
 
         auto response = FromBinaryHTTP<GetValuesResponse>(
-            *plain_text_binary_http_response, /*from_json=*/true);
+            *plain_text_binary_http_response, /*from_json=*/false);
         PS_VLOG(7) << "Retrieved proto response: " << response->DebugString();
         if (!response->has_single_partition()) {
-          PS_VLOG(1)
+          PS_LOG(ERROR)
               << "KVAsyncGrpcClient expected a single partition response, got: "
               << response->DebugString();
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
@@ -99,7 +100,7 @@ absl::Status KVAsyncGrpcClient::ExecuteInternal(
     absl::Duration timeout) const {
   PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
   PS_ASSIGN_OR_RETURN(std::string binary_http_msg,
-                      ToBinaryHTTP(*raw_request, /*to_json=*/true));
+                      ToBinaryHTTP(*raw_request, /*to_json=*/false));
 
   PS_VLOG(5) << "Fetching public Key ...";
   PS_ASSIGN_OR_RETURN(auto public_key,

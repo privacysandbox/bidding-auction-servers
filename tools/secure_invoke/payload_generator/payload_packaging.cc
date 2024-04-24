@@ -84,7 +84,8 @@ SelectAdRequest::AuctionConfig GetAuctionConfig(
 }
 
 ProtectedAuctionInput GetProtectedAuctionInput(
-    rapidjson::Document* input_json, bool enable_debug_reporting = false) {
+    rapidjson::Document* input_json, bool enable_debug_reporting = false,
+    bool enable_unlimited_egress = false) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
   rapidjson::Value& protected_auction_json =
       (*input_json)[kProtectedAuctionInputField];
@@ -98,6 +99,7 @@ ProtectedAuctionInput GetProtectedAuctionInput(
           protected_auction_json_str, &protected_auction_input, parse_options);
   // Enable debug reporting for all calls from this tool.
   protected_auction_input.set_enable_debug_reporting(enable_debug_reporting);
+  protected_auction_input.set_enable_unlimited_egress(enable_unlimited_egress);
   CHECK(protected_auction_input_parse.ok()) << protected_auction_input_parse;
   return protected_auction_input;
 }
@@ -208,11 +210,12 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 ClientType client_type,
                                 const HpkeKeyset& keyset,
                                 bool enable_debug_reporting,
-                                absl::string_view protected_app_signals_json) {
+                                absl::string_view protected_app_signals_json,
+                                bool enable_unlimited_egress) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   auto select_ad_request = std::make_unique<SelectAdRequest>();
-  ProtectedAuctionInput protected_auction_input =
-      GetProtectedAuctionInput(&input_json, enable_debug_reporting);
+  ProtectedAuctionInput protected_auction_input = GetProtectedAuctionInput(
+      &input_json, enable_debug_reporting, enable_unlimited_egress);
   if (input_json.HasMember(kComponentAuctionsField)) {
     for (auto& component_auction_json :
          input_json[kComponentAuctionsField].GetArray()) {
@@ -259,10 +262,12 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
 
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
-    const HpkeKeyset& keyset, bool enable_debug_reporting) {
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
+    bool enable_unlimited_egress) {
   auto req =
-      std::move(PackagePlainTextSelectAdRequest(input_json_str, client_type,
-                                                keyset, enable_debug_reporting)
+      std::move(PackagePlainTextSelectAdRequest(
+                    input_json_str, client_type, keyset, enable_debug_reporting,
+                    /*protected_app_signals_json=*/"", enable_unlimited_egress)
                     .first);
   std::string select_ad_json;
   auto select_ad_json_status =

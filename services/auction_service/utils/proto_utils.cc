@@ -177,11 +177,14 @@ std::string MakeOpenBidMetadataJson(
     }
     absl::StrAppend(&bid_metadata, R"(],)");
   }
-  // Only add bid currency to bid metadata if it's non-empty.
   if (!bid_currency.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                     kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
                     bid_currency, R"JSON(",)JSON");
+  } else {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
+                    kEmptyBidCurrencyCode, R"JSON(",)JSON");
   }
   return bid_metadata;
 }
@@ -375,8 +378,8 @@ void MayPopulateScoringSignalsForProtectedAppSignals(
         combined_signals.try_emplace(protected_app_signals_ad_bid.render(),
                                      std::move(combined_signals_for_this_bid));
     if (!succeeded) {
-      PS_VLOG(1, log_context) << "Render URL overlaps between bids: "
-                              << protected_app_signals_ad_bid.render();
+      PS_LOG(ERROR, log_context) << "Render URL overlaps between bids: "
+                                 << protected_app_signals_ad_bid.render();
     }
   }
 }
@@ -548,13 +551,14 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
     const std::shared_ptr<std::string>& auction_config,
     absl::string_view bid_metadata,
     server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, const bool enable_debug_reporting) {
+    const bool enable_adtech_code_logging, const bool enable_debug_reporting,
+    absl::string_view code_version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest score_ad_request;
   // TODO(b/250893468) Revisit dispatch id.
   score_ad_request.id = ad_render_url;
   // TODO(b/258790164) Update after code is fetched periodically.
-  score_ad_request.version_string = "v1";
+  score_ad_request.version_string = code_version;
   score_ad_request.handler_name = DispatchHandlerFunctionWithSellerWrapper;
 
   score_ad_request.input = std::vector<std::shared_ptr<std::string>>(

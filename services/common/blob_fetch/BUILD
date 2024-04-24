@@ -30,6 +30,7 @@ cc_library(
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
         "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 

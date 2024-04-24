@@ -35,7 +35,7 @@ struct BuyerServiceEndpoint {
 // BuyerFrontendAsyncClientFactory constructor expects. Used to parse the
 // startup config parameter in seller_frontend_main. Parsing may fail, in which
 // case the server should not start, hence the StatusOr. If the input to Factory
-// constructor changes, so should ths function.
+// constructor changes, so should this function.
 absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain);
 
@@ -44,6 +44,14 @@ std::vector<std::string> FetchIgOwnerList(
     const absl::StatusOr<
         absl::flat_hash_map<std::string, BuyerServiceEndpoint>>&
         ig_owner_to_bfe_domain_map);
+
+// Parses a JSON string containing a map of sellers to cloud platforms
+// into an absl::flat_hash_map for getComponentAuctionCiphertexts.
+// Used to parse the startup config parameter in seller_frontend_main.
+// Returns parsing error if string is invalid.
+absl::StatusOr<absl::flat_hash_map<std::string, server_common::CloudPlatform>>
+ParseSellerToCloudPlatformInMap(
+    absl::string_view seller_to_cloud_platform_json);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

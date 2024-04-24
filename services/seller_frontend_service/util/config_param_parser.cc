@@ -16,6 +16,7 @@
 #include "services/seller_frontend_service/util/config_param_parser.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <rapidjson/error/en.h>
@@ -28,6 +29,22 @@
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+namespace {
+absl::StatusOr<server_common::CloudPlatform> StringToCloudPlatform(
+    absl::string_view cloud_platform) {
+  if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
+    return server_common::CloudPlatform::kGcp;
+  } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
+    return server_common::CloudPlatform::kAws;
+  } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
+    return server_common::CloudPlatform::kLocal;
+  } else {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid value for cloud platform: ", cloud_platform));
+  }
+}
+}  // namespace
 
 absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
 ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
@@ -83,16 +100,8 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
     PS_ASSIGN_OR_RETURN(
         std::string cloud_platform,
         GetStringMember(buyer_service_endpoint_value, "cloudPlatform"));
-    if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kGcp;
-    } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kAws;
-    } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kLocal;
-    } else {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "Invalid value for BFE endpoint cloud platform: ", cloud_platform));
-    }
+    PS_ASSIGN_OR_RETURN(bfe_endpoint.cloud_platform,
+                        StringToCloudPlatform(cloud_platform));
 
     auto [it_2, inserted] =
         ig_owner_to_bfe_endpoint_map.try_emplace(ig_owner, bfe_endpoint);
@@ -122,6 +131,54 @@ std::vector<std::string> FetchIgOwnerList(
   }
 
   return ig_list;
+}
+
+absl::StatusOr<absl::flat_hash_map<std::string, server_common::CloudPlatform>>
+ParseSellerToCloudPlatformInMap(
+    absl::string_view seller_to_cloud_platform_json) {
+  absl::flat_hash_map<std::string, server_common::CloudPlatform>
+      seller_to_cloud_platform;
+  if (seller_to_cloud_platform_json.empty()) {
+    return seller_to_cloud_platform;
+  }
+  rapidjson::Document seller_to_cloud_platform_json_d;
+  rapidjson::ParseResult parse_result =
+      seller_to_cloud_platform_json_d.Parse<rapidjson::kParseFullPrecisionFlag>(
+          seller_to_cloud_platform_json.data());
+  if (parse_result.IsError()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Malformed Seller to CloudPlatform map, error: ",
+                     rapidjson::GetParseError_En(parse_result.Code())));
+  }
+
+  for (rapidjson::Value::MemberIterator itr =
+           seller_to_cloud_platform_json_d.MemberBegin();
+       itr != seller_to_cloud_platform_json_d.MemberEnd(); ++itr) {
+    if (!itr->name.IsString()) {
+      return absl::InvalidArgumentError(
+          "Expected Seller identifier string in key.");
+    }
+
+    if (!itr->value.IsString()) {
+      return absl::InvalidArgumentError(
+          "Expected cloud platform string in value.");
+    }
+
+    std::string seller_name = itr->name.GetString();
+    if (seller_name.empty()) {
+      return absl::InvalidArgumentError("Encountered empty Seller Name.");
+    }
+    PS_ASSIGN_OR_RETURN(server_common::CloudPlatform platform,
+                        StringToCloudPlatform(itr->value.GetString()));
+    auto [inserted_itr, inserted_bool] =
+        seller_to_cloud_platform.try_emplace(std::move(seller_name), platform);
+    if (!inserted_bool) {
+      return absl::InvalidArgumentError(
+          "Entry not inserted into Seller->Cloud platform map, check for "
+          "duplicate entries.");
+    }
+  }
+  return seller_to_cloud_platform;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -23,18 +23,13 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-constexpr char kFeatureLogging[] = "enable_logging";
-constexpr char kFeatureDebugUrlGeneration[] = "enable_debug_url_generation";
-
-constexpr char kFeatureDisabled[] = "false";
-constexpr char kFeatureEnabled[] = "true";
-
 inline constexpr char kReportWinWrapperNamePlaceholder[] =
     "$reportWinWrapperName";
 inline constexpr char kExtraArgs[] = "$extraArgs";
 inline constexpr char kSuffix[] = "$suffix";
 inline constexpr char kProtectedAppSignalsTag[] = "ProtectedAppSignals";
-inline constexpr char kEgressFeaturesTag[] = "egressFeatures";
+inline constexpr char kEgressPayloadTag[] =
+    "egressPayload, temporaryUnlimitedEgressPayload";
 inline constexpr char kReportWinCodePlaceholder[] = "$reportWinCode";
 inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
 
@@ -152,7 +147,9 @@ inline constexpr absl::string_view kReportingEntryFunction =
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
+          buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        }
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -160,6 +157,9 @@ inline constexpr absl::string_view kReportingEntryFunction =
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
+          buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
+        }
         // Absence of interest group indicates that this is a protected app
         // signals ad.
         if (buyerReportingMetadata.enableProtectedAppSignals &&
@@ -267,10 +267,6 @@ std::string GetSellerWrappedCode(
     const absl::flat_hash_map<std::string, std::string>& buyer_origin_code_map,
     const absl::flat_hash_map<std::string, std::string>&
         protected_app_signals_buyer_origin_code_map);
-
-// Returns a JSON string for feature flags to be used by the wrapper script.
-std::string GetFeatureFlagJson(bool enable_logging,
-                               bool enable_debug_url_generation);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

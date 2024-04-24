@@ -51,7 +51,6 @@ inline constexpr char kNoAdsWithValidScoringSignals[] =
     "No ads with valid scoring signals.";
 inline constexpr char kNoValidComponentAuctions[] =
     "No component auction results in request.";
-
 // An aggregate of the data we track when scoring all the ads.
 struct ScoringData {
   // Index of the most desirable ad. This helps us to set the overall response
@@ -147,74 +146,17 @@ class ScoreAdsReactor
   void DispatchReportingRequestForPA(
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
-      const BuyerReportingMetadata& buyer_reporting_metadata) {
-    ReportingDispatchRequestData dispatch_request_data = {
-        .handler_name = kReportingDispatchHandlerFunctionName,
-        .auction_config = auction_config,
-        .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-        .publisher_hostname = raw_request_.publisher_hostname(),
-        .log_context = log_context_,
-        .buyer_reporting_metadata = buyer_reporting_metadata};
-    if (auction_scope_ ==
-        AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
-      dispatch_request_data.component_reporting_metadata = {
-          .top_level_seller = raw_request_.top_level_seller(),
-          .component_seller = raw_request_.seller()};
-    }
-    if (winning_ad_score.bid() > 0) {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.bid();
-    } else {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.buyer_bid();
-    }
-    DispatchReportingRequest(dispatch_request_data);
-  }
+      const BuyerReportingMetadata& buyer_reporting_metadata);
 
   void DispatchReportingRequestForPAS(
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata,
-      std::string_view egress_features) {
-    DispatchReportingRequest(
-        {.handler_name = kReportingProtectedAppSignalsFunctionName,
-         .auction_config = auction_config,
-         .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-         .publisher_hostname = raw_request_.publisher_hostname(),
-         .log_context = log_context_,
-         .buyer_reporting_metadata = buyer_reporting_metadata,
-         .egress_features = egress_features});
-  }
+      std::string_view egress_payload,
+      absl::string_view temporary_egress_payload);
 
   void DispatchReportingRequest(
-      const ReportingDispatchRequestData& dispatch_request_data) {
-    ReportingDispatchRequestConfig dispatch_request_config = {
-        .enable_report_win_url_generation = enable_report_win_url_generation_,
-        .enable_protected_app_signals = enable_protected_app_signals_,
-        .enable_report_win_input_noising = enable_report_win_input_noising_,
-        .enable_adtech_code_logging = enable_adtech_code_logging_};
-    DispatchRequest dispatch_request = GetReportingDispatchRequest(
-        dispatch_request_config, dispatch_request_data);
-    dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
-
-    std::vector<DispatchRequest> dispatch_requests = {dispatch_request};
-    auto status = dispatcher_.BatchExecute(
-        dispatch_requests,
-        [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
-          ReportingCallback(result);
-        });
-
-    if (!status.ok()) {
-      std::string original_request;
-      google::protobuf::TextFormat::PrintToString(raw_request_,
-                                                  &original_request);
-      PS_VLOG(1, log_context_)
-          << "Reporting execution request failed for batch: "
-          << original_request
-          << status.ToString(absl::StatusToStringMode::kWithEverything);
-      EncryptAndFinishOK();
-    }
-  }
+      const ReportingDispatchRequestData& dispatch_request_data);
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
 
@@ -264,9 +206,11 @@ class ScoreAdsReactor
                       absl::string_view ad_with_bid_currency,
                       absl::string_view interest_group_name,
                       absl::string_view interest_group_owner,
+                      absl::string_view interest_group_origin,
                       const rapidjson::Document& response_json, AdType ad_type,
                       ScoreAdsResponse::AdScore& score_ads_response,
-                      ScoringData& scoring_data);
+                      ScoringData& scoring_data,
+                      const std::string& dispatch_response_id);
 
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's
@@ -288,7 +232,9 @@ class ScoreAdsReactor
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
 
-  std::vector<std::unique_ptr<ScoreAdsResponse::AdScore>> ad_scores_;
+  // Used for debug reporting. Keyed on Roma dispatch ID.
+  absl::flat_hash_map<std::string, std::unique_ptr<ScoreAdsResponse::AdScore>>
+      ad_scores_;
 
   // Flags needed to be passed as input to the code which wraps AdTech provided
   // code.
@@ -305,6 +251,9 @@ class ScoreAdsReactor
   // Impacts the creation of scoreAd input params and
   // parsing of scoreAd output.
   AuctionScope auction_scope_;
+
+  // Specifies which verison of scoreAd to use for this request.
+  absl::string_view code_version_;
 
   google::protobuf::RepeatedPtrField<std::string>
   GetEmptyAdComponentRenderUrls() {

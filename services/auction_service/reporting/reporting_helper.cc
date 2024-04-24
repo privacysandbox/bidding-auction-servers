@@ -17,13 +17,16 @@
 #include <utility>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "rapidjson/document.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/feature_flags.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/post_auction_signals.h"
 #include "services/common/util/reporting_util.h"
@@ -157,6 +160,26 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
   if (bid > -1) {
     document.AddMember(kBid, bid, document.GetAllocator());
   }
+  if (!dispatch_request_data.post_auction_signals.winning_bid_currency
+           .empty()) {
+    rapidjson::Value winning_bid_currency_value;
+    winning_bid_currency_value.SetString(
+        dispatch_request_data.post_auction_signals.winning_bid_currency.c_str(),
+        document.GetAllocator());
+    document.AddMember(kWinningBidCurrencyTag, winning_bid_currency_value,
+                       document.GetAllocator());
+  }
+  if (!dispatch_request_data.post_auction_signals
+           .highest_scoring_other_bid_currency.empty()) {
+    rapidjson::Value highest_scoring_other_bid_currency_value;
+    highest_scoring_other_bid_currency_value.SetString(
+        dispatch_request_data.post_auction_signals
+            .highest_scoring_other_bid_currency.c_str(),
+        document.GetAllocator());
+    document.AddMember(kHighestScoringOtherBidCurrencyTag,
+                       highest_scoring_other_bid_currency_value,
+                       document.GetAllocator());
+  }
   double desirability = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.post_auction_signals.winning_score);
@@ -188,6 +211,16 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
     if (modified_bid > -1) {
       document.AddMember(kModifiedBid, modified_bid, document.GetAllocator());
     }
+    if (!dispatch_request_data.component_reporting_metadata
+             .modified_bid_currency.empty()) {
+      rapidjson::Value modified_bid_currency;
+      modified_bid_currency.SetString(
+          dispatch_request_data.component_reporting_metadata
+              .modified_bid_currency.c_str(),
+          document.GetAllocator());
+      document.AddMember(kModifiedBidCurrencyTag, modified_bid_currency,
+                         document.GetAllocator());
+    }
     document.AddMember(kComponentSeller, component_seller,
                        document.GetAllocator());
   }
@@ -216,7 +249,7 @@ std::string GetBuyerMetadataJson(
     buyer_signals_obj = ParseJsonString(
         dispatch_request_data.buyer_reporting_metadata.buyer_signals);
     if (!buyer_signals_obj.ok()) {
-      PS_VLOG(1, dispatch_request_data.log_context)
+      PS_LOG(ERROR, dispatch_request_data.log_context)
           << "Error parsing buyer signals to Json object";
     } else {
       buyer_reporting_signals_obj.AddMember(
@@ -249,7 +282,7 @@ std::string GetBuyerMetadataJson(
         kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
   if (dispatch_request_data.buyer_reporting_metadata.recency.has_value()) {
-    PS_VLOG(1, dispatch_request_data.log_context)
+    PS_VLOG(kInfoMsg, dispatch_request_data.log_context)
         << "BuyerReportingMetadata: Recency:"
         << dispatch_request_data.buyer_reporting_metadata.recency.value();
     long recency =
@@ -291,19 +324,31 @@ std::string GetBuyerMetadataJson(
         kSellerTag, std::move(seller),
         buyer_reporting_signals_obj.GetAllocator());
   }
-  rapidjson::Value interest_group_name;
-  interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
-                                    .interest_group_name.c_str(),
-                                buyer_reporting_signals_obj.GetAllocator());
-  buyer_reporting_signals_obj.AddMember(
-      kInterestGroupName, std::move(interest_group_name),
-      buyer_reporting_signals_obj.GetAllocator());
   double ad_cost = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.buyer_reporting_metadata.ad_cost);
   if (ad_cost > -1) {
     buyer_reporting_signals_obj.AddMember(
         kAdCostTag, ad_cost, buyer_reporting_signals_obj.GetAllocator());
+  }
+  // if buyer_reporting_id is present, interestGroupName will not be set.
+  rapidjson::Value buyer_reporting_id;
+  rapidjson::Value interest_group_name;
+  if (!dispatch_request_data.buyer_reporting_metadata.buyer_reporting_id
+           .empty()) {
+    buyer_reporting_id.SetString(dispatch_request_data.buyer_reporting_metadata
+                                     .buyer_reporting_id.c_str(),
+                                 buyer_reporting_signals_obj.GetAllocator());
+    buyer_reporting_signals_obj.AddMember(
+        kBuyerReportingIdTag, std::move(buyer_reporting_id),
+        buyer_reporting_signals_obj.GetAllocator());
+  } else {
+    interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
+                                      .interest_group_name.c_str(),
+                                  buyer_reporting_signals_obj.GetAllocator());
+    buyer_reporting_signals_obj.AddMember(
+        kInterestGroupName, std::move(interest_group_name),
+        buyer_reporting_signals_obj.GetAllocator());
   }
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
@@ -347,8 +392,16 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)] =
       std::make_shared<std::string>(buyer_reporting_metadata_json);
   if (dispatch_request_config.enable_protected_app_signals) {
-    input[ReportingArgIndex(ReportingArgs::kEgressFeatures)] =
-        std::make_shared<std::string>(dispatch_request_data.egress_features);
+    input[ReportingArgIndex(ReportingArgs::kEgressPayload)] =
+        std::make_shared<std::string>(dispatch_request_data.egress_payload);
+    if (absl::GetFlag(FLAGS_enable_temporary_unlimited_egress)) {
+      input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
+          std::make_shared<std::string>(
+              dispatch_request_data.temporary_egress_payload);
+    } else {
+      input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
+          std::make_shared<std::string>("");
+    }
   }
 
   PS_VLOG(2, dispatch_request_data.log_context)
@@ -372,7 +425,7 @@ DispatchRequest GetReportingDispatchRequest(
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
       .id = dispatch_request_data.post_auction_signals.winning_ad_render_url,
-      .version_string = kDispatchRequestVersion,
+      .version_string = kReportingBlobVersion,
       .handler_name = dispatch_request_data.handler_name,
       .input =
           GetReportingInput(dispatch_request_config, dispatch_request_data),

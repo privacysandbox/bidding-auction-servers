@@ -14,12 +14,21 @@
 
 // Inference sidecar binary.
 
+#include <google/protobuf/util/json_util.h>
+
 #include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "proto/inference_sidecar.pb.h"
 
 #include "grpc_sidecar.h"
 
 int main(int argc, char** argv) {
-  CHECK(!privacy_sandbox::bidding_auction_servers::inference::Run().ok())
+  privacy_sandbox::bidding_auction_servers::inference::
+      InferenceSidecarRuntimeConfig config;
+  CHECK(google::protobuf::util::JsonStringToMessage(argv[0], &config).ok())
+      << "Could not parse inference sidecar runtime config JsonString to a "
+         "proto message.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::Run(config).ok())
       << "Unsuccessful run of the inference sidecar.";
   return 0;
 }

@@ -166,11 +166,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                          "support enabled";
   }
 
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << enable_protected_app_signals;
-  PS_VLOG(1) << "Protected Audience support enabled on the service: "
-             << enable_protected_audience;
-  PS_VLOG(1) << "Successfully constructed the config client.\n";
+  PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
+               << enable_protected_app_signals;
+  PS_LOG(INFO) << "Protected Audience support enabled on the service: "
+               << enable_protected_audience;
+  PS_LOG(INFO) << "Successfully constructed the config client.\n";
   return config_client;
 }
 
@@ -284,7 +284,7 @@ absl::Status RunServer() {
   if (server == nullptr) {
     return absl::UnavailableError("Error starting Server.");
   }
-  PS_VLOG(1) << "Server listening on " << server_address;
+  PS_LOG(INFO) << "Server listening on " << server_address;
 
   // Wait for the server to shut down. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.

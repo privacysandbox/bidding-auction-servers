@@ -62,6 +62,7 @@ AuctionResult MapBasicScoreFieldsToAuctionResult(
   auction_result.set_score(high_score.desirability());
   auction_result.set_interest_group_name(high_score.interest_group_name());
   auction_result.set_interest_group_owner(high_score.interest_group_owner());
+  auction_result.set_interest_group_origin(high_score.interest_group_origin());
   auction_result.set_ad_render_url(high_score.render());
   auction_result.mutable_win_reporting_urls()
       ->mutable_buyer_reporting_urls()
@@ -436,8 +437,11 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
-  // Should not populate bid value for single seller auction.
+  // bid val is only for component and auction and will not be parsed or encoded
+  // for single seller auction.
   expected.clear_bid();
+  // IG Origin is Android exclusive and will not be parsed or encoded for web.
+  expected.clear_interest_group_origin();
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),
                                             this->bidding_group_map_.end());
   auto decrypted_message = MakeDecryptedMessage();

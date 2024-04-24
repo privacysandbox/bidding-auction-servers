@@ -151,19 +151,10 @@ SellerCodeFetchManager::InitializeUrlCodeFetch() {
 }
 
 absl::Status SellerCodeFetchManager::InitBucketClient() {
-  auto result = blob_storage_client_->Init();
-  if (!result.Successful()) {
-    return absl::UnavailableError(
-        absl::StrFormat("Failed to init BlobStorageClient (status_code: %s)\n",
-                        GetErrorMessage(result.status_code)));
-  }
-
-  result = blob_storage_client_->Run();
-  if (!result.Successful()) {
-    return absl::UnavailableError(
-        absl::StrFormat("Failed to run BlobStorageClient (status_code: %s)\n",
-                        GetErrorMessage(result.status_code)));
-  }
+  PS_RETURN_IF_ERROR(blob_storage_client_->Init()).SetPrepend()
+      << "Failed to init BlobStorageClient: ";
+  PS_RETURN_IF_ERROR(blob_storage_client_->Run()).SetPrepend()
+      << "Failed to run BlobStorageClient: ";
   return absl::OkStatus();
 }
 

@@ -21,21 +21,11 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "services/bidding_service/constants.h"
+#include "services/common/util/reporting_util.h"
 #include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
-void AppendFeatureFlagValue(std::string& feature_flags,
-                            absl::string_view feature_name,
-                            bool is_feature_enabled) {
-  absl::string_view enable_feature = kFeatureDisabled;
-  if (is_feature_enabled) {
-    enable_feature = kFeatureEnabled;
-  }
-  feature_flags.append(
-      absl::StrCat("\"", feature_name, "\": ", enable_feature));
-}
 
 std::string WasmBytesToJavascript(absl::string_view wasm_bytes) {
   std::string hex_array = "";
@@ -57,7 +47,8 @@ absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
     case AuctionType::kProtectedAppSignals:
       return kProtectedAppSignalsGenerateBidsArgs;
     default:
-      PS_VLOG(1) << "Unsupported auction type: " << absl::StrCat(auction_type);
+      PS_LOG(ERROR) << "Unsupported auction type: "
+                    << absl::StrCat(auction_type);
       return "";
   }
 }
@@ -84,14 +75,4 @@ std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
                       ad_tech_js);
 }
 
-std::string GetFeatureFlagJson(bool enable_logging,
-                               bool enable_debug_url_generation) {
-  std::string feature_flags = "{";
-  AppendFeatureFlagValue(feature_flags, kFeatureLogging, enable_logging);
-  feature_flags.append(",");
-  AppendFeatureFlagValue(feature_flags, kFeatureDebugUrlGeneration,
-                         enable_debug_url_generation);
-  feature_flags.append("}");
-  return feature_flags;
-}
 }  // namespace privacy_sandbox::bidding_auction_servers

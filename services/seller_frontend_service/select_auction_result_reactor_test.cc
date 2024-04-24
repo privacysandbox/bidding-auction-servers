@@ -161,6 +161,30 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
   scoring_done.WaitForNotification();
 }
 
+TYPED_TEST(SelectAuctionResultReactorTest, AbortsAuctionWithDuplicateResults) {
+  absl::Notification scoring_done;
+  this->SetupComponentAuctionResults(1);
+  // Add duplicate
+  const auto& original_car = this->request_.component_auction_results(0);
+  auto* duplicate_car =
+      this->request_.mutable_component_auction_results()->Add();
+  duplicate_car->set_key_id(original_car.key_id());
+  duplicate_car->set_auction_result_ciphertext(
+      original_car.auction_result_ciphertext());
+
+  EXPECT_CALL(this->scoring_client_, ExecuteInternal).Times(0);
+  ClientRegistry clients = {
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
+      this->scoring_client_,
+      BuyerFrontEndAsyncClientFactoryMock(),
+      this->key_fetcher_manager_,
+      &this->crypto_client_,
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>())};
+  auto response = RunRequest(this->config_, clients, this->request_);
+  EXPECT_EQ(response.auction_result_ciphertext().size(), 0);
+}
+
 TYPED_TEST(SelectAuctionResultReactorTest,
            ReturnsErrorForNoValidComponentAuctions) {
   this->SetupComponentAuctionResults(0);

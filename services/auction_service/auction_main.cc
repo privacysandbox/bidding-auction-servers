@@ -33,22 +33,24 @@
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
 #include "services/auction_service/auction_code_fetch_config.pb.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/runtime_flags.h"
+#include "services/auction_service/seller_code_fetch_manager.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 #include "src/public/cpio/interface/cpio.h"
 #include "src/util/rlimit_core_config.h"
 #include "src/util/status_macro/status_macros.h"
@@ -76,6 +78,7 @@ ABSL_FLAG(std::optional<bool>, enable_report_win_input_noising, std::nullopt,
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using ::google::scp::cpio::BlobStorageClientFactory;
 using ::google::scp::cpio::Cpio;
 using ::google::scp::cpio::CpioOptions;
 using ::google::scp::cpio::LogOption;
@@ -143,43 +146,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   server_common::log::PS_VLOG_IS_ON(
       0, config_client.GetIntParameter(PS_VERBOSITY));
 
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  PS_VLOG(1) << "Successfully constructed the config client.";
+  PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
+               << config_client.GetBooleanParameter(
+                      ENABLE_PROTECTED_APP_SIGNALS);
+  PS_LOG(INFO) << "Successfully constructed the config client.";
   return config_client;
-}
-
-inline void CollectBuyerOriginEndpoints(
-    const google::protobuf::Map<std::string, std::string>&
-        buyer_reporting_code_url,
-    std::vector<std::string>& buyer_origins,
-    std::vector<std::string>& endpoints) {
-  for (const auto& [buyer_origin, report_win_url] : buyer_reporting_code_url) {
-    buyer_origins.push_back(buyer_origin);
-    endpoints.push_back(report_win_url);
-  }
-}
-
-// Gets code blob mapping from buyer origin => code blob fetched using the code
-// fetcher. Note: Caller needs to ensure that the `buyer_origins` and
-// `ad_tech_code_blobs` are in sync with each other and the `first` and `last`
-// indices are in bound.
-absl::flat_hash_map<std::string, std::string> GetCodeBlobMap(
-    int first, int last, const std::vector<std::string>& buyer_origins,
-    const std::vector<std::string>& ad_tech_code_blobs,
-    absl::string_view data_type) {
-  absl::flat_hash_map<std::string, std::string> code_blob_map;
-  for (unsigned int ind = first; ind < last; ind++) {
-    if (auto [unused_it, inserted] = code_blob_map.try_emplace(
-            buyer_origins[ind], ad_tech_code_blobs[ind]);
-        !inserted) {
-      PS_VLOG(0) << "Malformed config for '" << data_type
-                 << "': Possible duplicate entries for buyer: "
-                 << buyer_origins[ind]
-                 << ", existing map size: " << code_blob_map.size();
-    }
-  }
-  return code_blob_map;
 }
 
 // Brings up the gRPC AuctionService on FLAGS_port.
@@ -209,10 +180,6 @@ absl::Status RunServer() {
   std::unique_ptr<server_common::Executor> executor =
       std::make_unique<server_common::EventEngineExecutor>(
           grpc_event_engine::experimental::CreateEventEngine());
-  std::unique_ptr<HttpFetcherAsync> http_fetcher =
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
-
-  std::unique_ptr<CodeFetcherInterface> code_fetcher;
 
   // Convert Json string into a AuctionCodeBlobFetcherConfig proto
   auction_service::SellerCodeFetchConfig code_fetch_proto;
@@ -231,79 +198,27 @@ absl::Status RunServer() {
       code_fetch_proto.enable_report_result_url_generation();
   bool enable_report_win_url_generation =
       code_fetch_proto.enable_report_win_url_generation();
-  std::vector<std::string> endpoints;
-  std::vector<std::string> buyer_origins;
-  CollectBuyerOriginEndpoints(code_fetch_proto.buyer_report_win_js_urls(),
-                              buyer_origins, endpoints);
-  const int num_protected_audience_endpoints = buyer_origins.size();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  if (enable_protected_app_signals) {
-    CollectBuyerOriginEndpoints(
-        code_fetch_proto.protected_app_signals_buyer_report_win_js_urls(),
-        buyer_origins, endpoints);
-  }
 
-  // Starts periodic code blob fetching from an arbitrary url only if js_url is
-  // specified
-  std::string js_url = code_fetch_proto.auction_js_url();
-  if (!js_url.empty()) {
-    endpoints.push_back(js_url);
-    auto wrap_code =
-        [num_protected_audience_endpoints, enable_protected_app_signals,
-         enable_report_result_url_generation, enable_report_win_url_generation,
-         buyer_origins](const std::vector<std::string>& ad_tech_code_blobs) {
-          CHECK(buyer_origins.size() == ad_tech_code_blobs.size() - 1)
-              << "Error fetching code blobs from buyer. Buyer size:"
-              << buyer_origins.size()
-              << " and blobs count:" << ad_tech_code_blobs.size();
-          // Collect code blobs for protected audience.
-          auto buyer_origin_code_map = GetCodeBlobMap(
-              /*first=*/0, num_protected_audience_endpoints, buyer_origins,
-              ad_tech_code_blobs, "buyer_report_win_js_urls");
-          // Collect code blobs for protected app signals.
-          absl::flat_hash_map<std::string, std::string>
-              protected_app_signals_buyer_origin_code_map;
-          if (enable_protected_app_signals) {
-            protected_app_signals_buyer_origin_code_map = GetCodeBlobMap(
-                num_protected_audience_endpoints, buyer_origins.size(),
-                buyer_origins, ad_tech_code_blobs,
-                "protected_app_signals_buyer_report_win_js_urls");
-          }
-          return GetSellerWrappedCode(
-              ad_tech_code_blobs.at(ad_tech_code_blobs.size() - 1),
-              enable_report_result_url_generation, enable_protected_app_signals,
-              enable_report_win_url_generation, buyer_origin_code_map,
-              protected_app_signals_buyer_origin_code_map);
-        };
-
-    code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-        endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
-        http_fetcher.get(), &dispatcher, executor.get(),
-        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()),
-        std::move(wrap_code), "v1");
-
-    code_fetcher->Start();
-  } else if (!code_fetch_proto.auction_js_path().empty()) {
-    std::ifstream ifs(code_fetch_proto.auction_js_path().data());
-    std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
-                                 (std::istreambuf_iterator<char>()));
-
-    adtech_code_blob = GetSellerWrappedCode(
-        adtech_code_blob, enable_report_result_url_generation, false, {});
-
-    PS_RETURN_IF_ERROR(dispatcher.LoadSync("v1", adtech_code_blob))
-        << "Could not load Adtech untrusted code for scoring.";
-  } else {
-    return absl::UnavailableError(
-        "Code fetching config requires either a path or url.");
-  }
+  MultiCurlHttpFetcherAsync http_fetcher =
+      MultiCurlHttpFetcherAsync(executor.get());
+  HttpFetcherAsync* seller_udf_fetcher = &http_fetcher;
+  HttpFetcherAsync* buyer_reporting_udf_fetcher = &http_fetcher;
+  SellerCodeFetchManager code_fetch_manager(
+      BlobStorageClientFactory::Create(), executor.get(), seller_udf_fetcher,
+      buyer_reporting_udf_fetcher, &dispatcher, code_fetch_proto,
+      enable_protected_app_signals);
+  PS_RETURN_IF_ERROR(code_fetch_manager.Init())
+      << "Failed to initialize UDF fetch.";
 
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
 
   InitTelemetry<ScoreAdsRequest>(config_util, config_client, metric::kAs);
 
+  // TODO(b/334909636) : AsyncReporter should not own HttpFetcher,
+  // this needs to be decoupled so we can test different configurations.
   std::unique_ptr<AsyncReporter> async_reporter =
       std::make_unique<AsyncReporter>(
           std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
@@ -326,6 +241,11 @@ absl::Status RunServer() {
             runtime_config);
       };
 
+  std::string default_code_version =
+      code_fetch_proto.fetch_mode() == auction_service::FETCH_MODE_BUCKET
+          ? code_fetch_proto.auction_js_bucket_default_blob()
+          : kScoreAdBlobVersion;
+
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
       .roma_timeout_ms =
@@ -341,7 +261,8 @@ absl::Status RunServer() {
       .max_allowed_size_debug_url_bytes =
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
       .max_allowed_size_all_debug_urls_kb =
-          config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB)};
+          config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB),
+      .default_code_version = default_code_version};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),
@@ -376,12 +297,11 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  PS_VLOG(1) << "Server listening on " << server_address;
+  PS_LOG(INFO) << "Server listening on " << server_address;
   server->Wait();
   // Ends periodic code blob fetching from an arbitrary url.
-  if (code_fetcher) {
-    code_fetcher->End();
-  }
+  PS_RETURN_IF_ERROR(code_fetch_manager.End())
+      << "Error shutting down UDF fetcher.";
   return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers
