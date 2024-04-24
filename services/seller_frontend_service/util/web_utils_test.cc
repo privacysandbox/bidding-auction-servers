@@ -68,6 +68,8 @@ inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
 inline constexpr char kUsdIso[] = "USD";
+inline constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+
 server_common::log::ContextImpl log_context{
     {}, server_common::ConsentedDebugConfiguration()};
 
@@ -714,6 +716,7 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
       ->mutable_component_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.set_buyer_reporting_id(kTestBuyerReportingId);
   // Setup a bidding group map.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
       bidding_group_map;
@@ -777,6 +780,7 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
                 .interaction_reporting_urls()
                 .at(kTestEvent1),
             kTestInteractionUrl1);
+  EXPECT_EQ(decoded_result->buyer_reporting_id(), kTestBuyerReportingId);
 }
 
 TEST(ChromeResponseUtils, VerifyCborEncoding) {
@@ -1311,6 +1315,63 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncodingNoBidCurrency) {
       "687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d656369"
       "673172696e74657265737447726f75704f776e65727268747470733a2f2f616474656368"
       "2e636f6d");
+}
+
+TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
+  ScoreAdsResponse::AdScore winner;
+  winner.set_interest_group_owner("https://adtech.com");
+  winner.set_interest_group_name("ig1");
+  winner.set_desirability(156671.781);
+  // Should accomplish nothing as bid should not be included in the response for
+  // non-component auction.
+  winner.set_buyer_bid(0.195839122);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(kTestReportWinUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.set_buyer_reporting_id(kTestBuyerReportingId);
+  const std::string interest_group_owner_1 = "ig1";
+  const std::string interest_group_owner_2 = "zi";
+  const std::string interest_group_owner_3 = "ih1";
+  AuctionResult::InterestGroupIndex indices;
+  indices.add_index(7);
+  indices.add_index(2);
+  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
+      bidding_group_map;
+  bidding_group_map.try_emplace(interest_group_owner_1, indices);
+  bidding_group_map.try_emplace(interest_group_owner_2, indices);
+  bidding_group_map.try_emplace(interest_group_owner_3, indices);
+  bidding_group_map.try_emplace("owner1", std::move(indices));
+
+  auto ret = Encode(std::move(winner), bidding_group_map, std::nullopt,
+                    [](auto error) {});
+  ASSERT_TRUE(ret.ok()) << ret.status();
+  // Conversion can be verified at: https://cbor.me/
+  EXPECT_EQ(absl::BytesToHexString(*ret),
+            "a96573636f7265fa4818fff26769734368616666f46a636f6d706f6e656e747"
+            "3806b616452656e64657255524c606d62696464696e6747726f757073a4627a6"
+            "98207026369673182070263696831820702666f776e657231820702706275796"
+            "5725265706f7274696e674964747465737442757965725265706f7274696e674"
+            "9647077696e5265706f7274696e6755524c73a27262757965725265706f72746"
+            "96e6755524c73a26c7265706f7274696e6755524c74687474703a2f2f7265706"
+            "f727457696e2e636f6d7818696e746572616374696f6e5265706f7274696e675"
+            "5524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d781b746f7"
+            "04c6576656c53656c6c65725265706f7274696e6755524c73a26c7265706f727"
+            "4696e6755524c77687474703a2f2f7265706f7274526573756c742e636f6d781"
+            "8696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7"
+            "0687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e6"
+            "16d656369673172696e74657265737447726f75704f776e65727268747470733"
+            "a2f2f6164746563682e636f6d");
 }
 
 MATCHER_P(ProtoEq, value, "") {

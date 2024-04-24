@@ -28,6 +28,7 @@
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.grpc.pb.h"
@@ -75,12 +76,20 @@ class InferenceServiceImpl final : public InferenceService::Service {
 
 }  // namespace
 
-absl::Status Run() {
+absl::Status Run(const InferenceSidecarRuntimeConfig& config) {
   SandboxWorker worker;
   grpc::ServerBuilder builder;
+  // Set the max receive size to unlimited; The default max size is only 4MB.
+  builder.SetMaxReceiveMessageSize(-1);
 
+  if (!config.module_name().empty() &&
+      config.module_name() != ModuleInterface::GetModuleVersion()) {
+    return absl::FailedPreconditionError(
+        absl::StrCat("Expected inference module: ", config.module_name(),
+                     ", but got : ", ModuleInterface::GetModuleVersion()));
+  }
   auto server_impl =
-      std::make_unique<InferenceServiceImpl>(ModuleInterface::Create());
+      std::make_unique<InferenceServiceImpl>(ModuleInterface::Create(config));
   builder.RegisterService(server_impl.get());
   std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
   if (server == nullptr) {

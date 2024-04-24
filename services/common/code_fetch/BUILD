@@ -33,6 +33,7 @@ cc_library(
         ":code_fetcher_interface",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
         "//services/common/clients/http:http_fetcher_async",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -51,6 +52,7 @@ cc_library(
     deps = [
         ":code_fetcher_interface",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",

@@ -88,6 +88,9 @@ ABSL_FLAG(std::optional<bool>, buyer_egress_tls, std::nullopt,
 ABSL_FLAG(std::optional<std::string>, sfe_public_keys_endpoints, std::nullopt,
           "Endpoints serving set of public keys used for encryption across the "
           "supported cloud platforms");
+ABSL_FLAG(std::optional<std::string>, seller_cloud_platforms_map, std::nullopt,
+          "Seller partner cloud platforms. Can be empty."
+          "Enables requests to the getComponentAuctionCiphertexts RPC.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -158,6 +161,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_enable_protected_audience,
                         ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
+  config_client.SetFlag(FLAGS_seller_cloud_platforms_map,
+                        SELLER_CLOUD_PLATFORMS_MAP);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -175,11 +180,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     ABSL_LOG(WARNING) << "Neither protected audience nor protected app signals "
                          "is enabled";
   }
-  PS_VLOG(1) << "Protected Audience support enabled on the service: "
-             << enable_protected_audience;
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << enable_protected_app_signals;
-  PS_VLOG(1) << "Successfully constructed the config client.";
+  PS_LOG(INFO) << "Protected Audience support enabled on the service: "
+               << enable_protected_audience;
+  PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
+               << enable_protected_app_signals;
+  PS_LOG(INFO) << "Successfully constructed the config client.";
   return config_client;
 }
 
@@ -252,7 +257,7 @@ absl::Status RunServer() {
     return absl::UnavailableError("Error starting Server.");
   }
 
-  PS_VLOG(1) << "Server listening on " << server_address;
+  PS_LOG(INFO) << "Server listening on " << server_address;
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
   server->Wait();

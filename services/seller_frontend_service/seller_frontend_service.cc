@@ -23,17 +23,20 @@
 #include "services/common/clients/http_kv_server/seller/fake_seller_key_value_async_http_client.h"
 #include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
 #include "services/common/metric/server_definition.h"
+#include "services/common/util/auction_scope_util.h"
+#include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
 #include "services/seller_frontend_service/select_ad_reactor_invalid_client.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
+#include "services/seller_frontend_service/select_auction_result_reactor.h"
 #include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 // Factory method to get a reactor based on the request type.
-std::unique_ptr<SelectAdReactor> GetReactorForRequest(
+std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client) {
@@ -69,8 +72,26 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response) {
   LogCommonMetric(request, response);
-  auto reactor = GetReactorForRequest(context, request, response, clients_,
-                                      config_client_);
+  if (AuctionScope auction_scope = GetAuctionScope(*request);
+      auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
+    auto reactor = std::make_unique<SelectAuctionResultReactor>(
+        context, request, response, clients_, config_client_);
+    reactor->Execute();
+    return reactor.release();
+  }
+  std::unique_ptr<SelectAdReactor> reactor =
+      GetSelectAdReactor(context, request, response, clients_, config_client_);
+  reactor->Execute();
+  return reactor.release();
+}
+
+grpc::ServerUnaryReactor* SellerFrontEndService::GetComponentAuctionCiphertexts(
+    grpc::CallbackServerContext* context,
+    const GetComponentAuctionCiphertextsRequest* request,
+    GetComponentAuctionCiphertextsResponse* response) {
+  auto reactor = std::make_unique<GetComponentAuctionCiphertextsReactor>(
+      request, response, clients_.key_fetcher_manager_,
+      seller_cloud_platforms_map_);
   reactor->Execute();
   return reactor.release();
 }

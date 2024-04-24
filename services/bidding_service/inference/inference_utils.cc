@@ -34,6 +34,7 @@
 #include "absl/synchronization/mutex.h"
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "services/bidding_service/inference/inference_flags.h"
+#include "services/common/util/request_response_constants.h"
 #include "src/logger/request_context_logger.h"
 #include "src/roma/interface/roma.h"
 #include "src/util/status_macro/status_macros.h"
@@ -48,7 +49,8 @@ SandboxExecutor& Executor() {
 
   // TODO(b/317124648): Pass a SandboxExecutor object via Roma's `TMetadata`.
   static SandboxExecutor* executor = new SandboxExecutor(
-      *absl::GetFlag(FLAGS_inference_sidecar_binary_path), {""});
+      *absl::GetFlag(FLAGS_inference_sidecar_binary_path),
+      {*absl::GetFlag(FLAGS_inference_sidecar_runtime_config)});
   return *executor;
 }
 
@@ -135,7 +137,7 @@ void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper) {
   std::unique_ptr<InferenceService::StubInterface> stub =
       InferenceService::NewStub(InferenceChannel(executor));
 
-  PS_VLOG(1) << "RunInference input: " << payload;
+  PS_VLOG(kInfoMsg) << "RunInference input: " << payload;
   PredictRequest predict_request;
   predict_request.set_input(payload);
 
@@ -151,7 +153,7 @@ void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper) {
   }
   absl::Status status = server_common::ToAbslStatus(rpc_status);
   // TODO(b/321284008): Communicate inference failure with JS caller.
-  PS_VLOG(1) << "Response error: " << status.message();
+  PS_LOG(ERROR) << "Response error: " << status.message();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

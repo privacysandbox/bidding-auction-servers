@@ -53,7 +53,6 @@ using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse;
 using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataRequest;
 using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse;
 using ::google::scp::core::AsyncContext;
-using ::google::scp::core::ExecutionResult;
 using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;
 using ::google::scp::core::errors::GetErrorMessage;
@@ -89,7 +88,7 @@ TEST(PeriodicBucketFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
                 std::move(md));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -115,7 +114,7 @@ TEST(PeriodicBucketFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(dispatcher, LoadSync)
@@ -164,7 +163,7 @@ TEST(PeriodicBucketFetcherTest, LoadsAllBlobsInBucket) {
                 std::move(md2));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
@@ -185,7 +184,7 @@ TEST(PeriodicBucketFetcherTest, LoadsAllBlobsInBucket) {
             async_context.Finish();
 
             done_get_blob.DecrementCount();
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -245,13 +244,12 @@ TEST(PeriodicBucketFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
         async_context.response->mutable_blob_metadatas()->Add(std::move(md3));
         async_context.result = SuccessExecutionResult();
         async_context.Finish();
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
       .WillRepeatedly(
-          [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context)
-              -> ExecutionResult {
+          [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
             async_context.response = std::make_shared<GetBlobResponse>();
             if (async_context.request->blob_metadata().blob_name() ==
                 kSampleBlobName) {
@@ -262,11 +260,11 @@ TEST(PeriodicBucketFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
                   std::string(kSampleData2));
               async_context.result = SuccessExecutionResult();
             } else {
-              return FailureExecutionResult(SC_UNKNOWN);
+              return absl::UnknownError("");
             }
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -318,7 +316,7 @@ TEST(PeriodicBucketFetcherTest, FailsStartupIfNoBlobLoadedSuccessfully) {
                 std::move(md));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -344,7 +342,7 @@ TEST(PeriodicBucketFetcherTest, FailsStartupIfNoBlobLoadedSuccessfully) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(dispatcher, LoadSync)

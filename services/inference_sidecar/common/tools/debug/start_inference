@@ -112,6 +112,11 @@ export SERVER_START_CMD=$(cat << END
 /server \
 --inference_sidecar_binary_path="/inference_sidecar" \
 --inference_model_local_paths="/test_model" \
+--inference_sidecar_runtime_config='{
+      "num_interop_threads": 4,
+      "num_intraop_threads": 4
+      "module_name": "tensorflow_v2_14_0"
+    }' \
 --enable_bidding_service_benchmark="true" \
 --init_config_client="false" --port=50057 \
 --js_num_workers=4 \

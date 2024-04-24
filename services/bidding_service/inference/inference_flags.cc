@@ -35,3 +35,16 @@ ABSL_FLAG(std::optional<std::string>, inference_model_bucket_paths,
           std::nullopt,
           "Comma separated list of bucket paths. Used to specify a list of "
           "directories to fetch the blobs from.");
+// The JSON string should adhere to the following format:
+// {
+//    "num_interop_threads": <integer_value>,
+//    "num_intraop_threads": <integer_value>,
+//    "module_name": <string_value>,
+//    ...
+// }
+// where each property corresponds to a field of the
+// InferenceSidecarRuntimeConfig proto in
+// services/inference_sidecar/common/proto/inference_sidecar.proto.
+ABSL_FLAG(std::optional<std::string>, inference_sidecar_runtime_config,
+          std::nullopt,
+          "JSON string configurations for the inference sidecar runtime.");

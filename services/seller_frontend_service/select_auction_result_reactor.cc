@@ -229,7 +229,7 @@ void SelectAuctionResultReactor::Execute() {
       encapsulated_req, clients_.key_fetcher_manager_);
   // Could not decrypt PAI.
   if (!decrypt_req_status.ok()) {
-    PS_VLOG(1, log_context_)
+    PS_LOG(ERROR, log_context_)
         << "Error decrypting the protected "
         << (is_protected_auction_request_ ? "auction" : "audience")
         << " input ciphertext" << decrypt_req_status.status();
@@ -263,7 +263,7 @@ void SelectAuctionResultReactor::Execute() {
   // Validate PAI.
   request_generation_id_ = GetGenerationId(protected_auction_input_);
   if (request_generation_id_.empty()) {
-    PS_VLOG(1, log_context_) << kMissingGenerationId;
+    PS_LOG(ERROR, log_context_) << kMissingGenerationId;
     // Client side errors.
     FinishWithClientVisibleErrors(kMissingGenerationId);
     return;
@@ -280,7 +280,7 @@ void SelectAuctionResultReactor::Execute() {
   if (component_auction_results.empty()) {
     std::string error_msg = error_accumulator_.GetAccumulatedErrorString(
         ErrorVisibility::AD_SERVER_VISIBLE);
-    PS_VLOG(1, log_context_) << error_msg;
+    PS_LOG(ERROR, log_context_) << error_msg;
     FinishWithServerVisibleErrors(error_msg);
     return;
   }

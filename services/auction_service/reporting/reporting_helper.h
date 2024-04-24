@@ -47,13 +47,16 @@ inline constexpr char kBuyerLogs[] = "buyerLogs";
 inline constexpr char kBuyerErrors[] = "buyerErrors";
 inline constexpr char kBuyerWarnings[] = "buyerWarnings";
 inline constexpr int kReportingArgSize = 5;
-inline constexpr int kReportingArgSizeWithProtectedAppSignals = 6;
+inline constexpr int kReportingArgSizeWithProtectedAppSignals = 7;
 inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
 inline constexpr char kReportingProtectedAppSignalsFunctionName[] =
     "reportingEntryFunctionProtectedAppSignals";
-inline constexpr char kDispatchRequestVersion[] = "v1";
 inline constexpr char kTopLevelSellerTag[] = "topLevelSeller";
+inline constexpr char kWinningBidCurrencyTag[] = "bidCurrency";
+inline constexpr char kHighestScoringOtherBidCurrencyTag[] =
+    "highestScoringOtherBidCurrency";
+inline constexpr char kModifiedBidCurrencyTag[] = "modifiedBidCurrency";
 inline constexpr char kComponentSeller[] = "componentSeller";
 inline constexpr char kEnableReportWinUrlGeneration[] =
     "enableReportWinUrlGeneration";
@@ -67,6 +70,7 @@ inline constexpr char kBuyerSignals[] = "perBuyerSignals";
 inline constexpr char kBuyerOriginTag[] = "buyerOrigin";
 inline constexpr char kSellerTag[] = "seller";
 inline constexpr char kAdCostTag[] = "adCost";
+inline constexpr char kBuyerReportingIdTag[] = "buyerReportingId";
 inline constexpr char kMadeHighestScoringOtherBid[] =
     "madeHighestScoringOtherBid";
 inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
@@ -78,7 +82,8 @@ enum class ReportingArgs : int {
   kDirectFromSellerSignals,
   kEnableAdTechCodeLogging,
   kBuyerReportingMetadata,
-  kEgressFeatures
+  kEgressPayload,
+  kTemporaryEgressPayload,
 };
 
 inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
@@ -93,11 +98,13 @@ struct BuyerReportingMetadata {
   std::string seller;
   std::string interest_group_name;
   double ad_cost;
+  std::string buyer_reporting_id;
 };
 
 struct ComponentReportingMetadata {
   std::string top_level_seller;
   std::string component_seller;
+  std::string modified_bid_currency;
   float modified_bid;
 };
 
@@ -120,7 +127,8 @@ struct ReportingDispatchRequestData {
   server_common::log::ContextImpl& log_context;
   BuyerReportingMetadata buyer_reporting_metadata;
   ComponentReportingMetadata component_reporting_metadata;
-  absl::string_view egress_features;
+  absl::string_view egress_payload;
+  absl::string_view temporary_egress_payload;
 };
 
 // Bid metadata passed as input to reportResult and reportWin
@@ -131,9 +139,12 @@ struct SellerReportingMetadata {
   std::string interest_group_owner;
   std::string render_url;
   float bid;
+  std::string bid_currency;
   float desirability;
   float modified_bid;
+  std::string modified_bid_currency;
   float highest_scoring_other_bid;
+  std::string highest_scoring_other_bid_currency;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(

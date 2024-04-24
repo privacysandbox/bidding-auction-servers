@@ -61,7 +61,7 @@ absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>
 PredictPerModel(const tensorflow::SavedModelBundle* model,
                 const InferenceRequest& inference_request) {
   std::vector<std::pair<std::string, tensorflow::Tensor>> inputs;
@@ -98,12 +98,23 @@ PredictPerModel(const tensorflow::SavedModelBundle* model,
     return absl::InternalError(absl::StrCat(
         "Inference failed for model '", model_key, "': ", status.ToString()));
   }
+  std::vector<TensorWithName> zipped_vector;
+  if (output_names.size() != outputs.size()) {
+    return absl::InternalError(
+        "The number of output tensors doesn't match the number of output "
+        "tensor names");
+  }
+  for (size_t i = 0; i < output_names.size(); ++i) {
+    zipped_vector.push_back(TensorWithName(output_names[i], outputs[i]));
+  }
 
-  return std::make_pair(std::string(model_key), outputs);
+  return std::make_pair(std::string(model_key), zipped_vector);
 }
 
 class TensorflowModule final : public ModuleInterface {
  public:
+  explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config)
+      : runtime_config_(config) {}
   absl::StatusOr<PredictResponse> Predict(
       const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
   absl::StatusOr<RegisterModelResponse> RegisterModel(
@@ -117,6 +128,7 @@ class TensorflowModule final : public ModuleInterface {
       model_map_ ABSL_GUARDED_BY(mu_);
   // TODO(b/327907675) : Add a test for concurrency
   absl::Mutex mu_;
+  const InferenceSidecarRuntimeConfig runtime_config_;
 };
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
@@ -130,7 +142,7 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   }
 
   std::vector<std::future<
-      absl::StatusOr<std::pair<std::string, std::vector<tensorflow::Tensor>>>>>
+      absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>>>
       tasks;
 
   for (const InferenceRequest& inference_request : *parsed_requests) {
@@ -144,7 +156,7 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
                                it->second.get(), inference_request));
   }
 
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_outputs;
   for (size_t task_id = 0; task_id < tasks.size(); ++task_id) {
     auto result_status_or = tasks[task_id].get();
@@ -172,6 +184,16 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     const RegisterModelRequest& request) {
   tensorflow::SessionOptions session_options;
+  // TODO(b/332599154): Support runtime configuration on a per-session basis.
+  if (runtime_config_.num_intraop_threads() != 0) {
+    session_options.config.set_intra_op_parallelism_threads(
+        runtime_config_.num_intraop_threads());
+  }
+  if (runtime_config_.num_interop_threads() != 0) {
+    session_options.config.set_inter_op_parallelism_threads(
+        runtime_config_.num_interop_threads());
+  }
+
   const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
 
@@ -203,8 +225,13 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
 
 }  // namespace
 
-std::unique_ptr<ModuleInterface> ModuleInterface::Create() {
-  return std::make_unique<TensorflowModule>();
+std::unique_ptr<ModuleInterface> ModuleInterface::Create(
+    const InferenceSidecarRuntimeConfig& config) {
+  return std::make_unique<TensorflowModule>(config);
+}
+
+absl::string_view ModuleInterface::GetModuleVersion() {
+  return "tensorflow_v2_14_0";
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

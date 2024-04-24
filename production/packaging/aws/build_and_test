@@ -151,6 +151,9 @@ bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_EXTRA_ARGS} //production/packaging/aws/c
 "${WORKSPACE}"/builders/tools/normalize-dist
 
 if [[ -n ${AMI_REGIONS[0]} ]]; then
+  if [[ -v KOKORO_ARTIFACTS_DIR ]]; then
+    sudo apt-get install -y unzip
+  fi
   unzip -o -d "${DIST}"/aws "${DIST}"/aws/nonenclave_artifacts.zip
   unzip -o -d "${DIST}"/aws "${DIST}"/aws/artifacts_proto.zip
   printf "==== build AWS AMI (using packer) =====\n"

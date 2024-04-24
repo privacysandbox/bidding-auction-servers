@@ -75,8 +75,11 @@ absl::StatusOr<RegisterModelResponse> TestModule::RegisterModel(
   return response;
 }
 
-std::unique_ptr<ModuleInterface> ModuleInterface::Create() {
-  return std::make_unique<TestModule>();
+std::unique_ptr<ModuleInterface> ModuleInterface::Create(
+    const InferenceSidecarRuntimeConfig& config) {
+  return std::make_unique<TestModule>(config);
 }
+
+absl::string_view ModuleInterface::GetModuleVersion() { return "test"; }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

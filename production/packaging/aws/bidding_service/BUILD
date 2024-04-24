@@ -129,7 +129,11 @@ container_image(
     layers = [
         ":server_binary_layer",
         ":kmstool_enclave_cli_layer",
-    ],
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
     ],

@@ -97,7 +97,8 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
     int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<std::string>& bid_currency = absl::nullopt);
+    const absl::optional<std::string>& bid_currency = absl::nullopt,
+    absl::string_view buyer_reporting_id = "");
 
 void SetupMockCrytoClient(MockCryptoClientWrapper& crypto_client);
 
@@ -111,7 +112,7 @@ void SetupBuyerClientMock(
 
 void BuildAdWithBidFromAdWithBidMetadata(
     const ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata& input,
-    AdWithBid* result);
+    AdWithBid* result, absl::string_view buyer_reporting_id = "");
 
 AdWithBid BuildNewAdWithBid(
     const std::string& ad_url,
@@ -119,7 +120,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
     int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<absl::string_view>& bid_currency = absl::nullopt);
+    const absl::optional<absl::string_view>& bid_currency = absl::nullopt,
+    absl::string_view buyer_reporting_id = "");
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
@@ -216,7 +218,8 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
     ClientType client_type, absl::string_view seller_origin_domain,
     bool is_consented_debug = false, absl::string_view top_level_seller = "",
     EncryptionCloudPlatform top_seller_cloud_platform =
-        EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED) {
+        EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED,
+    bool enable_unlimited_egress = false) {
   BuyerInput buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
@@ -242,6 +245,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   SelectAdRequest request;
   T protected_auction_input;
   protected_auction_input.set_generation_id(kSampleGenerationId);
+  protected_auction_input.set_enable_unlimited_egress(enable_unlimited_egress);
   if (is_consented_debug) {
     auto* consented_debug_config =
         protected_auction_input.mutable_consented_debug_config();

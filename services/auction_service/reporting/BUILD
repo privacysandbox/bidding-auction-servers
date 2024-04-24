@@ -34,6 +34,8 @@ cc_library(
     deps = [
         ":noiser_and_bucketer",
         ":reporting_response",
+        "//services/auction_service:auction_constants",
+        "//services/common:feature_flags",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/util:json_util",

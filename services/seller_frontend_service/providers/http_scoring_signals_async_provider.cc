@@ -69,7 +69,7 @@ void HttpScoringSignalsAsyncProvider::Get(
       },
       timeout);
   if (!status.ok()) {
-    PS_VLOG(1) << "Unable to get seller KV signals: " << status;
+    PS_LOG(ERROR) << "Unable to get seller KV signals: " << status;
   }
 }
 

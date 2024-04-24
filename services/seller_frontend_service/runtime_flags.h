@@ -45,6 +45,8 @@ inline constexpr char SFE_TLS_CERT[] = "SFE_TLS_CERT";
 inline constexpr char AUCTION_EGRESS_TLS[] = "AUCTION_EGRESS_TLS";
 inline constexpr char BUYER_EGRESS_TLS[] = "BUYER_EGRESS_TLS";
 inline constexpr char SFE_PUBLIC_KEYS_ENDPOINTS[] = "SFE_PUBLIC_KEYS_ENDPOINTS";
+inline constexpr char SELLER_CLOUD_PLATFORMS_MAP[] =
+    "SELLER_CLOUD_PLATFORMS_MAP";
 
 inline constexpr absl::string_view kFlags[] = {
     PORT,
@@ -66,6 +68,7 @@ inline constexpr absl::string_view kFlags[] = {
     AUCTION_EGRESS_TLS,
     BUYER_EGRESS_TLS,
     SFE_PUBLIC_KEYS_ENDPOINTS,
+    SELLER_CLOUD_PLATFORMS_MAP,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

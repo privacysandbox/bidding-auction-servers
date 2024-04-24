@@ -19,6 +19,8 @@
 
 #include <string>
 
+#include "services/auction_service/auction_constants.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 struct AuctionServiceRuntimeConfig {
@@ -50,6 +52,9 @@ struct AuctionServiceRuntimeConfig {
   // The max allowed size of all debug win or loss URLs for an auction.
   // Default value is 3000 kilobytes.
   int max_allowed_size_all_debug_urls_kb = 3000;
+
+  // Default code version to pass to Roma.
+  std::string default_code_version = kScoreAdBlobVersion;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

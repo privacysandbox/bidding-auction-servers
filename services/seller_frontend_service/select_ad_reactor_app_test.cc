@@ -66,7 +66,9 @@ inline constexpr int kTestBidValue = 10.0;
 inline constexpr int kTestAdCost = 2.0;
 inline constexpr int kTestEncodingVersion = 1;
 inline constexpr int kTestModelingSignals = 3;
-inline constexpr char kTestEgressFeature[] = "TestEgressFeatures";
+inline constexpr char kTestEgressPayload[] = "TestegressPayload";
+inline constexpr char kTestTemporaryEgressPayload[] =
+    "TestTemporaryEgressPayload";
 inline constexpr char kTestRender[] = "https://test-render.com";
 inline constexpr char kAdRenderUrls[] = "AdRenderUrls";
 inline constexpr char kTestMetadataKey[] = "TestMetadataKey";
@@ -475,7 +477,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
     result.set_render(kTestRender);
     result.set_modeling_signals(kTestModelingSignals);
     result.set_ad_cost(kTestAdCost);
-    result.set_egress_features(kTestEgressFeature);
+    result.set_egress_payload(kTestEgressPayload);
+    result.set_temporary_unlimited_egress_payload(kTestTemporaryEgressPayload);
     return result;
   }
 
@@ -715,8 +718,8 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
                       expected_bid.modeling_signals());
             EXPECT_EQ(observed_bid_with_metadata.ad_cost(),
                       expected_bid.ad_cost());
-            EXPECT_EQ(observed_bid_with_metadata.egress_features(),
-                      expected_bid.egress_features());
+            EXPECT_EQ(observed_bid_with_metadata.egress_payload(),
+                      expected_bid.egress_payload());
             EXPECT_EQ(observed_bid_with_metadata.owner(), kSampleBuyer);
             EXPECT_TRUE(MessageDifferencer::Equals(
                 observed_bid_with_metadata.ad(), expected_bid.ad()));

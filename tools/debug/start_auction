@@ -32,6 +32,7 @@ export SERVER_START_CMD=$(cat << END
 --roma_timeout_ms="120000" \
 --enable_report_win_input_noising="false" \
 --seller_code_fetch_config='{
+      "fetchMode": 0,
       "auctionJsPath": "",
       "auctionJsUrl": "https://pubads.g.doubleclick.net/td/sjs",
       "urlFetchPeriodMs": 13000000,

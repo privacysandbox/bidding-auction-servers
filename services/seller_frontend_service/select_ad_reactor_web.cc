@@ -106,7 +106,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     encoded_data = auction_result.SerializeAsString();
 
     PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
-                                  << auction_result.DebugString();
+                                  << auction_result.ShortDebugString();
   } else {
     // SINGLE_SELLER or SERVER_TOP_LEVEL Auction
     PS_ASSIGN_OR_RETURN(

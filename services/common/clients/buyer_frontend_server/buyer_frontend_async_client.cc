@@ -44,8 +44,8 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](const grpc::Status& status) {
         if (!status.ok()) {
-          PS_VLOG(1) << "SendRPC completion status not ok: "
-                     << server_common::ToAbslStatus(status);
+          PS_LOG(ERROR) << "SendRPC completion status not ok: "
+                        << server_common::ToAbslStatus(status);
           params->OnDone(status);
           return;
         }
@@ -54,7 +54,7 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
         auto decrypted_response =
             DecryptResponse(hpke_secret, params->ResponseRef());
         if (!decrypted_response.ok()) {
-          PS_VLOG(1)
+          PS_LOG(ERROR)
               << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                       decrypted_response.status().ToString()));

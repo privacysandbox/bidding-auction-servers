@@ -460,10 +460,11 @@ TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
             kTestProtectedAppSignals);
   EXPECT_EQ(request->seller(), kTestSeller);
   EXPECT_EQ(request->publisher_name(), kTestPublisherName);
-  EXPECT_EQ(request->enable_debug_reporting(), true);
+  EXPECT_TRUE(request->enable_debug_reporting());
+  EXPECT_TRUE(request->enable_unlimited_egress());
   EXPECT_EQ(request->log_context().generation_id(), kTestGenerationId);
   EXPECT_EQ(request->log_context().adtech_debug_id(), kTestAdTechDebugId);
-  EXPECT_EQ(request->consented_debug_config().is_consented(), true);
+  EXPECT_TRUE(request->consented_debug_config().is_consented());
   EXPECT_EQ(request->consented_debug_config().token(),
             kTestConsentedDebuggingToken);
   ASSERT_TRUE(request->has_contextual_protected_app_signals_data());

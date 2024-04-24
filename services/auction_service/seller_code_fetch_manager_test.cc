@@ -100,14 +100,14 @@ TEST_F(SellerCodeFetchManagerTest,
   udf_config.set_auction_js_bucket("js");
   udf_config.set_auction_js_bucket_default_blob("default");
 
-  EXPECT_CALL(*blob_storage_client_, Init)
-      .WillOnce(Return(SuccessExecutionResult()));
-  EXPECT_CALL(*blob_storage_client_, Run)
-      .WillOnce(Return(SuccessExecutionResult()));
+  EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*executor_, RunAfter).Times(2);
   EXPECT_CALL(*http_fetcher_, FetchUrls)
       .Times(1)
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&udf_config, &pa_buyer_origin, &pas_buyer_origin,
+                 &pa_reporting_udf_data, &pas_reporting_udf_data](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url,
                   udf_config.buyer_report_win_js_urls().at(pa_buyer_origin));
@@ -122,7 +122,8 @@ TEST_F(SellerCodeFetchManagerTest,
 
   EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
       .WillOnce(
-          [&](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+          [&udf_config](
+              AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
                   context) {
             EXPECT_EQ(context.request->blob_metadata().bucket_name(),
                       udf_config.auction_js_bucket());
@@ -133,12 +134,13 @@ TEST_F(SellerCodeFetchManagerTest,
             context.response = std::make_shared<ListBlobsMetadataResponse>();
             context.response->mutable_blob_metadatas()->Add(std::move(md));
             context.Finish(SuccessExecutionResult());
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*blob_storage_client_, GetBlob)
       .WillOnce(
-          [&](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
+          [&udf_config, &fake_udf](
+              AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
             auto async_bucket_name =
                 async_context.request->blob_metadata().bucket_name();
             auto async_blob_name =
@@ -152,11 +154,13 @@ TEST_F(SellerCodeFetchManagerTest,
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*dispatcher_, LoadSync)
-      .WillOnce([&](std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&udf_config, &fake_udf, &pa_buyer_origin, &pas_buyer_origin,
+                 &pa_reporting_udf_data, &pas_reporting_udf_data](
+                    std::string_view version, absl::string_view blob_data) {
         EXPECT_EQ(version, udf_config.auction_js_bucket_default_blob());
         absl::flat_hash_map<std::string, std::string> pa_reporting_udfs;
         pa_reporting_udfs.try_emplace(pa_buyer_origin, pa_reporting_udf_data);
@@ -206,7 +210,9 @@ TEST_F(SellerCodeFetchManagerTest, FetchModeUrlSucceedsLoadingWrappedUrlBlobs) {
   EXPECT_CALL(*executor_, RunAfter).Times(2);
   EXPECT_CALL(*http_fetcher_, FetchUrls)
       .Times(2)
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&udf_config, &pa_buyer_origin, &pas_buyer_origin,
+                 &pa_reporting_udf_data, &pas_reporting_udf_data](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url,
                   udf_config.buyer_report_win_js_urls().at(pa_buyer_origin));
@@ -218,14 +224,17 @@ TEST_F(SellerCodeFetchManagerTest, FetchModeUrlSucceedsLoadingWrappedUrlBlobs) {
         std::move(done_callback)(
             {pa_reporting_udf_data, pas_reporting_udf_data});
       })
-      .WillOnce([&](const std::vector<HTTPRequest>& requests,
+      .WillOnce([&udf_config, &fake_udf](
+                    const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
         EXPECT_EQ(requests[0].url, udf_config.auction_js_url());
         std::move(done_callback)({fake_udf});
       });
 
   EXPECT_CALL(*dispatcher_, LoadSync)
-      .WillOnce([&](std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&udf_config, &fake_udf, &pa_buyer_origin, &pas_buyer_origin,
+                 &pa_reporting_udf_data, &pas_reporting_udf_data](
+                    std::string_view version, absl::string_view blob_data) {
         EXPECT_EQ(version, kScoreAdBlobVersion);
         absl::flat_hash_map<std::string, std::string> pa_reporting_udfs;
         pa_reporting_udfs.try_emplace(pa_buyer_origin, pa_reporting_udf_data);

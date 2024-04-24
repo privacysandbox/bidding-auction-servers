@@ -74,6 +74,8 @@ inline constexpr char kUnsupportedAdTypeInAuctionResultError[] =
     "Unsupported ad type.";
 inline constexpr char kTopLevelWinReportingUrlsInAuctionResultError[] =
     "Top Level Win Reporting URLs should not be present.";
+inline constexpr char kMultipleComponentAuctionResultsError[] =
+    "Top Level Auction contains multiple auction results for the same seller: ";
 
 // Server side errors listed here.
 inline constexpr char kInternalError[] = "Internal Error";

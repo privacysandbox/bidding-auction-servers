@@ -60,13 +60,15 @@ message Tensor {
   // should be equal to the product of tensor_shape elements, for example
   // a tensor of shape [1,4] will expect a flat array or 4 elements
   // (e.g. [1, 2, 7, 4]) and one with a shape [2,3] will expect a 6 element one.
-  bytes tensor_content = 4;
+  repeated string tensor_content = 4;
 }
 
 // Supported tensor data types.
 enum DataType {
   FLOAT = 0;  // 32-bit floating point
-  INT64 = 1;  // 64-bit integer (signed)
-  INT32 = 2;  // 32-bit integer (signed)
-  DOUBLE = 3;  // 64-bit floating point
+  DOUBLE = 1;  // 64-bit floating point
+  INT8= 2;  // 8-bit integer (signed)
+  INT16 = 3;  // 16-bit integer (signed)
+  INT32 = 4;  // 32-bit integer (signed)
+  INT64 = 5;  // 64-bit integer (signed)
 }

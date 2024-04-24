@@ -22,7 +22,8 @@ exclude: (?x)^(
                services/inference_sidecar/common/builders/.*|
                services/inference_sidecar/modules/pytorch_v2_1_1/builders/.*|
                services/inference_sidecar/modules/tensorflow_v2_14_0/builders/.*|
-               testing/functionaltest-system/.*
+               testing/functionaltest-system/.*|
+               google_internal/kokoro/key/.*
          )$
 
 fail_fast: false
@@ -118,6 +119,18 @@ repos:
     types: [ "dockerfile" ]
     entry: builders/tools/hadolint
 
+  - id: ps_vlog_123
+    name: Don't use PS_VLOG(0/1/2/3)
+    entry: sh -c '! grep -RE "PS_VLOG[(][01][,)]" services/'
+    language: system
+    types_or:
+    - c++
+    - c
+    pass_filenames: false
+    always_run: false
+    fail_fast: false
+    verbose: true
+
 - repo: https://github.com/pre-commit/mirrors-prettier
   rev: v3.0.3
   hooks:
@@ -127,8 +140,8 @@ repos:
     - markdown
     exclude: (?x)^(
                  testing/functional/suts/inference/data/seller-auction-service/scoreAd\.js|
-                 testing/functional/suts/basic/data/seller-auction-service/scoreAd\.js|
-                 testing/functional/suts/basic/data/buyer-bidding-service/generateBid\.js|
+                 testing/functional/suts/.*/data/seller-auction-service/scoreAd\.js|
+                 testing/functional/suts/.*/data/buyer-bidding-service/generateBid\.js|
                  testing/functional/suts/.*/.*\.reply\.json
              )$
 

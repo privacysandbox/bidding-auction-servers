@@ -34,7 +34,7 @@ inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-inline constexpr int kNumAuctionResultKeys = 13;
+inline constexpr int kNumAuctionResultKeys = 14;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // WinReportingUrls response.
@@ -83,6 +83,7 @@ inline constexpr char kAdRenderUrl[] = "adRenderURL";              // length: 11
 inline constexpr char kBidCurrency[] = "bidCurrency";              // length: 11
 inline constexpr char kBiddingGroups[] = "biddingGroups";          // length: 13
 inline constexpr char kTopLevelSeller[] = "topLevelSeller";        // length: 14
+inline constexpr char kBuyerReportingId[] = "buyerReportingId";    // length: 16
 inline constexpr char kWinReportingUrls[] = "winReportingURLs";    // length: 16
 inline constexpr char kInterestGroupName[] = "interestGroupName";  // length: 17
 inline constexpr char kInterestGroupOwner[] =
@@ -141,6 +142,8 @@ enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
 
 // log verbosity
 inline constexpr int kPlain = 1;
+inline constexpr int kSuccess = 3;
+inline constexpr int kInfoMsg = 3;
 inline constexpr int kEncrypted = 4;
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -24,6 +24,7 @@
 #include "absl/log/absl_log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "services/common/util/reporting_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -32,17 +33,6 @@ namespace {
 using ProcessReportWinBlob = absl::AnyInvocable<void(
     absl::string_view, absl::string_view, std::string&)>;
 using TagToValue = std::vector<std::pair<absl::string_view, absl::string_view>>;
-
-void AppendFeatureFlagValue(std::string& feature_flags,
-                            absl::string_view feature_name,
-                            bool is_feature_enabled) {
-  absl::string_view enable_feature = kFeatureDisabled;
-  if (is_feature_enabled) {
-    enable_feature = kFeatureEnabled;
-  }
-  feature_flags.append(
-      absl::StrCat("\"", feature_name, "\": ", enable_feature));
-}
 
 // Returns the reportWin wrapper function that should be called from
 // reportingEntryFunction. The function name is
@@ -124,7 +114,7 @@ std::string GetSellerWrappedCode(
     wrap_code.append(GetSellerWrappedCodeHelper(
         enable_report_result_url_generation, enable_report_win_url_generation,
         protected_app_signals_buyer_origin_code_map,
-        {{kSuffix, kProtectedAppSignalsTag}, {kExtraArgs, kEgressFeaturesTag}},
+        {{kSuffix, kProtectedAppSignalsTag}, {kExtraArgs, kEgressPayloadTag}},
         [](absl::string_view buyer_origin, absl::string_view buyer_code,
            std::string& report_win_blob) {
           ReplacePlaceholders(
@@ -132,7 +122,7 @@ std::string GetSellerWrappedCode(
               {{kReportWinWrapperNamePlaceholder,
                 GetProtectedAppSignalsReportWinFunctionName(buyer_origin)},
                {kReportWinCodePlaceholder, buyer_code},
-               {kExtraArgs, kEgressFeaturesTag},
+               {kExtraArgs, kEgressPayloadTag},
                {"reportWin(", "reportWinProtectedAppSignals("},
                {"reportWin =", "reportWinProtectedAppSignals ="}});
         }));
@@ -152,14 +142,4 @@ std::string GetSellerWrappedCode(
   return wrap_code;
 }
 
-std::string GetFeatureFlagJson(bool enable_logging,
-                               bool enable_debug_url_generation) {
-  std::string feature_flags = "{";
-  AppendFeatureFlagValue(feature_flags, kFeatureLogging, enable_logging);
-  feature_flags.append(",");
-  AppendFeatureFlagValue(feature_flags, kFeatureDebugUrlGeneration,
-                         enable_debug_url_generation);
-  feature_flags.append("}");
-  return feature_flags;
-}
 }  // namespace privacy_sandbox::bidding_auction_servers

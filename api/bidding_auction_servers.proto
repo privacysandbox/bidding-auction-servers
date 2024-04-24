@@ -318,6 +318,16 @@ message AuctionResult {
 
   // This is only populated for component auctions.
   AuctionParams auction_params = 18;
+
+  // BuyerReportingId of the winning Ad.
+  // This will be verified with the buyerReportingId in the Ad properties on
+  // the browser.
+  string buyer_reporting_id = 19;
+
+  // BuyerAndSellerReportingId of the winning Ad.
+  // This will be verified with the buyerAndSellerReportingId in the Ad
+  // properties on the browser.
+  string buyer_and_seller_reporting_id = 20;
 }
 
 message GetComponentAuctionCiphertextsRequest {
@@ -713,8 +723,8 @@ message GetBidsResponse {
 // Bid for an ad candidate.
 message AdWithBid {
   // Metadata of the ad, this will be passed to Seller's scoring function.
-  // Represents a serialized string that is deserialized to a JSON object
-  // before passing to Adtech script.
+  // Represents an opaque object that is eventually passed to seller Adtech
+  // script.
   // Note: API will be updated separately for Component Ads.
   google.protobuf.Value ad = 1;
 
@@ -752,6 +762,9 @@ message AdWithBid {
 
   // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
   string bid_currency = 10;
+
+  // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
+  string buyer_reporting_id = 11;
 }
 
 // Bidding service operated by buyer.
@@ -989,12 +1002,17 @@ message ProtectedAppSignalsAdWithBid {
   // Indicates the currency used for the bid price.
   string bid_currency = 6;
 
-  // Holds schema version as well as features related information that needs
-  // to be send back to the buyer who has the winning bid.
-  bytes egress_features = 7;
+  reserved 7;
 
   // Optional field for debug report URLs.
   DebugReportUrls debug_report_urls = 8;
+
+  // Holds schema version as well as features related information that needs
+  // to be send back to the buyer who has the winning bid.
+  string egress_payload = 9;
+
+  // Temporary unlimited size egress features. Meant for experimentation only.
+  string temporary_unlimited_egress_payload = 10;
 }
 
 // Encrypted response to GenerateProtectedAppSignalsBidsRequest with bid prices
@@ -1032,8 +1050,7 @@ message ScoreAdsRequest {
     // Bid for an ad along with other information required to score the ad.
     message AdWithBidMetadata {
       // Metadata of the ad, this will be passed to Seller's scoring function.
-      // Represents a serialized string that is deserialized to a JSON object
-      // before passing to Adtech script.
+      // Represents an opaque ad metadata object.
       google.protobuf.Value ad = 1;
 
       // Bid price corresponding to an ad.
@@ -1081,6 +1098,13 @@ message ScoreAdsRequest {
 
       // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
       string bid_currency = 12;
+
+      // Creator of the IG to which the winning ad belongs (applicable for
+      // Protected Audience only).
+      string interest_group_origin = 13;
+
+      // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
+      string buyer_reporting_id = 14;
     }
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
@@ -1161,15 +1185,21 @@ message ScoreAdsRequest {
       // performed stochastically.
       double ad_cost = 5;
 
-      // Features to be sent back to the buyer of winning app install ad to help
-      // train their models.
-      bytes egress_features = 6;
+      reserved 6;
 
       // Domain of Buyer who owns app signals used for this ad.
       string owner = 7;
 
       // Indicates the currency used for the bid price.
       string bid_currency = 8;
+
+      // Features to be sent back to the buyer of winning app install ad to help
+      // train their models.
+      string egress_payload = 9;
+
+      // Temporary unlimited size egress features. Meant for experimentation
+      // only.
+      string temporary_unlimited_egress_payload = 10;
     }
 
     // Ad with bid for protected app signals.
@@ -1326,6 +1356,24 @@ message ScoreAdsResponse {
     // If the seller specified a seller_currency in the AuctionConfig,
     // this value, if specified, must match it. If not, the bid is rejected.
     string bid_currency = 16;
+
+    // Currency of the of the original buyer bid if present
+    // (expressed as ISO 4217 alpha code).
+    // Not expected to be set in output from scoreAd();
+    // B&A will set this interally from the AdWithBid.
+    string buyer_bid_currency = 17;
+    // BuyerReportingId of the winning Ad.
+    // This will be verified with the buyerReportingId in the Ad properties on
+    // the browser.
+    string buyer_reporting_id = 18;
+    // BuyerAnd SellerReportingId of the winning Ad.
+    // This will be verified with the buyerAndSellerReportingId in the Ad
+    // properties on the browser.
+    string buyer_and_seller_reporting_id = 19;
+
+    // Owner of the IG to which the winning ad belongs (applicable for
+    // Protected Audience only).
+    string interest_group_origin = 20;
   }
 
   // The response includes the top scored ad along with other related data.

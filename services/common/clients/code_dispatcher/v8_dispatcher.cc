@@ -34,9 +34,9 @@ V8Dispatcher::V8Dispatcher(DispatchConfig&& config)
     : roma_service_(std::move(config)) {}
 
 V8Dispatcher::~V8Dispatcher() {
-  PS_VLOG(1) << "Stopping roma service...";
+  PS_LOG(ERROR) << "Stopping roma service...";
   absl::Status stop_status = roma_service_.Stop();
-  PS_VLOG(1) << "Roma service stop status: " << stop_status;
+  PS_LOG(ERROR) << "Roma service stop status: " << stop_status;
 }
 
 absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }

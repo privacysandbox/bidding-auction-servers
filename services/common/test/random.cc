@@ -77,12 +77,10 @@ google::protobuf::Struct MakeAnAd(absl::string_view render_url,
   google::protobuf::Value ad_render_url;
   ad_render_url.set_string_value(render_url);
   ad.mutable_fields()->try_emplace("renderUrl", ad_render_url);
-
   auto metadata_obj = MakeARandomStruct(0);
   google::protobuf::Value metadata_v;
   metadata_v.set_number_value(metadata_value);
   metadata_obj->mutable_fields()->try_emplace(metadata_key, metadata_v);
-
   google::protobuf::Value metadata_obj_val;
   metadata_obj_val.set_allocated_struct_value(metadata_obj.release());
   ad.mutable_fields()->try_emplace("metadata", metadata_obj_val);
@@ -344,16 +342,30 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
 
   ad_with_bid.mutable_ad()->mutable_struct_value()->MergeFrom(
       MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
-  ad_with_bid.set_interest_group_name(MakeARandomString());
-  ad_with_bid.set_render(MakeARandomString());
   ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
-  ad_with_bid.set_interest_group_owner(MakeARandomString());
+  ad_with_bid.set_render(
+      absl::StrCat("barStandardAds.com/ads?id=", MakeARandomString()));
 
   for (int i = 0; i < num_ad_components; i++) {
     ad_with_bid.add_ad_components(absl::StrCat("adComponent.com/id=", i));
   }
-  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+  // allow_component_auction defaults to false.
+
+  ad_with_bid.set_interest_group_name(
+      absl::StrCat("interest_group_name_", MakeARandomString()));
+  ad_with_bid.set_interest_group_owner(
+      absl::StrCat("interest_group_owner_", MakeARandomString()));
+
+  // join_count and recency left to default zeros.
+
   ad_with_bid.set_modeling_signals(MakeARandomInt(0, 100));
+  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+
+  // No bid currency specified.
+
+  ad_with_bid.set_interest_group_origin(
+      absl::StrCat("interest_group_origin_", MakeARandomString()));
+
   return ad_with_bid;
 }
 
@@ -448,6 +460,8 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
   ad_score.set_interest_group_name(MakeARandomString());
   ad_score.set_buyer_bid(bid);
   ad_score.set_interest_group_owner(MakeARandomString());
+  ad_score.set_interest_group_origin(
+      absl::StrCat("interest_group_origin_", MakeARandomString()));
   ad_score.set_ad_metadata(MakeARandomString());
   ad_score.set_allow_component_auction(false);
   ad_score.set_bid(MakeARandomNumber<float>(1, 2.5));
@@ -480,38 +494,47 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
 // Must manually delete/take ownership of underlying pointer
 // build_android_signals: If false, will build browser signals instead.
 std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
-    bool build_android_signals) {
+    bool for_android) {
   auto interest_group = std::make_unique<BuyerInput::InterestGroup>();
   interest_group->set_name(absl::StrCat("ig_name_", MakeARandomString()));
+
   interest_group->mutable_bidding_signals_keys()->Add(
       absl::StrCat("bidding_signal_key_", MakeARandomString()));
   interest_group->mutable_bidding_signals_keys()->Add(
       absl::StrCat("bidding_signal_key_", MakeARandomString()));
-  interest_group->set_allocated_user_bidding_signals(
-      MakeARandomStructJsonString(5).release());
+
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);
   for (int i = 0; i < ad_render_ids_to_generate; i++) {
     *interest_group->mutable_ad_render_ids()->Add() =
         absl::StrCat("ad_render_id_", MakeARandomString());
   }
-  if (build_android_signals) {
+
+  // No component ads added.
+
+  interest_group->set_allocated_user_bidding_signals(
+      MakeARandomStructJsonString(5).release());
+
+  if (for_android) {
     // Empty field right now.
     interest_group->mutable_android_signals();
+    interest_group->set_origin(
+        absl::StrCat("interest_group_origin_", MakeARandomString()));
   } else {
     interest_group->mutable_browser_signals()->CopyFrom(
         MakeRandomBrowserSignalsForIG(interest_group->ad_render_ids()));
   }
+
   return interest_group;
 }
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromAndroid() {
-  return MakeARandomInterestGroup(true);
+  return MakeARandomInterestGroup(/*for_android=*/true);
 }
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromBrowser() {
-  return MakeARandomInterestGroup(false);
+  return MakeARandomInterestGroup(/*for_android=*/false);
 }
 
 GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest() {
@@ -557,7 +580,7 @@ google::protobuf::Value MakeAListValue(
 BuyerInput MakeARandomBuyerInput() {
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->AddAllocated(
-      MakeARandomInterestGroup(false).release());
+      MakeARandomInterestGroup(/*for_android=*/false).release());
   return buyer_input;
 }
 

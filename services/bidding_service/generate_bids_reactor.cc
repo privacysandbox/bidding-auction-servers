@@ -448,9 +448,10 @@ void GenerateBidsReactor::Execute() {
   absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
       SerializeTrustedBiddingSignalsPerIG(raw_request_, log_context_);
   if (!ig_trusted_signals_map.ok()) {
-    PS_VLOG(0, log_context_) << "Request failed while parsing bidding signals: "
-                             << ig_trusted_signals_map.status().ToString(
-                                    absl::StatusToStringMode::kWithEverything);
+    PS_LOG(ERROR, log_context_)
+        << "Request failed while parsing bidding signals: "
+        << ig_trusted_signals_map.status().ToString(
+               absl::StatusToStringMode::kWithEverything);
     EncryptResponseAndFinish(
         server_common::FromAbslStatus(ig_trusted_signals_map.status()));
     return;
@@ -501,7 +502,7 @@ void GenerateBidsReactor::Execute() {
     LogIfError(metric_context_
                    ->AccumulateMetric<metric::kBiddingErrorCountByErrorCode>(
                        1, metric::kBiddingGenerateBidsFailedToDispatchCode));
-    PS_VLOG(1, log_context_)
+    PS_LOG(ERROR, log_context_)
         << "Execution request failed for batch: " << raw_request_.DebugString()
         << status.ToString(absl::StatusToStringMode::kWithEverything);
     LogIfError(
@@ -542,13 +543,15 @@ void GenerateBidsReactor::GenerateBidsCallback(
           ParseAndGetResponseJson(enable_adtech_code_logging_, result->resp,
                                   log_context_);
       if (!generate_bid_response.ok()) {
-        PS_VLOG(0, log_context_)
+        PS_LOG(ERROR, log_context_)
             << "Failed to parse response from Roma "
             << generate_bid_response.status().ToString(
                    absl::StatusToStringMode::kWithEverything);
       }
+      google::protobuf::json::ParseOptions parse_options;
+      parse_options.ignore_unknown_fields = true;
       auto valid = google::protobuf::util::JsonStringToMessage(
-          generate_bid_response.value(), &bid);
+          generate_bid_response.value(), &bid, parse_options);
       const std::string interest_group_name = result->id;
       if (valid.ok()) {
         if (current_all_debug_urls_chars >=
@@ -569,16 +572,16 @@ void GenerateBidsReactor::GenerateBidsCallback(
             auction_scope_ == AuctionScope::kDeviceComponentSeller &&
             !bid.allow_component_auction()) {
           // TODO(b/311234165): Add metric for rejected component ads.
-          PS_VLOG(1, log_context_)
+          PS_LOG(ERROR, log_context_)
               << "Skipping component bid as it is not allowed for "
               << interest_group_name << ": " << bid.DebugString();
         } else {
           bid.set_interest_group_name(interest_group_name);
-          *raw_response_.add_bids() = bid;
+          *raw_response_.add_bids() = std::move(bid);
           is_bid_zero = false;
         }
       } else {
-        PS_VLOG(1, log_context_)
+        PS_LOG(ERROR, log_context_)
             << "Invalid json output from code execution for interest_group "
             << interest_group_name << ": " << result->resp;
       }
@@ -587,7 +590,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
       LogIfError(metric_context_
                      ->AccumulateMetric<metric::kBiddingErrorCountByErrorCode>(
                          1, metric::kBiddingGenerateBidsDispatchResponseError));
-      PS_VLOG(1, log_context_)
+      PS_LOG(ERROR, log_context_)
           << "Invalid execution (possibly invalid input): "
           << result.status().ToString(
                  absl::StatusToStringMode::kWithEverything);
@@ -601,17 +604,18 @@ void GenerateBidsReactor::GenerateBidsCallback(
   LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
       (static_cast<double>(zero_bid_count)) / total_bid_count));
 
-  PS_VLOG(1, log_context_) << "\n\nFailed of total: " << failed_requests << "/"
-                           << output.size();
+  PS_VLOG(kInfoMsg, log_context_)
+      << "\n\nFailed of total: " << failed_requests << "/" << output.size();
   benchmarking_logger_->HandleResponseEnd();
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse\n"
-                                << raw_response_.DebugString();
+  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse:\n"
+                                << raw_response_.ShortDebugString();
 
   if (!EncryptResponse()) {
-    PS_VLOG(1, log_context_) << "Failed to encrypt the generate bids response.";
+    PS_LOG(ERROR, log_context_)
+        << "Failed to encrypt the generate bids response.";
     status = grpc::Status(grpc::INTERNAL, kInternalServerError);
   }
   if (status.error_code() != grpc::StatusCode::OK) {

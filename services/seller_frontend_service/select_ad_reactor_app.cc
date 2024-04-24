@@ -91,7 +91,7 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
         request_->auction_config().top_level_seller());
   }
   PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
-                                << auction_result.DebugString();
+                                << auction_result.ShortDebugString();
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();
@@ -239,9 +239,11 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   result.set_render(input.render());
   result.set_modeling_signals(input.modeling_signals());
   result.set_ad_cost(input.ad_cost());
-  result.set_egress_features(input.egress_features());
   result.set_owner(buyer_owner);
   result.set_bid_currency(input.bid_currency());
+  result.set_egress_payload(input.egress_payload());
+  result.set_temporary_unlimited_egress_payload(
+      input.temporary_unlimited_egress_payload());
   return result;
 }
 

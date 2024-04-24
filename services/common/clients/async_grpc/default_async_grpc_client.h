@@ -81,8 +81,8 @@ class DefaultAsyncGrpcClient
         std::move(raw_request), *crypto_client_, *key_fetcher_manager_,
         cloud_platform_);
     if (!secret_request.ok()) {
-      PS_VLOG(1) << "Failed to encrypt the request: "
-                 << secret_request.status();
+      PS_LOG(ERROR) << "Failed to encrypt the request: "
+                    << secret_request.status();
       return absl::InternalError(kEncryptionFailed);
     }
     auto& [hpke_secret, request] = *secret_request;

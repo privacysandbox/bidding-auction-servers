@@ -39,6 +39,15 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Create seller cloud platform map.
+static inline absl::flat_hash_map<std::string, server_common::CloudPlatform>
+ParseSellerCloudPlarformMap(absl::string_view seller_platforms_map_json) {
+  auto seller_cloud_platform_parse_status =
+      ParseSellerToCloudPlatformInMap(seller_platforms_map_json);
+  CHECK_OK(seller_cloud_platform_parse_status);
+  return *seller_cloud_platform_parse_status;
+}
+
 // This a utility class that acts as a wrapper for the clients that are used
 // by SellerFrontEndService.
 struct ClientRegistry {
@@ -106,11 +115,20 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
             crypto_client_.get(),
             std::make_unique<AsyncReporter>(
                 std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))} {
+    if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
+      seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
+          config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
+    }
   }
 
   SellerFrontEndService(const TrustedServersConfigClient* config_client,
                         ClientRegistry clients)
-      : config_client_(*config_client), clients_(std::move(clients)) {}
+      : config_client_(*config_client), clients_(std::move(clients)) {
+    if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
+      seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
+          config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
+    }
+  }
 
   std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
   CreateKVClient();
@@ -131,6 +149,26 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       const bidding_auction_servers::SelectAdRequest* request,
       bidding_auction_servers::SelectAdResponse* response) override;
 
+  // Selects a winning ad by running an ad auction.
+  //
+  // This is an rpc endpoint which will lead to further requests (rpc and http)
+  // to other endpoints.
+  //
+  // context: Standard gRPC-owned testing utility parameter.
+  // request: Pointer to GetComponentAuctionCiphertextsRequest.
+  // The request contains a ciphertext encrypted using
+  // Hybrid Public Key Encryption (HPKE).
+  // response: Pointer to GetComponentAuctionCiphertextsResponse.
+  // The response contains the same payload encrypted to unique ciphertexts
+  // using HPKE.
+  // return: a ServerUnaryReactor that is used by the gRPC library
+  grpc::ServerUnaryReactor* GetComponentAuctionCiphertexts(
+      grpc::CallbackServerContext* context,
+      const bidding_auction_servers::GetComponentAuctionCiphertextsRequest*
+          request,
+      bidding_auction_servers::GetComponentAuctionCiphertextsResponse* response)
+      override;
+
  private:
   const TrustedServersConfigClient& config_client_;
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
@@ -142,6 +180,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   std::unique_ptr<ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>>
       buyer_factory_;
   const ClientRegistry clients_;
+  absl::flat_hash_map<std::string, server_common::CloudPlatform>
+      seller_cloud_platforms_map_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

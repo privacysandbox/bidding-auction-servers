@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.5.0 (2024-04-24)
+
+
+### Features
+
+* Add runtime check for correct inference backend version
+* Adds debug info to secure invoke response
+* Adds implementation of GetComponentAuctionCiphertexts API
+* Adds optional flag to configure cloud platforms for component sellers
+* allow AWS Session Manager instance connection
+* enable bucket fetching for score ad
+* Enables and adds tests for GetComponentAuctionsCiphertexts API
+* Enables Top Level Auctions feature
+* Implement Support for Bid Currency in Reporting
+* Set Seller Rejection Reason on AdWithBid for Mismatch with Expected Buyer Currency
+* Set Seller Rejection Reasons on AdScore for currency-related rejectons
+* Support inference runtime configurations
+* Support Interest Group Origin in InterestGroup and AuctionResponse
+* Top Level auction does not accept multiple results from same seller
+* upload aws/gcp hashes as artifacts on release
+
+
+### Bug Fixes
+
+* Correct check condition in inference main
+* Increase the gRPC recv message limit for the inference sidecar
+* Pass complete ad object to scoreAd
+* Remove redundant clang-tidy repo, move config to .clang-tidy
+* RPC is finished properly in top level auction with reporting
+* Temporarily add bazel_clang_tidy repo
+
 ## 3.4.0 (2024-04-02)
 
 

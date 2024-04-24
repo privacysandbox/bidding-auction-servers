@@ -21,6 +21,8 @@ load(
 )
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 
+package(default_visibility = ["//visibility:public"])
+
 cc_binary(
     name = "inference_sidecar_bin",
     srcs = ["@inference_common//:inference_sidecar_main.cc"],
@@ -71,6 +73,7 @@ cc_test(
     ],
     flaky = True,
     deps = [
+        ":test_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:reflection",
@@ -83,6 +86,15 @@ cc_test(
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//sandbox:sandbox_executor",
         "@inference_common//utils:file_util",
+    ],
+)
+
+cc_library(
+    name = "test_constants",
+    testonly = True,
+    hdrs = ["test_constants.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
     ],
 )
 

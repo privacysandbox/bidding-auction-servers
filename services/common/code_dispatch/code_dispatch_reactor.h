@@ -55,7 +55,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     if (DecryptRequest()) {
       PS_VLOG(3) << "Decrypted request: " << raw_request_.DebugString();
     } else {
-      PS_VLOG(1) << "Failed to decrypt the request";
+      PS_LOG(ERROR) << "Failed to decrypt the request";
     }
   }
 
@@ -82,12 +82,12 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   // successful. If successful, the result is written into 'raw_request_'.
   bool DecryptRequest() {
     if (request_->key_id().empty()) {
-      PS_VLOG(1) << "No key ID found in the request";
+      PS_LOG(ERROR) << "No key ID found in the request";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError));
       return false;
     } else if (request_->request_ciphertext().empty()) {
-      PS_VLOG(1) << "No ciphertext found in the request";
+      PS_LOG(ERROR) << "No ciphertext found in the request";
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kEmptyCiphertextError));
       return false;
@@ -96,7 +96,8 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     std::optional<server_common::PrivateKey> private_key =
         key_fetcher_manager_->GetPrivateKey(request_->key_id());
     if (!private_key.has_value()) {
-      PS_VLOG(1) << "Unable to fetch private key from the key fetcher manager";
+      PS_LOG(ERROR)
+          << "Unable to fetch private key from the key fetcher manager";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError));
       return false;
@@ -106,8 +107,8 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         decrypt_response = crypto_client_->HpkeDecrypt(
             *private_key, request_->request_ciphertext());
     if (!decrypt_response.ok()) {
-      PS_VLOG(1) << "Unable to decrypt the request ciphertext: "
-                 << decrypt_response.status();
+      PS_LOG(ERROR) << "Unable to decrypt the request ciphertext: "
+                    << decrypt_response.status();
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kMalformedCiphertext));
       return false;
@@ -124,7 +125,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
         aead_encrypt = crypto_client_->AeadEncrypt(payload, hpke_secret_);
     if (!aead_encrypt.ok()) {
-      PS_VLOG(1) << "AEAD encrypt failed: " << aead_encrypt.status();
+      PS_LOG(ERROR) << "AEAD encrypt failed: " << aead_encrypt.status();
       Finish(grpc::Status(grpc::StatusCode::INTERNAL,
                           aead_encrypt.status().ToString()));
       return false;

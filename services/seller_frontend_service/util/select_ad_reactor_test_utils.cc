@@ -92,11 +92,12 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-    const absl::optional<std::string>& bid_currency) {
-  AdWithBid bid =
-      BuildNewAdWithBid(ad_url, std::move(interest_group_name), bid_value,
-                        enable_event_level_debug_reporting,
-                        number_ad_component_render_urls, bid_currency);
+    const absl::optional<std::string>& bid_currency,
+    absl::string_view buyer_reporting_id) {
+  AdWithBid bid = BuildNewAdWithBid(
+      ad_url, std::move(interest_group_name), bid_value,
+      enable_event_level_debug_reporting, number_ad_component_render_urls,
+      bid_currency, buyer_reporting_id);
   GetBidsResponse::GetBidsRawResponse response;
   response.mutable_bids()->Add(std::move(bid));
   return response;
@@ -146,7 +147,8 @@ void SetupBuyerClientMock(
 }
 
 void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
-                                         AdWithBid* result) {
+                                         AdWithBid* result,
+                                         absl::string_view buyer_reporting_id) {
   if (input.has_ad()) {
     *result->mutable_ad() = input.ad();
   }
@@ -158,6 +160,9 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   result->set_interest_group_name(input.interest_group_name());
   result->set_ad_cost(kAdCost);
   result->set_modeling_signals(kModelingSignals);
+  if (!buyer_reporting_id.empty()) {
+    result->set_buyer_reporting_id(buyer_reporting_id);
+  }
 }
 
 AdWithBid BuildNewAdWithBid(
@@ -166,7 +171,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-    const absl::optional<absl::string_view>& bid_currency) {
+    const absl::optional<absl::string_view>& bid_currency,
+    absl::string_view buyer_reporting_id) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -192,6 +198,9 @@ AdWithBid BuildNewAdWithBid(
     debug_report_urls.set_auction_debug_loss_url(
         "https://test.com/debugLoss?render=" + ad_url);
     *bid.mutable_debug_report_urls() = debug_report_urls;
+  }
+  if (!buyer_reporting_id.empty()) {
+    bid.set_buyer_reporting_id(buyer_reporting_id);
   }
   return bid;
 }

@@ -205,5 +205,63 @@ TEST(StartupParamParserTest, InvalidCloudPlatform) {
   EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
 }
 
+TEST(ParseSellerToCloudPlatformInMapTest, ParsesEmptyMap) {
+  absl::string_view seller_platform_map = R"json()json";
+
+  auto output = ParseSellerToCloudPlatformInMap(seller_platform_map);
+  EXPECT_TRUE(output.ok());
+  EXPECT_EQ(output->size(), 0);
+}
+
+TEST(ParseSellerToCloudPlatformInMapTest, ParsesMapWithNoEntries) {
+  absl::string_view seller_platform_map = R"json({})json";
+
+  auto output = ParseSellerToCloudPlatformInMap(seller_platform_map);
+  EXPECT_TRUE(output.ok());
+  EXPECT_EQ(output->size(), 0);
+}
+
+TEST(ParseSellerToCloudPlatformInMapTest, DoesNotParseMalformedMap) {
+  absl::string_view seller_platform_map = R"json({
+      "https://example-seller.com": "GCP",
+    })json";
+
+  auto output = ParseSellerToCloudPlatformInMap(seller_platform_map);
+  ASSERT_FALSE(output.ok());
+  EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST(ParseSellerToCloudPlatformInMapTest, DoesNotParseHalfCorrectMap) {
+  absl::string_view seller_platform_map = R"json({
+      "https://example-seller.com": "GCP",
+      "https://bidding1.com": 3
+    })json";
+
+  auto output = ParseSellerToCloudPlatformInMap(seller_platform_map);
+  ASSERT_FALSE(output.ok());
+  EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST(ParseSellerToCloudPlatformInMapTest, ParsesValidMap) {
+  absl::string_view seller_platform_map = R"json({
+      "https://example-seller.com": "GCP",
+      "https://example-seller2.com": "AWS"
+    })json";
+  auto output = ParseSellerToCloudPlatformInMap(seller_platform_map);
+
+  ASSERT_TRUE(output.ok());
+  auto it = output.value().find("https://example-seller.com");
+  EXPECT_NE(it, output.value().end());
+  if (it != output.value().end()) {
+    EXPECT_EQ(it->second, CloudPlatform::kGcp);
+  }
+
+  auto it_2 = output.value().find("https://example-seller2.com");
+  EXPECT_NE(it_2, output.value().end());
+  if (it_2 != output.value().end()) {
+    EXPECT_EQ(it_2->second, CloudPlatform::kAws);
+  }
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

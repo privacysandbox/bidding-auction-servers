@@ -31,6 +31,8 @@ constexpr absl::string_view kInit = "non-empty";
 constexpr absl::string_view kTestModelPath =
     "external/inference_common/testdata/models/tensorflow_1_mib_saved_model.pb";
 constexpr absl::string_view kBucketName = "test_bucket";
+constexpr absl::string_view kRuntimeConfig =
+    R"json({"num_interop_threads": 4, "num_intraop_threads": 5, "module_name": "test"})json";
 
 class InferenceUtilsTest : public ::testing::Test {
  protected:
@@ -38,6 +40,7 @@ class InferenceUtilsTest : public ::testing::Test {
     absl::SetFlag(&FLAGS_testonly_allow_policies_for_bazel, true);
     absl::SetFlag(&FLAGS_inference_sidecar_binary_path,
                   GetFilePath(kSidecarBinary));
+    absl::SetFlag(&FLAGS_inference_sidecar_runtime_config, kRuntimeConfig);
   }
 
  private:
@@ -50,6 +53,7 @@ class InferenceUtilsTest : public ::testing::Test {
 TEST_F(InferenceUtilsTest, ReturnValueIsSet) {
   SandboxExecutor& inference_executor = Executor();
   CHECK_EQ(inference_executor.StartSandboxee().code(), absl::StatusCode::kOk);
+
   ASSERT_TRUE(RegisterModelsFromLocal({std::string(kTestModelPath)}).ok());
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
   google::scp::roma::FunctionBindingPayload<> wrapper{input_output_proto, {}};

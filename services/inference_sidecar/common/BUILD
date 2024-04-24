@@ -33,6 +33,7 @@ cc_library(
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_worker",
         "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -50,6 +51,7 @@ cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )
@@ -94,6 +96,7 @@ cc_test(
     ],
     flaky = True,
     deps = [
+        ":test_constants",
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_executor",
@@ -106,6 +109,15 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "test_constants",
+    testonly = True,
+    hdrs = ["test_constants.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
     ],
 )
 

@@ -44,7 +44,6 @@ using ::google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse;
 using ::google::scp::cpio::Callback;
 
 using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
-using ::google::scp::core::ExecutionResult;
 using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;
 
@@ -55,32 +54,32 @@ inline constexpr char kCiphertext[] = "ciphertext";
 class MockCryptoClientProvider
     : public google::scp::cpio::CryptoClientInterface {
  public:
-  ExecutionResult init_result_mock = SuccessExecutionResult();
-  ExecutionResult Init() noexcept override { return init_result_mock; }
+  absl::Status init_result_mock = absl::OkStatus();
+  absl::Status Init() noexcept override { return init_result_mock; }
 
-  ExecutionResult run_result_mock = SuccessExecutionResult();
-  ExecutionResult Run() noexcept override { return run_result_mock; }
+  absl::Status run_result_mock = absl::OkStatus();
+  absl::Status Run() noexcept override { return run_result_mock; }
 
-  ExecutionResult stop_result_mock = SuccessExecutionResult();
-  ExecutionResult Stop() noexcept override { return stop_result_mock; }
+  absl::Status stop_result_mock = absl::OkStatus();
+  absl::Status Stop() noexcept override { return stop_result_mock; }
 
   // NOLINTNEXTLINE
-  MOCK_METHOD(ExecutionResult, HpkeEncrypt,
+  MOCK_METHOD(absl::Status, HpkeEncrypt,
               (HpkeEncryptRequest request,
                Callback<HpkeEncryptResponse> callback),
               (override, noexcept));
   // NOLINTNEXTLINE
-  MOCK_METHOD(ExecutionResult, HpkeDecrypt,
+  MOCK_METHOD(absl::Status, HpkeDecrypt,
               (HpkeDecryptRequest request,
                Callback<HpkeDecryptResponse> callback),
               (override, noexcept));
   // NOLINTNEXTLINE
-  MOCK_METHOD(ExecutionResult, AeadEncrypt,
+  MOCK_METHOD(absl::Status, AeadEncrypt,
               (AeadEncryptRequest request,
                Callback<AeadEncryptResponse> callback),
               (override, noexcept));
   // NOLINTNEXTLINE
-  MOCK_METHOD(ExecutionResult, AeadDecrypt,
+  MOCK_METHOD(absl::Status, AeadDecrypt,
               (AeadDecryptRequest request,
                Callback<AeadDecryptResponse> callback),
               (override, noexcept));
@@ -111,13 +110,13 @@ TEST(CryptoClientWrapperTest, HpkeEncrypt_Success) {
   std::unique_ptr<MockCryptoClientProvider> mock_crypto_client =
       std::make_unique<MockCryptoClientProvider>();
   EXPECT_CALL(*mock_crypto_client, HpkeEncrypt)
-      .WillOnce([&](const HpkeEncryptRequest& request,
-                    const Callback<HpkeEncryptResponse>& callback)
-                    -> ExecutionResult {
+      .WillOnce([&expected_request, &mock_response](
+                    const HpkeEncryptRequest& request,
+                    const Callback<HpkeEncryptResponse>& callback) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             request, expected_request));
         callback(SuccessExecutionResult(), mock_response);
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
   CryptoClientWrapper crypto_client(std::move(mock_crypto_client));
 
@@ -132,11 +131,10 @@ TEST(CryptoClientWrapperTest, HpkeEncrypt_Failure) {
   std::unique_ptr<MockCryptoClientProvider> mock_crypto_client =
       std::make_unique<MockCryptoClientProvider>();
   EXPECT_CALL(*mock_crypto_client, HpkeEncrypt)
-      .WillOnce([&](const HpkeEncryptRequest& request,
-                    const Callback<HpkeEncryptResponse>& callback)
-                    -> ExecutionResult {
+      .WillOnce([](const HpkeEncryptRequest& request,
+                   const Callback<HpkeEncryptResponse>& callback) {
         callback(FailureExecutionResult(0), HpkeEncryptResponse());
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
   CryptoClientWrapper crypto_client(std::move(mock_crypto_client));
 
@@ -185,13 +183,13 @@ TEST(CryptoClientWrapperTest, HpkeDecrypt_Success) {
   std::unique_ptr<MockCryptoClientProvider> mock_crypto_client =
       std::make_unique<MockCryptoClientProvider>();
   EXPECT_CALL(*mock_crypto_client, HpkeDecrypt)
-      .WillOnce([&](const HpkeDecryptRequest& request,
-                    const Callback<HpkeDecryptResponse>& callback)
-                    -> ExecutionResult {
+      .WillOnce([&expected_request, &mock_response](
+                    const HpkeDecryptRequest& request,
+                    const Callback<HpkeDecryptResponse>& callback) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             request, expected_request));
         callback(SuccessExecutionResult(), mock_response);
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
   CryptoClientWrapper crypto_client(std::move(mock_crypto_client));
 
@@ -218,13 +216,13 @@ TEST(CryptoClientWrapperTest, AeadEncrypt_Success) {
   std::unique_ptr<MockCryptoClientProvider> mock_crypto_client =
       std::make_unique<MockCryptoClientProvider>();
   EXPECT_CALL(*mock_crypto_client, AeadEncrypt)
-      .WillOnce([&](const AeadEncryptRequest& request,
-                    const Callback<AeadEncryptResponse>& callback)
-                    -> ExecutionResult {
+      .WillOnce([&expected_request, &mock_response](
+                    const AeadEncryptRequest& request,
+                    const Callback<AeadEncryptResponse>& callback) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             request, expected_request));
         callback(SuccessExecutionResult(), mock_response);
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
   CryptoClientWrapper crypto_client(std::move(mock_crypto_client));
 
@@ -252,13 +250,13 @@ TEST(CryptoClientWrapperTest, AeadDecrypt_Success) {
   std::unique_ptr<MockCryptoClientProvider> mock_crypto_client =
       std::make_unique<MockCryptoClientProvider>();
   EXPECT_CALL(*mock_crypto_client, AeadDecrypt)
-      .WillOnce([&](const AeadDecryptRequest& request,
-                    const Callback<AeadDecryptResponse>& callback)
-                    -> ExecutionResult {
+      .WillOnce([&expected_request, &mock_response](
+                    const AeadDecryptRequest& request,
+                    const Callback<AeadDecryptResponse>& callback) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             request, expected_request));
         callback(SuccessExecutionResult(), mock_response);
-        return SuccessExecutionResult();
+        return absl::OkStatus();
       });
   CryptoClientWrapper crypto_client(std::move(mock_crypto_client));
 

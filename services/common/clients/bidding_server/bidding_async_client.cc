@@ -32,15 +32,15 @@ void OnRpcDone(
     std::function<absl::StatusOr<std::unique_ptr<RawResponse>>(Response*)>
         decrypt_response) {
   if (!status.ok()) {
-    PS_VLOG(1) << "SendRPC completion status not ok: "
-               << server_common::ToAbslStatus(status);
+    PS_LOG(ERROR) << "SendRPC completion status not ok: "
+                  << server_common::ToAbslStatus(status);
     params->OnDone(status);
     return;
   }
   PS_VLOG(6) << "SendRPC completion status ok";
   auto decrypted_response = decrypt_response(params->ResponseRef());
   if (!decrypted_response.ok()) {
-    PS_VLOG(1) << "BiddingAsyncGrpcClient failed to decrypt response";
+    PS_LOG(ERROR) << "BiddingAsyncGrpcClient failed to decrypt response";
     params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                 decrypted_response.status().ToString()));
     return;

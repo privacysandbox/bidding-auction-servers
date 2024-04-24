@@ -38,8 +38,8 @@ std::unique_ptr<CryptoClientWrapperInterface> CreateCryptoClient() {
 
   std::unique_ptr<google::scp::cpio::CryptoClientInterface> cpio_crypto_client =
       google::scp::cpio::CryptoClientFactory::Create(options);
-  cpio_crypto_client->Init();
-  cpio_crypto_client->Run();
+  cpio_crypto_client->Init().IgnoreError();
+  cpio_crypto_client->Run().IgnoreError();
   return std::make_unique<CryptoClientWrapper>(std::move(cpio_crypto_client));
 }
 

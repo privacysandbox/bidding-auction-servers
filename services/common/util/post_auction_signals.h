@@ -31,9 +31,13 @@ struct PostAuctionSignals {
   std::string winning_ig_owner;
   // The winning bid from the auction.
   float winning_bid;
+  // Currency for said winning bid.
+  std::string winning_bid_currency;
 
   // The bid which was scored second highest in the auction.
   float highest_scoring_other_bid;
+  // Currency for said highest-scoring other bid.
+  std::string highest_scoring_other_bid_currency;
   // Owner of the interest group which made the second highest scored bid.
   std::string highest_scoring_other_bid_ig_owner;
   // Set to true if the signals has second highest scoring bid information.

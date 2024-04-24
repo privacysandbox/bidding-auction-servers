@@ -80,6 +80,37 @@ constexpr absl::string_view js_code_template = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_with_buyer_reporting_id_template =
+    R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+      // Do a random amount of work to generate the price:
+      const bid = fibonacci(Math.floor(Math.random() * 10 + 1));
+
+      // Reshaped into an AdWithBid.
+      return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        bidCurrency: "USD",
+        adComponents: [
+          "adComponent.com/comp?id=1",
+          "adComponent.com/comp?id=2"
+        ],
+        allowComponentAuction: false,
+        buyerReportingId: "%s"
+      };
+    }
+  )JS_CODE";
+
 constexpr absl::string_view js_code_requiring_user_bidding_signals_template =
     R"JS_CODE(
     function fibonacci(num) {
@@ -573,6 +604,80 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
                   .at("arbitraryMetadataField")
                   .number_value(),
               1.0);
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
+  grpc::CallbackServerContext context;
+  V8Dispatcher dispatcher;
+  CodeDispatchClient client(dispatcher);
+  std::string test_buyer_reporting_id = "testBuyerReportingId";
+  SetupV8Dispatcher(
+      &dispatcher,
+      absl::StrFormat(js_code_with_buyer_reporting_id_template,
+                      kAdRenderUrlPrefixForTest, test_buyer_reporting_id));
+
+  GenerateBidsRequest request;
+  request.set_key_id(kKeyId);
+  absl::flat_hash_map<std::string, std::vector<std::string>>
+      interest_group_to_ad;
+  auto req = BuildGenerateBidsRequestFromBrowser(&interest_group_to_ad);
+  ASSERT_TRUE(req.ok()) << req.status();
+  request.set_request_ciphertext(req->SerializeAsString());
+  GenerateBidsResponse response;
+
+  auto generate_bids_reactor_factory =
+      [&client](const GenerateBidsRequest* request,
+                GenerateBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                const BiddingServiceRuntimeConfig& runtime_config) {
+        // You can manually flip this flag to turn benchmarking logging on or
+        // off
+        bool enable_benchmarking = true;
+        std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger;
+        if (enable_benchmarking) {
+          benchmarking_logger = std::make_unique<BiddingBenchmarkingLogger>(
+              FormatTime(absl::Now()));
+        } else {
+          benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
+        }
+        return new GenerateBidsReactor(
+            client, request, response, std::move(benchmarking_logger),
+            key_fetcher_manager, crypto_client, runtime_config);
+      };
+
+  auto protected_app_signals_generate_bids_reactor_factory =
+      [&client](const grpc::CallbackServerContext* context,
+                const GenerateProtectedAppSignalsBidsRequest* request,
+                const BiddingServiceRuntimeConfig& runtime_config,
+                GenerateProtectedAppSignalsBidsResponse* response,
+                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+                CryptoClientWrapperInterface* crypto_client,
+                KVAsyncClient* ad_retrieval_async_client,
+                KVAsyncClient* kv_async_client) {
+        return new ProtectedAppSignalsGenerateBidsReactor(
+            context, client, runtime_config, request, response,
+            key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+            kv_async_client);
+      };
+
+  BiddingService service(
+      std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
+      std::move(crypto_client_), bidding_service_runtime_config_,
+      std::move(protected_app_signals_generate_bids_reactor_factory));
+  service.GenerateBids(&context, &request, &response);
+
+  // Todo(b/336330082) Redesign the tests to avoid waiting with thread sleep.
+  std::this_thread::sleep_for(
+      absl::ToChronoSeconds(absl::Seconds(kGenerateBidExecutionTimeSeconds)));
+
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.buyer_reporting_id(), test_buyer_reporting_id);
   }
 }
 

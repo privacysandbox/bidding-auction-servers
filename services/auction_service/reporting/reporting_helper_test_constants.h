@@ -18,6 +18,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kTestReportResultUrl[] = "http://reportResultUrl.com";
 constexpr char kTestReportWinUrl[] = "http://reportWinUrl.com";
+constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+constexpr char kTestReportWinUrlWithBuyerReportingId[] =
+    "http://reportWinUrl.com&buyerReportingId=testId";
 constexpr char kTestLog[] = "testLog";
 constexpr bool kSendReportToInvokedTrue = true;
 constexpr bool kRegisterAdBeaconInvokedTrue = true;
@@ -26,9 +29,11 @@ constexpr char kTestInteractionUrl[] = "http://event.com";
 constexpr char kTestPublisherHostName[] = "publisherName";
 constexpr char kTestAuctionConfig[] = "testAuctionConfig";
 constexpr char kTestSellerReportingSignalsForComponentSeller[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0,"componentSeller":"http://seller.com"})";
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0,"modifiedBidCurrency":"USD","componentSeller":"http://seller.com"})";
+constexpr char kTestSellerReportingSignalsWithOtherBidCurrency[] =
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5})";
 constexpr char kTestSellerReportingSignals[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"desirability":2.0,"highestScoringOtherBid":0.5})";
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"???","highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5})";
 constexpr char kTestInterestGroupOwner[] = "testOwner";
 constexpr char kTestInterestGroupName[] = "testInterestGroupName";
 constexpr char kTestRender[] = "http://testurl.com";
@@ -40,7 +45,7 @@ constexpr int kTestJoinCount = 1;
 constexpr float kTestRecency = 2.1;
 constexpr int kTestModelingSignals = 3;
 constexpr char kTestBuyerMetadata[] =
-    R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":false,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","interestGroupName":"testInterestGroupName","adCost":5.0})";
+    R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":false,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","adCost":5.0,"interestGroupName":"testInterestGroupName"})";
 constexpr char kTestBuyerMetadataWithProtectedAppSignals[] =
     R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":true,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","interestGroupName":"testInterestGroupName","adCost":5.0})";
 constexpr char kTestBuyerSignals[] = "{\"testkey\":\"testvalue\"}";
@@ -48,6 +53,8 @@ constexpr char kTestSeller[] = "http://seller.com";
 constexpr double kTestAdCost = 5.0;
 constexpr char kTestTopLevelSeller[] = "testTopLevelSeller";
 constexpr float kTestModifiedBid = 1.0;
+constexpr char kUsdIsoCode[] = "USD";
+constexpr char kEurosIsoCode[] = "EUR";
 constexpr bool kTestEnableReportWinInputNoisingTrue = true;
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -14,6 +14,12 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
+# We export some benchmark files.
+# The benchmark can run in the workspace of each inference backend.
+exports_files([
+    "module_benchmark.cc",
+])
+
 cc_binary(
     name = "sandbox_benchmark",
     srcs = [
@@ -39,6 +45,44 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "module_benchmark",
+    srcs = [
+        "module_benchmark.cc",
+    ],
+    data = [
+        "//:gen_test_model",
+    ],
+    deps = [
+        "//modules:module_interface",
+        "//modules:test_module",
+        "//proto:inference_sidecar_cc_proto",
+        "//utils:file_util",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_benchmark//:benchmark",
+        "@com_google_benchmark//:benchmark_main",
+    ],
+)
+
+cc_binary(
+    name = "roma_benchmark",
+    srcs = ["roma_benchmark.cc"],
+    deps = [
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_benchmark//:benchmark",
+        "@com_google_benchmark//:benchmark_main",
+        "@google_privacysandbox_servers_common//src/roma/config",
+        "@google_privacysandbox_servers_common//src/roma/interface",
+        "@google_privacysandbox_servers_common//src/roma/roma_service",
+    ],
+)
+
 # Builds the IPC inference sidecar for testing.
 cc_binary(
     name = "ipc_inference_sidecar_test_bin",
@@ -46,6 +90,7 @@ cc_binary(
     deps = [
         "//:ipc_sidecar",
         "//modules:test_module",
+        "//proto:inference_sidecar_cc_proto",
         "@com_google_absl//absl/log:check",
     ],
 )

@@ -97,6 +97,7 @@ SelectAdReactor::SelectAdReactor(
 AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
     const AdWithBid& input, absl::string_view interest_group_owner) {
   AdWithBidMetadata result;
+  // First copy all the fields that can be copied directly.
   if (input.has_ad()) {
     *result.mutable_ad() = input.ad();
   }
@@ -105,23 +106,33 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_allow_component_auction(input.allow_component_auction());
   result.mutable_ad_components()->CopyFrom(input.ad_components());
   result.set_interest_group_name(input.interest_group_name());
-  result.set_interest_group_owner(interest_group_owner);
   result.set_ad_cost(input.ad_cost());
   result.set_modeling_signals(input.modeling_signals());
   result.set_bid_currency(input.bid_currency());
+
+  // Then set fields passed in externally.
+  result.set_interest_group_owner(interest_group_owner);
+
+  // Finally, find the AdWithBid's IG and copy the last fields from there.
   const BuyerInput& buyer_input =
       buyer_inputs_->find(interest_group_owner)->second;
   for (const auto& interest_group : buyer_input.interest_groups()) {
     if (interest_group.name() == result.interest_group_name()) {
+      result.set_interest_group_origin(interest_group.origin());
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
-        PS_VLOG(1, log_context_) << "BrowserSignal: Recency:"
-                                 << interest_group.browser_signals().recency();
+        PS_VLOG(kInfoMsg, log_context_)
+            << "BrowserSignal: Recency:"
+            << interest_group.browser_signals().recency();
 
         result.set_recency(interest_group.browser_signals().recency());
       }
+      // May as well skip further iterations.
       break;
     }
+  }
+  if (!input.buyer_reporting_id().empty()) {
+    result.set_buyer_reporting_id(input.buyer_reporting_id());
   }
   return result;
 }
@@ -189,9 +200,11 @@ grpc::Status SelectAdReactor::DecryptRequest() {
         GetDecodedProtectedAudienceInput(decrypted_request_->plaintext);
   }
   std::visit(
-      [this](const auto& protected_auction_input) {
-        buyer_inputs_ =
-            GetDecodedBuyerinputs(protected_auction_input.buyer_input());
+      [this](auto& input) {
+        buyer_inputs_ = GetDecodedBuyerinputs(input.buyer_input());
+        for (auto& each_buyer_input : *input.mutable_buyer_input()) {
+          each_buyer_input.second = "encoded buyer input erased";
+        }
       },
       protected_auction_input_);
   return grpc::Status::OK;
@@ -268,7 +281,7 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
 
 void SelectAdReactor::MayLogBuyerInput() {
   if (!buyer_inputs_.ok()) {
-    PS_VLOG(1, log_context_) << "Failed to decode buyer inputs";
+    PS_LOG(ERROR, log_context_) << "Failed to decode buyer inputs";
   } else {
     PS_VLOG(6, log_context_)
         << "Decoded BuyerInput:\n"
@@ -330,8 +343,8 @@ void SelectAdReactor::Execute() {
                                                 absl::StreamFormatter()));
   if (!decrypt_status.ok()) {
     FinishWithStatus(decrypt_status);
-    PS_VLOG(1, log_context_) << "SelectAdRequest decryption failed:"
-                             << server_common::ToAbslStatus(decrypt_status);
+    PS_LOG(ERROR, log_context_) << "SelectAdRequest decryption failed:"
+                                << server_common::ToAbslStatus(decrypt_status);
     return;
   }
   std::visit(
@@ -349,7 +362,7 @@ void SelectAdReactor::Execute() {
     LogIfError(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeSelectAdRequestBadInput));
-    PS_VLOG(1, log_context_) << "AdServerVisible errors found, failing now";
+    PS_LOG(ERROR, log_context_) << "AdServerVisible errors found, failing now";
 
     // Finish the GRPC request if we have received bad data from the ad tech
     // server.
@@ -375,13 +388,13 @@ void SelectAdReactor::Execute() {
   MayPopulateClientVisibleErrors();
 
   if (error_accumulator_.HasErrors()) {
-    PS_VLOG(1, log_context_) << "Some errors found, failing now";
+    PS_LOG(ERROR, log_context_) << "Some errors found, failing now";
 
     // Finish the GRPC request now.
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-  PS_VLOG(1, log_context_) << "No client / Adtech server errors found";
+  PS_VLOG(3, log_context_) << "No client / Adtech server errors found";
 
   benchmarking_logger_->Begin();
 
@@ -470,6 +483,8 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
           *get_bids_request->mutable_consented_debug_config() =
               protected_auction_input.consented_debug_config();
         }
+        get_bids_request->set_enable_unlimited_egress(
+            protected_auction_input.enable_unlimited_egress());
       },
       protected_auction_input_);
 
@@ -597,7 +612,7 @@ void SelectAdReactor::OnFetchBidsDone(
             1, metric::kSfeGetBidsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kBfe, response.status(),
                                     buyer_ig_owner);
-    PS_VLOG(1, log_context_)
+    PS_LOG(ERROR, log_context_)
         << "GetBidsRequest failed for buyer " << buyer_ig_owner
         << "\nresponse status: " << response.status();
 
@@ -646,7 +661,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 }
 
 template <typename T>
-void FilterBidsWithMismatchingCurrencyHelper(
+void SelectAdReactor::FilterBidsWithMismatchingCurrencyHelper(
     google::protobuf::RepeatedPtrField<T>* ads_with_bids,
     absl::string_view buyer_currency) {
   int i = 0;
@@ -657,7 +672,11 @@ void FilterBidsWithMismatchingCurrencyHelper(
         buyer_currency != ad_with_bid.bid_currency()) {
       // Swap to last. Mark for removal and make sure we don't check it again
       ads_with_bids->SwapElements(i, --remove_starting_at);
-      // TODO: Record metric.
+      LogIfError(
+          metric_context_->AccumulateMetric<metric::kAuctionBidRejectedCount>(
+              1, ToSellerRejectionReasonString(
+                     SellerRejectionReason::
+                         BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK)));
       // Leave index un-incremented so swapped element is checked.
     } else {
       i++;
@@ -783,7 +802,7 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeScoringSignalsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kKv, result.status());
-    PS_VLOG(1, log_context_)
+    PS_LOG(ERROR, log_context_)
         << "Scoring signals fetch from key-value server failed: "
         << result.status();
 
@@ -1011,8 +1030,8 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
                     ProtoCloudPlatformToScpCloudPlatform(
                         request_->auction_config().top_level_cloud_platform()));
     if (!encrypted_request.ok()) {
-      PS_VLOG(1, log_context_) << "Error while encrypting response: "
-                               << encrypted_request.status().message();
+      PS_LOG(ERROR, log_context_) << "Error while encrypting response: "
+                                  << encrypted_request.status().message();
       FinishWithStatus(
           grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
       return false;
@@ -1064,8 +1083,8 @@ void SelectAdReactor::PerformDebugReporting(
     return;
   }
 
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(high_score);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      high_score, request_->auction_config().seller_currency());
   for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       const AdWithBid& ad_with_bid = get_bid_response->bids().at(i);

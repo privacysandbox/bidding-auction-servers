@@ -16,11 +16,12 @@
 #define SERVICES_INFERENCE_SIDECAR_COMMON_GRPC_SIDECAR_H_
 
 #include "absl/status/status.h"
+#include "proto/inference_sidecar.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 // Runs a simple gRPC server. It is thread safe.
-absl::Status Run();
+absl::Status Run(const InferenceSidecarRuntimeConfig& config);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

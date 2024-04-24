@@ -319,6 +319,10 @@ absl::Status CborSerializeScoreAdResponse(
                                          error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
+  if (!ad_score.buyer_reporting_id().empty()) {
+    PS_RETURN_IF_ERROR(CborSerializeString(
+        kBuyerReportingId, ad_score.buyer_reporting_id(), error_handler, root));
+  }
   PS_RETURN_IF_ERROR(CborSerializeWinReportingUrls(
       ad_score.win_reporting_urls(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(
@@ -1315,6 +1319,13 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
               "Expected Bid Currency value to be a string");
         }
         auction_result.set_bid_currency(CborDecodeString(kv.value));
+      } break;
+      case 13: {  // kBuyerReportingId
+        if (!cbor_isa_string(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected buyer reporting id to be a string");
+        }
+        auction_result.set_buyer_reporting_id(CborDecodeString(kv.value));
       } break;
       default:
         // Unexpected key in the auction result CBOR

@@ -34,6 +34,7 @@ cc_library(
     ],
     deps = [
         "//services/common/loggers:timer",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",

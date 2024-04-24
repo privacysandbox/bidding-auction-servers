@@ -39,6 +39,14 @@ load("@google_privacysandbox_servers_common//third_party:deps1.bzl", data_plane_
 
 data_plane_shared_deps1()
 
+load("@google_privacysandbox_servers_common//third_party:deps2.bzl", data_plane_shared_deps2 = "deps2")
+
+data_plane_shared_deps2()
+
+load("@google_privacysandbox_servers_common//third_party:deps3.bzl", data_plane_shared_deps3 = "deps3")
+
+data_plane_shared_deps3()
+
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
 
 switched_rules_by_language(
@@ -63,15 +71,3 @@ grpc_deps()
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
-
-load("@google_privacysandbox_servers_common//build_defs/cc/shared:sandboxed_api.bzl", "sandboxed_api")
-
-### Sandbox2 depndencies
-sandboxed_api()
-
-load("@com_google_sandboxed_api//sandboxed_api/bazel:llvm_config.bzl", "llvm_disable_optional_support_deps")
-load("@com_google_sandboxed_api//sandboxed_api/bazel:sapi_deps.bzl", "sapi_deps")
-
-llvm_disable_optional_support_deps()
-
-sapi_deps()

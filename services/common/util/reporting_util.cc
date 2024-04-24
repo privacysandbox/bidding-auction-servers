@@ -23,6 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/request_response_constants.h"
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,6 +35,8 @@ inline constexpr char kWarnings[] = "warnings";
 inline constexpr char kErrors[] = "errors";
 inline constexpr int kNumDebugReportingReplacements = 5;
 inline constexpr int kNumAdditionalWinReportingReplacements = 2;
+inline constexpr absl::string_view kFeatureDisabled = "false";
+inline constexpr absl::string_view kFeatureEnabled = "true";
 
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
 
@@ -42,21 +45,35 @@ void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
-      PS_VLOG(1, log_context) << log_type << ": " << log.GetString();
+      PS_VLOG(kInfoMsg, log_context) << log_type << ": " << log.GetString();
     }
   }
+}
+
+void AppendFeatureFlagValue(std::string& feature_flags,
+                            absl::string_view feature_name,
+                            bool is_feature_enabled) {
+  absl::string_view enable_feature = kFeatureDisabled;
+  if (is_feature_enabled) {
+    enable_feature = kFeatureEnabled;
+  }
+  feature_flags.append(
+      absl::StrCat("\"", feature_name, "\": ", enable_feature));
 }
 
 }  // namespace
 
 PostAuctionSignals GeneratePostAuctionSignals(
-    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
+    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
+    absl::string_view seller_currency) {
   // If there is no winning ad, return with default signals values.
   if (!winning_ad_score.has_value()) {
     return {kDefaultWinningInterestGroupName,
             kDefaultWinningInterestGroupOwner,
             kDefaultWinningBid,
+            /*DefaultWinningBidCurrency=*/kEmptyBidCurrencyCode,
             /*DefaultHighestScoringOtherBid=*/0.0,
+            /*DefaultHighestScoringOtherBidCurrency=*/kEmptyBidCurrencyCode,
             kDefaultHighestScoringOtherBidInterestGroupOwner,
             /*DefaultHasHighestScoringOtherBid=*/false,
             kDefaultWinningScore,
@@ -80,6 +97,13 @@ PostAuctionSignals GeneratePostAuctionSignals(
       has_highest_scoring_other_bid = true;
     }
   }
+
+  std::string bid_currency = (winning_ad_score->buyer_bid_currency().empty())
+                                 ? kEmptyBidCurrencyCode
+                                 : winning_ad_score->buyer_bid_currency();
+  std::string highest_scoring_other_bid_currency =
+      (seller_currency.empty()) ? kEmptyBidCurrencyCode
+                                : std::string(seller_currency);
 
   bool made_highest_scoring_other_bid = false;
   if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() == 1 &&
@@ -112,7 +136,9 @@ PostAuctionSignals GeneratePostAuctionSignals(
   return {winning_ad_score->interest_group_name(),
           winning_ad_score->interest_group_owner(),
           winning_bid,
+          bid_currency,
           highest_scoring_other_bid,
+          highest_scoring_other_bid_currency,
           std::move(highest_scoring_other_bid_ig_owner),
           has_highest_scoring_other_bid,
           winning_score,
@@ -260,6 +286,17 @@ absl::StatusOr<std::string> ParseAndGetResponseJson(
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);
+}
+
+std::string GetFeatureFlagJson(bool enable_logging,
+                               bool enable_debug_url_generation) {
+  std::string feature_flags = "{";
+  AppendFeatureFlagValue(feature_flags, kFeatureLogging, enable_logging);
+  feature_flags.append(",");
+  AppendFeatureFlagValue(feature_flags, kFeatureDebugUrlGeneration,
+                         enable_debug_url_generation);
+  feature_flags.append("}");
+  return feature_flags;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

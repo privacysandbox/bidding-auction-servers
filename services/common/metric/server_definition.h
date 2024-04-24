@@ -548,6 +548,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kSfeWithWinnerTimeMs,
         &kProtectedCiphertextSize,
         &kAuctionConfigSize,
+        &kAuctionBidRejectedCount,
 };
 
 template <>

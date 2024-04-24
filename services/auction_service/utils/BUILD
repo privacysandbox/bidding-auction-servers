@@ -48,6 +48,7 @@ cc_test(
     ],
     deps = [
         ":proto_utils",
+        "//services/auction_service:auction_constants",
         "//services/auction_service:score_ads_reactor_test_util",
         "//services/common/test:random",
         "@com_google_googletest//:gtest_main",

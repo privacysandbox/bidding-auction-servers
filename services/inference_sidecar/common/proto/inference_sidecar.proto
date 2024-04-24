@@ -52,3 +52,20 @@ message RegisterModelRequest {
 
 message RegisterModelResponse {
 }
+
+message InferenceSidecarRuntimeConfig {
+  // The following two parameters control the threading behavior of the
+  // inference backend.
+  // For Tensorflow, they are configured at the session level.
+  // For PyTorch, they are configured the process level.
+
+  // Specifies the number of threads for parallelizing individual operations.
+  int32 num_interop_threads = 1;
+  // Specifies the number of threads for parallelizing the execution within a
+  // single operation.
+  int32 num_intraop_threads = 2;
+
+  // Specifies the inference backend module required.
+  // Currently supports "test", "tensorflow_v2_14_0", "pytorch_v2_1_1"
+  string module_name = 3;
+}

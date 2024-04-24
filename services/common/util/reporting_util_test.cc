@@ -31,17 +31,21 @@ inline constexpr char kTestIgOwner[] = "test_ig_owner";
 inline constexpr char kTestIgName[] = "test_ig_name";
 inline constexpr char kWinningIgName[] = "winning_ig_name";
 inline constexpr char kWinningIgOwner[] = "winning_ig_owner";
+inline constexpr char kSellerCurrency[] = "GBP";
+inline constexpr char kDefaultHighestScoringOtherBidCurrency[] = "???";
 
 TEST(PostAuctionSignalsTest, HasAllSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(2, 2, 2));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score);
+  PostAuctionSignals signals =
+      GeneratePostAuctionSignals(ad_score, kSellerCurrency);
   EXPECT_EQ(ad_score->interest_group_owner(), signals.winning_ig_owner);
   EXPECT_EQ(ad_score->interest_group_name(), signals.winning_ig_name);
   EXPECT_EQ(ad_score->buyer_bid(), signals.winning_bid);
   EXPECT_EQ(ad_score->desirability(), signals.winning_score);
   EXPECT_EQ(ad_score->render(), signals.winning_ad_render_url);
   EXPECT_TRUE(signals.has_highest_scoring_other_bid);
+  EXPECT_EQ(signals.highest_scoring_other_bid_currency, kSellerCurrency);
   EXPECT_NE(signals.highest_scoring_other_bid_ig_owner, "");
   EXPECT_GT(signals.highest_scoring_other_bid, 0.0);
   EXPECT_GT(signals.rejection_reason_map.size(), 0);
@@ -50,32 +54,36 @@ TEST(PostAuctionSignalsTest, HasAllSignals) {
 TEST(PostAuctionSignalsTest, HasWinningBidSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(0));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score);
+  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score, "");
   EXPECT_EQ(ad_score->interest_group_owner(), signals.winning_ig_owner);
   EXPECT_EQ(ad_score->interest_group_name(), signals.winning_ig_name);
   EXPECT_EQ(ad_score->buyer_bid(), signals.winning_bid);
   EXPECT_EQ(ad_score->desirability(), signals.winning_score);
   EXPECT_EQ(ad_score->render(), signals.winning_ad_render_url);
+  EXPECT_EQ(signals.highest_scoring_other_bid_currency,
+            kDefaultHighestScoringOtherBidCurrency);
 }
 
 TEST(PostAuctionSignalsTest, HasHighestOtherBidSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(2));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score);
+  PostAuctionSignals signals =
+      GeneratePostAuctionSignals(ad_score, kSellerCurrency);
   EXPECT_TRUE(signals.has_highest_scoring_other_bid);
   EXPECT_NE(signals.highest_scoring_other_bid_ig_owner, "");
   EXPECT_GT(signals.highest_scoring_other_bid, 0.0);
+  EXPECT_EQ(signals.highest_scoring_other_bid_currency, kSellerCurrency);
 }
 
 TEST(PostAuctionSignalsTest, HasRejectionReasons) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(0, 2, 2));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score);
+  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score, "");
   EXPECT_GT(signals.rejection_reason_map.size(), 0);
 }
 
 TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
-  PostAuctionSignals signals = GeneratePostAuctionSignals(std::nullopt);
+  PostAuctionSignals signals = GeneratePostAuctionSignals(std::nullopt, "");
   EXPECT_EQ(signals.winning_ig_owner, "");
   EXPECT_EQ(signals.winning_ig_name, "");
   EXPECT_EQ(signals.winning_bid, 0.0);
@@ -83,6 +91,8 @@ TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
   EXPECT_EQ(signals.winning_ad_render_url, "");
   EXPECT_FALSE(signals.has_highest_scoring_other_bid);
   EXPECT_EQ(signals.highest_scoring_other_bid_ig_owner, "");
+  EXPECT_EQ(signals.highest_scoring_other_bid_currency,
+            kDefaultHighestScoringOtherBidCurrency);
   EXPECT_EQ(signals.highest_scoring_other_bid, 0.0);
   EXPECT_EQ(signals.rejection_reason_map.size(), 0);
 }

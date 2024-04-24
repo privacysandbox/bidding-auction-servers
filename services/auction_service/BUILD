@@ -33,10 +33,7 @@ cc_library(
     hdrs = [
         "auction_constants.h",
     ],
-    visibility = [
-        "//services/auction_service:__pkg__",
-        "//services/auction_service/utils:__pkg__",
-    ],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -284,16 +281,16 @@ cc_binary(
     visibility = ["//visibility:public"],
     deps = [
         ":auction_code_fetch_config_cc_proto",
+        ":auction_constants",
         ":auction_service",
+        ":seller_code_fetch_manager",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
-        "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/data:runtime_config",
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
-        "//services/common/code_fetch:periodic_code_fetcher",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
@@ -306,6 +303,7 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
@@ -350,6 +348,7 @@ cc_library(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/util:proto_util",
         "@com_google_absl//absl/strings",
     ],
 )

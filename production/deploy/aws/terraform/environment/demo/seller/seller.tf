@@ -63,6 +63,7 @@ module "seller" {
     AUCTION_SERVER_HOST                    = "" # Example: "dns:///auction.seller-frontend.com:443"
     KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
     BUYER_SERVER_HOSTS                     = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
+    SELLER_CLOUD_PLATFORMS_MAP             = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
@@ -76,6 +77,7 @@ module "seller" {
     TEST_MODE                              = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
     # "{
+    #     "fetchMode": 0,
     #     "auctionJsPath": "",
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,

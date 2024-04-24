@@ -28,21 +28,24 @@ constexpr absl::string_view kModelPath =
     "__main__/testdata/models/tensorflow_1_mib_saved_model.pb";
 
 TEST(TestModule, Success_Predict) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   PredictRequest request;
   auto result = module->Predict(request);
   EXPECT_TRUE(result.ok());
 }
 
 TEST(TestModule, Success_RegisterModel) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest request;
   auto result = module->RegisterModel(request);
   EXPECT_TRUE(result.ok());
 }
 
 TEST(TestModule, Success_ReadModel) {
-  std::unique_ptr<TestModule> module = std::make_unique<TestModule>();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<TestModule> module = std::make_unique<TestModule>(config);
   module->set_model_path(kModelPath);
   RegisterModelRequest request;
   auto result = module->RegisterModel(request);

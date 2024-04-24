@@ -124,6 +124,11 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // RETURNS: True if any bids remain to be scored and false otherwise.
   bool FilterBidsWithMismatchingCurrency();
 
+  template <typename T>
+  void FilterBidsWithMismatchingCurrencyHelper(
+      google::protobuf::RepeatedPtrField<T>* ads_with_bids,
+      absl::string_view buyer_currency);
+
   // Validates the mandatory fields in the request. Reports any errors to the
   // error accumulator.
   template <typename T>
