@@ -120,7 +120,7 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
     error_msg = status.error_message();
     wait_for_error_callback.Notify();
   };
-  PS_VLOG(2, log_context)
+  PS_VLOG(kNoisyInfo, log_context)
       << "IG bids map size:"
       << (maybe_bidding_group_map.has_value()
               ? absl::StrCat("found: ", maybe_bidding_group_map->size())
@@ -297,15 +297,15 @@ IgsWithBidsMap GetBuyerIgsWithBidsMap(
   IgsWithBidsMap buyer_to_ig_idx_map;
   for (IgsWithBidsMap& component_auction_ig_group :
        component_auction_bidding_groups) {
-    PS_VLOG(kInfoMsg) << "Size of input buyer bids map "
-                      << component_auction_ig_group.size();
+    PS_VLOG(kNoisyInfo) << "Size of input buyer bids map "
+                        << component_auction_ig_group.size();
     for (auto& [buyer, ig_idx] : component_auction_ig_group) {
       // Check if the key already exists in the output map
       const auto& it = buyer_to_ig_idx_map.find(buyer);
       if (it == buyer_to_ig_idx_map.end()) {
         // Insert the entire entry
         buyer_to_ig_idx_map.insert({buyer, std::move(ig_idx)});
-        PS_VLOG(kInfoMsg) << "Inserted for " << buyer;
+        PS_VLOG(kNoisyInfo) << "Inserted for " << buyer;
         continue;
       } else if (auto buyer_ig_set = colliding_buyer_sets.find(buyer);
                  buyer_ig_set == colliding_buyer_sets.end()) {
@@ -313,13 +313,13 @@ IgsWithBidsMap GetBuyerIgsWithBidsMap(
         // Add values from previous CARs.
         absl::flat_hash_set<int> ig_set(it->second.index().begin(),
                                         it->second.index().end());
-        PS_VLOG(kInfoMsg) << "Inserted in colliding for" << buyer
-                          << ig_set.size();
+        PS_VLOG(kNoisyInfo)
+            << "Inserted in colliding for" << buyer << ig_set.size();
         colliding_buyer_sets.insert({buyer, std::move(ig_set)});
       }
       // Already in colliding buyer set. Add all values from current CAR.
-      PS_VLOG(kInfoMsg) << "Inserted in colliding for" << buyer
-                        << ig_idx.index().size();
+      PS_VLOG(kNoisyInfo) << "Inserted in colliding for" << buyer
+                          << ig_idx.index().size();
       colliding_buyer_sets.at(buyer).insert(ig_idx.index().begin(),
                                             ig_idx.index().end());
     }
@@ -330,8 +330,8 @@ IgsWithBidsMap GetBuyerIgsWithBidsMap(
     buyer_to_ig_idx_map.at(buyer).mutable_index()->Assign(ig_idx_set.begin(),
                                                           ig_idx_set.end());
   }
-  PS_VLOG(kInfoMsg) << "Size of output buyer bids map "
-                    << buyer_to_ig_idx_map.size();
+  PS_VLOG(kNoisyInfo) << "Size of output buyer bids map "
+                      << buyer_to_ig_idx_map.size();
   return buyer_to_ig_idx_map;
 }
 
@@ -350,7 +350,7 @@ absl::StatusOr<AuctionResult> UnpackageServerAuctionComponentResult(
 
   PS_ASSIGN_OR_RETURN(std::string payload,
                       GzipDecompress(decoded_request.compressed_data));
-  PS_VLOG(2) << "Parsing Auction Result: " << payload;
+  PS_VLOG(kNoisyInfo) << "Parsing Auction Result: " << payload;
   if (!proto.ParseFromArray(payload.data(), payload.size())) {
     return absl::Status(absl::StatusCode::kInvalidArgument, kBadBinaryProto);
   }
@@ -374,7 +374,7 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
       std::string error_msg =
           absl::StrFormat(kErrorDecryptingAuctionResultError,
                           auction_result.status().message());
-      PS_VLOG(2, log_context) << error_msg;
+      PS_VLOG(kNoisyWarn, log_context) << error_msg;
       // Report error. This will be later returned to client in case
       // none of the auction results could be decoded.
       error_accumulator.ReportError(ErrorVisibility::AD_SERVER_VISIBLE,
@@ -382,10 +382,10 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
                                     ErrorCode::CLIENT_SIDE);
       continue;
     }
-    PS_VLOG(2, log_context)
+    PS_VLOG(kSuccess, log_context)
         << "Successfully decrypted auction result ciphertext for: "
         << auction_result->auction_params().component_seller();
-    PS_VLOG(kInfoMsg, log_context)
+    PS_VLOG(kNoisyInfo, log_context)
         << "Bidding group size: " << auction_result->bidding_groups().size();
     // Add errors from AuctionResult to error_accumulator in
     // ValidateComponentAuctionResult.
@@ -412,7 +412,7 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
       // Return empty vector to abort auction.
       return std::vector<AuctionResult>();
     }
-    PS_VLOG(2, log_context)
+    PS_VLOG(kSuccess, log_context)
         << "Successfully validated auction result for: "
         << auction_result->auction_params().component_seller();
     component_auction_results.push_back(*std::move(auction_result));
@@ -439,7 +439,8 @@ ProtectedAudienceInput DecryptProtectedAudienceInput(
     default:
       break;
   }
-  PS_VLOG(2) << "Successfully decrypted protected audience input ciphertext";
+  PS_VLOG(kSuccess)
+      << "Successfully decrypted protected audience input ciphertext";
   return protected_auction_input;
 }
 
@@ -462,7 +463,8 @@ ProtectedAuctionInput DecryptProtectedAuctionInput(
     default:
       break;
   }
-  PS_VLOG(2) << "Successfully decrypted protected audience input ciphertext";
+  PS_VLOG(kSuccess)
+      << "Successfully decrypted protected audience input ciphertext";
   return protected_auction_input;
 }
 

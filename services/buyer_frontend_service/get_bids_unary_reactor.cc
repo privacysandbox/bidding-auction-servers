@@ -224,11 +224,11 @@ void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
                                     << request_->ShortDebugString();
-  PS_VLOG(2, log_context_) << "Headers:\n"
-                           << absl::StrJoin(context_->client_metadata(), "\n",
-                                            absl::PairFormatter(
-                                                absl::StreamFormatter(), " : ",
-                                                absl::StreamFormatter()));
+  PS_VLOG(kPlain, log_context_)
+      << "Headers:\n"
+      << absl::StrJoin(context_->client_metadata(), "\n",
+                       absl::PairFormatter(absl::StreamFormatter(), " : ",
+                                           absl::StreamFormatter()));
 
   if (!decrypt_status_.ok()) {
     PS_LOG(ERROR, log_context_) << "Decrypting the request failed:"
@@ -419,8 +419,8 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
           CreateGenerateBidsRawRequest(raw_request_, raw_request_.buyer_input(),
                                        std::move(bidding_signals), log_context);
 
-  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
-                           << raw_bidding_input->ShortDebugString();
+  PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"
+                                     << raw_bidding_input->ShortDebugString();
   auto bidding_request =
       metric::MakeInitiatedRequest(metric::kBs, metric_context_.get());
   bidding_request->SetRequestSize((int)raw_bidding_input->ByteSizeLong());

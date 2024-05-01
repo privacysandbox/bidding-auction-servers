@@ -40,9 +40,9 @@ void BenchmarkingLogger::End() {
 
 BenchmarkingLogger::~BenchmarkingLogger() {
   for (const std::string& log_record : log_store_) {
-    PS_VLOG(kInfoMsg) << absl::StrCat("\nBenchmarking for request ID [",
-                                      request_id_, "]: ", log_record);
+    PS_VLOG(kNoisyInfo) << absl::StrCat("\nBenchmarking for request ID [",
+                                        request_id_, "]: ", log_record);
   }
-  PS_VLOG(kInfoMsg) << "\n\n";
+  PS_VLOG(kNoisyInfo) << "\n\n";
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

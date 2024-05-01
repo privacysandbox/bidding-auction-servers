@@ -79,7 +79,7 @@ module "seller" {
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
-    #     "enableSellerDebugUrlGeneration": false,
+    #     "enableSellerDebugUrlGeneration": true,
     #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": true,
     #     "enableReportWinUrlGeneration": true,
@@ -124,6 +124,13 @@ module "seller" {
     SFE_TLS_CERT                       = module.secrets.tls_cert # You may remove the secrets module and instead either inline or use an auto.tfvars for this variable.
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = ""                      # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = ""                      # Example: "3000"
+
+    # TCMalloc related config parameters.
+    # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
+    AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND = "4096"
+    AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
+    SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
+    SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.

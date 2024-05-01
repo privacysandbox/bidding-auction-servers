@@ -37,7 +37,7 @@ export SERVER_START_CMD=$(cat << END
       "auctionJsUrl": "https://pubads.g.doubleclick.net/td/sjs",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
-      "enableSellerDebugUrlGeneration": false,
+      "enableSellerDebugUrlGeneration": true,
       "enableAdtechCodeLogging": false,
       "enableReportResultUrlGeneration": true,
       "enableReportWinUrlGeneration": true,
@@ -48,6 +48,8 @@ export SERVER_START_CMD=$(cat << END
 --consented_debug_token="" \
 --ps_verbosity=2 \
 --enable_protected_audience="true" \
+--auction_tcmalloc_background_release_rate_bytes_per_second=4096 \
+--auction_tcmalloc_max_total_thread_cache_bytes=10737418240 \
 --enable_protected_app_signals="false" && exit
 END
 )

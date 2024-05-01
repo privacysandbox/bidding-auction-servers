@@ -27,6 +27,7 @@
 #include "include/gmock/gmock.h"
 #include "include/gtest/gtest.h"
 #include "rapidjson/document.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -41,6 +42,7 @@ constexpr int kNormalTimeoutMs = 5000;
 class MultiCurlHttpFetcherAsyncTest : public ::testing::Test {
  protected:
   MultiCurlHttpFetcherAsyncTest() {
+    server_common::log::PS_VLOG_IS_ON(0, 10);
     executor_ = std::make_unique<server_common::EventEngineExecutor>(
         grpc_event_engine::experimental::CreateEventEngine());
     fetcher_ = std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get());

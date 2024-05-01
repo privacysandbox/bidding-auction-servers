@@ -15,6 +15,7 @@
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 
 #include <algorithm>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -23,6 +24,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "event2/thread.h"
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -44,6 +46,7 @@ struct CurlTimeStats {
   curl_off_t download_speed = -1;
   curl_off_t upload_speed = -1;
   curl_off_t new_conns = -1;
+  curl_off_t queue_time_us = -1;
 };
 void GetTraceFromCurl(CURL* handle) {
   if (server_common::log::PS_VLOG_IS_ON(log_level)) {
@@ -74,6 +77,8 @@ void GetTraceFromCurl(CURL* handle) {
                       &curl_time_stats.upload_speed);
     curl_easy_getinfo(handle, CURLINFO_NUM_CONNECTS,
                       &curl_time_stats.new_conns);
+    curl_easy_getinfo(handle, CURLINFO_QUEUE_TIME_T,
+                      &curl_time_stats.queue_time_us);
 
     PS_VLOG(log_level)
         << "Curl request " << absl::StrCat(request_url) << " stats: \n"
@@ -90,20 +95,91 @@ void GetTraceFromCurl(CURL* handle) {
         << " bytes/second\n"
         << "upload_speed:  " << curl_time_stats.upload_speed
         << " bytes/second\n"
-        << "new_conns:  " << curl_time_stats.new_conns << "\n";
+        << "new_conns:  " << curl_time_stats.new_conns << "\n"
+        << "queue duration: "
+        << absl::ToDoubleMilliseconds(
+               absl::Microseconds(curl_time_stats.queue_time_us))
+        << " ms\n";
   }
 }
 
 }  // namespace
+
+EventBase::EventBase(int num_priorities) {
+  evthread_use_pthreads();
+  event_base_ = event_base_new();
+  event_base_priority_init(event_base_, num_priorities);
+  if (server_common::log::PS_VLOG_IS_ON(10)) {
+    event_enable_debug_mode();
+  }
+}
+
+EventBase::~EventBase() {
+  if (event_base_ != nullptr) {
+    event_base_free(event_base_);
+  }
+}
+
+struct event_base* EventBase::get() { return event_base_; }
+
+Event::Event(struct event_base* base, evutil_socket_t fd, short event_type,
+             EventCallback event_callback, void* arg, int priority,
+             struct timeval* event_timeout)
+    : priority_(priority),
+      event_(event_new(base, fd, event_type, event_callback, arg)) {
+  event_priority_set(event_, priority_);
+  event_add(event_, event_timeout);
+}
+
+struct event* Event::get() { return event_; }
+Event::~Event() {
+  if (event_) {
+    event_del(event_);
+    event_free(event_);
+  }
+}
+
+static struct timeval OneSecond = {1, 0};
 
 MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
     server_common::Executor* executor, int64_t keepalive_interval_sec,
     int64_t keepalive_idle_sec)
     : executor_(executor),
       keepalive_idle_sec_(keepalive_idle_sec),
-      keepalive_interval_sec_(keepalive_interval_sec) {
+      keepalive_interval_sec_(keepalive_interval_sec),
+      // Shutdown timer event is persistent because we don't want to remove
+      // it from the event loop the first time it fires. With this timer, we
+      // periodically check for fetcher shutdown and terminate the event loop
+      // if fetcher has been shutdown.
+      shutdown_timer_event_(Event(event_base_.get(), /*fd=*/-1,
+                                  /*event_type=*/EV_PERSIST,
+                                  /*event_callback=*/ShutdownEventLoop,
+                                  /*arg=*/this,
+                                  /*priority=*/0, &OneSecond)),
+      multi_curl_request_manager_(event_base_.get()),
+      multi_timer_event_(Event(
+          event_base_.get(), /*fd=*/-1, /*event_type=*/0,
+          /*event_callback=*/multi_curl_request_manager_.MultiTimerCallback,
+          /*arg=*/&multi_curl_request_manager_)) {
+  multi_curl_request_manager_.Configure([this]() { PerformCurlUpdate(); },
+                                        multi_timer_event_.get());
   // Start execution loop.
-  executor_->Run([this]() { ExecuteLoop(); });
+  executor_->Run([this]() {
+    PS_VLOG(5) << "libevent scheduled the event loop";
+    event_base_dispatch(event_base_.get());
+  });
+}
+
+void MultiCurlHttpFetcherAsync::ShutdownEventLoop(int fd, short event_type,
+                                                  void* arg) {
+  auto* self = reinterpret_cast<MultiCurlHttpFetcherAsync*>(arg);
+  if (!self->shutdown_requested_.HasBeenNotified()) {
+    return;
+  }
+
+  PS_VLOG(5) << "Shutting down the event loop";
+  event_base_loopbreak(self->event_base_.get());
+  self->shutdown_complete_.Notify();
 }
 
 MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
@@ -114,8 +190,7 @@ MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
   // We ensure that no other thread will lock callback_map_lock_ and in_loop_mu_
   // here since no new requests are being accepted, or processed through
   // the execution loop.
-  absl::MutexLock l1(&in_loop_mu_);
-  absl::MutexLock l2(&curl_handle_set_lock_);
+  absl::MutexLock lock(&curl_handle_set_lock_);
 
   // Execute all callbacks and clean up handles
   for (auto& handle : curl_handle_set_) {
@@ -316,18 +391,6 @@ void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
   ExecuteCurlRequest(std::move(request));
 }
 
-void MultiCurlHttpFetcherAsync::ExecuteLoop() ABSL_LOCKS_EXCLUDED(in_loop_mu_) {
-  if (in_loop_mu_.TryLock()) {
-    while (!shutdown_requested_.HasBeenNotified()) {
-      PerformCurlUpdate();
-    }
-    // Shut down has been requested so exit.
-    shutdown_complete_.Notify();
-    in_loop_mu_.Unlock();
-  }
-  // Another ExecuteLoop is already running.
-}
-
 std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
     CURLMsg* msg) {
   void* output;
@@ -370,11 +433,11 @@ std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
 }
 
 void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
-    ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
-        ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_) {
+    ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_) {
   // Check for updates (provide computation for Libcurl to perform I/O).
   int msgs_left = -1;
   while (CURLMsg* msg = multi_curl_request_manager_.GetUpdate(&msgs_left)) {
+    PS_VLOG(10) << __func__ << ": A curl handle completed transfer";
     // Get data for completed message.
     auto [status, data_ptr] = GetResultFromMsg(msg);
     multi_curl_request_manager_.Remove(msg->easy_handle);
@@ -397,6 +460,7 @@ void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
           static_cast<CurlRequestData*>(data_ptr));
       // invoke callback for handle.
       if (status.ok()) {
+        PS_VLOG(10) << "Invoking callback for successful curl operation";
         std::move(curl_request_data_ptr->done_callback)(
             *curl_request_data_ptr->output);
       } else {

@@ -282,7 +282,7 @@ std::string GetBuyerMetadataJson(
         kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
   if (dispatch_request_data.buyer_reporting_metadata.recency.has_value()) {
-    PS_VLOG(kInfoMsg, dispatch_request_data.log_context)
+    PS_VLOG(kNoisyInfo, dispatch_request_data.log_context)
         << "BuyerReportingMetadata: Recency:"
         << dispatch_request_data.buyer_reporting_metadata.recency.value();
     long recency =
@@ -353,7 +353,7 @@ std::string GetBuyerMetadataJson(
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {
-    PS_VLOG(2, dispatch_request_data.log_context)
+    PS_VLOG(kNoisyWarn, dispatch_request_data.log_context)
         << "Error constructing buyer_reporting_metadata_input for "
            "reportingEntryFunction";
     return kDefaultBuyerReportingMetadata;
@@ -367,7 +367,7 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   absl::StatusOr<std::string> seller_reporting_signals =
       GetSellerReportingSignals(dispatch_request_data, dispatch_request_config);
   if (!seller_reporting_signals.ok()) {
-    PS_VLOG(2, dispatch_request_data.log_context)
+    PS_VLOG(kNoisyWarn, dispatch_request_data.log_context)
         << "Error generating Seller Reporting Signals for Reporting input";
     return {};
   }
@@ -404,9 +404,8 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
     }
   }
 
-  PS_VLOG(2, dispatch_request_data.log_context)
-      << "\n\nReporting Input Args:"
-      << "\nAuction Config:\n"
+  PS_VLOG(kDispatch, dispatch_request_data.log_context)
+      << "\n\nReporting Input Args:" << "\nAuction Config:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kAuctionConfig)])
       << "\nSeller Reporting Signals:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)])

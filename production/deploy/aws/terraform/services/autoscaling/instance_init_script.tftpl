@@ -1,15 +1,21 @@
 #!/bin/bash
 
+# Having issues with servers failing init? On the EC2 instance,
+# you can find log outputs for this script via:
+# sudo cat /var/log/cloud-init-output.log
+
+set -x
+
 # Start Envoy before the nitro allocator service.
 # Otherwise, Envoy segfaults.
 # See b/276754615 for more detail.
 # TODO(b/276754615): Update after envoy fixes its bug.
 docker run --rm \
---network host \
--v /etc/envoy:/etc/envoy \
-envoyproxy/envoy-distroless-dev:e0cc4306253f0318f9dcbc77cf32feb6245c378f \
---config-path /etc/envoy/envoy.yaml \
--l info &
+  --network host \
+  -v /etc/envoy:/etc/envoy \
+  envoyproxy/envoy-distroless-dev:e0cc4306253f0318f9dcbc77cf32feb6245c378f \
+  --config-path /etc/envoy/envoy.yaml \
+  -l info &
 # Ping Envoy until it's ready. Silent fail otherwise --
 # load balancer health checks will eventually kill this instance.
 curl --retry 6 --retry-all-errors localhost:9902/ready
@@ -18,7 +24,7 @@ curl --retry 6 --retry-all-errors localhost:9902/ready
 systemctl stop nitro-enclaves-allocator.service
 
 # Allocate resources available to enclave
-export ALLOCATOR_YAML=/etc/nitro_enclaves/allocator.yaml
+declare -r -x  ALLOCATOR_YAML=/etc/nitro_enclaves/allocator.yaml
 cat >"$${ALLOCATOR_YAML}" <<EOF
 ---
 # How much memory to allocate for enclaves (in MiB).
@@ -39,11 +45,45 @@ systemctl enable vsockproxy.service
 sed -i -e 's/$SERVICE/'${service}'/g' /opt/privacysandbox/otel_collector_config.yaml
 # Start the otel collector
 sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl \
--c /opt/privacysandbox/otel_collector_config.yaml \
--a start
+  -c /opt/privacysandbox/otel_collector_config.yaml \
+  -a start
 
-# `${debug_mode}` must always be the last input/part of the run-enclave command.
-nitro-cli run-enclave \
---cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
---eif-path /opt/privacysandbox/server_enclave_image.eif \
---enclave-cid 16 ${debug_mode}
+if [[ "${enclave_debug_mode}" == "true" ]]; then
+  # Create cloudwatch config
+  cat << EOF > "/amazon-cloudwatch-agent.json"
+{
+  "agent": {
+    "metrics_collection_interval": 10
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "${enclave_log_path}",
+            "log_group_name": "${service}-tee-logs",
+            "log_stream_name": "${environment}-{instance_id}",
+            "timestamp_format": "%Y-%m-%d %H:%M:%S"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+  # Start cloudwatch
+  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config -m ec2 \
+    -c file:/amazon-cloudwatch-agent.json -s
+
+  nitro-cli run-enclave \
+    --cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
+    --eif-path /opt/privacysandbox/server_enclave_image.eif \
+    --enclave-cid 16 --attach-console > ${enclave_log_path}
+else
+  nitro-cli run-enclave \
+    --cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
+    --eif-path /opt/privacysandbox/server_enclave_image.eif \
+    --enclave-cid 16
+fi

@@ -837,8 +837,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   EXPECT_EQ(auction_result.ad_component_render_urls().size(),
             winner.mutable_component_renders()->size());
   EXPECT_EQ(auction_result.ad_render_url(), winner.render());
-  // No modified bid set, so bid should be empty.
-  EXPECT_EQ(auction_result.bid(), 0.0f);
+  EXPECT_EQ(auction_result.bid(), winner.buyer_bid());
   EXPECT_EQ(auction_result.interest_group_name(), winner.interest_group_name());
   EXPECT_EQ(auction_result.interest_group_owner(),
             winner.interest_group_owner());
@@ -1109,7 +1108,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
             winner.mutable_component_renders()->size());
   EXPECT_EQ(auction_result.ad_render_url(), winner.render());
   // No modified bid set, so bid should be empty.
-  EXPECT_EQ(auction_result.bid(), 0.0f);
+  EXPECT_EQ(auction_result.bid(), winner.buyer_bid());
   EXPECT_EQ(auction_result.interest_group_name(), winner.interest_group_name());
   EXPECT_EQ(auction_result.interest_group_owner(),
             winner.interest_group_owner());
@@ -1335,7 +1334,7 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
       .WillRepeatedly(
           [&reporting_count](
               const HTTPRequest& reporting_request,
-              absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
+              absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
                   done_callback) {
             EXPECT_FALSE(reporting_request.url.empty());
             reporting_count.DecrementCount();

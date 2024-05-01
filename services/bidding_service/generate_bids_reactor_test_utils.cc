@@ -245,22 +245,21 @@ void SetupAdRetrievalClientExpectations(
     KVAsyncClientMock& ad_retrieval_client,
     absl::optional<absl::StatusOr<GetValuesResponse>> ads_retrieval_response) {
   EXPECT_CALL(ad_retrieval_client, ExecuteInternal)
-      .WillOnce(
-          [&ads_retrieval_response](
-              std::unique_ptr<GetValuesRequest> raw_request,
-              const RequestMetadata& metadata,
-              absl::AnyInvocable<
-                  void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
-                  on_done,
-              absl::Duration timeout) {
-            auto response = ads_retrieval_response.has_value()
-                                ? *ads_retrieval_response
-                                : CreateAdsRetrievalOrKvLookupResponse();
-            EXPECT_TRUE(response.ok()) << response.status();
-            std::move(on_done)(
-                std::make_unique<GetValuesResponse>(*std::move(response)));
-            return absl::OkStatus();
-          });
+      .WillOnce([&ads_retrieval_response](
+                    std::unique_ptr<GetValuesRequest> raw_request,
+                    const RequestMetadata& metadata,
+                    absl::AnyInvocable<void(
+                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                        on_done,
+                    absl::Duration timeout) {
+        auto response = ads_retrieval_response.has_value()
+                            ? *ads_retrieval_response
+                            : CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)));
+        return absl::OkStatus();
+      });
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

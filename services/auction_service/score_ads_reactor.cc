@@ -58,10 +58,10 @@ inline void MayVlogRomaResponses(
     ContextImpl& log_context) {
   if (PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : responses) {
-      PS_VLOG(2, log_context)
+      PS_VLOG(kDispatch, log_context)
           << "ScoreAds V8 Response: " << dispatch_response.status();
       if (dispatch_response.ok()) {
-        PS_VLOG(2, log_context) << dispatch_response->resp;
+        PS_VLOG(kDispatch, log_context) << dispatch_response->resp;
       }
     }
   }
@@ -252,7 +252,7 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
         log_context_, enable_adtech_code_logging_, enable_debug_reporting,
         code_version_);
     if (!dispatch_request.ok()) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kDispatch, log_context_)
           << "Failed to create scoring request for protected audience: "
           << dispatch_request.status();
       continue;
@@ -266,9 +266,10 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
         ad_data_.emplace(dispatch_request->id,
                          MapAuctionResultToAdWithBidMetadata(auction_result));
     if (!inserted) {
-      PS_VLOG(2, log_context_) << "Protected Audience ScoreAd Request id "
-                                  "conflict detected: "
-                               << dispatch_request->id;
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Protected Audience ScoreAd Request id "
+             "conflict detected: "
+          << dispatch_request->id;
       continue;
     }
 
@@ -296,7 +297,7 @@ void ScoreAdsReactor::PopulateProtectedAudienceDispatchRequests(
                           ad->bid_currency()),
           code_version_);
       if (!dispatch_request.ok()) {
-        PS_VLOG(2, log_context_)
+        PS_VLOG(kNoisyWarn, log_context_)
             << "Failed to create scoring request for protected audience: "
             << dispatch_request.status();
         continue;
@@ -304,9 +305,10 @@ void ScoreAdsReactor::PopulateProtectedAudienceDispatchRequests(
       auto [unused_it, inserted] =
           ad_data_.emplace(dispatch_request->id, std::move(ad));
       if (!inserted) {
-        PS_VLOG(2, log_context_) << "Protected Audience ScoreAd Request id "
-                                    "conflict detected: "
-                                 << dispatch_request->id;
+        PS_VLOG(kNoisyWarn, log_context_)
+            << "Protected Audience ScoreAd Request id "
+               "conflict detected: "
+            << dispatch_request->id;
         continue;
       }
 
@@ -344,7 +346,7 @@ void ScoreAdsReactor::MayPopulateProtectedAppSignalsDispatchRequests(
             raw_request_.top_level_seller(), pas_ad_with_bid->bid_currency()),
         code_version_);
     if (!dispatch_request.ok()) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kNoisyWarn, log_context_)
           << "Failed to create scoring request for protected app signals ad: "
           << dispatch_request.status();
       continue;
@@ -353,7 +355,7 @@ void ScoreAdsReactor::MayPopulateProtectedAppSignalsDispatchRequests(
     auto [unused_it, inserted] = protected_app_signals_ad_data_.emplace(
         dispatch_request->id, std::move(pas_ad_with_bid));
     if (!inserted) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kNoisyWarn, log_context_)
           << "ProtectedAppSignals ScoreAd Request id conflict detected: "
           << dispatch_request->id;
       continue;
@@ -562,7 +564,7 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
 
   if (CheckAndUpdateModifiedBid(auction_scope_, buyer_bid, ad_with_bid_currency,
                                 &ad_score)) {
-    PS_VLOG(kInfoMsg, log_context_)
+    PS_VLOG(kNoisyInfo, log_context_)
         << "Setting modified bid value to original buyer bid value (and "
            "currency) as the "
            "modified bid is not set. For interest group: "
@@ -578,7 +580,7 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
         ad_score.interest_group_owner());
     ad_rejection_reason->set_rejection_reason(
         SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK);
-    PS_VLOG(kInfoMsg, log_context_)
+    PS_VLOG(kNoisyInfo, log_context_)
         << "Skipping component bid as it does not match seller_currency: "
         << interest_group_name << ": " << ad_score.DebugString();
   }
@@ -593,7 +595,7 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
         ad_score.interest_group_owner());
     ad_rejection_reason->set_rejection_reason(
         SellerRejectionReason::INVALID_BID);
-    PS_VLOG(kInfoMsg, log_context_)
+    PS_VLOG(kNoisyInfo, log_context_)
         << "Skipping ad_score as its incomingBidInSellerCurrency was "
            "modified "
            "when it should not have been: "
@@ -614,7 +616,7 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
       // Ignore component level winner if it is not allowed to
       // participate in the top level auction.
       // TODO(b/311234165): Add metric for rejected component ads.
-      PS_VLOG(kInfoMsg, log_context_)
+      PS_VLOG(kNoisyInfo, log_context_)
           << "Skipping component bid as it is not allowed for "
           << interest_group_name << ": " << ad_score.DebugString();
       return;
@@ -712,11 +714,12 @@ ScoringData ScoreAdsReactor::FindWinningAd(
     long current_all_debug_urls_chars = 0;
     auto ad_score = ParseScoreAdResponse(
         *response_json, max_allowed_size_debug_url_chars_,
-        max_allowed_size_all_debug_urls_chars_, current_all_debug_urls_chars,
+        max_allowed_size_all_debug_urls_chars_,
         (auction_scope_ ==
              AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER ||
          auction_scope_ ==
-             AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER));
+             AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER),
+        current_all_debug_urls_chars);
     if (!ad_score.ok()) {
       LogWarningForBadResponse(ad_score.status(), *response, ad, log_context_);
       continue;
@@ -874,9 +877,6 @@ void ScoreAdsReactor::ScoreAdsCallback(
     PerformDebugReporting(winning_ad);
   }
   *raw_response_.mutable_ad_score() = *winning_ad;
-
-  PS_VLOG(2, log_context_) << "ScoreAdsRawResponse:\n"
-                           << raw_response_.DebugString();
   if (!enable_report_result_url_generation_) {
     benchmarking_logger_->HandleResponseEnd();
     EncryptAndFinishOK();
@@ -889,10 +889,10 @@ void ScoreAdsReactor::ReportingCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
   if (PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : responses) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kDispatch, log_context_)
           << "Reporting V8 Response: " << dispatch_response.status();
       if (dispatch_response.ok()) {
-        PS_VLOG(2, log_context_) << dispatch_response.value().resp;
+        PS_VLOG(kDispatch, log_context_) << dispatch_response.value().resp;
       }
     }
   }
@@ -909,7 +909,7 @@ void ScoreAdsReactor::ReportingCallback(
       }
       if (PS_VLOG_IS_ON(1) && enable_adtech_code_logging_) {
         for (std::string& log : reporting_response.value().seller_logs) {
-          PS_VLOG(kInfoMsg, log_context_)
+          PS_VLOG(kNoisyInfo, log_context_)
               << "Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().seller_error_logs) {
@@ -922,7 +922,7 @@ void ScoreAdsReactor::ReportingCallback(
               << "Warning Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_logs) {
-          PS_VLOG(kInfoMsg, log_context_)
+          PS_VLOG(kNoisyInfo, log_context_)
               << "Log from Buyer's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_error_logs) {

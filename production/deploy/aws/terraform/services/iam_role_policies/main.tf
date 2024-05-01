@@ -82,6 +82,15 @@ data "aws_iam_policy_document" "instance_policy_doc" {
     effect    = "Allow"
     resources = ["*"]
   }
+  statement {
+    actions = [
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetObject",
+    ]
+    effect    = "Allow"
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "instance_policy" {
@@ -97,6 +106,11 @@ resource "aws_iam_role_policy_attachment" "instance_role_policy_attachment" {
 resource "aws_iam_role_policy_attachment" "ssm_instance_role_attachment" {
   role       = var.server_instance_role_name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_instance_role_attachment" {
+  role       = var.server_instance_role_name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 # Set up policies for using EC2 instance connect.

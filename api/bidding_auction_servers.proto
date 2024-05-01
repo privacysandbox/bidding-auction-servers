@@ -542,6 +542,20 @@ message SelectAdRequest {
     // object in SelectAdResponse will be encrypted with a public key
     // of the specified cloud platform instead of the shared encryption context.
     EncryptionCloudPlatform top_level_cloud_platform = 11;
+
+    // Optional. For use by the top-level seller in a server-orchestrated
+    // multiseller auction only. Specifies configuration information about the
+    // component sellers.
+    message PerComponentSellerConfig {
+      // The currency in which the top-level seller expects this component seller
+      // to submit bids. Expressed as three capital letters, ISO 4217 suggested.
+      string expected_currency = 1;
+    }
+
+    // Optional. For use by the top-level seller in a server-orchestrated
+    // multiseller auction only. The key in the map corresponds to the seller
+    // identifier in AuctionResult.auction_params.component_seller.
+    map<string, PerComponentSellerConfig> per_component_seller_config = 12;
   }
   message ComponentAuctionResult {
     //  AuctionResult from a server component auction.

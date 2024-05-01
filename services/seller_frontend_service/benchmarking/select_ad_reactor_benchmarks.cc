@@ -50,9 +50,9 @@ void AsyncReporterStub::DoReport(
     const HTTPRequest& reporting_request,
     absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
         done_callback) const {
-  PS_VLOG(kInfoMsg) << "Mocking success for reporting to URL: "
-                    << reporting_request.url
-                    << ", body: " << reporting_request.body;
+  PS_VLOG(kNoisyInfo) << "Mocking success for reporting to URL: "
+                      << reporting_request.url
+                      << ", body: " << reporting_request.body;
   std::move(done_callback)("success");
 }
 

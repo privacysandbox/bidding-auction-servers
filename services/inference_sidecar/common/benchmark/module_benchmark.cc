@@ -40,6 +40,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "benchmark/benchmark.h"
+#include "benchmark/request_utils.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "utils/file_util.h"
@@ -75,30 +76,6 @@ static void ExportMetrics(benchmark::State& state) {
   state.counters["Latency"] =
       benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate |
                                                  benchmark::Counter::kInvert);
-}
-
-// Creates a new request with model files in the new model path
-RegisterModelRequest CreateNewRegisterRequest(
-    const RegisterModelRequest& register_request,
-    const std::string& new_model_path) {
-  RegisterModelRequest new_register_request = register_request;
-  new_register_request.mutable_model_spec()->set_model_path(new_model_path);
-
-  std::map<std::string, std::string> new_model_files;
-
-  absl::string_view request_model_path =
-      register_request.model_spec().model_path();
-  for (const auto& [relative_path, file_content] :
-       register_request.model_files()) {
-    std::string new_file_path = absl::StrCat(
-        new_model_path, relative_path.substr(request_model_path.length()));
-    new_model_files[new_file_path] = file_content;
-  }
-  new_register_request.clear_model_files();
-  for (const auto& [new_file_path, file_content] : new_model_files) {
-    (*new_register_request.mutable_model_files())[new_file_path] = file_content;
-  }
-  return new_register_request;
 }
 
 class ModuleFixture : public benchmark::Fixture {
@@ -144,7 +121,7 @@ BENCHMARK_DEFINE_F(ModuleFixture, BM_Register)(benchmark::State& state) {
         absl::StrCat(register_model_request_.model_spec().model_path(),
                      state.thread_index(), iter++);
     RegisterModelRequest new_register_model_request =
-        CreateNewRegisterRequest(register_model_request_, new_model_path);
+        CreateRegisterModelRequest(register_model_request_, new_model_path);
     state.ResumeTiming();
 
     absl::StatusOr response =

@@ -109,6 +109,7 @@ cc_binary(
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     local_defines = ENABLE_CORE_DUMPS_DEFINES,
+    malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [
         ":buyer_frontend_service",
@@ -122,6 +123,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:tcmalloc_utils",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli

@@ -112,7 +112,7 @@ class ProtectedAppSignalsGenerateBidsReactor
          on_successful_response = std::move(on_successful_response), requests](
             const std::vector<absl::StatusOr<DispatchResponse>>& result) {
           if (auto status = ValidateRomaResponse(result); !status.ok()) {
-            PS_VLOG(2, log_context_)
+            PS_VLOG(kNoisyWarn, log_context_)
                 << "Failed to run UDF: " << roma_entry_function
                 << ". Error: " << status;
             EncryptResponseAndFinish(
@@ -124,7 +124,7 @@ class ProtectedAppSignalsGenerateBidsReactor
                                    << ": " << result[0]->resp;
           auto parsed_response = std::move(parse_response)(result[0]->resp);
           if (!parsed_response.ok()) {
-            PS_VLOG(2, log_context_)
+            PS_VLOG(kNoisyWarn, log_context_)
                 << "Failed to parse the response from: " << roma_entry_function
                 << ". Error: " << parsed_response.status();
             EncryptResponseAndFinish(
@@ -140,8 +140,9 @@ class ProtectedAppSignalsGenerateBidsReactor
         });
 
     if (!status.ok()) {
-      PS_VLOG(2, log_context_) << "Failed to execute " << roma_entry_function
-                               << " in Roma. Error: " << status.ToString();
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Failed to execute " << roma_entry_function
+          << " in Roma. Error: " << status.ToString();
       EncryptResponseAndFinish(
           grpc::Status(grpc::StatusCode::INTERNAL, status.ToString()));
     }

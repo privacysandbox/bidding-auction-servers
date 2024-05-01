@@ -81,8 +81,8 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
 absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
     const rapidjson::Document& score_ad_resp,
     int max_allowed_size_debug_url_chars,
-    long max_allowed_size_all_debug_urls_chars,
-    long current_all_debug_urls_chars, bool device_component_auction);
+    int64_t max_allowed_size_all_debug_urls_chars,
+    bool device_component_auction, int64_t& current_all_debug_urls_chars);
 
 constexpr int ScoreArgIndex(ScoreAdArgs arg) {
   return static_cast<std::underlying_type_t<ScoreAdArgs>>(arg);

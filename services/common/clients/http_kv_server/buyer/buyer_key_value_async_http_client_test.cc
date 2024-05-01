@@ -144,8 +144,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // Inside this callback, we will actually check that the client correctly
   // parses what it gets back from the "server" (mocked below).
   absl::Notification callback_invoked;
-  absl::AnyInvocable<void(
-      absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
+  absl::AnyInvocable<
+      void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
@@ -168,7 +168,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  defining what it shall be)
       .WillOnce([actual_result = expected_result, &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
         // Pack said string into a statusOr
@@ -281,8 +281,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
   // parses what it gets back from the "server" (mocked below).
-  absl::AnyInvocable<void(
-      absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
+  absl::AnyInvocable<
+      void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
@@ -305,7 +305,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  defining what it shall be)
       .WillOnce([actualResult, &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url)) << request.url;
         // Pack said string into a statusOr
@@ -331,10 +331,11 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
       absl::StrCat(hostname_, "?hostname=www.usatoday.com&keys=url1");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
-          [expected_url](
-              const HTTPRequest& request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                  done_callback) { EXPECT_EQ(expected_url, request.url); });
+          [expected_url](const HTTPRequest& request, int timeout_ms,
+                         absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                             done_callback) {
+            EXPECT_EQ(expected_url, request.url);
+          });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -346,10 +347,11 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
       absl::StrCat(hostname_, "?hostname=www.usatoday.com");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
-          [expected_url](
-              const HTTPRequest& request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                  done_callback) { EXPECT_EQ(expected_url, request.url); });
+          [expected_url](const HTTPRequest& request, int timeout_ms,
+                         absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                             done_callback) {
+            EXPECT_EQ(expected_url, request.url);
+          });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -362,7 +364,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -384,7 +386,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -415,7 +417,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
       });
@@ -444,7 +446,7 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expectedHeaders](
                     HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         std::sort(expectedHeaders.begin(), expectedHeaders.end());
         std::sort(request.headers.begin(), request.headers.end());
@@ -475,7 +477,7 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expected_headers](
                     HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         std::sort(expected_headers.begin(), expected_headers.end());
         std::sort(request.headers.begin(), request.headers.end());
@@ -534,8 +536,8 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Inside this callback, we will actually check that the client correctly
   // parses what it gets back from the "server" (mocked below).
   absl::Notification callback_invoked;
-  absl::AnyInvocable<void(
-      absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
+  absl::AnyInvocable<
+      void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
@@ -558,7 +560,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       //  defining what it shall be)
       .WillOnce([actual_result = expected_result, &expectedUrl](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
+                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                         done_callback) {
         EXPECT_EQ(request.url, expectedUrl);
         // Pack said string into a statusOr

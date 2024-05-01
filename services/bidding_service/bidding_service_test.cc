@@ -273,15 +273,14 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
                                  CreatePrepareDataForAdsRetrievalResponse());
       });
   EXPECT_CALL(*ad_retrieval_client_, ExecuteInternal)
-      .WillOnce(
-          [](std::unique_ptr<GetValuesRequest> raw_request,
-             const RequestMetadata& metadata,
-             absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
-                 on_done,
-             absl::Duration timeout) {
-            return absl::InternalError(kInternalServerError);
-          });
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   const RequestMetadata& metadata,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       on_done,
+                   absl::Duration timeout) {
+        return absl::InternalError(kInternalServerError);
+      });
   auto bidding_service = CreateBiddingService();
   LocalServiceStartResult start_service_result =
       StartLocalService(&bidding_service);

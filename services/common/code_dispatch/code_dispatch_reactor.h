@@ -74,8 +74,8 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   void OnDone() override { delete this; };
 
   // Handles early-cancellation by the client.
-  void OnCancel() override{
-      // TODO(b/245982466): error handling design
+  void OnCancel() override {
+    // TODO(b/245982466): error handling design
   };
 
   // Decrypts the request ciphertext in and returns whether decryption was

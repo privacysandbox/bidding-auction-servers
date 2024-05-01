@@ -1,0 +1,50 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+    - build
+    - -t
+    - service-builder
+    - -f
+    - production/packaging/gcp/cloud_build/Dockerfile
+    - .
+  - name: service-builder
+    env:
+      - WORKSPACE_MOUNT=/workspace
+    script: |
+      #!/usr/bin/env bash
+      production/packaging/build_and_test_all_in_docker \
+      --service-path buyer_frontend_service \
+      --service-path bidding_service \
+      --service-path seller_frontend_service \
+      --service-path auction_service \
+      --instance gcp --platform gcp \
+      --build-flavor prod \
+      --gcp-image-tag ${_GCP_IMAGE_TAG} \
+      --gcp-image-repo ${_GCP_IMAGE_REPO} \
+      --no-tests --no-precommit
+substitutions:
+    # The following variables may be overridden via the gcloud CLI or the
+    # CloudBuild Trigger GUI.
+    # See https://cloud.google.com/build/docs/configuring-builds/substitute-variable-values
+    # for more information.
+    _GCP_IMAGE_TAG: from-cloudbuild # Default. Useful for organization. The build already tags the images with verison information.
+    _GCP_IMAGE_REPO: us-docker.pkg.dev/${PROJECT_ID}/services # Default. Artifact Registry repo to house images for each service.
+timeout: 10800s
+options:
+  machineType: E2_HIGHCPU_32
+  automapSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY

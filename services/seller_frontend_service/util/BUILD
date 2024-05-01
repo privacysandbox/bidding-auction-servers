@@ -190,6 +190,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/util:oblivious_http_utils",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",

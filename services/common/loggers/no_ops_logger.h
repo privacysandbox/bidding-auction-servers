@@ -25,8 +25,8 @@ class NoOpsLogger final : public BenchmarkingLogger {
   NoOpsLogger() = default;
   virtual ~NoOpsLogger() = default;
 
-  void Begin() override{};
-  void End() override{};
+  void Begin() override {};
+  void End() override {};
 
   // NoOpsLogger is neither copyable nor movable.
   NoOpsLogger(const NoOpsLogger&) = delete;

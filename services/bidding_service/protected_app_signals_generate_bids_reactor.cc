@@ -161,8 +161,8 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
       [this, prepare_data_for_ads_retrieval_response](
           KVLookUpResult ad_retrieval_result) {
         if (!ad_retrieval_result.ok()) {
-          PS_VLOG(2, log_context_) << "Ad retrieval request failed: "
-                                   << ad_retrieval_result.status();
+          PS_VLOG(kNoisyWarn, log_context_) << "Ad retrieval request failed: "
+                                            << ad_retrieval_result.status();
           EncryptResponseAndFinish(grpc::Status(
               grpc::INTERNAL, ad_retrieval_result.status().ToString()));
           return;
@@ -174,7 +174,7 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
   if (!status.ok()) {
-    PS_VLOG(2, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "Failed to execute ad retrieval request: " << status;
     EncryptResponseAndFinish(grpc::Status(grpc::INTERNAL, status.ToString()));
   }
@@ -263,8 +263,9 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
       },
       [this](const ProtectedAppSignalsAdWithBid& bid) {
         if (!IsValidBid(bid)) {
-          PS_VLOG(2, log_context_) << "Skipping protected app signals bid ("
-                                   << GetBidDebugInfo(bid) << ")";
+          PS_VLOG(kNoisyWarn, log_context_)
+              << "Skipping protected app signals bid (" << GetBidDebugInfo(bid)
+              << ")";
         } else {
           PS_VLOG(3, log_context_)
               << "Successful non-zero protected app signals bid received";
@@ -381,7 +382,7 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
           KVLookUpResult kv_look_up_result) {
         PS_VLOG(8) << "On KV response";
         if (!kv_look_up_result.ok()) {
-          PS_VLOG(2, log_context_)
+          PS_VLOG(kNoisyWarn, log_context_)
               << "KV metadata request failed: " << kv_look_up_result.status();
           EncryptResponseAndFinish(grpc::Status(
               grpc::INTERNAL, kv_look_up_result.status().ToString()));
@@ -394,7 +395,7 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
   if (!status.ok()) {
-    PS_VLOG(2, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "Failed to execute ads metadata KV lookup request: " << status;
     EncryptResponseAndFinish(grpc::Status(grpc::INTERNAL, status.ToString()));
   }
@@ -408,8 +409,8 @@ void ProtectedAppSignalsGenerateBidsReactor::StartContextualAdsRetrieval() {
 
 void ProtectedAppSignalsGenerateBidsReactor::Execute() {
   PS_VLOG(8, log_context_) << __func__;
-  PS_VLOG(2, log_context_) << "GenerateBidsRequest:\n"
-                           << request_->DebugString();
+  PS_VLOG(kEncrypted, log_context_) << "GenerateBidsRequest:\n"
+                                    << request_->ShortDebugString();
   PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
 

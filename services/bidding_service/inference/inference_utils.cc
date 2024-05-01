@@ -137,7 +137,7 @@ void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper) {
   std::unique_ptr<InferenceService::StubInterface> stub =
       InferenceService::NewStub(InferenceChannel(executor));
 
-  PS_VLOG(kInfoMsg) << "RunInference input: " << payload;
+  PS_VLOG(kNoisyInfo) << "RunInference input: " << payload;
   PredictRequest predict_request;
   predict_request.set_input(payload);
 

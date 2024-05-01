@@ -48,9 +48,8 @@ void SetupBiddingProviderMock(
   auto MockBiddingSignalsProvider =
       [bidding_signals_value, server_error_to_return](
           const BiddingSignalsRequest& bidding_signals_request,
-          absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
-                   GetByteSize) &&>
+          absl::AnyInvocable<void(
+              absl::StatusOr<std::unique_ptr<BiddingSignals>>, GetByteSize)&&>
               on_done,
           absl::Duration timeout) {
         GetByteSize get_byte_size;

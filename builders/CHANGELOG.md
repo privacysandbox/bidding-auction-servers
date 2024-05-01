@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.58.0 (2024-04-26)
+
+
+### Features
+
+* add missing AWS env variable for CodeBuild
+
+## 0.57.1 (2024-03-28)
+
+
+### Bug Fixes
+
+* Upgrade OpenSSF scorecard GitHub Action
+
 ## 0.57.0 (2024-03-10)
 
 

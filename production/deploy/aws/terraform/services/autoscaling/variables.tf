@@ -78,7 +78,13 @@ variable "service" {
 }
 
 variable "enclave_debug_mode" {
-  description = "If true, strats the Nitro enclave with --debug-mode."
+  description = "If true, starts the Nitro enclave with --debug-mode."
   type        = bool
   default     = false
+}
+
+variable "enclave_log_path" {
+  description = "Absolute path to where nitro enclave logs will be written. Only used if enclave_debug_mode = true."
+  type        = string
+  default     = "/output.log"
 }

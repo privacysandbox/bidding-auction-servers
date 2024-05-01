@@ -102,7 +102,7 @@ class ClientParams {
   std::unique_ptr<Response> response_;
 
   // callback will only run once for a single gRPC call
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
       callback_ = nullptr;
 };
 
@@ -170,7 +170,7 @@ class RawClientParams {
   std::unique_ptr<RawResponse> raw_response_;
 
   // callback will only run once for a single gRPC call
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
       raw_callback_ = nullptr;
 };
 

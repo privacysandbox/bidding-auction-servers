@@ -48,6 +48,7 @@ declare -i SKIP_PRECOMMIT=0
 declare -i NO_TESTS=0
 declare -i NO_PLATFORM_BUILD=0
 declare -a AMI_REGIONS
+declare AWS_IMAGE_TAG
 declare GCP_IMAGE_TAG
 declare GCP_IMAGE_REPO
 declare -i GCP_SKIP_IMAGE_UPLOAD=0
@@ -75,10 +76,13 @@ usage:
     --no-precommit               Skip precommit checks
     --no-tests                   Skip tests
     --no-platform-build          Skip platform-specific building and testing
+    --verbose                    Enable verbose output
+
+If platform is aws:
     --with-ami                   AMI region in which to build and store AWS AMIs.
                                    Use multiple times to specify more than one region.
                                    If empty or not specified, none will be built.
-    --verbose                    Enable verbose output
+    --aws-image-tag              Custom image tag for AMI image. Applied to AMI as tag value for key 'build_env'.
 
 If platform is gcp:
     --gcp-skip-image-upload       Skip GCP image upload (and sha256 recording).
@@ -122,6 +126,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-ami)
       AMI_REGIONS+=("$2")
+      shift 2 || usage
+      ;;
+    --aws-image-tag)
+      AWS_IMAGE_TAG+=("$2")
       shift 2 || usage
       ;;
     --service-path)
@@ -310,6 +318,7 @@ if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
       for region in "${AMI_REGIONS[@]}"; do
         EXTRA_ARGS+=(--with-ami "${region}")
       done
+      EXTRA_ARGS+=(--aws-image-tag ${AWS_IMAGE_TAG})
       if [[ ${VERBOSE} -eq 1 ]]; then
         EXTRA_ARGS+=("--verbose")
       fi

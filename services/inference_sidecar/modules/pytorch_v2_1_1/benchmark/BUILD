@@ -27,6 +27,7 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_benchmark//:benchmark",
         "@com_google_benchmark//:benchmark_main",
+        "@inference_common//benchmark:request_utils",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
