@@ -46,9 +46,11 @@
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "benchmark/benchmark.h"
+#include "benchmark/request_utils.h"
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "proto/inference_sidecar.pb.h"
 #include "sandbox/sandbox_executor.h"
@@ -63,9 +65,10 @@ constexpr absl::string_view kIpcInferenceSidecarBinary =
 constexpr absl::string_view kTestModelPath = "test_model";
 constexpr char kJsonString[] = R"json({
   "request" : [{
-    "model_path" : "my_bucket/models/pcvr_models/1/",
+    "model_path" : "test_model",
     "tensors" : [
     {
+      "tensor_name": "serving_default_double1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1,
@@ -270,16 +273,28 @@ static void BM_Register_GRPC(benchmark::State& state) {
   std::unique_ptr<InferenceService::StubInterface> stub =
       InferenceService::NewStub(client_channel);
 
+  RegisterModelRequest register_model_request;
+  CHECK(PopulateRegisterModelRequest(kTestModelPath, register_model_request)
+            .ok());
+
+  int iter = 0;
   for (auto _ : state) {
-    RegisterModelRequest register_model_request;
-    RegisterModelResponse register_model_response;
-    CHECK(PopulateRegisterModelRequest(kTestModelPath, register_model_request)
-              .ok());
+    state.PauseTiming();
+    std::string new_model_path =
+        absl::StrCat(register_model_request.model_spec().model_path(),
+                     state.thread_index(), iter++);
+    RegisterModelRequest new_register_model_request =
+        CreateRegisterModelRequest(register_model_request, new_model_path);
+    state.ResumeTiming();
+
     grpc::ClientContext context;
-    grpc::Status status = stub->RegisterModel(&context, register_model_request,
-                                              &register_model_response);
+    RegisterModelResponse register_model_response;
+    grpc::Status status = stub->RegisterModel(
+        &context, new_register_model_request, &register_model_response);
     CHECK(status.ok()) << status.error_message();
   }
+
+  ExportMetrics(state);
 
   absl::StatusOr<sandbox2::Result> result = executor.StopSandboxee();
   CHECK(result.ok());
@@ -295,10 +310,6 @@ BENCHMARK(BM_Register_GRPC)->MeasureProcessCPUTime()->UseRealTime();
 
 // Use a single sandbox worker (or, inference sidecar) to run the execution in
 // parallel.
-BENCHMARK(BM_Predict_IPC)
-    ->ThreadRange(1, kMaxThreads)
-    ->MeasureProcessCPUTime()
-    ->UseRealTime();
 BENCHMARK(BM_Predict_GRPC)
     ->ThreadRange(1, kMaxThreads)
     ->MeasureProcessCPUTime()
@@ -307,10 +318,6 @@ BENCHMARK(BM_Predict_GRPC)
 // BM_Multiworker benchmarks trigger one sandbox worker (or, inference
 // sidecar) per Thread. NumWorkers counter is the number of the running
 // sandbox workers in the benchmark.
-BENCHMARK(BM_Multiworker_Predict_IPC)
-    ->ThreadRange(1, kMaxThreads)
-    ->MeasureProcessCPUTime()
-    ->UseRealTime();
 BENCHMARK(BM_Multiworker_Predict_GRPC)
     ->ThreadRange(1, kMaxThreads)
     ->MeasureProcessCPUTime()

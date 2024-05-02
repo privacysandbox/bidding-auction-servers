@@ -134,7 +134,7 @@ void PeriodicBucketFetcher::HandleBlobFetchResult(
     PS_LOG(ERROR) << "Roma failed to load blob: " << roma_result;
     return;
   }
-  PS_VLOG(kInfoMsg) << "Current code loaded into Roma for version " << version
+  PS_VLOG(kSuccess) << "Current code loaded into Roma for version " << version
                     << ":\n"
                     << wrapped_code;
   absl::MutexLock lock(&some_load_success_mu_);

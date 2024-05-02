@@ -47,6 +47,7 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
@@ -75,6 +76,15 @@ ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
 ABSL_FLAG(std::optional<bool>, enable_report_win_input_noising, std::nullopt,
           "Enables noising and bucketing of the inputs to reportWin");
+ABSL_FLAG(std::optional<int64_t>,
+          auction_tcmalloc_background_release_rate_bytes_per_second,
+          std::nullopt,
+          "Amount of cached memory in bytes that is returned back to the "
+          "system per second");
+ABSL_FLAG(std::optional<int64_t>, auction_tcmalloc_max_total_thread_cache_bytes,
+          std::nullopt,
+          "Maximum amount of cached memory in bytes across all threads (or "
+          "logical CPUs)");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -137,7 +147,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         MAX_ALLOWED_SIZE_DEBUG_URL_BYTES);
   config_client.SetFlag(FLAGS_max_allowed_size_all_debug_urls_kb,
                         MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB);
-
+  config_client.SetFlag(
+      FLAGS_auction_tcmalloc_background_release_rate_bytes_per_second,
+      AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
+  config_client.SetFlag(FLAGS_auction_tcmalloc_max_total_thread_cache_bytes,
+                        AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -158,6 +172,11 @@ absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+
+  MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
+      AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
+  MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
+      AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
 
   std::string_view port = config_client.GetStringParameter(PORT);
   std::string server_address = absl::StrCat("0.0.0.0:", port);

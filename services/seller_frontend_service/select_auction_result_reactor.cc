@@ -72,8 +72,8 @@ void SelectAuctionResultReactor::ScoreAds(
   auto raw_request = CreateTopLevelScoreAdsRawRequest(
       request_->auction_config(), protected_auction_input_,
       component_auction_results);
-  PS_VLOG(2, log_context_) << "\nScoreAdsRawRequest:\n"
-                           << raw_request->DebugString();
+  PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
+                                     << raw_request->DebugString();
   auto auction_request_metric =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
   auction_request_metric->SetRequestSize((int)raw_request->ByteSizeLong());
@@ -108,7 +108,8 @@ void SelectAuctionResultReactor::ScoreAds(
 void SelectAuctionResultReactor::OnScoreAdsDone(
     absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
         response) {
-  PS_VLOG(2, log_context_) << "ScoreAdsResponse status:" << response.status();
+  PS_VLOG(kOriginated, log_context_)
+      << "ScoreAdsResponse status:" << response.status();
   auto scoring_return_status = server_common::FromAbslStatus(response.status());
   if (!response.ok()) {
     LogIfError(
@@ -182,7 +183,7 @@ void SelectAuctionResultReactor::FinishWithResponse(
 
 void SelectAuctionResultReactor::FinishWithClientVisibleErrors(
     absl::string_view message) {
-  PS_VLOG(2, log_context_)
+  PS_LOG(ERROR, log_context_)
       << "Finishing the SelectAdRequest RPC with client visible error: "
       << message;
   AuctionResult::Error auction_error;
@@ -195,7 +196,7 @@ void SelectAuctionResultReactor::FinishWithClientVisibleErrors(
 
 void SelectAuctionResultReactor::FinishWithServerVisibleErrors(
     absl::string_view message) {
-  PS_VLOG(2, log_context_)
+  PS_LOG(ERROR, log_context_)
       << "Finishing the SelectAdRequest RPC with ad server visible error";
   FinishWithStatus(
       grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, message.data()));

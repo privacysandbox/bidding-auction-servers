@@ -25,6 +25,7 @@
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/score_ads_reactor_test_util.h"
 #include "services/common/test/random.h"
+#include "services/common/util/json_util.h"
 #include "services/common/util/proto_util.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
@@ -363,6 +364,36 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
                 MakeFeatureFlagJson(flag_1, flag_2));
     }
   }
+}
+
+TEST(ScoreAdsTest, ParsesScoreAdResponseRespectsDebugUrlLimits) {
+  std::string long_win_url(1024, 'A');
+  std::string long_loss_url(1025, 'B');
+  auto scored_ad = ParseJsonString(absl::Substitute(
+      R"({
+                  "desirability" : 10,
+                  "allowComponentAuction" : false,
+                  "debugReportUrls": {
+                    "auctionDebugLossUrl": "$0",
+                    "auctionDebugWinUrl": "$1"
+                  }
+                })",
+      long_loss_url, long_win_url));
+  CHECK_OK(scored_ad);
+  int64_t current_all_debug_urls_chars = 0;
+  auto parsed_response = ParseScoreAdResponse(
+      *scored_ad, /*max_allowed_size_debug_url_chars=*/65536,
+      /*max_allowed_size_all_debug_urls_chars=*/1024,
+      /*device_component_auction=*/false, current_all_debug_urls_chars);
+  CHECK_OK(parsed_response);
+  std::cerr << " parsed response: \n" << parsed_response->DebugString() << "\n";
+  EXPECT_TRUE(parsed_response->has_debug_report_urls());
+  EXPECT_FALSE(
+      parsed_response->debug_report_urls().auction_debug_win_url().empty());
+  EXPECT_EQ(parsed_response->debug_report_urls().auction_debug_win_url().size(),
+            1024);
+  EXPECT_TRUE(
+      parsed_response->debug_report_urls().auction_debug_loss_url().empty());
 }
 
 }  // namespace

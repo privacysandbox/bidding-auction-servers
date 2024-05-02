@@ -126,3 +126,15 @@ local_repository(
     name = "tensorflow_v2_14_0",
     path = "services/inference_sidecar/modules/tensorflow_v2_14_0",
 )
+
+http_archive(
+    name = "libevent",
+    build_file = "//third_party:libevent.BUILD",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party:libevent.patch",
+    ],
+    sha256 = "8836ad722ab211de41cb82fe098911986604f6286f67d10dfb2b6787bf418f49",
+    strip_prefix = "libevent-release-2.1.12-stable",
+    urls = ["https://github.com/libevent/libevent/archive/refs/tags/release-2.1.12-stable.zip"],
+)

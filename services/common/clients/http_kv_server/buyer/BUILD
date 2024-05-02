@@ -32,6 +32,7 @@ cc_library(
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/clients/http_kv_server/util:http_kv_server_gen_url_utils",
         "//services/common/util:request_metadata",
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
     ],
 )

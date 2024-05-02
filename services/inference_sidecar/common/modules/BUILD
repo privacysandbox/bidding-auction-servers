@@ -74,6 +74,7 @@ cc_test(
     ],
     deps = [
         ":test_module",
+        "//benchmark:request_utils",
         "//proto:inference_sidecar_cc_proto",
         "//utils:file_util",
         "@com_google_absl//absl/status",

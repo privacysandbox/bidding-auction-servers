@@ -24,22 +24,33 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
-inline constexpr char PORT[] = "BIDDING_PORT";
-inline constexpr char HEALTHCHECK_PORT[] = "BIDDING_HEALTHCHECK_PORT";
-inline constexpr char ENABLE_BIDDING_SERVICE_BENCHMARK[] =
+inline constexpr absl::string_view PORT = "BIDDING_PORT";
+inline constexpr absl::string_view HEALTHCHECK_PORT =
+    "BIDDING_HEALTHCHECK_PORT";
+inline constexpr absl::string_view ENABLE_BIDDING_SERVICE_BENCHMARK =
     "ENABLE_BIDDING_SERVICE_BENCHMARK";
-inline constexpr char BUYER_CODE_FETCH_CONFIG[] = "BUYER_CODE_FETCH_CONFIG";
-inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
-inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
-inline constexpr char TEE_AD_RETRIEVAL_KV_SERVER_ADDR[] =
+inline constexpr absl::string_view BUYER_CODE_FETCH_CONFIG =
+    "BUYER_CODE_FETCH_CONFIG";
+inline constexpr absl::string_view JS_NUM_WORKERS = "JS_NUM_WORKERS";
+inline constexpr absl::string_view JS_WORKER_QUEUE_LEN = "JS_WORKER_QUEUE_LEN";
+inline constexpr absl::string_view TEE_AD_RETRIEVAL_KV_SERVER_ADDR =
     "TEE_AD_RETRIEVAL_KV_SERVER_ADDR";
-inline constexpr char TEE_KV_SERVER_ADDR[] = "TEE_KV_SERVER_ADDR";
-inline constexpr char AD_RETRIEVAL_TIMEOUT_MS[] = "AD_RETRIEVAL_TIMEOUT_MS";
-inline constexpr char AD_RETRIEVAL_KV_SERVER_EGRESS_TLS[] =
+inline constexpr absl::string_view TEE_KV_SERVER_ADDR = "TEE_KV_SERVER_ADDR";
+inline constexpr absl::string_view AD_RETRIEVAL_TIMEOUT_MS =
+    "AD_RETRIEVAL_TIMEOUT_MS";
+inline constexpr absl::string_view AD_RETRIEVAL_KV_SERVER_EGRESS_TLS =
     "AD_RETRIEVAL_KV_SERVER_EGRESS_TLS";
-inline constexpr char KV_SERVER_EGRESS_TLS[] = "KV_SERVER_EGRESS_TLS";
+inline constexpr absl::string_view KV_SERVER_EGRESS_TLS =
+    "KV_SERVER_EGRESS_TLS";
+inline constexpr char
+    BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND[] =
+        "BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
+inline constexpr absl::string_view
+    BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
+        "BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr absl::string_view kFlags[] = {
+inline constexpr int kNumRuntimeFlags = 13;
+inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
     ENABLE_BIDDING_SERVICE_BENCHMARK,
@@ -50,11 +61,14 @@ inline constexpr absl::string_view kFlags[] = {
     TEE_KV_SERVER_ADDR,
     AD_RETRIEVAL_KV_SERVER_EGRESS_TLS,
     KV_SERVER_EGRESS_TLS,
-    AD_RETRIEVAL_TIMEOUT_MS};
+    AD_RETRIEVAL_TIMEOUT_MS,
+    BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
+    BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
+};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
-  int size = sizeof(kFlags) / sizeof(kFlags[0]);
-  std::vector<absl::string_view> flags(kFlags, kFlags + size);
+  std::vector<absl::string_view> flags(kFlags.begin(),
+                                       kFlags.begin() + kNumRuntimeFlags);
 
   for (absl::string_view flag : kCommonServiceFlags) {
     flags.push_back(flag);

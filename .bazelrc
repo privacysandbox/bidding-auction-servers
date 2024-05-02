@@ -27,6 +27,11 @@ build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
 build:clang --copt=-Werror=thread-safety
 #disable the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
 build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
+# https://github.com/google/tcmalloc/blob/master/docs/tuning.md#build-time-optimizations
+build:clang --cxxopt=-fsized-deallocation
+build:clang --host_cxxopt=-fsized-deallocation
+build:clang --cxxopt=-fnew-alignment=8
+build:clang --host_cxxopt=-fnew-alignment=8
 
 # Flag compiler warnings as errors.
 build:cpp_no_warn --copt=-Werror
@@ -101,6 +106,7 @@ build:asan --copt=-fno-omit-frame-pointer
 build:asan --linkopt=-fsanitize=address
 build:asan --linkopt=-fuse-ld=lld
 build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
+build:asan --custom_malloc=@bazel_tools//tools/cpp:malloc
 
 # Memory sanitizer, set action_env to segregate cache entries
 build:msan --action_env=PRIVACY_SANDBOX_SERVERS_MSAN=1

@@ -437,9 +437,6 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
-  // bid val is only for component and auction and will not be parsed or encoded
-  // for single seller auction.
-  expected.clear_bid();
   // IG Origin is Android exclusive and will not be parsed or encoded for web.
   expected.clear_interest_group_origin();
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),

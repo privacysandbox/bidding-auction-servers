@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
 
 # We export some benchmark files.
 # The benchmark can run in the workspace of each inference backend.
 exports_files([
     "module_benchmark.cc",
+    "sandbox_benchmark.cc",
 ])
 
 cc_binary(
@@ -31,6 +34,7 @@ cc_binary(
         "//:inference_sidecar_test_target",
     ],
     deps = [
+        ":request_utils",
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_executor",
@@ -54,6 +58,7 @@ cc_binary(
         "//:gen_test_model",
     ],
     deps = [
+        ":request_utils",
         "//modules:module_interface",
         "//modules:test_module",
         "//proto:inference_sidecar_cc_proto",
@@ -80,6 +85,16 @@ cc_binary(
         "@google_privacysandbox_servers_common//src/roma/config",
         "@google_privacysandbox_servers_common//src/roma/interface",
         "@google_privacysandbox_servers_common//src/roma/roma_service",
+    ],
+)
+
+cc_library(
+    name = "request_utils",
+    srcs = ["request_utils.cc"],
+    hdrs = ["request_utils.h"],
+    deps = [
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_absl//absl/strings",
     ],
 )
 

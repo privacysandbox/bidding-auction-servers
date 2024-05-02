@@ -305,6 +305,7 @@ cc_library(
         "binary_http_utils.h",
     ],
     deps = [
+        "//services/common/util:request_response_constants",
         "@com_github_google_quiche//quiche:binary_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -444,4 +445,15 @@ cc_library(
     hdrs = ["build_info.h"],
     visibility = ["//services:__subpackages__"],
     deps = ["@com_google_absl//absl/strings"],
+)
+
+cc_library(
+    name = "tcmalloc_utils",
+    hdrs = [
+        "tcmalloc_utils.h",
+    ],
+    deps = [
+        "@com_google_tcmalloc//tcmalloc:malloc_extension",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+    ],
 )

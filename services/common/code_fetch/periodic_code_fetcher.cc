@@ -96,11 +96,13 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
             std::string wrapped_code = wrap_code_(cb_results_value_);
             absl::Status syncResult =
                 dispatcher_.LoadSync(version_string_, wrapped_code);
-            PS_VLOG(kInfoMsg) << "Roma Client Response: " << syncResult;
             if (syncResult.ok()) {
-              PS_VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
+              PS_VLOG(kSuccess) << "Current code loaded into Roma:\n"
+                                << wrapped_code;
               absl::MutexLock lock(&some_load_success_mu_);
               some_load_success_ = true;
+            } else {
+              PS_LOG(ERROR) << "Roma  LoadSync fail: " << syncResult;
             }
           }
         }
@@ -110,7 +112,7 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
   // Create a HTTPRequest object from the url_endpoint_
   std::vector<HTTPRequest> requests;
   for (const std::string& endpoint : url_endpoints_) {
-    PS_VLOG(kInfoMsg) << "Requesting UDF from: " << endpoint;
+    PS_VLOG(5) << "Requesting UDF from: " << endpoint;
     requests.push_back(
         {.url = endpoint, .headers = {"Cache-Control: no-cache"}});
   }

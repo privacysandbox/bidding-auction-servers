@@ -23,26 +23,37 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
-inline constexpr char PORT[] = "BUYER_FRONTEND_PORT";
-inline constexpr char HEALTHCHECK_PORT[] = "BUYER_FRONTEND_HEALTHCHECK_PORT";
-inline constexpr char BIDDING_SERVER_ADDR[] = "BIDDING_SERVER_ADDR";
-inline constexpr char BUYER_KV_SERVER_ADDR[] = "BUYER_KV_SERVER_ADDR";
-inline constexpr char GENERATE_BID_TIMEOUT_MS[] = "GENERATE_BID_TIMEOUT_MS";
-inline constexpr char PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS[] =
-    "PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS";
-inline constexpr char BIDDING_SIGNALS_LOAD_TIMEOUT_MS[] =
+inline constexpr absl::string_view PORT = "BUYER_FRONTEND_PORT";
+inline constexpr absl::string_view HEALTHCHECK_PORT =
+    "BUYER_FRONTEND_HEALTHCHECK_PORT";
+inline constexpr absl::string_view BIDDING_SERVER_ADDR = "BIDDING_SERVER_ADDR";
+inline constexpr absl::string_view BUYER_KV_SERVER_ADDR =
+    "BUYER_KV_SERVER_ADDR";
+inline constexpr absl::string_view GENERATE_BID_TIMEOUT_MS =
+    "GENERATE_BID_TIMEOUT_MS";
+inline constexpr absl::string_view
+    PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS =
+        "PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS";
+inline constexpr absl::string_view BIDDING_SIGNALS_LOAD_TIMEOUT_MS =
     "BIDDING_SIGNALS_LOAD_TIMEOUT_MS";
-inline constexpr char ENABLE_BUYER_FRONTEND_BENCHMARKING[] =
+inline constexpr absl::string_view ENABLE_BUYER_FRONTEND_BENCHMARKING =
     "ENABLE_BUYER_FRONTEND_BENCHMARKING";
-inline constexpr char CREATE_NEW_EVENT_ENGINE[] = "CREATE_NEW_EVENT_ENGINE";
-inline constexpr char ENABLE_BIDDING_COMPRESSION[] =
+inline constexpr absl::string_view CREATE_NEW_EVENT_ENGINE =
+    "CREATE_NEW_EVENT_ENGINE";
+inline constexpr absl::string_view ENABLE_BIDDING_COMPRESSION =
     "ENABLE_BIDDING_COMPRESSION";
-inline constexpr char BFE_INGRESS_TLS[] = "BFE_INGRESS_TLS";
-inline constexpr char BFE_TLS_KEY[] = "BFE_TLS_KEY";
-inline constexpr char BFE_TLS_CERT[] = "BFE_TLS_CERT";
-inline constexpr char BIDDING_EGRESS_TLS[] = "BIDDING_EGRESS_TLS";
+inline constexpr absl::string_view BFE_INGRESS_TLS = "BFE_INGRESS_TLS";
+inline constexpr absl::string_view BFE_TLS_KEY = "BFE_TLS_KEY";
+inline constexpr absl::string_view BFE_TLS_CERT = "BFE_TLS_CERT";
+inline constexpr absl::string_view BIDDING_EGRESS_TLS = "BIDDING_EGRESS_TLS";
+inline constexpr absl::string_view
+    BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND =
+        "BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
+inline constexpr absl::string_view BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
+    "BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr absl::string_view kFlags[] = {
+inline constexpr int kNumRuntimeFlags = 16;
+inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
     BIDDING_SERVER_ADDR,
@@ -57,11 +68,13 @@ inline constexpr absl::string_view kFlags[] = {
     BFE_TLS_KEY,
     BFE_TLS_CERT,
     BIDDING_EGRESS_TLS,
+    BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
+    BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {
-  int size = sizeof(kFlags) / sizeof(kFlags[0]);
-  std::vector<absl::string_view> flags(kFlags, kFlags + size);
+  std::vector<absl::string_view> flags(kFlags.begin(),
+                                       kFlags.begin() + kNumRuntimeFlags);
 
   for (absl::string_view flag : kCommonServiceFlags) {
     flags.push_back(flag);

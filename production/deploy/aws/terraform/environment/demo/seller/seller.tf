@@ -82,7 +82,7 @@ module "seller" {
     #     "auctionJsUrl": "https://example.com/scoreAd.js",
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
-    #     "enableSellerDebugUrlGeneration": false,
+    #     "enableSellerDebugUrlGeneration": true,
     # This flag should only be set if console.logs from the AdTech code(Ex:scoreAd(), reportResult(), reportWin())
     # execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
@@ -119,5 +119,12 @@ module "seller" {
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
+
+    # TCMalloc related config parameters.
+    # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
+    AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND = "4096"
+    AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
+    SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
+    SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 }

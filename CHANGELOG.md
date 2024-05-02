@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.6.0 (2024-05-01)
+
+
+### Features
+
+* [Debug Reporting] Enable debug reporting by default
+* [DebugReporting] Add a log to get the libcurl queue time
+* add ability to tag AMIs
+* Add kv e2e tests environment
+* Add markdown-link-check to pre-commit
+* add support for AWS CodeBuild
+* add support for GCP Cloud Build
+* API Updates for Bid Currency Support for Top-Level Seller in Server-Orchestrated Multi-Seller Auctions
+* Enable TCMalloc for all B&A servers
+* support sending Nitro Enclave logs to AWS CloudWatch for debugging
+
+
+### Bug Fixes
+
+* [Temp] Adds buyer bid to top level auctions for Chrome < v125
+* Adjust ps_vlog pre-commit hook to avoid recursing symlinks
+* clean up log verbosity 2
+* **deps:** Upgrade clang-format to v18
+* **deps:** Upgrade pre-commit hooks
+* Ensure that the debug url length is capped
+
 ## 3.5.0 (2024-04-24)
 
 

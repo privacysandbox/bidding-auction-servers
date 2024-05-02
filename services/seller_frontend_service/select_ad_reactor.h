@@ -39,6 +39,7 @@
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/error_reporter.h"
 #include "services/common/util/request_metadata.h"
+#include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/encryption_util.h"
@@ -179,7 +180,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
         // Log but don't report the errors for malformed buyer inputs because we
         // have found at least one buyer input that is well formed.
         for (const auto& observed_error : observed_errors) {
-          PS_VLOG(2, log_context_) << observed_error;
+          PS_VLOG(kNoisyWarn, log_context_) << observed_error;
         }
       }
     }

@@ -218,15 +218,15 @@ absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
   auto start_parse_time = absl::Now();
   PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
                       ParseJsonString(raw_request.bidding_signals()));
-  PS_VLOG(2, log_context) << "\nTrusted Bidding Signals Deserialize Time: "
-                          << ToInt64Microseconds(
-                                 (absl::Now() - start_parse_time))
-                          << " microseconds for "
-                          << raw_request.bidding_signals().size() << " bytes.";
+  PS_VLOG(kStats, log_context)
+      << "\nTrusted Bidding Signals Deserialize Time: "
+      << ToInt64Microseconds((absl::Now() - start_parse_time))
+      << " microseconds for " << raw_request.bidding_signals().size()
+      << " bytes.";
 
   // Select root key.
   if (!parsed_signals.HasMember("keys")) {
-    PS_VLOG(2, log_context)
+    PS_VLOG(kNoisyWarn, log_context)
         << "Trusted bidding signals JSON validate error (Missing property "
            "\"keys\")";
 
@@ -520,10 +520,10 @@ void GenerateBidsReactor::GenerateBidsCallback(
     const std::vector<absl::StatusOr<DispatchResponse>>& output) {
   if (server_common::log::PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : output) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kDispatch, log_context_)
           << "Generate Bids V8 Response: " << dispatch_response.status();
       if (dispatch_response.ok()) {
-        PS_VLOG(2, log_context_) << dispatch_response.value().resp;
+        PS_VLOG(kDispatch, log_context_) << dispatch_response.value().resp;
       }
     }
   }
@@ -564,7 +564,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
                                        current_all_debug_urls_chars);
         }
         if (!IsValidBid(bid)) {
-          PS_VLOG(2, log_context_)
+          PS_VLOG(kNoisyWarn, log_context_)
               << "Skipping 0 bid for " << interest_group_name << ": "
               << bid.DebugString();
         } else if (
@@ -604,7 +604,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
   LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
       (static_cast<double>(zero_bid_count)) / total_bid_count));
 
-  PS_VLOG(kInfoMsg, log_context_)
+  PS_VLOG(kNoisyInfo, log_context_)
       << "\n\nFailed of total: " << failed_requests << "/" << output.size();
   benchmarking_logger_->HandleResponseEnd();
 }

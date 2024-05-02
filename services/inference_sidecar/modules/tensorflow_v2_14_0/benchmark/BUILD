@@ -27,8 +27,34 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_benchmark//:benchmark",
         "@com_google_benchmark//:benchmark_main",
+        "@inference_common//benchmark:request_utils",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:file_util",
+    ],
+)
+
+cc_binary(
+    name = "sandbox_benchmark",
+    srcs = ["@inference_common//benchmark:sandbox_benchmark.cc"],
+    data = [
+        "//:inference_sidecar_test_target",
+        "//:test_model_target",
+    ],
+    deps = [
+        "//:tensorflow",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_benchmark//:benchmark",
+        "@com_google_benchmark//:benchmark_main",
+        "@inference_common//benchmark:request_utils",
+        "@inference_common//modules:module_interface",
+        "@inference_common//proto:inference_sidecar_cc_grpc_proto",
+        "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//sandbox:sandbox_executor",
         "@inference_common//utils:file_util",
     ],
 )

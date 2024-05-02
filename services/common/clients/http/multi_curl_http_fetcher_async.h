@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <curl/multi.h>
+#include <event2/event.h>
 #include <grpc/event_engine/event_engine.h>
 
 #include "absl/container/flat_hash_set.h"
@@ -38,6 +39,46 @@ struct DataToUpload {
   std::string data;
   // First offset in the data that has not yet been uploaded.
   int offset = 0;
+};
+
+// Libevent uses default priority as half of the number of priorities.
+// We needed 2 priorities to begin with (high and default) but configured 3
+// here for future use if we have to configure a low priority event.
+inline constexpr int kNumEventPriorities = 3;
+
+// Wrapper for the libevent structure to hold information and state for a
+// libevent dispatch loop.
+class EventBase {
+ public:
+  explicit EventBase(int num_priorities = kNumEventPriorities);
+  virtual ~EventBase();
+
+  // Gets the underlying event base data type.
+  struct event_base* get();
+
+ private:
+  struct event_base* event_base_ = nullptr;
+};
+
+// Arguments are documented here:
+// https://libevent.org/doc/event_8h.html#aed2307f3d9b38e07cc10c2607322d758
+using EventCallback = void (*)(/*fd or signal=*/int, /*events=*/short,
+                               /*pointer to user provided data=*/void*);
+
+// Wraps the event used by libevent. This wrapper makes it easier to manage
+// lifecycle of the underlying event.
+class Event {
+ public:
+  explicit Event(struct event_base* base, evutil_socket_t fd, short event_type,
+                 EventCallback event_callback, void* arg,
+                 int priority = kNumEventPriorities / 2,
+                 struct timeval* event_timeout = nullptr);
+  struct event* get();
+  virtual ~Event();
+
+ private:
+  int priority_;
+  struct event* event_ = nullptr;
 };
 
 // MultiCurlHttpFetcherAsync provides a thread-safe libcurl wrapper to perform
@@ -165,8 +206,11 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // available, it schedules the callback on the executor_.
   // Only a single thread can execute this function at a time since it requires
   // the acquisition of the in_loop_mu_ mutex.
-  void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
-      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+  void PerformCurlUpdate() ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
+  // Shuts down the event loop. This is a callback registered with an event
+  // that fires every second to see if the event loop should be shutdown.
+  static void ShutdownEventLoop(int fd, short event_type, void* arg);
 
   // Parses curl message to result string or an error message for the callback.
   std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
@@ -193,8 +237,18 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Interval time between keep-alive probes in case of no response.
   int64_t keepalive_interval_sec_;
 
+  // All events in the loop are associated with this event base. Note: There can
+  // be a single event base for a single thread.
+  // Documentation: https://libevent.org/libevent-book/Ref2_eventbase.html
+  EventBase event_base_;
+  // This event is registered with the event loop and fires every second to
+  // check if the fetcher has been stopped and if so, the callback registered
+  // for this event will also stop the event loop.
+  Event shutdown_timer_event_;
+
   // The multi session used for performing HTTP calls.
   MultiCurlRequestManager multi_curl_request_manager_;
+  Event multi_timer_event_;  // Controlled by multi libcurl stack.
 
   // Makes sure only one execution loop runs at a time.
   absl::Mutex in_loop_mu_;

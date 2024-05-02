@@ -1,0 +1,45 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "event",
+    srcs = [
+        "buffer.c",
+        "bufferevent.c",
+        "bufferevent_filter.c",
+        "bufferevent_pair.c",
+        "bufferevent_ratelim.c",
+        "bufferevent_sock.c",
+        "epoll.c",
+        "evdns.c",
+        "event.c",
+        "event_tagging.c",
+        "evmap.c",
+        "evrpc.c",
+        "evthread.c",
+        "evthread_pthread.c",
+        "evutil.c",
+        "evutil_rand.c",
+        "evutil_time.c",
+        "http.c",
+        "kqueue.c",
+        "listener.c",
+        "log.c",
+        "poll.c",
+        "select.c",
+        "signal.c",
+        "strlcpy.c",
+    ] + glob(["*.h"]),
+    hdrs = ["arc4random.c"] + glob([
+        "include/**/*.h",
+        "*-internal.h",
+        "event2/*.h",
+    ]),
+    # This disables some thread unsafe stuff that fails TSAN.
+    defines = ["EVENT__DISABLE_DEBUG_MODE"],
+    includes = [
+        ".",
+        "compat",
+        "include",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -83,7 +83,7 @@ module "buyer" {
     #    "protectedAppSignalsBiddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
-    #    "enableBuyerDebugUrlGeneration": false,
+    #    "enableBuyerDebugUrlGeneration": true,
     #    "enableAdtechCodeLogging": false,
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
@@ -122,6 +122,13 @@ module "buyer" {
     INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
     INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
     INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
+
+    # TCMalloc related config parameters.
+    # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
+    BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND = "4096"        # Example: 4096
+    BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240" # Example: 10737418240
+    BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
+    BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.

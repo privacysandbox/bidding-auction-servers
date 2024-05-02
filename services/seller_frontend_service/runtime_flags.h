@@ -23,32 +23,46 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
-inline constexpr char PORT[] = "SELLER_FRONTEND_PORT";
-inline constexpr char HEALTHCHECK_PORT[] = "SELLER_FRONTEND_HEALTHCHECK_PORT";
-inline constexpr char GET_BID_RPC_TIMEOUT_MS[] = "GET_BID_RPC_TIMEOUT_MS";
-inline constexpr char KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS[] =
+inline constexpr absl::string_view PORT = "SELLER_FRONTEND_PORT";
+inline constexpr absl::string_view HEALTHCHECK_PORT =
+    "SELLER_FRONTEND_HEALTHCHECK_PORT";
+inline constexpr absl::string_view GET_BID_RPC_TIMEOUT_MS =
+    "GET_BID_RPC_TIMEOUT_MS";
+inline constexpr absl::string_view KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS =
     "KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS";
-inline constexpr char SCORE_ADS_RPC_TIMEOUT_MS[] = "SCORE_ADS_RPC_TIMEOUT_MS";
-inline constexpr char SELLER_ORIGIN_DOMAIN[] = "SELLER_ORIGIN_DOMAIN";
-inline constexpr char AUCTION_SERVER_HOST[] = "AUCTION_SERVER_HOST";
-inline constexpr char KEY_VALUE_SIGNALS_HOST[] = "KEY_VALUE_SIGNALS_HOST";
-inline constexpr char BUYER_SERVER_HOSTS[] = "BUYER_SERVER_HOSTS";
-inline constexpr char ENABLE_BUYER_COMPRESSION[] = "ENABLE_BUYER_COMPRESSION";
-inline constexpr char ENABLE_AUCTION_COMPRESSION[] =
+inline constexpr absl::string_view SCORE_ADS_RPC_TIMEOUT_MS =
+    "SCORE_ADS_RPC_TIMEOUT_MS";
+inline constexpr absl::string_view SELLER_ORIGIN_DOMAIN =
+    "SELLER_ORIGIN_DOMAIN";
+inline constexpr absl::string_view AUCTION_SERVER_HOST = "AUCTION_SERVER_HOST";
+inline constexpr absl::string_view KEY_VALUE_SIGNALS_HOST =
+    "KEY_VALUE_SIGNALS_HOST";
+inline constexpr absl::string_view BUYER_SERVER_HOSTS = "BUYER_SERVER_HOSTS";
+inline constexpr absl::string_view ENABLE_BUYER_COMPRESSION =
+    "ENABLE_BUYER_COMPRESSION";
+inline constexpr absl::string_view ENABLE_AUCTION_COMPRESSION =
     "ENABLE_AUCTION_COMPRESSION";
-inline constexpr char ENABLE_SELLER_FRONTEND_BENCHMARKING[] =
+inline constexpr absl::string_view ENABLE_SELLER_FRONTEND_BENCHMARKING =
     "ENABLE_SELLER_FRONTEND_BENCHMARKING";
-inline constexpr char CREATE_NEW_EVENT_ENGINE[] = "CREATE_NEW_EVENT_ENGINE";
-inline constexpr char SFE_INGRESS_TLS[] = "SFE_INGRESS_TLS";
-inline constexpr char SFE_TLS_KEY[] = "SFE_TLS_KEY";
-inline constexpr char SFE_TLS_CERT[] = "SFE_TLS_CERT";
-inline constexpr char AUCTION_EGRESS_TLS[] = "AUCTION_EGRESS_TLS";
-inline constexpr char BUYER_EGRESS_TLS[] = "BUYER_EGRESS_TLS";
-inline constexpr char SFE_PUBLIC_KEYS_ENDPOINTS[] = "SFE_PUBLIC_KEYS_ENDPOINTS";
-inline constexpr char SELLER_CLOUD_PLATFORMS_MAP[] =
+inline constexpr absl::string_view CREATE_NEW_EVENT_ENGINE =
+    "CREATE_NEW_EVENT_ENGINE";
+inline constexpr absl::string_view SFE_INGRESS_TLS = "SFE_INGRESS_TLS";
+inline constexpr absl::string_view SFE_TLS_KEY = "SFE_TLS_KEY";
+inline constexpr absl::string_view SFE_TLS_CERT = "SFE_TLS_CERT";
+inline constexpr absl::string_view AUCTION_EGRESS_TLS = "AUCTION_EGRESS_TLS";
+inline constexpr absl::string_view BUYER_EGRESS_TLS = "BUYER_EGRESS_TLS";
+inline constexpr absl::string_view SFE_PUBLIC_KEYS_ENDPOINTS =
+    "SFE_PUBLIC_KEYS_ENDPOINTS";
+inline constexpr absl::string_view SELLER_CLOUD_PLATFORMS_MAP =
     "SELLER_CLOUD_PLATFORMS_MAP";
+inline constexpr absl::string_view
+    SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND =
+        "SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
+inline constexpr absl::string_view SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
+    "SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr absl::string_view kFlags[] = {
+inline constexpr int kNumRuntimeFlags = 22;
+inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
     GET_BID_RPC_TIMEOUT_MS,
@@ -69,11 +83,13 @@ inline constexpr absl::string_view kFlags[] = {
     BUYER_EGRESS_TLS,
     SFE_PUBLIC_KEYS_ENDPOINTS,
     SELLER_CLOUD_PLATFORMS_MAP,
+    SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
+    SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {
-  int size = sizeof(kFlags) / sizeof(kFlags[0]);
-  std::vector<absl::string_view> flags(kFlags, kFlags + size);
+  std::vector<absl::string_view> flags(kFlags.begin(),
+                                       kFlags.begin() + kNumRuntimeFlags);
 
   for (absl::string_view flag : kCommonServiceFlags) {
     flags.push_back(flag);

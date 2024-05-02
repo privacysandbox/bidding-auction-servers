@@ -23,27 +23,40 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Define runtime flag names.
-inline constexpr char PORT[] = "AUCTION_PORT";
-inline constexpr char HEALTHCHECK_PORT[] = "AUCTION_HEALTHCHECK_PORT";
-inline constexpr char ENABLE_AUCTION_SERVICE_BENCHMARK[] =
+inline constexpr absl::string_view PORT = "AUCTION_PORT";
+inline constexpr absl::string_view HEALTHCHECK_PORT =
+    "AUCTION_HEALTHCHECK_PORT";
+inline constexpr absl::string_view ENABLE_AUCTION_SERVICE_BENCHMARK =
     "ENABLE_AUCTION_SERVICE_BENCHMARK";
-inline constexpr char SELLER_CODE_FETCH_CONFIG[] = "SELLER_CODE_FETCH_CONFIG";
-inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
-inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
-inline constexpr char ENABLE_REPORT_WIN_INPUT_NOISING[] =
+inline constexpr absl::string_view SELLER_CODE_FETCH_CONFIG =
+    "SELLER_CODE_FETCH_CONFIG";
+inline constexpr absl::string_view JS_NUM_WORKERS = "JS_NUM_WORKERS";
+inline constexpr absl::string_view JS_WORKER_QUEUE_LEN = "JS_WORKER_QUEUE_LEN";
+inline constexpr absl::string_view ENABLE_REPORT_WIN_INPUT_NOISING =
     "ENABLE_REPORT_WIN_INPUT_NOISING";
+inline constexpr char
+    AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND[] =
+        "AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
+inline constexpr absl::string_view
+    AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
+        "AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr absl::string_view kFlags[] = {PORT,
-                                               HEALTHCHECK_PORT,
-                                               ENABLE_AUCTION_SERVICE_BENCHMARK,
-                                               SELLER_CODE_FETCH_CONFIG,
-                                               JS_NUM_WORKERS,
-                                               JS_WORKER_QUEUE_LEN,
-                                               ENABLE_REPORT_WIN_INPUT_NOISING};
+inline constexpr int kNumRuntimeFlags = 9;
+inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
+    PORT,
+    HEALTHCHECK_PORT,
+    ENABLE_AUCTION_SERVICE_BENCHMARK,
+    SELLER_CODE_FETCH_CONFIG,
+    JS_NUM_WORKERS,
+    JS_WORKER_QUEUE_LEN,
+    ENABLE_REPORT_WIN_INPUT_NOISING,
+    AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
+    AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
+};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
-  int size = sizeof(kFlags) / sizeof(kFlags[0]);
-  std::vector<absl::string_view> flags(kFlags, kFlags + size);
+  std::vector<absl::string_view> flags(kFlags.begin(),
+                                       kFlags.begin() + kNumRuntimeFlags);
 
   for (absl::string_view flag : kCommonServiceFlags) {
     flags.push_back(flag);

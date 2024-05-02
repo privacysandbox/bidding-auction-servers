@@ -18,6 +18,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
 #include "services/common/util/request_metadata.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -81,22 +82,22 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   auto done_callback = [on_done = std::move(on_done), request_size](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
-      PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Success Response:\n"
-                 << resultStr.value() << "\n";
+      PS_VLOG(kKVLog) << "BuyerKeyValueAsyncHttpClient Success Response:\n"
+                      << resultStr.value() << "\n";
       size_t response_size = resultStr->size();
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
           std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
               {std::move(resultStr.value()), request_size, response_size}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
-      PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Failure Response: "
-                 << resultStr.status();
+      PS_VLOG(kNoisyWarn) << "BuyerKeyValueAsyncHttpClient Failure Response: "
+                          << resultStr.status();
       std::move(on_done)(resultStr.status());
     }
   };
-  PS_VLOG(2) << "BTS Request Url:\n" << request.url << "\nHeaders:\n";
+  PS_VLOG(kKVLog) << "BTS Request Url:\n" << request.url << "\nHeaders:\n";
   for (const auto& header : request.headers) {
-    PS_VLOG(2) << header;
+    PS_VLOG(kKVLog) << header;
   }
   http_fetcher_async_->FetchUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),

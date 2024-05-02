@@ -12,6 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -54,6 +55,7 @@
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
@@ -90,6 +92,15 @@ ABSL_FLAG(std::optional<bool>, ad_retrieval_kv_server_egress_tls, std::nullopt,
           "If true, ad retrieval service gRPC client uses TLS.");
 ABSL_FLAG(std::optional<bool>, kv_server_egress_tls, std::nullopt,
           "If true, KV service gRPC client uses TLS.");
+ABSL_FLAG(std::optional<int64_t>,
+          bidding_tcmalloc_background_release_rate_bytes_per_second,
+          std::nullopt,
+          "Amount of cached memory in bytes that is returned back to the "
+          "system per second");
+ABSL_FLAG(std::optional<int64_t>, bidding_tcmalloc_max_total_thread_cache_bytes,
+          std::nullopt,
+          "Maximum amount of cached memory in bytes across all threads (or "
+          "logical CPUs)");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -170,7 +181,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         INFERENCE_MODEL_BUCKET_PATHS);
   config_client.SetFlag(FLAGS_inference_sidecar_runtime_config,
                         INFERENCE_SIDECAR_RUNTIME_CONFIG);
-
+  config_client.SetFlag(
+      FLAGS_bidding_tcmalloc_background_release_rate_bytes_per_second,
+      BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
+  config_client.SetFlag(FLAGS_bidding_tcmalloc_max_total_thread_cache_bytes,
+                        BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -210,6 +225,10 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
+  MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
+      BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
+  MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
+      BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
   std::string_view port = config_client.GetStringParameter(PORT);
   std::string server_address = absl::StrCat("0.0.0.0:", port);
 

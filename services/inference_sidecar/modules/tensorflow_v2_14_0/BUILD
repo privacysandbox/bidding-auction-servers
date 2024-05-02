@@ -220,6 +220,7 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@inference_common//benchmark:request_utils",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
     ],

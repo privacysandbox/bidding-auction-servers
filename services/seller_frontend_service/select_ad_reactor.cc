@@ -121,7 +121,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
       result.set_interest_group_origin(interest_group.origin());
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
-        PS_VLOG(kInfoMsg, log_context_)
+        PS_VLOG(kNoisyInfo, log_context_)
             << "BrowserSignal: Recency:"
             << interest_group.browser_signals().recency();
 
@@ -179,9 +179,10 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   auto decrypted_hpke_req = DecryptOHTTPEncapsulatedHpkeCiphertext(
       encapsulated_req, clients_.key_fetcher_manager_);
   if (!decrypted_hpke_req.ok()) {
-    PS_VLOG(2) << "Error decrypting the protected "
-               << (is_protected_auction_request_ ? "auction" : "audience")
-               << " input ciphertext" << decrypted_hpke_req.status();
+    PS_VLOG(kNoisyWarn) << "Error decrypting the protected "
+                        << (is_protected_auction_request_ ? "auction"
+                                                          : "audience")
+                        << " input ciphertext" << decrypted_hpke_req.status();
     return {grpc::StatusCode::INVALID_ARGUMENT,
             absl::StrFormat(kErrorDecryptingCiphertextError,
                             decrypted_hpke_req.status().message())};
@@ -336,11 +337,11 @@ void SelectAdReactor::Execute() {
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdRequest:\n"
                                     << request_->ShortDebugString();
-  PS_VLOG(2, log_context_) << "Headers:\n"
-                           << absl::StrJoin(context_->client_metadata(), "\n",
-                                            absl::PairFormatter(
-                                                absl::StreamFormatter(), " : ",
-                                                absl::StreamFormatter()));
+  PS_VLOG(kPlain, log_context_)
+      << "Headers:\n"
+      << absl::StrJoin(context_->client_metadata(), "\n",
+                       absl::PairFormatter(absl::StreamFormatter(), " : ",
+                                           absl::StreamFormatter()));
   if (!decrypt_status.ok()) {
     FinishWithStatus(decrypt_status);
     PS_LOG(ERROR, log_context_) << "SelectAdRequest decryption failed:"
@@ -408,7 +409,7 @@ void SelectAdReactor::Execute() {
 
   for (const auto& buyer_ig_owner : request_->auction_config().buyer_list()) {
     if (buyer_set.erase(buyer_ig_owner) == 0) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kNoisyWarn, log_context_)
           << "Duplicate buyer found " << buyer_ig_owner << ", skipping buyer";
       async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
       continue;
@@ -417,14 +418,15 @@ void SelectAdReactor::Execute() {
     if (num_buyers_solicited >= max_buyers_solicited_) {
       // Skipped buyers should not be left pending.
       async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
-      PS_VLOG(2, log_context_) << "Exceeded cap of " << max_buyers_solicited_
-                               << " buyers called. Skipping buyer";
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Exceeded cap of " << max_buyers_solicited_
+          << " buyers called. Skipping buyer";
       continue;
     }
 
     const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
     if (buyer_input_iterator == buyer_inputs_->end()) {
-      PS_VLOG(2, log_context_)
+      PS_VLOG(kNoisyWarn, log_context_)
           << "No buyer input found for buyer: " << buyer_ig_owner
           << ", skipping buyer";
 
@@ -501,7 +503,7 @@ void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
                                const BuyerInput& buyer_input) {
   auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
   if (buyer_client == nullptr) {
-    PS_VLOG(2, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "No buyer client found for buyer: " << buyer_ig_owner;
 
     async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
@@ -583,8 +585,8 @@ void SelectAdReactor::OnFetchBidsDone(
   PS_VLOG(5, log_context_) << "Received response from a BFE ... ";
   if (response.ok()) {
     auto& found_response = *response;
-    PS_VLOG(2, log_context_) << "\nGetBidsResponse:\n"
-                             << found_response->DebugString();
+    PS_VLOG(kOriginated, log_context_) << "\nGetBidsResponse:\n"
+                                       << found_response->DebugString();
     if (found_response->has_debug_info()) {
       server_common::DebugInfo& bfe_log =
           *response_->mutable_debug_info()->add_downstream_servers();
@@ -594,8 +596,8 @@ void SelectAdReactor::OnFetchBidsDone(
     if ((!is_protected_audience_enabled_ || found_response->bids().empty()) &&
         (!is_pas_enabled_ ||
          found_response->protected_app_signals_bids().empty())) {
-      PS_VLOG(2, log_context_) << "Skipping buyer " << buyer_ig_owner
-                               << " due to empty GetBidsResponse.";
+      PS_VLOG(kNoisyWarn, log_context_) << "Skipping buyer " << buyer_ig_owner
+                                        << " due to empty GetBidsResponse.";
 
       async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
     } else {
@@ -629,7 +631,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 
   // No successful bids received.
   if (shared_buyer_bids_map_.empty()) {
-    PS_VLOG(2, log_context_) << kNoBidsReceived;
+    PS_VLOG(kNoisyWarn, log_context_) << kNoBidsReceived;
 
     if (!any_successful_bids) {
       LogIfError(
@@ -652,7 +654,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
   // That each buyer has bids was checked in OnFetchBidsDone().
   // Thus the preconditions of the following method are satisfied.
   if (!FilterBidsWithMismatchingCurrency()) {
-    PS_VLOG(2, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
+    PS_VLOG(kNoisyWarn, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
     FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT,
                                   kAllBidsRejectedBuyerCurrencyMismatch));
   } else {
@@ -814,8 +816,9 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
   scoring_signals_ = std::move(result).value();
   // If signals are empty, return chaff.
   if (scoring_signals_->scoring_signals->empty()) {
-    PS_VLOG(2, log_context_) << "Scoring signals fetch from key-value server "
-                                "succeeded but were empty.";
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "Scoring signals fetch from key-value server "
+           "succeeded but were empty.";
 
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
@@ -881,21 +884,14 @@ void SelectAdReactor::ScoreAds() {
   auto raw_request = CreateScoreAdsRequest();
   if (raw_request->ad_bids().empty() &&
       raw_request->protected_app_signals_ad_bids().empty()) {
-    PS_VLOG(2, log_context_) << "No Protected Audience or Protected App "
-                                "Signals ads to score, sending chaff response";
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "No Protected Audience or Protected App "
+           "Signals ads to score, sending chaff response";
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-
-  PS_VLOG(2, log_context_) << "\nScoreAdsRawRequest:\n"
-                           << raw_request->DebugString();
-  if (raw_request->ad_bids().empty() &&
-      raw_request->protected_app_signals_ad_bids().empty()) {
-    PS_VLOG(2, log_context_) << "No Protected Audience or Protected App "
-                                "Signals ads to score, sending chaff response";
-    OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
-    return;
-  }
+  PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
+                                     << raw_request->DebugString();
 
   auto auction_request =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
@@ -955,7 +951,8 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
-  PS_VLOG(2, log_context_) << "ScoreAdsResponse status:" << response.status();
+  PS_VLOG(kOriginated, log_context_)
+      << "ScoreAdsResponse status:" << response.status();
   auto scoring_return_code =
       static_cast<grpc::StatusCode>(response.status().code());
   if (!response.ok()) {

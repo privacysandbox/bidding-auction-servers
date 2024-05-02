@@ -22,7 +22,15 @@ EOF
   }
 }
 
-variable "commit_version" {
+variable "git_commit" {
+  type    = string
+}
+
+variable "build_version" {
+  type    = string
+}
+
+variable "build_env" {
   type    = string
 }
 
@@ -84,7 +92,9 @@ source "amazon-ebs" "dataserver" {
     owners      = ["137112412989"]
   }
   tags = {
-    commit_version = var.commit_version
+    git_commit = var.git_commit
+    build_version = var.build_version
+    build_env = var.build_env
   }
   ssh_username = "ec2-user"
 }
