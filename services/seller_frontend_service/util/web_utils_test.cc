@@ -745,8 +745,9 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
-  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), buyer_bid))
-      << " Actual: " << decoded_result->bid() << ", Expected: " << buyer_bid;
+  // The modified bid should not be set unless we have a component auction.
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), 0.0f))
+      << " Actual: " << decoded_result->bid() << ", Expected: " << 0.0f;
   EXPECT_TRUE(AreFloatsEqual(decoded_result->score(), desirability))
       << " Actual: " << decoded_result->score()
       << ", Expected: " << desirability;
@@ -824,8 +825,9 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
-  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), buyer_bid))
-      << " Actual: " << decoded_result->bid() << ", Expected: " << buyer_bid;
+  // Modified bid should not have been set at all.
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), 0.0f))
+      << " Actual: " << decoded_result->bid() << ", Expected: " << 0.0f;
   EXPECT_TRUE(AreFloatsEqual(decoded_result->score(), desirability))
       << " Actual: " << decoded_result->score()
       << ", Expected: " << desirability;
@@ -1185,18 +1187,17 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(
       absl::BytesToHexString(*ret),
-      "a963626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
-      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
-      "698207026369673182070263696831820702666f776e6572318207027077696e5265706f"
-      "7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c7265706f72"
-      "74696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e74657261"
+      "a86573636f7265fa4818fff26769734368616666f46a636f6d706f6e656e7473806b6164"
+      "52656e64657255524c606d62696464696e6747726f757073a4627a698207026369673182"
+      "070263696831820702666f776e6572318207027077696e5265706f7274696e6755524c73"
+      "a27262757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c7468"
+      "7474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e5265706f"
+      "7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d781b74"
+      "6f704c6576656c53656c6c65725265706f7274696e6755524c73a26c7265706f7274696e"
+      "6755524c77687474703a2f2f7265706f7274526573756c742e636f6d7818696e74657261"
       "6374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69"
-      "636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a2"
-      "6c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f"
-      "6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
-      "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d65636967"
-      "3172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
-      "636f6d");
+      "636b2e636f6d71696e74657265737447726f75704e616d656369673172696e7465726573"
+      "7447726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {
@@ -1321,6 +1322,8 @@ TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
   winner.set_interest_group_owner("https://adtech.com");
   winner.set_interest_group_name("ig1");
   winner.set_desirability(156671.781);
+  // Should accomplish nothing as bid should not be included in the response for
+  // non-component auction.
   winner.set_buyer_bid(0.195839122);
   winner.mutable_win_reporting_urls()
       ->mutable_buyer_reporting_urls()
@@ -1354,21 +1357,21 @@ TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
                     [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(
-      absl::BytesToHexString(*ret),
-      "aa63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
-      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
-      "698207026369673182070263696831820702666f776e6572318207027062757965725265"
-      "706f7274696e674964747465737442757965725265706f7274696e6749647077696e5265"
-      "706f7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c726570"
-      "6f7274696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e7465"
-      "72616374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f63"
-      "6c69636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c"
-      "73a26c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e"
-      "636f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b"
-      "70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
-      "69673172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563"
-      "682e636f6d");
+  EXPECT_EQ(absl::BytesToHexString(*ret),
+            "a96573636f7265fa4818fff26769734368616666f46a636f6d706f6e656e747"
+            "3806b616452656e64657255524c606d62696464696e6747726f757073a4627a6"
+            "98207026369673182070263696831820702666f776e657231820702706275796"
+            "5725265706f7274696e674964747465737442757965725265706f7274696e674"
+            "9647077696e5265706f7274696e6755524c73a27262757965725265706f72746"
+            "96e6755524c73a26c7265706f7274696e6755524c74687474703a2f2f7265706"
+            "f727457696e2e636f6d7818696e746572616374696f6e5265706f7274696e675"
+            "5524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d781b746f7"
+            "04c6576656c53656c6c65725265706f7274696e6755524c73a26c7265706f727"
+            "4696e6755524c77687474703a2f2f7265706f7274526573756c742e636f6d781"
+            "8696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7"
+            "0687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e6"
+            "16d656369673172696e74657265737447726f75704f776e65727268747470733"
+            "a2f2f6164746563682e636f6d");
 }
 
 MATCHER_P(ProtoEq, value, "") {

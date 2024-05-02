@@ -311,8 +311,6 @@ absl::Status CborSerializeScoreAdResponse(
     const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
   PS_RETURN_IF_ERROR(
-      CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
-  PS_RETURN_IF_ERROR(
       CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
