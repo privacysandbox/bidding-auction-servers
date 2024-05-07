@@ -767,7 +767,7 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         IGForBidding received;
         EXPECT_EQ(*input[3], expected_signals);
         // Check that device signals are an empty JSON object.
-        EXPECT_EQ(*input[4], R"JSON("{}")JSON");
+        EXPECT_EQ(*input[4], R"JSON({})JSON");
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
   RawRequest raw_request;
