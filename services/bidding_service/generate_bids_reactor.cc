@@ -115,7 +115,7 @@ constexpr char kJsonStringValueStart[] = R"JSON(":")JSON";
 constexpr char kJsonValueStart[] = R"JSON(":)JSON";
 constexpr char kJsonValueEnd[] = R"JSON(,")JSON";
 constexpr char kJsonEmptyString[] = R"JSON("")JSON";
-constexpr char kEmptyDeviceSignals[] = R"JSON("{}")JSON";
+constexpr char kEmptyDeviceSignals[] = R"JSON({})JSON";
 
 std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
                                         absl::string_view seller,
