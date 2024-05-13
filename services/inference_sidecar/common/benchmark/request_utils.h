@@ -15,6 +15,7 @@
 #ifndef SERVICES_INFERENCE_SIDECAR_COMMON_BENCHMARK_REQUEST_UTILS_H_
 #define SERVICES_INFERENCE_SIDECAR_COMMON_BENCHMARK_REQUEST_UTILS_H_
 
+#include <cstdlib>
 #include <string>
 
 #include "proto/inference_sidecar.pb.h"
@@ -25,6 +26,16 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 RegisterModelRequest CreateRegisterModelRequest(
     const RegisterModelRequest& register_request,
     const std::string& new_model_path);
+
+inline std::string GenerateRandomFloat() {
+  return std::to_string(static_cast<float>(rand()) /  // NOLINT
+                        static_cast<float>(RAND_MAX));
+}
+
+// Returns an array of random floating numbers.
+std::string GenerateRandomFloats(int n);
+
+std::string StringFormat(const std::string& s);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

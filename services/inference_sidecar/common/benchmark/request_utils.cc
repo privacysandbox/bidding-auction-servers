@@ -14,6 +14,8 @@
 
 #include "benchmark/request_utils.h"
 
+#include <cstdlib>
+#include <regex>
 #include <string>
 #include <unordered_map>
 
@@ -44,6 +46,32 @@ RegisterModelRequest CreateRegisterModelRequest(
     (*new_register_request.mutable_model_files())[new_file_path] = file_content;
   }
   return new_register_request;
+}
+
+// Returns an array of random floating numbers.
+std::string GenerateRandomFloats(int n) {
+  if (n < 1) {
+    return "";
+  }
+  std::string result;
+  absl::StrAppend(&result, "\"", GenerateRandomFloat(), "\"");
+  for (int i = 1; i < n; i++) {
+    absl::StrAppend(&result, ", \"", GenerateRandomFloat(), "\"");
+  }
+  return result;
+}
+
+std::string StringFormat(const std::string& s) {
+  std::regex pattern("GenerateRandomFloats\\((\\d+)\\)");
+  std::smatch match;
+  std::string result = s;
+
+  while (std::regex_search(result, match, pattern)) {
+    int num = std::stoi(match.str(1));
+    result = std::regex_replace(result, pattern, GenerateRandomFloats(num),
+                                std::regex_constants::format_first_only);
+  }
+  return result;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

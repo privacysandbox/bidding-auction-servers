@@ -66,6 +66,7 @@ inline constexpr char kBrowserSignals[] = "browserSignals";
 inline constexpr char kBidCount[] = "bidCount";
 inline constexpr char kJoinCount[] = "joinCount";
 inline constexpr char kRecency[] = "recency";
+inline constexpr char kRecencyMs[] = "recencyMs";
 inline constexpr char kPrevWins[] = "prevWins";
 inline constexpr char kConsentedDebugConfig[] = "consentedDebugConfig";
 inline constexpr char kIsConsented[] = "isConsented";
@@ -99,14 +100,10 @@ inline constexpr std::array<absl::string_view, kNumInterestGroupKeys>
     kInterestGroupKeys = {kName, kBiddingSignalsKeys, kUserBiddingSignals,
                           kAds,  kAdComponents,       kBrowserSignals};
 
-inline constexpr int kNumBrowserSignalKeys = 4;
+inline constexpr int kNumBrowserSignalKeys = 5;
 inline constexpr std::array<absl::string_view, kNumBrowserSignalKeys>
-    kBrowserSignalKeys = {
-        kBidCount,
-        kJoinCount,
-        kRecency,
-        kPrevWins,
-};
+    kBrowserSignalKeys = {kBidCount, kJoinCount, kRecency, kPrevWins,
+                          kRecencyMs};
 inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
     kConsentedDebugConfigKeys = {
         kIsConsented,

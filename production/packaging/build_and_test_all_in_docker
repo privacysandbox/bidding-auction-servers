@@ -318,7 +318,9 @@ if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
       for region in "${AMI_REGIONS[@]}"; do
         EXTRA_ARGS+=(--with-ami "${region}")
       done
-      EXTRA_ARGS+=(--aws-image-tag ${AWS_IMAGE_TAG})
+      if [[ -n "${AWS_IMAGE_TAG}" ]]; then
+        EXTRA_ARGS+=(--aws-image-tag ${AWS_IMAGE_TAG})
+      fi
       if [[ ${VERBOSE} -eq 1 ]]; then
         EXTRA_ARGS+=("--verbose")
       fi

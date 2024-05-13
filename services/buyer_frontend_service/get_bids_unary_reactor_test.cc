@@ -240,11 +240,11 @@ TEST_F(GetBidUnaryReactorTest,
   EXPECT_FALSE(response_.response_ciphertext().empty());
 }
 
-auto EqLogContext(const LogContext& log_context) {
-  return AllOf(
-      Property(&LogContext::generation_id, Eq(log_context.generation_id())),
-      Property(&LogContext::adtech_debug_id,
-               Eq(log_context.adtech_debug_id())));
+auto EqLogContext(const server_common::LogContext& log_context) {
+  return AllOf(Property(&server_common::LogContext::generation_id,
+                        Eq(log_context.generation_id())),
+               Property(&server_common::LogContext::adtech_debug_id,
+                        Eq(log_context.adtech_debug_id())));
 }
 
 auto EqGenerateBidsRawRequestWithLogContext(

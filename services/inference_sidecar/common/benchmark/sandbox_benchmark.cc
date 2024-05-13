@@ -112,8 +112,12 @@ static void BM_Multiworker_Predict_GRPC(benchmark::State& state) {
   CHECK(status.ok()) << status.error_message();
 
   for (auto _ : state) {
+    state.PauseTiming();
+    std::string input = StringFormat(kJsonString);
+    state.ResumeTiming();
+
     PredictRequest predict_request;
-    predict_request.set_input(kJsonString);
+    predict_request.set_input(input);
 
     PredictResponse predict_response;
     grpc::ClientContext context;
@@ -157,8 +161,12 @@ static void BM_Predict_GRPC(benchmark::State& state) {
   }
 
   for (auto _ : state) {
+    state.PauseTiming();
+    std::string input = StringFormat(kJsonString);
+    state.ResumeTiming();
+
     PredictRequest predict_request;
-    predict_request.set_input(kJsonString);
+    predict_request.set_input(input);
 
     PredictResponse predict_response;
     grpc::ClientContext context;
@@ -189,8 +197,12 @@ static void BM_Multiworker_Predict_IPC(benchmark::State& state) {
   CHECK(comms.SendProtoBuf(register_request));
 
   for (auto _ : state) {
+    state.PauseTiming();
+    std::string input = StringFormat(kJsonString);
+    state.ResumeTiming();
+
     PredictRequest predict_request;
-    predict_request.set_input(kJsonString);
+    predict_request.set_input(input);
     CHECK(comms.SendProtoBuf(predict_request));
 
     PredictResponse predict_response;
@@ -231,8 +243,12 @@ static void BM_Predict_IPC(benchmark::State& state) {
   }
 
   for (auto _ : state) {
+    state.PauseTiming();
+    std::string input = StringFormat(kJsonString);
+    state.ResumeTiming();
+
     PredictRequest predict_request;
-    predict_request.set_input(kJsonString);
+    predict_request.set_input(input);
 
     absl::MutexLock lock(&mutex);
 

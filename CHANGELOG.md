@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.7.0 (2024-05-13)
+
+
+### Features
+
+* Add the CPU affinity lib for inference
+
+
+### Bug Fixes
+
+* Cap debug reporting URL
+* Fix the recency value passed to generateBid and scoreAds
+* make aws-image-tag optional
+* remove unitOverride in gcp seller dashboard terraform
+* replace ABSL_LOG with PS_LOG in reactors
+* update empty device signals to be an object, not string
+
 ## 3.6.0 (2024-05-01)
 
 

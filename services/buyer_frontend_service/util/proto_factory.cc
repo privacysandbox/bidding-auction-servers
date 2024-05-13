@@ -78,7 +78,7 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRawRequest& get_bids_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const LogContext& log_context) {
+    const server_common::LogContext& log_context) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
 
   // 1. Set Interest Group for bidding

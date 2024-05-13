@@ -179,6 +179,14 @@ message BrowserSignals {
   // that occurred in the last 30 days. The time is specified in seconds
   // before the containing auctionBlob was requested.
   string prev_wins = 4;
+
+  // The most recent join time for this group expressed in milli seconds
+  // before the containing auctionBlob was requested. This field will be used
+  // by newer client versions. For older devices, the precison will be in seconds.
+  // If recency_ms is present, this value will be used to offer higher precision.
+  // If not, recency will be used.
+  // Only one of the recency or recency_ms is expected to present in the request.
+  optional int64 recency_ms = 5;
 }
 
 // Information passed by Android.
@@ -606,17 +614,6 @@ message SelectAdResponse {
   string key_id = 3;
 }
 
-// Context useful for logging and debugging requests.
-message LogContext {
-  // UUID for the request (as originating from client).
-  string generation_id = 1;
-
-  // Adtech debug id that can be used for correlating the request with the
-  // adtech. This will contain `buyer_debug_id` when used in context of buyer
-  // services and `seller_debug_id` when used in context of seller services.
-  string adtech_debug_id = 2;
-}
-
 // Buyer's FrontEnd service.
 service BuyerFrontEnd {
   // Returns bids for each Interest Group / Custom Audience.
@@ -679,7 +676,7 @@ message GetBidsRequest {
     bool enable_debug_reporting = 7;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 8;
+    server_common.LogContext log_context = 8;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 9;
@@ -890,7 +887,7 @@ message GenerateBidsRequest {
     string publisher_name = 7;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 8;
+    server_common.LogContext log_context = 8;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 9;
@@ -963,7 +960,7 @@ message GenerateProtectedAppSignalsBidsRequest {
     string publisher_name = 5;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 6;
+    server_common.LogContext log_context = 6;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 7;
@@ -1167,7 +1164,7 @@ message ScoreAdsRequest {
     bool enable_debug_reporting = 6;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 7;
+    server_common.LogContext log_context = 7;
 
     // Map of buyer_origin to buyer_signals required as input for event level
     // reporting url generation for the winning buyer.

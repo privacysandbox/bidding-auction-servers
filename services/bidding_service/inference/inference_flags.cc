@@ -23,8 +23,6 @@ ABSL_FLAG(std::optional<std::string>, inference_sidecar_binary_path,
           std::nullopt, "The binary path of the inference sidecar.");
 // Used to load local models for debugging purposes. In the prod setting, this
 // flag is not used, and we fetch models from cloud buckets.
-// TODO(b/330817239): Bidding server should throw an error if this flag is set
-// in the prod mode.
 ABSL_FLAG(std::optional<std::string>, inference_model_local_paths, std::nullopt,
           "Comma separated list of inference model paths to read from the "
           "local disk. It's mainly used for testing.");

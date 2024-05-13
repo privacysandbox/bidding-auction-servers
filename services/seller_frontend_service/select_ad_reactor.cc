@@ -43,6 +43,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr int kMillisInMinute = 60000;
+constexpr int kSecsInMinute = 60;
 using ScoreAdsRawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 using AdScore = ScoreAdsResponse::AdScore;
 using AdWithBidMetadata =
@@ -124,8 +126,15 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
         PS_VLOG(kNoisyInfo, log_context_)
             << "BrowserSignal: Recency:"
             << interest_group.browser_signals().recency();
-
-        result.set_recency(interest_group.browser_signals().recency());
+        if (interest_group.browser_signals().has_recency_ms()) {
+          // ScoreAdsRequest requires recency to be in minutes.
+          result.set_recency(static_cast<int>(
+              interest_group.browser_signals().recency_ms() / kMillisInMinute));
+        } else {
+          // ScoreAdsRequest requires recency to be in minutes.
+          result.set_recency(static_cast<int>(
+              interest_group.browser_signals().recency() / kSecsInMinute));
+        }
       }
       // May as well skip further iterations.
       break;

@@ -1199,8 +1199,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.duration_ms'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.count' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div",
-                  "unitOverride": ""
+                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.duration_ms'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.count' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div"
                 }
               }
             ],

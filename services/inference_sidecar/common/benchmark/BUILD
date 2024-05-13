@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -95,6 +95,20 @@ cc_library(
     deps = [
         "//proto:inference_sidecar_cc_proto",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "request_utils_test",
+    size = "small",
+    srcs = ["request_utils_test.cc"],
+    data = [
+    ],
+    deps = [
+        ":request_utils",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

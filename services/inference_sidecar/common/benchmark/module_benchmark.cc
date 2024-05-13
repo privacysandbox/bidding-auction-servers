@@ -103,8 +103,12 @@ class ModuleFixture : public benchmark::Fixture {
 
 BENCHMARK_DEFINE_F(ModuleFixture, BM_Predict)(benchmark::State& state) {
   for (auto _ : state) {
+    state.PauseTiming();
+    std::string input = StringFormat(kJsonString);
+    state.ResumeTiming();
+
     PredictRequest predict_request;
-    predict_request.set_input(kJsonString);
+    predict_request.set_input(input);
 
     absl::StatusOr response = module_->Predict(predict_request);
     CHECK(response.ok()) << response.status().message();

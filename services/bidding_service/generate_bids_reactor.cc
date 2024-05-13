@@ -128,11 +128,18 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
     absl::StrAppend(&device_signals_str, kJsonStringEnd, kTopLevelSeller,
                     kJsonStringValueStart, top_level_seller);
   }
+  int64_t recency_ms;
+  if (browser_signals.has_recency_ms()) {
+    recency_ms = browser_signals.recency_ms();
+  } else {
+    recency_ms = browser_signals.recency() * 1000;
+  }
   absl::StrAppend(
       &device_signals_str, kJsonStringEnd, kJoinCount, kJsonValueStart,
       browser_signals.join_count(), kJsonValueEnd, kBidCount, kJsonValueStart,
       browser_signals.bid_count(), kJsonValueEnd, kRecency, kJsonValueStart,
-      browser_signals.recency(), kJsonValueEnd, kPrevWins, kJsonValueStart,
+      /*recency is expected to be in milli seconds.*/
+      recency_ms, kJsonValueEnd, kPrevWins, kJsonValueStart,
       browser_signals.prev_wins().empty() ? kJsonEmptyString
                                           : browser_signals.prev_wins(),
       "}");

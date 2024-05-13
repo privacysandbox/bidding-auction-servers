@@ -73,11 +73,11 @@ inline void LogWarningForBadResponse(
   PS_LOG(ERROR, log_context) << "Failed to parse response from Roma ",
       status.ToString(absl::StatusToStringMode::kWithEverything);
   if (ad_with_bid_metadata) {
-    ABSL_LOG(WARNING)
+    PS_LOG(WARNING, log_context)
         << "Invalid json output from code execution for interest group "
         << ad_with_bid_metadata->interest_group_name() << ": " << response.resp;
   } else {
-    ABSL_LOG(WARNING)
+    PS_LOG(WARNING, log_context)
         << "Invalid json output from code execution for protected app signals "
            "ad: "
         << response.resp;
@@ -677,12 +677,14 @@ void ScoreAdsReactor::FindScoredAdType(
 ScoringData ScoreAdsReactor::FindWinningAd(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
   ScoringData scoring_data;
+  int64_t current_all_debug_urls_chars = 0;
   for (int index = 0; index < responses.size(); ++index) {
     const auto& response = responses[index];
     if (!response.ok()) {
-      ABSL_LOG(WARNING) << "Invalid execution (possibly invalid input): "
-                        << responses[index].status().ToString(
-                               absl::StatusToStringMode::kWithEverything);
+      PS_LOG(WARNING, log_context_)
+          << "Invalid execution (possibly invalid input): "
+          << responses[index].status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
       continue;
     }
 
@@ -698,10 +700,11 @@ ScoringData ScoreAdsReactor::FindWinningAd(
     if (!ad && !protected_app_signals_ad_with_bid) {
       // This should never happen but we log here in case there is a bug in
       // our implementation.
-      ABSL_LOG(ERROR) << "Scored ad is neither a protected audience ad, nor a "
-                         "protected app "
-                         "signals ad: "
-                      << response->resp;
+      PS_LOG(ERROR, log_context_)
+          << "Scored ad is neither a protected audience ad, nor a "
+             "protected app "
+             "signals ad: "
+          << response->resp;
       continue;
     }
 
@@ -711,7 +714,6 @@ ScoringData ScoreAdsReactor::FindWinningAd(
       continue;
     }
 
-    long current_all_debug_urls_chars = 0;
     auto ad_score = ParseScoreAdResponse(
         *response_json, max_allowed_size_debug_url_chars_,
         max_allowed_size_all_debug_urls_chars_,
@@ -850,7 +852,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
     LogIfError(metric_context_
                    ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
                        1, metric::kAuctionScoreAdsNoAdSelected));
-    ABSL_LOG(WARNING) << "No ad was selected as most desirable";
+    PS_LOG(WARNING, log_context_) << "No ad was selected as most desirable";
     if (enable_debug_reporting) {
       PerformDebugReporting(winning_ad);
     }

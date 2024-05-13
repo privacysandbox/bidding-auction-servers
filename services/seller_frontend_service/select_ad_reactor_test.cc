@@ -793,7 +793,9 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
               EXPECT_EQ(bid.join_count(),
                         interest_group.browser_signals().join_count());
               EXPECT_EQ(bid.recency(),
-                        interest_group.browser_signals().recency());
+                        static_cast<int>(
+                            interest_group.browser_signals().recency_ms() /
+                            60000));  // recency in minutes
             }
           }
 

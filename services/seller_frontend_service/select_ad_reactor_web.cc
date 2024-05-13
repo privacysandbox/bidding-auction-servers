@@ -122,8 +122,9 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
 
   absl::StatusOr<std::string> compressed_data = GzipCompress(data_to_compress);
   if (!compressed_data.ok()) {
-    ABSL_LOG(ERROR) << "Failed to compress the CBOR serialized data: "
-                    << compressed_data.status().message();
+    PS_LOG(ERROR, log_context_)
+        << "Failed to compress the CBOR serialized data: "
+        << compressed_data.status().message();
     FinishWithStatus(
         grpc::Status(grpc::INTERNAL, "Failed to compress CBOR data"));
     return absl::InternalError("");

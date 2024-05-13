@@ -173,8 +173,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_kv_server_egress_tls, KV_SERVER_EGRESS_TLS);
   config_client.SetFlag(FLAGS_inference_sidecar_binary_path,
                         INFERENCE_SIDECAR_BINARY_PATH);
-  config_client.SetFlag(FLAGS_inference_model_local_paths,
-                        INFERENCE_MODEL_LOCAL_PATHS);
   config_client.SetFlag(FLAGS_inference_model_bucket_name,
                         INFERENCE_MODEL_BUCKET_NAME);
   config_client.SetFlag(FLAGS_inference_model_bucket_paths,
@@ -337,14 +335,17 @@ absl::Status RunServer() {
                "required arguements.";
       }
     }
-    PS_LOG(INFO) << "Register models from local.";
-    std::string_view local_paths =
-        GetStringParameterSafe(config_client, INFERENCE_MODEL_LOCAL_PATHS);
-    if (absl::Status status = inference::RegisterModelsFromLocal(
-            absl::StrSplit(local_paths, ','));
-        !status.ok()) {
-      PS_LOG(INFO) << "Skip registering models from local: "
-                   << status.message();
+
+    if (std::optional<std::string> local_paths =
+            absl::GetFlag(FLAGS_inference_model_local_paths);
+        local_paths.has_value()) {
+      PS_LOG(INFO) << "Register models from local for testing.";
+      if (absl::Status status = inference::RegisterModelsFromLocal(
+              absl::StrSplit(local_paths.value(), ','));
+          !status.ok()) {
+        PS_LOG(INFO) << "Skip registering models from local: "
+                     << status.message();
+      }
     }
   }
 

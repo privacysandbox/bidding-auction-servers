@@ -38,7 +38,7 @@ CreateGenerateBidsRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bid_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const LogContext& log_context);
+    const server_common::LogContext& log_context);
 
 // Creates a request to generate bid for protected app signals.
 std::unique_ptr<GenerateProtectedAppSignalsBidsRequest::

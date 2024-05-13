@@ -142,7 +142,8 @@ BrowserSignals MakeRandomBrowserSignalsForIG(
   BrowserSignals browser_signals;
   browser_signals.set_join_count(MakeARandomInt(0, 10));
   browser_signals.set_bid_count(MakeARandomInt(0, 50));
-  browser_signals.set_recency((unsigned long)std::time(NULL));
+  browser_signals.set_recency(60);  // secs
+  browser_signals.set_recency_ms(60000);
   browser_signals.set_prev_wins(MakeRandomPreviousWins(ad_render_ids));
   return browser_signals;
 }
