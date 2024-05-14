@@ -45,6 +45,7 @@
 #include "services/common/util/proto_util.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -3065,6 +3066,63 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionUrl);
+}
+
+TEST_F(ScoreAdsReactorTest, RespectConfiguredDebugUrlLimits) {
+  server_common::log::PS_VLOG_IS_ON(0, 10);
+  MockCodeDispatchClient dispatcher;
+  RawRequest raw_request;
+  AdWithBidMetadata foo, bar;
+  GetTestAdWithBidFoo(foo);
+  GetTestAdWithBidBar(bar);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  /*enable_debug_reporting=*/true);
+  std::string long_win_url(1024, 'A');
+  std::string long_loss_url(1025, 'B');
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([long_win_url, long_loss_url](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> score_logic;
+        score_logic.reserve(batch.size());
+        for (int i = 0; i < batch.size(); ++i) {
+          score_logic.emplace_back(absl::Substitute(
+              R"JSON(
+                  {
+                  "response" : {
+                    "desirability" : $0,
+                    "bid" : 1,
+                    "allowComponentAuction" : false,
+                    "debugReportUrls": {
+                      "auctionDebugLossUrl": "$1",
+                      "auctionDebugWinUrl": "$2"
+                    }
+                  },
+                  "logs":[]
+                  }
+                )JSON",
+              batch.size() - i, long_loss_url, long_win_url));
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic));
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true,
+      .max_allowed_size_all_debug_urls_kb = 1};
+  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& scored_ad = raw_response.ad_score();
+  PS_VLOG(5) << "Response:\n" << scored_ad.DebugString();
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  EXPECT_TRUE(scored_ad.has_debug_report_urls());
+  EXPECT_FALSE(scored_ad.debug_report_urls().auction_debug_win_url().empty());
+  EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_win_url().size(), 1024);
+  EXPECT_TRUE(scored_ad.debug_report_urls().auction_debug_loss_url().empty());
 }
 
 }  // namespace

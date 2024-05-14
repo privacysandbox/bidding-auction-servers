@@ -224,7 +224,10 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
   *interest_group->mutable_bidding_signals_keys()->Add() = "[]";
-
+  google::protobuf::RepeatedPtrField<std::string> ad_render_ids;
+  ad_render_ids.Add(MakeARandomString());
+  interest_group->mutable_browser_signals()->CopyFrom(
+      MakeRandomBrowserSignalsForIG(ad_render_ids));
   google::protobuf::Map<std::string, BuyerInput> decoded_buyer_inputs;
   decoded_buyer_inputs.emplace(kSampleBuyer, buyer_input);
   google::protobuf::Map<std::string, std::string> encoded_buyer_inputs;

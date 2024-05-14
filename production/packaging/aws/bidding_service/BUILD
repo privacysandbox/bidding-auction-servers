@@ -22,6 +22,7 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
+    "pkg_mklink",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
@@ -47,17 +48,16 @@ pkg_files(
     prefix = "/",
 )
 
-pkg_files(
-    name = "kmstool_enclave_executable",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_cli",
-    ],
-    attributes = pkg_attributes(mode = "0555"),
-    prefix = "/",
+# Create a symlink between where kmstool_enclave_cli expects shell to be
+# (/bin/sh) and where it actually is on our image (/busybox/sh).
+pkg_mklink(
+    name = "busybox_sh_symlink",
+    link_name = "/bin/sh",
+    target = "/busybox/sh",
 )
 
 server_binaries = [
-    ":kmstool_enclave_executable",
+    ":busybox_sh_symlink",
     ":server_executables",
 ]
 
@@ -69,30 +69,6 @@ pkg_zip(
 pkg_tar(
     name = "server_binaries_tar",
     srcs = server_binaries,
-)
-
-# Ensure libnsm ends up in the load path.
-pkg_tar(
-    name = "libnsm-tar",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:libnsm_so",
-    ],
-    mode = "0644",
-    # TODO(b/294113069): Remove arch-specific path.
-    package_dir = "/lib/x86_64-linux-gnu/",
-    visibility = ["//visibility:public"],
-)
-
-# Create a symlink between where kmstool_enclave_cli expects shell to be
-# (/bin/sh) and where it actually is on our image (/busybox/sh).
-container_layer(
-    name = "kmstool_enclave_cli_layer",
-    symlinks = {
-        "/bin/sh": "/busybox/sh",
-    },
-    tars = [
-        ":libnsm-tar",
-    ],
 )
 
 container_layer(
@@ -128,7 +104,6 @@ container_image(
     env = LOG_ENV_VARS,
     layers = [
         ":server_binary_layer",
-        ":kmstool_enclave_cli_layer",
     ] + select({
         "//:e2e_build": [
         ],
@@ -136,6 +111,7 @@ container_image(
     }),
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
     ],
 )
 

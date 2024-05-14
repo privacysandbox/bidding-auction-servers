@@ -34,7 +34,7 @@ INFERENCE_SIDECAR_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/modules/pytor
 INFERENCE_MODEL_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_e2e_model1.pt:/test_model
 
 # Default client JS code:
-BIDDING_JS_PATH="/src/workspace/testing/functional/suts/inference/data/buyer-bidding-service/generateBidRunInference.js"
+BIDDING_JS_PATH="/src/workspace/testing/functional/suts/inference_pytorch/data/buyer-bidding-service/generateBidRunInference.js"
 
 print_usage() {
     cat << USAGE
@@ -114,8 +114,8 @@ export SERVER_START_CMD=$(cat << END
 --inference_model_local_paths="/test_model" \
 --inference_sidecar_runtime_config='{
       "num_interop_threads": 4,
-      "num_intraop_threads": 4
-      "module_name": "tensorflow_v2_14_0"
+      "num_intraop_threads": 4,
+      "module_name": "pytorch_v2_1_1"
     }' \
 --enable_bidding_service_benchmark="true" \
 --init_config_client="false" --port=50057 \
@@ -141,6 +141,8 @@ export SERVER_START_CMD=$(cat << END
 --consented_debug_token="" \
 --enable_protected_app_signals="false" \
 --ps_verbosity=2 \
+--bidding_tcmalloc_background_release_rate_bytes_per_second=4096 \
+--bidding_tcmalloc_max_total_thread_cache_bytes=10737418240 \
 --ad_retrieval_timeout_ms="60000" && exit
 END
 )

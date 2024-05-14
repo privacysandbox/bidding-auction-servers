@@ -218,7 +218,7 @@ inline absl::string_view GetDebugUrlIfInLimit(
     PS_VLOG(8) << "Skipping " << url_type << " of length: " << url_length
                << ", since it will cause the new running total to become: "
                << current_all_debug_urls_chars + url_length
-               << "(which surpasses the limit: "
+               << " (which surpasses the limit: "
                << max_allowed_size_all_debug_urls_chars << ")";
   }
   return "";

@@ -53,6 +53,7 @@ inline constexpr char kSampleUserBiddingSignals[] =
 inline constexpr int kSampleJoinCount = 1;
 inline constexpr int kSampleBidCount = 2;
 inline constexpr int kSampleRecency = 3;
+inline constexpr int kSampleRecencyMs = 3000;
 inline constexpr char kSampleIgOwner[] = "foo_owner";
 inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
@@ -78,6 +79,11 @@ using BiddingGroupMap =
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+
+struct CborInterestGroupConfig {
+  std::optional<int> recency;
+  std::optional<int> recency_ms;
+};
 
 cbor_pair BuildStringMapPair(absl::string_view key, absl::string_view value) {
   return {cbor_move(cbor_build_stringn(key.data(), key.size())),
@@ -114,7 +120,8 @@ cbor_pair BuildStringArrayMapPair(
           cbor_move(array)};
 }
 
-struct cbor_item_t* BuildSampleCborInterestGroup() {
+struct cbor_item_t* BuildSampleCborInterestGroup(
+    CborInterestGroupConfig cbor_interest_group_config = {}) {
   cbor_item_t* interest_group = cbor_new_definite_map(kNumInterestGroupKeys);
   EXPECT_TRUE(
       cbor_map_add(interest_group, BuildStringMapPair(kName, kSampleIgName)));
@@ -138,9 +145,17 @@ struct cbor_item_t* BuildSampleCborInterestGroup() {
                            BuildIntMapPair(kJoinCount, kSampleJoinCount)));
   EXPECT_TRUE(cbor_map_add(browser_signals,
                            BuildIntMapPair(kBidCount, kSampleBidCount)));
-  EXPECT_TRUE(
-      cbor_map_add(browser_signals, BuildIntMapPair(kRecency, kSampleRecency)));
-
+  if (cbor_interest_group_config.recency.has_value()) {
+    EXPECT_TRUE(cbor_map_add(
+        browser_signals,
+        BuildIntMapPair(kRecency, cbor_interest_group_config.recency.value())));
+  }
+  if (cbor_interest_group_config.recency_ms.has_value()) {
+    EXPECT_TRUE(cbor_map_add(
+        browser_signals,
+        BuildIntMapPair(kRecencyMs,
+                        cbor_interest_group_config.recency_ms.value())));
+  }
   // Build prevWins arrays.
   cbor_item_t* child_arr_1 = cbor_new_definite_array(2);
   EXPECT_TRUE(cbor_array_push(child_arr_1, cbor_move(cbor_build_uint64(-20))));
@@ -236,7 +251,7 @@ ScoreAdsResponse::AdScore MakeARandomComponentAdScore() {
   return winner;
 }
 
-TEST(ChromeRequestUtils, Decode_Success) {
+void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
   EXPECT_TRUE(cbor_map_add(*protected_auction_input,
@@ -248,7 +263,8 @@ TEST(ChromeRequestUtils, Decode_Success) {
                            BuildBoolMapPair(kDebugReporting, true)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
-  EXPECT_TRUE(cbor_array_push(*ig_array, BuildSampleCborInterestGroup()));
+  EXPECT_TRUE(cbor_array_push(
+      *ig_array, BuildSampleCborInterestGroup(cbor_interest_group_config)));
   cbor_item_t* ig_bytestring = CompressInterestGroups(ig_array);
 
   cbor_item_t* interest_group_data_map = cbor_new_definite_map(1);
@@ -300,7 +316,12 @@ TEST(ChromeRequestUtils, Decode_Success) {
   BrowserSignals* signals = expected_ig.mutable_browser_signals();
   signals->set_join_count(kSampleJoinCount);
   signals->set_bid_count(kSampleBidCount);
-  signals->set_recency(kSampleRecency);
+  if (cbor_interest_group_config.recency.has_value()) {
+    signals->set_recency(cbor_interest_group_config.recency.value());
+  }
+  if (cbor_interest_group_config.recency_ms.has_value()) {
+    signals->set_recency_ms(cbor_interest_group_config.recency_ms.value());
+  }
   std::string prev_wins_json_str = absl::StrFormat(
       R"([[-20,"%s"],[-100,"%s"]])", kSampleAdRenderId1, kSampleAdRenderId2);
   signals->set_prev_wins(prev_wins_json_str);
@@ -360,6 +381,25 @@ TEST(ChromeRequestUtils, Decode_Success) {
         << bi_differences;
     FAIL();
   }
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {
+      .recency = kSampleRecency,
+  };
+  TestDecode(cbor_interest_group_config);
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyMsInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {.recency_ms =
+                                                            kSampleRecencyMs};
+  TestDecode(cbor_interest_group_config);
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyAndRecencyMsInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {
+      .recency = kSampleRecency, .recency_ms = kSampleRecencyMs};
+  TestDecode(cbor_interest_group_config);
 }
 
 TEST(ChromeRequestUtils, Decode_FailOnWrongType) {

@@ -227,6 +227,16 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
         }
         break;
       }
+      case 4: {  // RecencyMs.
+        bool is_recency_valid_type =
+            IsTypeValid(&cbor_is_int, signal.value, kBrowserSignalsRecencyMs,
+                        kInt, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, signals);
+        if (is_recency_valid_type) {
+          signals.set_recency_ms(cbor_get_int(signal.value));
+        }
+        break;
+      }
     }
   }
 
