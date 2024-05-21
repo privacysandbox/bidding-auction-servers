@@ -26,7 +26,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ScoringAsyncClient = AsyncClient<ScoreAdsRequest, ScoreAdsResponse,
@@ -37,7 +37,6 @@ struct AuctionServiceClientConfig {
   std::string server_addr;
   bool compression = false;
   bool secure_client = true;
-  bool encryption_enabled = false;
 };
 
 // This class is an async grpc client for the Fledge Auction (Scoring) Service.
@@ -49,7 +48,7 @@ class ScoringAsyncGrpcClient
   explicit ScoringAsyncGrpcClient(
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      AuctionServiceClientConfig client_config);
+      const AuctionServiceClientConfig& client_config);
 
  protected:
   // Sends an asynchronous request via grpc to the Scoring Service.

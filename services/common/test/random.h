@@ -29,7 +29,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 // helper functions to generate random objects for testing
 namespace privacy_sandbox::bidding_auction_servers {
@@ -55,8 +55,8 @@ num_type MakeARandomNumber(num_type min, num_type max) {
 
 std::unique_ptr<google::protobuf::Struct> MakeARandomStruct(int num_fields);
 
-void ProtoToJson(const google::protobuf::Message& proto,
-                 std::string* json_output);
+absl::Status ProtoToJson(const google::protobuf::Message& proto,
+                         std::string* json_output);
 
 std::unique_ptr<std::string> MakeARandomStructJsonString(int num_fields);
 
@@ -163,12 +163,16 @@ T MakeARandomProtectedAuctionInput(int num_buyers = 2) {
   *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_input);
   protected_auction_input.set_publisher_name(MakeARandomString());
+  protected_auction_input.set_enable_debug_reporting(true);
   return protected_auction_input;
 }
 
 template <typename T>
 SelectAdRequest MakeARandomSelectAdRequest(
-    absl::string_view seller_domain_origin, const T& protected_auction_input) {
+    absl::string_view seller_domain_origin, const T& protected_auction_input,
+    bool set_buyer_egid = false, bool set_seller_egid = false,
+    absl::string_view seller_currency = "",
+    absl::string_view buyer_currency = "") {
   SelectAdRequest request;
   request.mutable_auction_config()->set_seller_signals(absl::StrCat(
       "{\"seller_signal\": \"", MakeARandomString(), "\"}"));  // 3.
@@ -179,16 +183,32 @@ SelectAdRequest MakeARandomSelectAdRequest(
   request.mutable_auction_config()->set_seller(MakeARandomString());
   request.mutable_auction_config()->set_buyer_timeout_ms(1000);
 
+  if (set_seller_egid) {
+    request.mutable_auction_config()
+        ->mutable_code_experiment_spec()
+        ->set_seller_kv_experiment_group_id(MakeARandomInt(1000, 10000));
+  }
+
   for (auto& buyer_input_pair : protected_auction_input.buyer_input()) {
     *request.mutable_auction_config()->mutable_buyer_list()->Add() =
         buyer_input_pair.first;
     SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config = {};
     per_buyer_config.set_buyer_signals(MakeARandomString());
+    if (set_buyer_egid) {
+      per_buyer_config.set_buyer_kv_experiment_group_id(
+          MakeARandomInt(1000, 10000));
+    }
+    if (!buyer_currency.empty()) {
+      per_buyer_config.set_buyer_currency(buyer_currency);
+    }
     request.mutable_auction_config()->mutable_per_buyer_config()->insert(
         {buyer_input_pair.first, per_buyer_config});
   }
 
   request.mutable_auction_config()->set_seller(seller_domain_origin);
+  if (!seller_currency.empty()) {
+    request.mutable_auction_config()->set_seller_currency(seller_currency);
+  }
   request.set_client_type(CLIENT_TYPE_BROWSER);
   return request;
 }
@@ -204,8 +224,14 @@ BuyerInput MakeARandomBuyerInput();
 
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
 
-AuctionResult MakeARandomAuctionResult();
+// Populates fields for a auction result object for a single seller auction.
+AuctionResult MakeARandomSingleSellerAuctionResult(
+    std::vector<std::string> buyer_list = {});
 
+// Populates fields for a auction result object for a component seller auction.
+AuctionResult MakeARandomComponentAuctionResult(
+    std::string generation_id, std::string top_level_seller,
+    std::vector<std::string> buyer_list = {});
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_TEST_RANDOM_H_

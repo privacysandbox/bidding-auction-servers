@@ -19,13 +19,45 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+constexpr char DispatchHandlerFunctionWithSellerWrapper[] =
+    "scoreAdEntryFunction";
+constexpr char kNoTrustedScoringSignals[] = "Empty trusted scoring signals";
+constexpr char kAdComponentRenderUrlsProperty[] = "adComponentRenderUrls";
+constexpr char kRenderUrlsPropertyForKVResponse[] = "renderUrls";
+
+// The following fields are expected to returned by ScoreAd response
+constexpr char kRenderUrlsPropertyForScoreAd[] = "renderUrl";
+constexpr char kTopLevelSellerFieldPropertyForScoreAd[] = "topLevelSeller";
+constexpr char kComponentSellerFieldPropertyForScoreAd[] = "componentSeller";
+constexpr char kAuctionDebugLossUrlPropertyForScoreAd[] = "auctionDebugLossUrl";
+constexpr char kAuctionDebugWinUrlPropertyForScoreAd[] = "auctionDebugWinUrl";
+constexpr char kRejectReasonPropertyForScoreAd[] = "rejectReason";
+constexpr char kDesirabilityPropertyForScoreAd[] = "desirability";
+constexpr char kAllowComponentAuctionPropertyForScoreAd[] =
+    "allowComponentAuction";
+constexpr char kBidCurrencyPropertyForScoreAd[] = "bidCurrency";
+constexpr char kAdMetadataForComponentAuction[] = "ad";
+constexpr char kModifiedBidForComponentAuction[] = "bid";
+constexpr char kIncomingBidInSellerCurrency[] = "incomingBidInSellerCurrency";
+constexpr char kDebugReportUrlsPropertyForScoreAd[] = "debugReportUrls";
+constexpr char kScoreAdBlobVersion[] = "v1";
+constexpr char kIGOwnerPropertyForScoreAd[] = "interestGroupOwner";
+constexpr char kTopWindowHostnamePropertyForScoreAd[] = "topWindowHostname";
+
+constexpr int kArgSizeWithWrapper = 7;
+// Acceptable error margin for float currency comparisons.
+// Arbitrarily specified to be one one-hundred-thousandth,
+// because this is thousandths-of-a-cent,
+// which seems like an irrelevantly small amount for US Dollars.
+constexpr float kCurrencyFloatComparisonEpsilon = 0.00001f;
+
 // See ScoreAdInput for more detail on each field.
 enum class ScoreAdArgs : int {
   kAdMetadata = 0,
   kBid,
   kAuctionConfig,
   kScoringSignals,
-  kDeviceSignals,
+  kBidMetadata,
   // This is only added to prevent errors in the score ad script, and
   // will always be an empty object.
   kDirectFromSellerSignals,

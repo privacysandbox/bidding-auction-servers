@@ -21,7 +21,10 @@ constexpr char kBuyerOrigin[] = "http://buyer1.com";
 constexpr char kTestReportResultUrl[] = "http://test.com";
 constexpr char kTestComponentReportResultUrl[] =
     "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
-    "seller.com";
+    "seller.com&bid=1&modifiedBid=2";
+constexpr char kTestComponentReportResultUrlWithNoModifiedBid[] =
+    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
+    "seller.com&bid=1&modifiedBid=1";
 constexpr char kTestInteractionEvent[] = "clickEvent";
 constexpr char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestReportWinUrl[] =
@@ -32,6 +35,13 @@ constexpr char kTestReportWinUrl[] =
 constexpr absl::string_view kBuyerBaseCodeSimple =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
+})JS_CODE";
+
+constexpr absl::string_view kBuyerBaseCodeComponentAuction =
+    R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+        sendReportTo("http://test.com")
+        registerAdBeacon({"clickEvent":"http://click.com"})
 })JS_CODE";
 
 constexpr absl::string_view kBuyerBaseCode =
@@ -60,7 +70,7 @@ constexpr absl::string_view kBuyerBaseCode =
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
 
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -68,6 +78,50 @@ constexpr absl::string_view kBuyerBaseCode =
         sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
+)JS_CODE";
+
+constexpr absl::string_view kBuyerBaseCodeWithValidation =
+    R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+        if(!buyerReportingSignals.seller){
+          console.error("Missing seller in input to reportWin")
+          return
+        }
+        if(!buyerReportingSignals.interestGroupName){
+          console.error("Missing interestGroupName in input to reportWin")
+          return
+        }
+        if(buyerReportingSignals.adCost === undefined || buyerReportingSignals.adCost === 0 || buyerReportingSignals.adCost === -1){
+          console.error("Missing adCost in input to reportWin")
+          return
+        }
+        var reportWinUrl = "Invalid buyerReportingSignals"
+        if(validateInputs(buyerReportingSignals)){
+        reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
+                    "&interestGroupName="+buyerReportingSignals.interestGroupName+
+                    "&adCost="+buyerReportingSignals.adCost+
+                    "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
+                    "&signalsForWinner="+signalsForWinner+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
+        }
+        console.log("Logging from ReportWin");
+        console.error("Logging error from ReportWin")
+        console.warn("Logging warning from ReportWin")
+        sendReportTo(reportWinUrl)
+        registerAdBeacon({"clickEvent":"http://click.com"})
+    }
+  function validateInputs(buyerReportingSignals){
+    if(buyerReportingSignals.modelingSignals === undefined || buyerReportingSignals.modelingSignals<0 || buyerReportingSignals.modelingSignals>65535){
+      return false
+    }
+    if(buyerReportingSignals.recency===undefined || buyerReportingSignals.recency<0){
+      return false
+    }
+    if(buyerReportingSignals.joinCount===undefined || buyerReportingSignals.joinCount<0){
+      return false
+    }
+    return true
+  }
 )JS_CODE";
 
 constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
@@ -86,7 +140,7 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -110,11 +164,13 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
-        ad: device_signals["topLevelSeller"],
+        ad: bid_metadata["topLevelSeller"],
         desirability: 1,
         bid: 2,
+        incomingBidInSellerCurrency: 1.868,
+        bidCurrency: "USD",
         allowComponentAuction: true
       }
     }
@@ -123,7 +179,28 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
           sendReportTo("http://test.com")
         } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return "testSignalsForWinner"
+    }
+
+)JS_CODE";
+
+constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      return {
+        ad: bid_metadata["topLevelSeller"],
+        desirability: 1,
+        allowComponentAuction: true
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return "testSignalsForWinner"
@@ -132,12 +209,31 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kSkipAdComponentAuctionCode = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
-        ad: device_signals["topLevelSeller"],
+        ad: bid_metadata["topLevelSeller"],
         desirability: 1,
         bid: 2,
         allowComponentAuction: false
+      }
+    }
+)JS_CODE";
+
+constexpr absl::string_view kTopLevelAuctionCode = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      let desirability = 0;
+
+      if (bid_metadata["componentSeller"] !== undefined &&
+       bid_metadata["componentSeller"].length > 0) {
+        desirability = 1;
+      }
+      return {
+        ad: bid_metadata["componentSeller"],
+        desirability: desirability,
+        incomingBidInSellerCurrency: 1.868,
+        bidCurrency: "USD",
+        bid: bid,
+        allowComponentAuction: true
       }
     }
 )JS_CODE";
@@ -240,6 +336,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -344,7 +441,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals;
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
 
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -373,7 +470,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -494,6 +591,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -641,6 +739,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -743,7 +842,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -864,6 +963,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         var functionSuffix = buyerOrigin.replace(/[^a-zA-Z0-9 ]/g, "")
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
+        delete buyerReportingSignals.desirability
         buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
@@ -909,7 +1009,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")
@@ -990,7 +1090,7 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
       return fibonacci(num - 1) + fibonacci(num - 2);
     }
 
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       // Do a random amount of work to generate the score:
       const score = fibonacci(Math.floor(Math.random() * 10 + 1));
       console.log("Logging from ScoreAd")

@@ -23,6 +23,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
     ],
 )
@@ -39,13 +41,13 @@ cc_library(
         "multi_curl_http_fetcher_async.h",
     ],
     deps = [
-        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@curl",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )
 
@@ -64,7 +66,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@rapidjson",
     ],
 )

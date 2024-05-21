@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -34,6 +35,7 @@ cc_library(
         "select_ad_reactor_app.cc",
         "select_ad_reactor_invalid_client.cc",
         "select_ad_reactor_web.cc",
+        "select_auction_result_reactor.cc",
         "seller_frontend_service.cc",
     ],
     hdrs = [
@@ -41,11 +43,11 @@ cc_library(
         "select_ad_reactor_app.h",
         "select_ad_reactor_invalid_client.h",
         "select_ad_reactor_web.h",
+        "select_auction_result_reactor.h",
         "seller_frontend_service.h",
     ],
     deps = [
         ":runtime_flags",
-        ":seller_frontend_providers",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/auction_server:async_client",
@@ -61,13 +63,18 @@ cc_library(
         "//services/common/reporters:async_reporter",
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/util:async_task_tracker",
+        "//services/common/util:auction_scope_util",
         "//services/common/util:error_accumulator",
         "//services/common/util:error_reporter",
         "//services/common/util:reporting_util",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",
         "//services/common/util:scoped_cbor",
+        "//services/seller_frontend_service/providers:seller_frontend_providers",
+        "//services/seller_frontend_service/util:encryption_util",
         "//services/seller_frontend_service/util:framing_utils",
+        "//services/seller_frontend_service/util:key_fetcher_utils",
+        "//services/seller_frontend_service/util:proto_mapping_util",
         "//services/seller_frontend_service/util:startup_param_parser",
         "//services/seller_frontend_service/util:web_utils",
         "@aws_sdk_cpp//:core",
@@ -76,59 +83,15 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/telemetry",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@libcbor//:cbor",
-    ],
-)
-
-cc_library(
-    name = "seller_frontend_data",
-    hdrs = [
-        "data/scoring_signals.h",
-    ],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "@com_google_absl//absl/container:flat_hash_map",
-    ],
-)
-
-cc_library(
-    name = "seller_frontend_providers",
-    srcs = [
-        "providers/http_scoring_signals_async_provider.cc",
-    ],
-    hdrs = [
-        "providers/http_scoring_signals_async_provider.h",
-        "providers/scoring_signals_async_provider.h",
-    ],
-    deps = [
-        ":seller_frontend_data",
-        "//services/common/clients:fake_seller_key_value_async_http_client",
-        "//services/common/clients:seller_key_value_async_http_client",
-        "//services/common/providers:async_provider",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/status",
-    ],
-)
-
-cc_test(
-    name = "seller_frontend_providers_test",
-    size = "small",
-    srcs = [
-        "providers/http_scoring_signals_async_provider_test.cc",
-    ],
-    deps = [
-        "seller_frontend_providers",
-        "//services/common/test:mocks",
-        "//services/common/test:random",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -138,6 +101,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
+    local_defines = ENABLE_CORE_DUMPS_DEFINES,
     deps = [
         ":seller_frontend_service",
         "//services/common/clients/config:config_client_util",
@@ -153,8 +117,9 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/telemetry",
+        "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -174,7 +139,7 @@ cc_test(
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "//services/seller_frontend_service/util:web_utils",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -189,12 +154,33 @@ cc_test(
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",
+        "//services/common/util:oblivious_http_utils",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
         "@libcbor//:cbor",
+    ],
+)
+
+cc_test(
+    name = "select_auction_result_reactor_test",
+    size = "small",
+    srcs = [
+        "select_auction_result_reactor_test.cc",
+    ],
+    deps = [
+        ":seller_frontend_service",
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -215,7 +201,7 @@ cc_test(
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -230,12 +216,13 @@ cc_test(
         "//services/common/compression:gzip",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/util:oblivious_http_utils",
         "//services/seller_frontend_service/util:framing_utils",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
-        "@google_privacysandbox_servers_common//src/cpp/communication:ohttp_utils",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

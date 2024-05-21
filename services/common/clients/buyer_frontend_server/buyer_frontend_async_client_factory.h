@@ -24,7 +24,7 @@
 #include "services/common/clients/client_factory.h"
 #include "services/common/concurrent/local_cache.h"
 #include "services/seller_frontend_service/util/config_param_parser.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

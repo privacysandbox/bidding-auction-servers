@@ -14,14 +14,21 @@
 
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
 
+#include <memory>
+
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/encryption/crypto_client_factory.h"
+#include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
+#include "services/seller_frontend_service/util/proto_mapping_util.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/communication/encoding_utils.h"
+#include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -56,9 +63,8 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
   }
 
   // Encrypt request.
-  PS_ASSIGN_OR_RETURN(
-      (quiche::ObliviousHttpRequest ohttp_request),
-      CreateValidEncryptedRequest(std::move(encoded_request), keyset));
+  PS_ASSIGN_OR_RETURN((quiche::ObliviousHttpRequest ohttp_request),
+                      CreateValidEncryptedRequest(encoded_request, keyset));
   // Prepend with a zero byte to follow the new B&A request format that uses
   // custom media types for request encryption/request decryption.
   std::string encrypted_request =
@@ -82,28 +88,29 @@ PackageBuyerInputsForBrowser(
 }
 
 absl::StatusOr<AuctionResult> UnpackageAuctionResult(
-    absl::string_view auction_result_ciphertext, ClientType client_type,
+    std::string& auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context, const HpkeKeyset& keyset) {
   // Decrypt Response.
   PS_ASSIGN_OR_RETURN(
-      (quiche::ObliviousHttpResponse decrypted_response),
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset));
+      auto decrypted_response,
+      FromObliviousHTTPResponse(auction_result_ciphertext, context,
+                                kBiddingAuctionOhttpResponseLabel));
 
   switch (client_type) {
     case CLIENT_TYPE_BROWSER: {
       // Decompress the encoded response.
-      PS_ASSIGN_OR_RETURN((std::string decompressed_response),
-                          UnframeAndDecompressAuctionResult(
-                              decrypted_response.GetPlaintextData()));
+      PS_ASSIGN_OR_RETURN(
+          (std::string decompressed_response),
+          UnframeAndDecompressAuctionResult(decrypted_response));
 
       // Decode the response.
       return CborDecodeAuctionResultToProto(decompressed_response);
     }
     case CLIENT_TYPE_ANDROID: {
       absl::StatusOr<server_common::DecodedRequest> decoded_response;
-      PS_ASSIGN_OR_RETURN((std::string decompressed_response),
-                          UnframeAndDecompressAuctionResult(
-                              decrypted_response.GetPlaintextData()));
+      PS_ASSIGN_OR_RETURN(
+          (std::string decompressed_response),
+          UnframeAndDecompressAuctionResult(decrypted_response));
       AuctionResult auction_result;
       if (!auction_result.ParseFromArray(decompressed_response.data(),
                                          decompressed_response.size())) {
@@ -116,6 +123,40 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
       return absl::InvalidArgumentError(
           absl::StrCat("Unknown client type: ", client_type));
   }
+}
+
+absl::StatusOr<HpkeMessage> PackageServerComponentAuctionResult(
+    const AuctionResult& auction_result, const HpkeKeyset& keyset) {
+  // Serialize the protected audience input and frame it.
+  std::string serialized_result = auction_result.SerializeAsString();
+
+  PS_ASSIGN_OR_RETURN(std::string compressed_data,
+                      GzipCompress(serialized_result));
+  PS_ASSIGN_OR_RETURN(
+      std::string plaintext_response,
+      server_common::EncodeResponsePayload(
+          server_common::CompressionType::kGzip, compressed_data,
+          GetEncodedDataSize(compressed_data.size())));
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          keyset.public_key, keyset.private_key, std::to_string(keyset.key_id));
+  auto crypto_client = CreateCryptoClient();
+  return HpkeEncrypt(plaintext_response, *crypto_client, *key_fetcher_manager,
+                     server_common::CloudPlatform::kGcp);
+}
+
+absl::StatusOr<AuctionResult> UnpackageResultForServerComponentAuction(
+    absl::string_view ciphertext, absl::string_view key_id,
+    const HpkeKeyset& keyset) {
+  auto key_fetcher_manager =
+      std::make_unique<server_common::FakeKeyFetcherManager>(
+          keyset.public_key, keyset.private_key, absl::StrCat(key_id));
+  auto crypto_client = CreateCryptoClient();
+  SelectAdRequest::ComponentAuctionResult car;
+  car.set_key_id(key_id);
+  car.set_auction_result_ciphertext(ciphertext);
+  return UnpackageServerAuctionComponentResult(car, *crypto_client,
+                                               *key_fetcher_manager);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

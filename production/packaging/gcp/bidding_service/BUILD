@@ -32,7 +32,19 @@ pkg_files(
     srcs = [
         "bin/init_server_basic",
         "//services/bidding_service:server",
-    ],
+        "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
+    ] + select({
+        "//:inference_noop": [
+            "@inference_common//:inference_sidecar_test_target",
+        ],
+        "//:inference_pytorch": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar",
+        ],
+        "//:inference_tensorflow": [
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar",
+        ],
+        "//conditions:default": [],
+    }),
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/server/bin",
 )
@@ -54,6 +66,11 @@ pkg_tar(
 container_layer(
     name = "server_binary_layer",
     directory = "/",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
     tars = [
         ":server_binaries_tar",
     ],
@@ -68,12 +85,16 @@ container_image(
     cmd = [
         "/server/bin/init_server_basic",
     ],
-    entrypoint = ["sh"],
+    entrypoint = [
+        "sh",
+    ],
     env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     ports = ["50051"],

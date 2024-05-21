@@ -66,6 +66,44 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           "&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%3D123%26another_"
           "id%"
           "3D456")};
+  const absl::flat_hash_set<std::string> expected_urls_with_egid_ = {
+      absl::StrCat(
+          hostname_,
+          "?experimentGroupId=1776&renderUrls=https%3A%2F%2Fams.creativecdn."
+          "com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge,"
+          "url2&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
+          "3D456,url4"),
+      absl::StrCat(
+          hostname_,
+          "?experimentGroupId=1776&renderUrls=url2,https%3A%2F%2Fams."
+          "creativecdn.com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge"
+          "&adComponentRenderUrls=www.foo.com%2Fad%3Fid%3D123%26another_id%"
+          "3D456,url4"),
+      absl::StrCat(hostname_,
+                   "?experimentGroupId=1776&renderUrls=https%3A%2F%2Fams."
+                   "creativecdn.com%2Fcreatives%"
+                   "3Ffls%3Dtrue%"
+                   "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+                   "3Drtbhfledge,"
+                   "url2&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%"
+                   "3D123%26another_id%"
+                   "3D456"),
+      absl::StrCat(
+          hostname_,
+          "?experimentGroupId=1776&renderUrls=url2,https%3A%2F%2Fams."
+          "creativecdn.com%2Fcreatives%"
+          "3Ffls%3Dtrue%"
+          "26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%"
+          "3Drtbhfledge"
+          "&adComponentRenderUrls=url4,www.foo.com%2Fad%3Fid%3D123%26another_"
+          "id%"
+          "3D456")};
 
  protected:
   void CheckGetValuesFromKeysViaHttpClient(
@@ -74,11 +112,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
         void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
         do_nothing_done_callback;
     // Create the client
-    SellerKeyValueAsyncHttpClient kvHttpClient(
+    SellerKeyValueAsyncHttpClient seller_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), {},
-                         std::move(do_nothing_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = seller_key_value_async_http_client.Execute(
+        std::move(keys), {}, std::move(do_nothing_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 
   void CheckGetValuesFromKeysViaHttpClient(
@@ -88,11 +127,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
           value_checking_done_callback) {
     // Create the client
-    SellerKeyValueAsyncHttpClient kvHttpClient(
+    SellerKeyValueAsyncHttpClient seller_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), metadata,
-                         std::move(value_checking_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = seller_key_value_async_http_client.Execute(
+        std::move(keys), metadata, std::move(value_checking_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 };
 
@@ -124,14 +164,16 @@ TEST_F(KeyValueAsyncHttpClientTest,
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
        "rtbhfledge",
        "url2"},
-      {"www.foo.com/ad?id=123&another_id=456", "url4"}};
+      {"www.foo.com/ad?id=123&another_id=456", "url4"},
+      ClientType::CLIENT_TYPE_UNKNOWN,
+      "1776"};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetSellerValuesInput> input =
       std::make_unique<GetSellerValuesInput>(getValuesClientInput);
   // Now we define what we expect to get back out of the client, which is a
   // GetSellerValuesOutput struct.
   // Note that this test is trivial; we use the same string
-  const std::string expectedResult = R"json({
+  const std::string expected_result = R"json({
             "render_urls": {
               "https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge": {
                 "constitution_author": "madison",
@@ -153,10 +195,9 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  const std::string actualResult = expectedResult;
   std::unique_ptr<GetSellerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetSellerValuesOutput>(
-          GetSellerValuesOutput({expectedResult}));
+          GetSellerValuesOutput({expected_result}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -184,14 +225,15 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, expected_urls = &(expected_urls_)](
+      .WillOnce([actual_result = expected_result,
+                 expected_urls = &(expected_urls_with_egid_)](
                     const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls->contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);
@@ -240,7 +282,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  const std::string actualResult = R"json({
+  const std::string actual_result = R"json({
             "render_urls": {
               "https%3A%2F%2Fams.creativecdn.com%2Fcreatives%3Ffls%3Dtrue%26id%3D000rHxs8auvkixVNAyYw%26c%3DVMR8favvTg6zsLGCra37%26s%3Drtbhfledge": {
                 "constitution_author": "WRONG_NAME",
@@ -291,14 +333,14 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, expected_urls = &(expected_urls_)](
-                    HTTPRequest request, int timeout_ms,
+      .WillOnce([actual_result, expected_urls = &(expected_urls_)](
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls->contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);
@@ -313,6 +355,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
 TEST_F(KeyValueAsyncHttpClientTest,
        MakesSSPUrlCorrectlyWithNoAdComponentRenderUrlsAndADuplicateKey) {
   const GetSellerValuesInput getValuesClientInput3 = {
+      // NOLINTNEXTLINE
       {"https://ams.creativecdn.com/"
        "creatives?fls=true&id=000rHxs8auvkixVNAyYw&c=VMR8favvTg6zsLGCra37&s="
        "rtbhfledge",
@@ -347,7 +390,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoClientType) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -375,7 +418,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeBrowser) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -399,7 +442,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeAndroid) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [&expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -443,7 +486,7 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
   // with the metadata.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expectedHeaders](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_EQ(expectedHeaders, request.headers);

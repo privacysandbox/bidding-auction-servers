@@ -1,7 +1,3 @@
-<!-- prettier-ignore-start -->
-
-<! -- markdownlint-disable -->
-
 ## Load Testing Guide for Bidding and Auction Services
 
 This is a guide with the recommended steps to perform load testing with Bidding and Auction
@@ -12,13 +8,13 @@ B&A service infra setup.
 ## Prerequisites
 
 1.  Cloud Account (GCP/AWS)
-2.  Sample SFE requests
-3.  Load testing client ([wrk2](https://github.com/giltene/wrk2))
+1.  Sample SFE requests
+1.  Load testing client ([wrk2](https://github.com/giltene/wrk2))
 
 ## General instructions
 
 1.  Setup the WRK2 tool as per the instructions below.
-2.  Follow the deployment guide to deploy all the 4 services on
+1.  Follow the deployment guide to deploy all the four services on
     Cloud([GCP](https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_gcp_guide.md)/[AWS](https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_aws_guide.md)).
 
 Note the following while building and deploying the services:
@@ -49,7 +45,7 @@ Note the following while building and deploying the services:
 -   Use WRK2 to run the load tests:
 
     1.  Generate 2 encrypted payloads.
-    2.  Create a lua script and add the path to the payloads. Example:
+    1.  Create a lua script and add the path to the payloads. Example:
 
 ```lua
 wrk.method = "POST"
@@ -91,13 +87,13 @@ end
 1.  To run load test with the required number of requests use this command:
 
 ```bash
-./wrk  -R 300 -t50 -c60 -d5m -s <lua file path> --u_latency  https://seller1-<env>.sfe-gcp.com/v1/selectAd
+./wrk  -R 300 -t50 -c60 -d5m -s <lua file path> --u_latency  https://seller1-<env>.sfe.bas-gcp.pstest.dev/v1/selectAd
 ```
 
 1.  Performance metrics can be found on GCP/AWS dashboards:
-    1.  On the GCP console, goto Monitoring-> Dashboards and search for the environment the services
-        are deployed on to find the buyer and seller metrics.
-    2.  Look at the round trip latency using the request.duration_ms metrics.
+    1.  On the GCP console, go to Monitoring-> Dashboards and search for the environment the
+        services are deployed on to find the buyer and seller metrics.
+    1.  Look at the round trip latency using the request.duration_ms metrics.
 
 Note: _Verify the request count and make sure request.failed_count is 0. _ IGNORE the latency
 metrics from the wrk2 tool.
@@ -146,13 +142,11 @@ Other options(not recommended):
         rate in requests per second, it is difficult to know exactly what load the servers are being
         put under.
 -   GHZ
-    -   Uses GRPC, which is nice because it allows bypassing the envoy proxy
+    -   Uses gRPC, which is nice because it allows bypassing the envoy proxy
     -   Also allows asynchronous requests which helps overload the servers effectively
     -   Additionally, for high concurrency, the tool reliably throws errors and refuses to work.
         (above 100 concurrency these errors are common, at 500 concurrency they can be observed
         every time.)
     -   For high QPS, the tool can run into issues if you're sending metadata/headers to the SFE
-        service. It batches requests togeteher which can cause it to hit the the default metadata
-        size limit on the gRPC channel.
-
-<! -- markdownlint-disable --> <!-- prettier-ignore-end -->
+        service. It batches requests together which can cause it to hit the default metadata size
+        limit on the gRPC channel.

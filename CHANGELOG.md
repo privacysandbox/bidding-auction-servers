@@ -2,6 +2,152 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.4.0 (2024-04-02)
+
+
+### Features
+
+* Add Bid Currency to PAS bidMetadata for scoreAd()
+* Add blob fetch library
+* Adds API for generating ciphertexts for server component auctions
+* Adds proto mapping functions for top level auction reactor
+* Adds reactor for handling top level auction in SFE
+* Adds utility for re-encrypting ciphertexts from device
+* Adds validator functions for top level auction reactor
+* Build version dynamically for telemetry
+* Check Bid Currency on Protected App Signals AdWithBids
+* create SellerCodeFetchManager for auction service UDF fetching logic
+* Enable cpp_no_warn mode by default
+* Enable ML inference in B&A
+* Implements server component auctions feature in SFE
+* Implements support for server component auctions in secure invoke
+* Implements top level auction feature in auction service
+* Implements top level auctions support in secure invoke
+
+
+### Bug Fixes
+
+* Add get_workspace_status script to github repo
+* Create extra function to only add zone attribute to gcp deployment
+* Delete Right AdWithBids for Currency Mismatch in SFE
+* Do not check trailing space for patch files
+* improve graceful shutdown of bidding server
+* Simplify V8Dispatcher::LoadSync, switch to absl::Notification
+* Update data plane library dependency
+* update generate bid to receive empty json object when no device signals are present
+
+
+### Dependencies
+
+* **deps:** Upgrade build-system to 0.57.0
+
+## 3.3.0 (2024-03-11)
+
+
+### Features
+
+* create BuyerCodeFetchManager to handle buyer udf fetching logic
+* enable consented debugging in AWS deployment
+* integrate buyer code fetch management
+* Output raw metric for consented request
+
+## 3.2.0 (2024-03-06)
+
+
+### Features
+
+* Add a metric attribute for instance region
+* Add bid rejection reasons for bid currency
+* Add bid_currency to CBOR Auction Response
+* Add binary HTTP Utils
+* add component_reporting_urls to SelectAdResponse
+* Add KV client for TEE retrieval
+* Add pylint to pre-commit
+* Add TF flags for PAS KV/retrieval service
+* Adds API support for server component auctions
+* Adds HPKE encryption utility for server component auction
+* Adds OHTTP Encryption utils for sharing with top level auction reactor
+* Adds proto field to support top level auction
+* Adds util for resolving AuctionScope with SelectAdRequest
+* Check bid currency on AdWithBids against buyer currency in SFE
+* Disable/enable core dumps based on build flavour
+* Enable prettier pre-commit hook for JavaScript
+* Enable prettier pre-commit hook for JSON
+* Instantiate KV GRPC Client in bidding
+* Integrate bidding with KV service
+* Oblivious HTTP Utils
+* PAS contextual ads API changes
+* Pass Contextual PAS Ads from SFE -> BFE
+* Relay contextual PAS Ads from BFE -> Bidding
+* Support Bid Currency in the ScoreAdsReactor
+* update gcp collector to use internal proxy network load
+* Use GRPC client for ad retrieval
+* Validate currencies in the auction config
+
+
+### Bug Fixes
+
+* Avoid race conditions when turning PyTorch models into eval mode
+* correct branching condition in register model request
+* Correct git submodule links
+* Fix debug statements to include result status
+* Fix flaky reporting_helper_test
+* resolve inference sidecar path for unit test
+* update kv service hash after repo name change
+
+
+### Documentation
+
+* Fix minor typos in load testing doc
+
+
+### Dependencies
+
+* **deps:** Downgrade build-system to v0.52.0
+* **deps:** Upgrade build-system to 0.53.0
+* **deps:** Upgrade build-system to 0.55.1
+* **deps:** Upgrade build-system to 0.56.0
+* **deps:** Upgrade functionaltest-system to v0.12.0
+
+## 3.1.0 (2024-01-25)
+
+
+### Features
+
+* [reporting] Add set modifiedBid value in sellerReportingSignals for multi seller auctions
+* Add  metric for size of  protected_ciphertext and auction_config
+* add additional metrics to the AWS seller dashboard
+* Add AWS perfgate benchmark
+* Add aws s3 support to perf-test-helpers
+* Add metric attribute for instance zone
+* Add perfgate analyzer support
+* Add Support for Buyer Experiment Group ID
+* Add tf vars for otel collector template file and image uri
+* API Changes for Bid Currency
+* Builds AWS AMI with debug otel collector
+* create AWS seller and buyer metric dashboards for monitoring
+* load and make inference request with a PyTorch model
+* Seller KV Experiment Group ID
+* Test Bid Currency on AdWithBids returned from generateBid()
+
+
+### Bug Fixes
+
+* ad metadata string is escaped to be valid json in browser
+* Add run_all_tests bazel config
+* Bazel builds should ignore the cost tool
+* Consider all 2XX HTTP codes as success
+* **deps:** Upgrade data-plane-shared-libraries to 44d1d64 2024-01-08
+* Ensure that non-200 status codes become errors
+* Fix build flag and copybara rule
+* Fix custom quickstore input file bug
+* Fix debug statements to include result status
+* Fix flaky sandbox_executor_test
+* Prevent Config from being copied into RomaService
+* Removes a test breaking the build
+* secure_invoke client stub lifetime prolonged to wait for call to end
+* Temporarily revert changes to the SUT so that it passes
+
 ## 3.0.0 (2023-12-14)
 
 

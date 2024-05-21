@@ -28,17 +28,17 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/constants/common_service_flags.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/metric/server_definition.h"
-#include "src/cpp/telemetry/flag/telemetry_flag.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "services/common/util/build_info.h"
+#include "src/logger/request_context_impl.h"
+#include "src/telemetry/flag/telemetry_flag.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// TODO (b/278899152): get version dynamically
 inline constexpr std::string_view kOpenTelemetryVersion = "1.9.1";
-inline constexpr std::string_view kBuildVersion = "3.0.0";
 inline constexpr std::string_view kOperator = "operator";
+inline constexpr std::string_view kRegion = "region";
 
 template <typename T>
 void InitTelemetry(const TrustedServerConfigUtil& config_util,
@@ -52,6 +52,20 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
   namespace semantic_conventions =
       ::opentelemetry::sdk::resource::SemanticConventions;
 
+  ResourceAttributes resource_attributes = {
+      {semantic_conventions::kServiceName, config_util.GetService().data()},
+      {semantic_conventions::kDeploymentEnvironment,
+       config_util.GetEnvironment().data()},
+      {semantic_conventions::kServiceInstanceId,
+       config_util.GetInstanceId().data()},
+      {semantic_conventions::kServiceVersion, kBuildVersion.data()},
+      {kOperator.data(), config_util.GetOperator().data()},
+      {kRegion.data(), config_util.GetRegion().data()}};
+
+  absl::btree_map<std::string, std::string> zone_attribute =
+      config_util.GetAttribute();
+  resource_attributes.insert(zone_attribute.begin(), zone_attribute.end());
+
   server_common::telemetry::BuildDependentConfig telemetry_config(
       config_client
           .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
@@ -63,26 +77,20 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
       telemetry_config.LogsAllowed() &&
       config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING);
   if (consented_log_enabled) {
-    log::ServerToken(config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN));
+    server_common::log::ServerToken(
+        config_client.GetStringParameter(CONSENTED_DEBUG_TOKEN));
   }
   server_common::InitTelemetry(
       config_util.GetService().data(), kOpenTelemetryVersion.data(),
       telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
       consented_log_enabled);
-  Resource server_info = Resource::Create(ResourceAttributes{
-      {semantic_conventions::kServiceName, config_util.GetService().data()},
-      {semantic_conventions::kDeploymentEnvironment,
-       config_util.GetEnvironment().data()},
-      {semantic_conventions::kServiceInstanceId,
-       config_util.GetInstanceId().data()},
-      {semantic_conventions::kServiceVersion, kBuildVersion.data()},
-      {kOperator.data(), config_util.GetOperator().data()}});
+  Resource server_info = Resource::Create(resource_attributes);
 
   server_common::ConfigureTracer(server_info, collector_endpoint);
   static LoggerProvider* log_provider =
       server_common::ConfigurePrivateLogger(server_info, collector_endpoint)
           .release();
-  log::logger_private =
+  server_common::log::logger_private =
       log_provider->GetLogger(config_util.GetService().data()).get();
 
   auto metric_export_interval =

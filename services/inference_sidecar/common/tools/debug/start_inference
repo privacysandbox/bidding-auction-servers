@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This script is used in place of //tools/debug/start_bidding with other sever
+# scripts in //tools/debug to create a local debug server stack.
+# It requires a prebuilt bidding server and an inference sidecar. After building
+# the targets, modify the docker mount variables as needed.
+
+# To build the inference sidecar, choose a inference backend workspace, e.g.,
+# cd services/inference_sidecar/modules/pytorch_v2_1_1
+# ./builders/tools/bazel-debian run //:generate_artifacts
+
+# To build the bidding server, run from B&A root
+# cd $(git rev-parse --show-toplevel)
+# ./builders/tools/bazel-debian build services/bidding_service/server --//:inference_build=yes --//:inference_runtime=pytorch
+
+
+export PROJECT_ROOT=$(git rev-parse --show-toplevel)
+
+# Default mount variables:
+BIDDING_SERVER_MOUNT=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server
+INFERENCE_SIDECAR_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar:/inference_sidecar
+INFERENCE_MODEL_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_e2e_model1.pt:/test_model
+
+# Default client JS code:
+BIDDING_JS_PATH="/src/workspace/testing/functional/suts/inference/data/buyer-bidding-service/generateBidRunInference.js"
+
+print_usage() {
+    cat << USAGE
+This script is used in place of //tools/debug/start_bidding with other sever
+scripts in //tools/debug to create a local debug server stack.
+It requires a prebuilt bidding server and an inference sidecar. After building
+the targets, modify the docker mount variables as needed.
+
+To build the inference sidecar, choose a inference backend workspace, e.g.,
+cd services/inference_sidecar/modules/pytorch_v2_1_1
+./builders/tools/bazel-debian run //:generate_artifacts
+
+To build the bidding server, run the build_and_test_all_in_docker script, e.g.,
+export BAZEL_EXTRA_ARGS="--//:inference_runtime=pytorch"
+./production/packaging/build_and_test_all_in_docker --service-path bidding_service --instance local --platform aws --build-flavor inference_non_prod
+
+Usage:
+  <options>
+  -h, --help                    Print usage information
+  --gdb                         Run with GDB
+  --bidding-server-mount PATH   Set the bidding server mount path (default: $BIDDING_SERVER_MOUNT)
+  --inference-mount PATH        Set the inference sidecar mount path (default: $INFERENCE_SIDECAR_MOUNT)
+  --model-mount PATH            Set the inference model mount path (default: $INFERENCE_MODEL_MOUNT)
+  --bidding-js-path PATH        Set the bidding JS path (default: $BIDDING_JS_PATH)
+USAGE
+    exit 0
+}
+
+# Parse command-line options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            print_usage
+            ;;
+        --gdb)
+            GDB_OPTION="--gdb"
+            ;;
+        --bidding-server-mount)
+            BIDDING_SERVER_MOUNT=$2
+            shift 2
+            ;;
+        --inference-mount)
+            INFERENCE_SIDECAR_MOUNT=$2
+            shift 2
+            ;;
+        --model-mount)
+            INFERENCE_MODEL_MOUNT=$2
+            shift 2
+            ;;
+        --bidding-js-path)
+            BIDDING_JS_PATH=$2
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo ""
+            print_usage
+            ;;
+    esac
+done
+
+declare -a -r DOCKER_RUN_ARGS=(
+  "--volume=${BIDDING_SERVER_MOUNT}"
+  "--volume=${INFERENCE_SIDECAR_MOUNT}"
+  "--volume=${INFERENCE_MODEL_MOUNT}"
+  "--name=bidding"
+)
+
+source ${PROJECT_ROOT}/tools/debug/common
+export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
+
+echo $EXTRA_DOCKER_RUN_ARGS
+
+export SERVER_START_CMD=$(cat << END
+/server \
+--inference_sidecar_binary_path="/inference_sidecar" \
+--inference_model_local_paths="/test_model" \
+--enable_bidding_service_benchmark="true" \
+--init_config_client="false" --port=50057 \
+--js_num_workers=4 \
+--js_worker_queue_len=100 \
+--test_mode="true" \
+--telemetry_config="mode: EXPERIMENT" \
+--roma_timeout_ms="120000" \
+--buyer_code_fetch_config='{
+      "fetchMode": 2,
+      "biddingJsPath": "${BIDDING_JS_PATH}",
+      "protectedAppSignalsBiddingJsUrl": "https://td.doubleclick.net/td/bjs",
+      "biddingWasmHelperUrl": "",
+      "protectedAppSignalsBiddingWasmHelperUrl": "",
+      "urlFetchPeriodMs": 13000000,
+      "urlFetchTimeoutMs": 30000,
+      "enableBuyerDebugUrlGeneration": true,
+      "enableAdtechCodeLogging": false,
+      "prepareDataForAdsRetrievalJsUrl": "",
+      "prepareDataForAdsRetrievalWasmHelperUrl": ""
+    }' \
+--enable_otel_based_logging="false" \
+--consented_debug_token="" \
+--enable_protected_app_signals="false" \
+--ps_verbosity=2 \
+--ad_retrieval_timeout_ms="60000" && exit
+END
+)
+
+if [[ $1 == "--gdb" ]]; then
+  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
+  --docker-network host --image build-debian \
+  --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
+else
+  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined  --docker-network host --image build-debian --cmd  "${SERVER_START_CMD}"
+fi

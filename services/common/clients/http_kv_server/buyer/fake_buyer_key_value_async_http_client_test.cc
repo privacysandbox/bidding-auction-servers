@@ -18,12 +18,33 @@
 #include <fstream>
 
 #include "absl/log/check.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-TEST(FakeBuyerKeyValueAsyncHttpClient, _) {
-  FakeBuyerKeyValueAsyncHttpClient client("not used");
+absl::btree_map<std::string, std::string> RequestToPath() {
+  return {
+      {"interestGroupNames=1j386134098",
+       "testing/functional/suts/basic/data/buyer-kv-server/response.json"},
+  };
+}
+
+TEST(FakeBuyerKeyValueAsyncHttpClient, match_request) {
+  auto buyer_input = std::make_unique<GetBuyerValuesInput>();
+  absl::btree_set<absl::string_view> interest_group = {"1j386134098"};
+  buyer_input->interest_group_names = interest_group;
+  buyer_input->buyer_kv_experiment_group_id = "100";
+
+  FakeBuyerKeyValueAsyncHttpClient client("not used", RequestToPath());
+}
+
+TEST(FakeBuyerKeyValueAsyncHttpClient, not_match_request) {
+  auto buyer_input = std::make_unique<GetBuyerValuesInput>();
+  absl::btree_set<absl::string_view> interest_group = {"not_match"};
+  buyer_input->interest_group_names = interest_group;
+
+  FakeBuyerKeyValueAsyncHttpClient client("not used", RequestToPath());
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

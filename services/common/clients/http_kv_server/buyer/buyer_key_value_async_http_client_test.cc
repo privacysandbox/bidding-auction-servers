@@ -24,6 +24,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+constexpr char kEgId[] = "1776";
+
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
   static constexpr char hostname_[] =
@@ -45,11 +47,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
         void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
         do_nothing_done_callback;
     // Create the client
-    BuyerKeyValueAsyncHttpClient kvHttpClient(
+    BuyerKeyValueAsyncHttpClient buyer_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), {},
-                         std::move(do_nothing_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = buyer_key_value_async_http_client.Execute(
+        std::move(keys), {}, std::move(do_nothing_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 
   void CheckGetValuesFromKeysViaHttpClient(
@@ -59,11 +62,12 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
           void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
           value_checking_done_callback) {
     // Create the client
-    BuyerKeyValueAsyncHttpClient kvHttpClient(
+    BuyerKeyValueAsyncHttpClient buyer_key_value_async_http_client(
         hostname_, std::move(mock_http_fetcher_async_));
-    kvHttpClient.Execute(std::move(keys), metadata,
-                         std::move(value_checking_done_callback),
-                         absl::Milliseconds(5000));
+    auto status = buyer_key_value_async_http_client.Execute(
+        std::move(keys), metadata, std::move(value_checking_done_callback),
+        absl::Milliseconds(5000));
+    CHECK_OK(status);
   }
 };
 
@@ -93,23 +97,27 @@ TEST_F(KeyValueAsyncHttpClientTest,
   const GetBuyerValuesInput getValuesClientInput = {
       {"1j1043317685", "1j112014758"},
       {"ig_name_likes_boots"},
-      "www.usatoday.com"};
+      "www.usatoday.com",
+      ClientType::CLIENT_TYPE_UNKNOWN,
+      kEgId};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls;
-  expected_urls.emplace(
-      absl::StrCat(hostname_,
-                   "?hostname=www.usatoday.com&keys=1j1043317685,1j112014758&"
-                   "interestGroupNames=ig_name_likes_boots"));
-  expected_urls.emplace(
-      absl::StrCat(hostname_,
-                   "?hostname=www.usatoday.com&keys=1j112014758,1j1043317685&"
-                   "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j1043317685,1j112014758&"
+      "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j112014758,1j1043317685&"
+      "interestGroupNames=ig_name_likes_boots"));
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
-  const std::string expectedResult = R"json({
+  const std::string expected_result = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -128,10 +136,9 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  const std::string actualResult = expectedResult;
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expectedResult}));
+          GetBuyerValuesOutput({expected_result}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -159,14 +166,14 @@ TEST_F(KeyValueAsyncHttpClientTest,
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expected_urls](
-                    HTTPRequest request, int timeout_ms,
+      .WillOnce([actual_result = expected_result, &expected_urls](
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);
@@ -184,30 +191,36 @@ TEST_F(KeyValueAsyncHttpClientTest,
   const GetBuyerValuesInput getValuesClientInput = {
       {"1j386134098", "1s8yAqUg!2sZQakmQ!3sAFmfCp-n8sq_"},
       {"ig_name_likes_boots", "ig_name_ohio_state_fan"},
-      "www.usatoday.com"};
+      "www.usatoday.com",
+      ClientType::CLIENT_TYPE_UNKNOWN,
+      kEgId};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls = {
       absl::StrCat(
-          hostname_,
-          "?hostname=www.usatoday.com&keys=1j386134098,1s8yAqUg%212sZQakmQ%"
+          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+          "&keys=1j386134098,"
+          "1s8yAqUg%212sZQakmQ%"
           "213sAFmfCp-n8sq_&"
           "interestGroupNames=ig_name_likes_boots,ig_name_ohio_state_fan"),
       absl::StrCat(
-          hostname_,
-          "?hostname=www.usatoday.com&keys=1s8yAqUg%212sZQakmQ%213sAFmfCp-n8sq_"
+          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+          "&keys=1s8yAqUg%"
+          "212sZQakmQ%213sAFmfCp-n8sq_"
           ",1j386134098&"
           "interestGroupNames=ig_name_likes_boots,ig_name_ohio_state_fan"),
       absl::StrCat(
-          hostname_,
-          "?hostname=www.usatoday.com&keys=1j386134098,1s8yAqUg%212sZQakmQ%"
+          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+          "&keys=1j386134098,"
+          "1s8yAqUg%212sZQakmQ%"
           "213sAFmfCp-n8sq_&"
           "interestGroupNames=ig_name_ohio_state_fan,ig_name_likes_boots"),
       absl::StrCat(
-          hostname_,
-          "?hostname=www.usatoday.com&keys=1s8yAqUg%212sZQakmQ%213sAFmfCp-n8sq_"
+          hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+          "&keys=1s8yAqUg%"
+          "212sZQakmQ%213sAFmfCp-n8sq_"
           ",1j386134098&"
           "interestGroupNames=ig_name_ohio_state_fan,ig_name_likes_boots")};
   // Now we define what we expect to get back out of the client, which is a
@@ -291,7 +304,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
       .WillOnce([actualResult, &expected_urls](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url)) << request.url;
@@ -319,7 +332,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -334,7 +347,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
           [expected_url](
-              HTTPRequest request, int timeout_ms,
+              const HTTPRequest& request, int timeout_ms,
               absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                   done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
@@ -348,7 +361,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
@@ -370,7 +383,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // testing to always include a client_type.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
@@ -401,7 +414,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
                    "?client_type=1&keys=clementine,lloyd_george,birkenhead")};
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expected_urls](
-                    HTTPRequest request, int timeout_ms,
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
@@ -452,20 +465,21 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
 
-  std::vector<std::string> expectedHeaders;
+  std::vector<std::string> expected_headers;
+  expected_headers.reserve(kMandatoryHeaders.size());
   for (const auto& mandatory_header : kMandatoryHeaders) {
-    expectedHeaders.push_back(absl::StrCat(mandatory_header, ":"));
+    expected_headers.push_back(absl::StrCat(mandatory_header, ":"));
   }
   // Assert that the mocked fetcher will have the method FetchUrl called on it,
   // with the metadata.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
-      .WillOnce([&expectedHeaders](
+      .WillOnce([&expected_headers](
                     HTTPRequest request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
-        std::sort(expectedHeaders.begin(), expectedHeaders.end());
+        std::sort(expected_headers.begin(), expected_headers.end());
         std::sort(request.headers.begin(), request.headers.end());
-        EXPECT_EQ(expectedHeaders, request.headers);
+        EXPECT_EQ(expected_headers, request.headers);
       });
 
   absl::AnyInvocable<
@@ -500,7 +514,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
   // Note that this test is trivial; we use the same string
-  const std::string expectedResult = R"json({
+  const std::string expected_result = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -512,10 +526,9 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
             },
           })json";
 
-  const std::string actualResult = expectedResult;
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expectedResult}));
+          GetBuyerValuesOutput({expected_result}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -543,14 +556,14 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       // the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expectedUrl](
-                    HTTPRequest request, int timeout_ms,
+      .WillOnce([actual_result = expected_result, &expectedUrl](
+                    const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
                         done_callback) {
         EXPECT_EQ(request.url, expectedUrl);
         // Pack said string into a statusOr
         absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+            absl::StatusOr<std::string>(actual_result);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
         std::move(done_callback)(resp);

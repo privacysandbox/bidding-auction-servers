@@ -27,6 +27,8 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "gmock/gmock.h"
 #include "include/grpc/event_engine/event_engine.h"
+#include "public/query/v2/get_values_v2.grpc.pb.h"
+#include "public/query/v2/get_values_v2.pb.h"
 #include "services/auction_service/score_ads_reactor.h"
 #include "services/bidding_service/generate_bids_reactor.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
@@ -41,7 +43,7 @@
 #include "services/common/concurrent/local_cache.h"
 #include "services/common/providers/async_provider.h"
 #include "services/common/reporters/async_reporter.h"
-#include "src/cpp/concurrent/executor.h"
+#include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -156,6 +158,9 @@ using ProtectedAppSignalsBiddingAsyncClientMock =
                         GenerateProtectedAppSignalsBidsRawRequest,
                     GenerateProtectedAppSignalsBidsResponse::
                         GenerateProtectedAppSignalsBidsRawResponse>;
+using KVAsyncClientMock =
+    AsyncClientMock<ObliviousGetValuesRequest, google::api::HttpBody,
+                    GetValuesRequest, GetValuesResponse>;
 
 // Utility class to be used by anything that relies on an HttpFetcherAsync.
 class MockHttpFetcherAsync : public HttpFetcherAsync {
@@ -303,8 +308,33 @@ class BuyerFrontEndAsyncClientFactoryMock
               (absl::string_view), (const, override));
 };
 
+// Dummy server in lieu of no support for mocking async stubs.
+class KVServiceMock : public kv_server::v2::KeyValueService::CallbackService {
+ public:
+  explicit KVServiceMock(std::function<grpc::ServerUnaryReactor*(
+                             grpc::CallbackServerContext*,
+                             const kv_server::v2::ObliviousGetValuesRequest*,
+                             google::api::HttpBody*)>
+                             rpc_method)
+      : server_rpc_(std::move(rpc_method)) {}
+
+  grpc::ServerUnaryReactor* ObliviousGetValues(
+      grpc::CallbackServerContext* context,
+      const kv_server::v2::ObliviousGetValuesRequest* request,
+      google::api::HttpBody* response) override {
+    return server_rpc_(context, request, response);
+  }
+
+ private:
+  std::function<grpc::ServerUnaryReactor*(
+      grpc::CallbackServerContext*,
+      const kv_server::v2::ObliviousGetValuesRequest*, google::api::HttpBody*)>
+      server_rpc_;
+};
+
 class MockV8Dispatcher : public V8Dispatcher {
  public:
+  virtual ~MockV8Dispatcher() = default;
   MOCK_METHOD(absl::Status, Init, ());
   MOCK_METHOD(absl::Status, Stop, ());
   MOCK_METHOD(absl::Status, LoadSync,
@@ -346,8 +376,7 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
       const AsyncReporter* async_reporter, absl::string_view js)
       : ScoreAdsReactor(dispatcher, request, response,
                         std::move(benchmarking_logger), key_fetcher_manager,
-                        crypto_client, async_reporter,
-                        std::move(runtime_config)) {}
+                        crypto_client, async_reporter, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 
@@ -362,7 +391,7 @@ class MockGenerateBidsReactor : public GenerateBidsReactor {
       const BiddingServiceRuntimeConfig& runtime_config)
       : GenerateBidsReactor(dispatcher, request, response,
                             std::move(benchmarkingLogger), key_fetcher_manager,
-                            crypto_client_, std::move(runtime_config)) {}
+                            crypto_client_, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 
@@ -377,12 +406,11 @@ class GenerateProtectedAppSignalsMockBidsReactor
       GenerateProtectedAppSignalsBidsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-          http_ad_retrieval_async_client)
+      KVAsyncClient* ads_retrieval_client, KVAsyncClient* kv_async_client)
       : ProtectedAppSignalsGenerateBidsReactor(
             context, dispatcher, runtime_config, request, response,
-            key_fetcher_manager, crypto_client,
-            http_ad_retrieval_async_client) {}
+            key_fetcher_manager, crypto_client, ads_retrieval_client,
+            kv_async_client) {}
   MOCK_METHOD(void, Execute, (), (override));
 };
 

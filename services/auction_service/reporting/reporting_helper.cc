@@ -14,6 +14,7 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -27,9 +28,11 @@
 #include "services/common/util/post_auction_signals.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+constexpr int kStochasticalRoundingBits = 8;
 
 // Collects log of the provided type into the output vector.
 void ParseLogs(const rapidjson::Document& document, const std::string& log_type,
@@ -104,28 +107,43 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   return reporting_response;
 }
 
-absl::StatusOr<std::string> GetSellerReportingSignals(
-    const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname,
-    std::optional<ComponentReportingMetadata> component_reporting_metadata) {
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score);
+// Stochastically rounds floating point value to 8 bit mantissa and 8
+// bit exponent. If there is an error while generating the rounded
+// number, -1 will be returned.
+double GetEightBitRoundedValue(bool enable_noising, double value) {
+  if (!enable_noising) {
+    return value;
+  }
+  absl::StatusOr<double> rounded_value =
+      RoundStochasticallyToKBits(value, kStochasticalRoundingBits);
+  if (rounded_value.ok()) {
+    return rounded_value.value();
+  }
+  return -1;
+}
 
+absl::StatusOr<std::string> GetSellerReportingSignals(
+    const ReportingDispatchRequestData& dispatch_request_data,
+    const ReportingDispatchRequestConfig& dispatch_request_config) {
   rapidjson::Document document;
   document.SetObject();
   // Convert the std::string to a rapidjson::Value object.
   rapidjson::Value hostname_value;
-  hostname_value.SetString(publisher_hostname.c_str(), document.GetAllocator());
+  hostname_value.SetString(dispatch_request_data.publisher_hostname.data(),
+                           document.GetAllocator());
   rapidjson::Value render_URL_value;
-  render_URL_value.SetString(post_auction_signals.winning_ad_render_url.c_str(),
-                             document.GetAllocator());
+  render_URL_value.SetString(
+      dispatch_request_data.post_auction_signals.winning_ad_render_url.c_str(),
+      document.GetAllocator());
   rapidjson::Value render_url_value;
-  render_url_value.SetString(post_auction_signals.winning_ad_render_url.c_str(),
-                             document.GetAllocator());
+  render_url_value.SetString(
+      dispatch_request_data.post_auction_signals.winning_ad_render_url.c_str(),
+      document.GetAllocator());
 
   rapidjson::Value interest_group_owner;
-  interest_group_owner.SetString(post_auction_signals.winning_ig_owner.c_str(),
-                                 document.GetAllocator());
+  interest_group_owner.SetString(
+      dispatch_request_data.post_auction_signals.winning_ig_owner.c_str(),
+      document.GetAllocator());
 
   document.AddMember(kTopWindowHostname, hostname_value,
                      document.GetAllocator());
@@ -133,81 +151,94 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
                      document.GetAllocator());
   document.AddMember(kRenderURL, render_URL_value, document.GetAllocator());
   document.AddMember(kRenderUrl, render_url_value, document.GetAllocator());
-  document.AddMember(kBid, post_auction_signals.winning_bid,
-                     document.GetAllocator());
-  document.AddMember(kDesirability, post_auction_signals.winning_score,
-                     document.GetAllocator());
-  document.AddMember(kHighestScoringOtherBid,
-                     post_auction_signals.highest_scoring_other_bid,
-                     document.GetAllocator());
+  double bid = GetEightBitRoundedValue(
+      dispatch_request_config.enable_report_win_input_noising,
+      dispatch_request_data.post_auction_signals.winning_bid);
+  if (bid > -1) {
+    document.AddMember(kBid, bid, document.GetAllocator());
+  }
+  double desirability = GetEightBitRoundedValue(
+      dispatch_request_config.enable_report_win_input_noising,
+      dispatch_request_data.post_auction_signals.winning_score);
+  if (desirability > -1) {
+    document.AddMember(kDesirability, desirability, document.GetAllocator());
+  }
+  document.AddMember(
+      kHighestScoringOtherBid,
+      dispatch_request_data.post_auction_signals.highest_scoring_other_bid,
+      document.GetAllocator());
 
-  if (component_reporting_metadata.has_value()) {
+  if (!dispatch_request_data.component_reporting_metadata.top_level_seller
+           .empty()) {
     rapidjson::Value top_level_seller;
     top_level_seller.SetString(
-        component_reporting_metadata.value().top_level_seller.c_str(),
+        dispatch_request_data.component_reporting_metadata.top_level_seller
+            .c_str(),
         document.GetAllocator());
     rapidjson::Value component_seller;
     component_seller.SetString(
-        component_reporting_metadata.value().component_seller.c_str(),
+        dispatch_request_data.component_reporting_metadata.component_seller
+            .c_str(),
         document.GetAllocator());
     document.AddMember(kTopLevelSellerTag, top_level_seller,
                        document.GetAllocator());
-    document.AddMember(kModifiedBid,
-                       component_reporting_metadata.value().modified_bid,
-                       document.GetAllocator());
+    double modified_bid = GetEightBitRoundedValue(
+        dispatch_request_config.enable_report_win_input_noising,
+        dispatch_request_data.component_reporting_metadata.modified_bid);
+    if (modified_bid > -1) {
+      document.AddMember(kModifiedBid, modified_bid, document.GetAllocator());
+    }
     document.AddMember(kComponentSeller, component_seller,
                        document.GetAllocator());
   }
-
   return SerializeJsonDoc(document);
 }
 
 std::string GetBuyerMetadataJson(
-    const BuyerReportingMetadata& buyer_reporting_metadata,
-    log::ContextImpl& log_context,
-    const ScoreAdsResponse::AdScore& winning_ad_score) {
-  if (!buyer_reporting_metadata.enable_report_win_url_generation) {
+    const ReportingDispatchRequestConfig& dispatch_request_config,
+    const ReportingDispatchRequestData& dispatch_request_data) {
+  if (!dispatch_request_config.enable_report_win_url_generation) {
     return kDefaultBuyerReportingMetadata;
   }
+
   rapidjson::Document buyer_reporting_signals_obj;
   buyer_reporting_signals_obj.SetObject();
   buyer_reporting_signals_obj.AddMember(
       kEnableReportWinUrlGeneration,
-      buyer_reporting_metadata.enable_report_win_url_generation,
+      dispatch_request_config.enable_report_win_url_generation,
       buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
       kEnableProtectedAppSignals,
-      buyer_reporting_metadata.enable_protected_app_signals,
+      dispatch_request_config.enable_protected_app_signals,
       buyer_reporting_signals_obj.GetAllocator());
   absl::StatusOr<rapidjson::Document> buyer_signals_obj;
-  if (!buyer_reporting_metadata.buyer_signals.empty()) {
-    buyer_signals_obj = ParseJsonString(buyer_reporting_metadata.buyer_signals);
+  if (!dispatch_request_data.buyer_reporting_metadata.buyer_signals.empty()) {
+    buyer_signals_obj = ParseJsonString(
+        dispatch_request_data.buyer_reporting_metadata.buyer_signals);
     if (!buyer_signals_obj.ok()) {
-      PS_VLOG(1, log_context) << "Error parsing buyer signals to Json object";
+      PS_VLOG(1, dispatch_request_data.log_context)
+          << "Error parsing buyer signals to Json object";
     } else {
       buyer_reporting_signals_obj.AddMember(
-          kBuyerSignals, buyer_signals_obj.value(),
+          kBuyerSignals, *std::move(buyer_signals_obj),
           buyer_reporting_signals_obj.GetAllocator());
     }
   }
   rapidjson::Value buyer_origin;
-  buyer_origin.SetString(winning_ad_score.interest_group_owner().c_str(),
-                         buyer_reporting_signals_obj.GetAllocator());
-  buyer_reporting_signals_obj.AddMember(
-      kBuyerOriginTag, buyer_origin,
+  buyer_origin.SetString(
+      dispatch_request_data.post_auction_signals.winning_ig_owner.c_str(),
       buyer_reporting_signals_obj.GetAllocator());
-  bool made_highest_scoring_other_bid = false;
-  if (winning_ad_score.ig_owner_highest_scoring_other_bids_map().size() == 1 &&
-      winning_ad_score.ig_owner_highest_scoring_other_bids_map().contains(
-          winning_ad_score.interest_group_owner())) {
-    made_highest_scoring_other_bid = true;
-  }
   buyer_reporting_signals_obj.AddMember(
-      kMadeHighestScoringOtherBid, made_highest_scoring_other_bid,
+      kBuyerOriginTag, std::move(buyer_origin),
       buyer_reporting_signals_obj.GetAllocator());
-  if (buyer_reporting_metadata.join_count.has_value()) {
-    int join_count = buyer_reporting_metadata.join_count.value();
-    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+  buyer_reporting_signals_obj.AddMember(
+      kMadeHighestScoringOtherBid,
+      dispatch_request_data.post_auction_signals.made_highest_scoring_other_bid,
+      buyer_reporting_signals_obj.GetAllocator());
+  if (dispatch_request_data.buyer_reporting_metadata.join_count.has_value()) {
+    int join_count =
+        dispatch_request_data.buyer_reporting_metadata.join_count.value();
+    if (dispatch_request_config.enable_report_win_input_noising) {
       absl::StatusOr<int> noised_join_count =
           NoiseAndBucketJoinCount(join_count);
       if (noised_join_count.ok()) {
@@ -217,11 +248,13 @@ std::string GetBuyerMetadataJson(
     buyer_reporting_signals_obj.AddMember(
         kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
-  if (buyer_reporting_metadata.recency.has_value()) {
-    PS_VLOG(1, log_context) << "BuyerReportingMetadata: Recency:"
-                            << buyer_reporting_metadata.recency.value();
-    long recency = buyer_reporting_metadata.recency.value();
-    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+  if (dispatch_request_data.buyer_reporting_metadata.recency.has_value()) {
+    PS_VLOG(1, dispatch_request_data.log_context)
+        << "BuyerReportingMetadata: Recency:"
+        << dispatch_request_data.buyer_reporting_metadata.recency.value();
+    long recency =
+        dispatch_request_data.buyer_reporting_metadata.recency.value();
+    if (dispatch_request_config.enable_report_win_input_noising) {
       absl::StatusOr<long> noised_recency = NoiseAndBucketRecency(recency);
       if (noised_recency.ok()) {
         recency = noised_recency.value();
@@ -230,9 +263,11 @@ std::string GetBuyerMetadataJson(
     buyer_reporting_signals_obj.AddMember(
         kRecency, recency, buyer_reporting_signals_obj.GetAllocator());
   }
-  if (buyer_reporting_metadata.modeling_signals.has_value()) {
-    int modeling_signals = buyer_reporting_metadata.modeling_signals.value();
-    if (buyer_reporting_metadata.enable_report_win_input_noising) {
+  if (dispatch_request_data.buyer_reporting_metadata.modeling_signals
+          .has_value()) {
+    int modeling_signals =
+        dispatch_request_data.buyer_reporting_metadata.modeling_signals.value();
+    if (dispatch_request_config.enable_report_win_input_noising) {
       absl::StatusOr<int> noised_modeling_signals =
           NoiseAndMaskModelingSignals(modeling_signals);
       if (noised_modeling_signals.ok()) {
@@ -248,27 +283,32 @@ std::string GetBuyerMetadataJson(
     }
   }
   rapidjson::Value seller;
-  if (!buyer_reporting_metadata.seller.empty()) {
-    seller.SetString(buyer_reporting_metadata.seller.c_str(),
-                     buyer_reporting_signals_obj.GetAllocator());
+  if (!dispatch_request_data.buyer_reporting_metadata.seller.empty()) {
+    seller.SetString(
+        dispatch_request_data.buyer_reporting_metadata.seller.c_str(),
+        buyer_reporting_signals_obj.GetAllocator());
     buyer_reporting_signals_obj.AddMember(
-        kSellerTag, seller, buyer_reporting_signals_obj.GetAllocator());
+        kSellerTag, std::move(seller),
+        buyer_reporting_signals_obj.GetAllocator());
   }
   rapidjson::Value interest_group_name;
-  interest_group_name.SetString(
-      buyer_reporting_metadata.interest_group_name.c_str(),
-      buyer_reporting_signals_obj.GetAllocator());
+  interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
+                                    .interest_group_name.c_str(),
+                                buyer_reporting_signals_obj.GetAllocator());
   buyer_reporting_signals_obj.AddMember(
-      kInterestGroupName, interest_group_name,
+      kInterestGroupName, std::move(interest_group_name),
       buyer_reporting_signals_obj.GetAllocator());
-  buyer_reporting_signals_obj.AddMember(
-      kAdCostTag, buyer_reporting_metadata.ad_cost,
-      buyer_reporting_signals_obj.GetAllocator());
-
+  double ad_cost = GetEightBitRoundedValue(
+      dispatch_request_config.enable_report_win_input_noising,
+      dispatch_request_data.buyer_reporting_metadata.ad_cost);
+  if (ad_cost > -1) {
+    buyer_reporting_signals_obj.AddMember(
+        kAdCostTag, ad_cost, buyer_reporting_signals_obj.GetAllocator());
+  }
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {
-    PS_VLOG(2, log_context)
+    PS_VLOG(2, dispatch_request_data.log_context)
         << "Error constructing buyer_reporting_metadata_input for "
            "reportingEntryFunction";
     return kDefaultBuyerReportingMetadata;
@@ -277,26 +317,22 @@ std::string GetBuyerMetadataJson(
 }
 
 std::vector<std::shared_ptr<std::string>> GetReportingInput(
-    const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
-    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata,
-    std::optional<ComponentReportingMetadata> component_reporting_metadata,
-    absl::string_view egress_features) {
+    const ReportingDispatchRequestConfig& dispatch_request_config,
+    const ReportingDispatchRequestData& dispatch_request_data) {
   absl::StatusOr<std::string> seller_reporting_signals =
-      GetSellerReportingSignals(winning_ad_score, publisher_hostname,
-                                component_reporting_metadata);
+      GetSellerReportingSignals(dispatch_request_data, dispatch_request_config);
   if (!seller_reporting_signals.ok()) {
-    PS_VLOG(2, log_context)
+    PS_VLOG(2, dispatch_request_data.log_context)
         << "Error generating Seller Reporting Signals for Reporting input";
     return {};
   }
   std::vector<std::shared_ptr<std::string>> input(
-      buyer_reporting_metadata.enable_protected_app_signals
+      dispatch_request_config.enable_protected_app_signals
           ? kReportingArgSizeWithProtectedAppSignals
           : kReportingArgSize);  // ReportingArgs size
 
-  input[ReportingArgIndex(ReportingArgs::kAuctionConfig)] = auction_config;
+  input[ReportingArgIndex(ReportingArgs::kAuctionConfig)] =
+      dispatch_request_data.auction_config;
   input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)] =
       std::make_shared<std::string>(seller_reporting_signals.value());
   // This is only added to prevent errors in the reporting ad script, and
@@ -304,18 +340,18 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   input[ReportingArgIndex(ReportingArgs::kDirectFromSellerSignals)] =
       std::make_shared<std::string>("{}");
   input[ReportingArgIndex(ReportingArgs::kEnableAdTechCodeLogging)] =
-      std::make_shared<std::string>(
-          absl::StrFormat("%v", enable_ad_tech_code_logging));
-  std::string buyer_reporting_metadata_json = GetBuyerMetadataJson(
-      buyer_reporting_metadata, log_context, winning_ad_score);
+      std::make_shared<std::string>(absl::StrFormat(
+          "%v", dispatch_request_config.enable_adtech_code_logging));
+  std::string buyer_reporting_metadata_json =
+      GetBuyerMetadataJson(dispatch_request_config, dispatch_request_data);
   input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)] =
       std::make_shared<std::string>(buyer_reporting_metadata_json);
-  if (buyer_reporting_metadata.enable_protected_app_signals) {
+  if (dispatch_request_config.enable_protected_app_signals) {
     input[ReportingArgIndex(ReportingArgs::kEgressFeatures)] =
-        std::make_shared<std::string>(egress_features);
+        std::make_shared<std::string>(dispatch_request_data.egress_features);
   }
 
-  PS_VLOG(2, log_context)
+  PS_VLOG(2, dispatch_request_data.log_context)
       << "\n\nReporting Input Args:"
       << "\nAuction Config:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kAuctionConfig)])
@@ -331,21 +367,15 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
 }
 
 DispatchRequest GetReportingDispatchRequest(
-    const ScoreAdsResponse::AdScore& winning_ad_score,
-    const std::string& publisher_hostname, bool enable_ad_tech_code_logging,
-    std::shared_ptr<std::string> auction_config, log::ContextImpl& log_context,
-    const BuyerReportingMetadata& buyer_reporting_metadata,
-    std::optional<ComponentReportingMetadata> component_reporting_metadata,
-    const std::string& handler_name, absl::string_view egress_features) {
+    const ReportingDispatchRequestConfig& dispatch_request_config,
+    const ReportingDispatchRequestData& dispatch_request_data) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
-      .id = winning_ad_score.render(),
+      .id = dispatch_request_data.post_auction_signals.winning_ad_render_url,
       .version_string = kDispatchRequestVersion,
-      .handler_name = handler_name,
-      .input = GetReportingInput(winning_ad_score, publisher_hostname,
-                                 enable_ad_tech_code_logging, auction_config,
-                                 log_context, buyer_reporting_metadata,
-                                 component_reporting_metadata, egress_features),
+      .handler_name = dispatch_request_data.handler_name,
+      .input =
+          GetReportingInput(dispatch_request_config, dispatch_request_data),
   };
 }
 

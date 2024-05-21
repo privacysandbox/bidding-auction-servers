@@ -22,8 +22,8 @@
 
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/util/request_response_constants.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -50,8 +50,7 @@ class BaseGenerateBidsReactor
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client)
       : CodeDispatchReactor<Request, RawRequest, Response, RawResponse>(
-            dispatcher, request, response, key_fetcher_manager, crypto_client,
-            runtime_config.encryption_enabled),
+            dispatcher, request, response, key_fetcher_manager, crypto_client),
         enable_buyer_debug_url_generation_(
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
@@ -80,13 +79,13 @@ class BaseGenerateBidsReactor
 
   template <typename BidType>
   bool IsValidBid(BidType bid) {
-    return bid.bid() != 0.0f || bid.has_debug_report_urls();
+    return bid.bid() != 0.0f;
   }
 
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
   bool enable_adtech_code_logging_;
-  log::ContextImpl log_context_;
+  server_common::log::ContextImpl log_context_;
   int max_allowed_size_debug_url_chars_;
   long max_allowed_size_all_debug_urls_chars_;
 };

@@ -32,6 +32,12 @@ void HttpBiddingSignalsAsyncProvider::Get(
       bidding_signals_request.get_bids_raw_request_.publisher_name();
   request->client_type =
       bidding_signals_request.get_bids_raw_request_.client_type();
+  if (bidding_signals_request.get_bids_raw_request_
+          .has_buyer_kv_experiment_group_id()) {
+    request->buyer_kv_experiment_group_id =
+        absl::StrCat(bidding_signals_request.get_bids_raw_request_
+                         .buyer_kv_experiment_group_id());
+  }
   absl::StatusOr<std::unique_ptr<BiddingSignals>> output =
       std::make_unique<BiddingSignals>();
 
@@ -43,7 +49,7 @@ void HttpBiddingSignalsAsyncProvider::Get(
                          interest_group.bidding_signals_keys().end());
   }
 
-  http_buyer_kv_async_client_->Execute(
+  auto status = http_buyer_kv_async_client_->Execute(
       std::move(request), bidding_signals_request.filtering_metadata_,
       [res = std::move(output), on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
@@ -61,5 +67,8 @@ void HttpBiddingSignalsAsyncProvider::Get(
         std::move(on_done)(std::move(res), get_byte_size);
       },
       timeout);
+  if (!status.ok()) {
+    PS_VLOG(1) << "Unable to fetch bidding signals";
+  }
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

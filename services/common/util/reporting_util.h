@@ -23,8 +23,8 @@
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/loggers/request_context_impl.h"
 #include "services/common/util/post_auction_signals.h"
+#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -52,6 +52,10 @@ constexpr absl::string_view kRejectionReasonLanguageExclusions =
     "language-exclusions";
 constexpr absl::string_view kRejectionReasonCategoryExclusions =
     "category-exclusions";
+constexpr absl::string_view kRejectionReasonBidFromGenBidFailedCurrencyCheck =
+    "bid-from-gen-bid-failed-currency-check";
+constexpr absl::string_view kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
+    "bid-from-score-ad-failed-currency-check";
 
 constexpr float kDefaultWinningBid = 0.0;
 constexpr float kDefaultWinningScore = 0.0;
@@ -109,14 +113,13 @@ absl::string_view ToSellerRejectionReasonString(
 // `enable_ad_tech_code_logging` is enabled.
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-                           log::ContextImpl& log_context);
+                           server_common::log::ContextImpl& log_context);
 
 // Parses the JSON string, conditionally prints the logs from the response and
 // returns a serialized response string retrieved from the underlying UDF.
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    log::ContextImpl& log_context);
+    server_common::log::ContextImpl& log_context);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
-
 #endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

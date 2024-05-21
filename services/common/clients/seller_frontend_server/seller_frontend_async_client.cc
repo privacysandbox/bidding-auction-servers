@@ -19,8 +19,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 SellerFrontEndGrpcClient::SellerFrontEndGrpcClient(
-    const SellerFrontEndServiceClientConfig& client_config)
-    : AsyncClient() {
+    const SellerFrontEndServiceClientConfig& client_config) {
   std::shared_ptr<grpc::ChannelCredentials> creds =
       client_config.secure_client
           ? grpc::SslCredentials(grpc::SslCredentialsOptions())
@@ -35,7 +34,9 @@ SellerFrontEndGrpcClient::SellerFrontEndGrpcClient(
     args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
   }
   stub_ = SellerFrontEnd::NewStub(grpc::CreateCustomChannel(
-      absl::StrCat(client_config.server_addr), std::move(creds), args));
+      absl::StrCat(client_config.server_addr), creds, args));
+  absl::MutexLock l(&active_calls_mutex_);
+  active_calls_count_ = 0;
 }
 
 absl::Status SellerFrontEndGrpcClient::Execute(
@@ -43,17 +44,32 @@ absl::Status SellerFrontEndGrpcClient::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<SelectAdResponse>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout) {
   auto params =
       std::make_unique<ClientParams<SelectAdRequest, SelectAdResponse>>(
           std::move(request), std::move(on_done), metadata);
   params->SetDeadline(std::min(sfe_client_max_timeout, timeout));
+  absl::MutexLock l(&active_calls_mutex_);
+  ++active_calls_count_;
   stub_->async()->SelectAd(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [params_ptr = params.release()](grpc::Status status) {
+      [params_ptr = params.release(), this](const grpc::Status& status) {
         params_ptr->OnDone(status);
+        absl::MutexLock l(&active_calls_mutex_);
+        --active_calls_count_;
       });
   return absl::OkStatus();
+}
+
+SellerFrontEndGrpcClient::~SellerFrontEndGrpcClient() {
+  while (true) {
+    // wait before locking mutex.
+    absl::SleepFor(absl::Milliseconds(10));
+    absl::MutexLock l(&active_calls_mutex_);
+    if (active_calls_count_ == 0) {
+      break;
+    }
+  }
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

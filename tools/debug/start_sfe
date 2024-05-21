@@ -37,13 +37,12 @@ export SERVER_START_CMD=$(cat << END
 --score_ads_rpc_timeout_ms=60000 \
 --get_bid_rpc_timeout_ms=60000 --key_value_signals_fetch_rpc_timeout_ms 60000 \
 --create_new_event_engine="false" \
---enable_encryption="true" \
 --test_mode="true" \
 --telemetry_config="mode: EXPERIMENT" \
---enable_encryption="true" \
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \
 --ps_verbosity=2 \
+--enable_protected_audience="true" \
 --enable_protected_app_signals="false" && exit
 END
 )

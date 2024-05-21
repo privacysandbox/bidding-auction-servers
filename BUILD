@@ -86,6 +86,30 @@ config_setting(
 )
 
 config_setting(
+    name = "gcp_instance",
+    flag_values = {
+        ":instance": "gcp",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "azure_instance",
+    flag_values = {
+        ":instance": "azure",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "aws_instance",
+    flag_values = {
+        ":instance": "aws",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
     name = "local_platform",
     flag_values = {
         ":platform": "local",
@@ -119,6 +143,29 @@ EOF""",
     message = "generate coverage report",
 )
 
+genrule(
+    name = "package-lcov-report",
+    outs = ["package_lcov_report.bin"],
+    cmd_bash = """cat << EOF > '$@'
+cp bazel-out/_coverage/_coverage_report.dat dist/_"\\$$@"_coverage_report.dat
+EOF""",
+    executable = True,
+    local = True,
+    message = "package lcov report",
+)
+
+genrule(
+    name = "merge-lcov-reports",
+    outs = ["merge_lcov_reports.bin"],
+    cmd_bash = """cat << EOF > '$@'
+find dist -name '*_coverage_report.dat' -exec echo -a '{}' \\; | \\
+xargs builders/tools/lcov -o dist/_combined_coverage_report.dat
+EOF""",
+    executable = True,
+    local = True,
+    message = "merge lcov reports",
+)
+
 string_flag(
     name = "build_flavor",
     build_setting_default = "prod",
@@ -132,6 +179,60 @@ config_setting(
     name = "non_prod_build",
     flag_values = {
         ":build_flavor": "non_prod",
+    },
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "inference_build",
+    build_setting_default = "no",
+    values = [
+        "yes",
+        "no",
+    ],
+)
+
+config_setting(
+    name = "inference",
+    flag_values = {
+        ":inference_build": "yes",
+    },
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "inference_runtime",
+    build_setting_default = "noop",
+    values = [
+        "noop",
+        "pytorch",
+        "tensorflow",
+    ],
+)
+
+config_setting(
+    name = "inference_noop",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "noop",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "inference_pytorch",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "pytorch",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "inference_tensorflow",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "tensorflow",
     },
     visibility = ["//visibility:public"],
 )
@@ -157,4 +258,10 @@ filegroup(
     name = "version_data",
     srcs = ["version.txt"],
     visibility = ["//services/common/telemetry:__pkg__"],
+)
+
+filegroup(
+    name = "clang_tidy_config",
+    srcs = [".clang-tidy"],
+    visibility = ["//visibility:public"],
 )

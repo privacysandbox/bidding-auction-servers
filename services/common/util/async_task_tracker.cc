@@ -22,7 +22,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 AsyncTaskTracker::AsyncTaskTracker(
-    int num_tasks_to_track, log::ContextImpl& log_context,
+    int num_tasks_to_track, server_common::log::ContextImpl& log_context,
     absl::AnyInvocable<void(bool) &&> on_all_tasks_done)
     : num_tasks_to_track_(num_tasks_to_track),
       pending_tasks_count_(num_tasks_to_track),
@@ -30,8 +30,8 @@ AsyncTaskTracker::AsyncTaskTracker(
       empty_tasks_count_(0),
       skipped_tasks_count_(0),
       error_tasks_count_(0),
-      log_context_(log_context),
-      on_all_tasks_done_(std::move(on_all_tasks_done)) {}
+      on_all_tasks_done_(std::move(on_all_tasks_done)),
+      log_context_(log_context) {}
 
 void AsyncTaskTracker::TaskCompleted(TaskStatus task_status) {
   TaskCompleted(task_status, std::nullopt);
@@ -88,6 +88,7 @@ void AsyncTaskTracker::TaskCompleted(
 }
 
 void AsyncTaskTracker::SetNumTasksToTrack(int num_tasks_to_track) {
+  absl::MutexLock lock(&mu_);
   num_tasks_to_track_ = num_tasks_to_track;
   pending_tasks_count_ = num_tasks_to_track;
   successful_tasks_count_ = 0;

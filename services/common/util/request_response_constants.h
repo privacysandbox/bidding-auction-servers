@@ -34,7 +34,7 @@ inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-inline constexpr int kNumAuctionResultKeys = 12;
+inline constexpr int kNumAuctionResultKeys = 13;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // WinReportingUrls response.
@@ -75,16 +75,18 @@ inline constexpr int kRelativeTimeIndex = 0;
 inline constexpr int kAdRenderIdIndex = 1;
 
 // Constants for the fields in response sent back to clients.
-inline constexpr char kScore[] = "score";
-inline constexpr char kBid[] = "bid";
-inline constexpr char kChaff[] = "isChaff";
-inline constexpr char kAdRenderUrl[] = "adRenderURL";
-inline constexpr char kBiddingGroups[] = "biddingGroups";
-inline constexpr char kInterestGroupName[] = "interestGroupName";
-inline constexpr char kInterestGroupOwner[] = "interestGroupOwner";
-inline constexpr char kWinReportingUrls[] = "winReportingURLs";
-inline constexpr char kAdMetadata[] = "adMetadata";
-inline constexpr char kTopLevelSeller[] = "topLevelSeller";
+inline constexpr char kBid[] = "bid";                              // length: 3
+inline constexpr char kScore[] = "score";                          // length: 5
+inline constexpr char kChaff[] = "isChaff";                        // length: 7
+inline constexpr char kAdMetadata[] = "adMetadata";                // length: 10
+inline constexpr char kAdRenderUrl[] = "adRenderURL";              // length: 11
+inline constexpr char kBidCurrency[] = "bidCurrency";              // length: 11
+inline constexpr char kBiddingGroups[] = "biddingGroups";          // length: 13
+inline constexpr char kTopLevelSeller[] = "topLevelSeller";        // length: 14
+inline constexpr char kWinReportingUrls[] = "winReportingURLs";    // length: 16
+inline constexpr char kInterestGroupName[] = "interestGroupName";  // length: 17
+inline constexpr char kInterestGroupOwner[] =
+    "interestGroupOwner";  // length: 18
 
 inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
     kRequestRootKeys = {

@@ -20,15 +20,14 @@
 #include <string>
 #include <utility>
 
-#include <public/cpio/interface/parameter_client/parameter_client_interface.h>
-
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "scp/cc/core/interface/type_def.h"
-#include "src/cpp/telemetry/flag/telemetry_flag.h"
+#include "src/core/interface/type_def.h"
+#include "src/public/cpio/interface/parameter_client/parameter_client_interface.h"
+#include "src/telemetry/flag/telemetry_flag.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -60,10 +59,10 @@ class TrustedServersConfigClient {
           std::unique_ptr<google::scp::cpio::ParameterClientInterface>(
               google::scp::cpio::ParameterClientOptions) &&>
           config_client_provider_fn =
-              [](google::scp::cpio::ParameterClientOptions
+              [](const google::scp::cpio::ParameterClientOptions&
                      parameter_client_options) {
                 return google::scp::cpio::ParameterClientFactory::Create(
-                    std::move(parameter_client_options));
+                    parameter_client_options);
               });
 
   // Creates and initializes the config client to fetch config values

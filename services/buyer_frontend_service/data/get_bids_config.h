@@ -24,13 +24,13 @@ struct GetBidsConfig {
   int generate_bid_timeout_ms;
   // The max time to wait for fetching bidding signals to finish.
   int bidding_signals_load_timeout_ms;
-  // Enables encryption when communicating with clients and other servers.
-  bool encryption_enabled;
   // The max time to wait for protected app signals generate bid request to
   // finish.
   int protected_app_signals_generate_bid_timeout_ms;
   // Indicates whether Protected App Signals support is enabled or not.
   bool is_protected_app_signals_enabled;
+  // Indicates whether Protected Audience support is enabled or not.
+  bool is_protected_audience_enabled;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

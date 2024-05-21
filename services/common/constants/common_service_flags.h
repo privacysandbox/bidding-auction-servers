@@ -22,9 +22,8 @@
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
-#include "src/cpp/telemetry/flag/telemetry_flag.h"
+#include "src/telemetry/flag/telemetry_flag.h"
 
-ABSL_DECLARE_FLAG(std::optional<bool>, enable_encryption);
 ABSL_DECLARE_FLAG(std::optional<bool>, test_mode);
 ABSL_DECLARE_FLAG(std::optional<std::string>, public_key_endpoint);
 ABSL_DECLARE_FLAG(std::optional<std::string>,
@@ -55,13 +54,13 @@ ABSL_DECLARE_FLAG(std::optional<std::string>, collector_endpoint);
 ABSL_DECLARE_FLAG(std::optional<std::string>, consented_debug_token);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_otel_based_logging);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_protected_app_signals);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_protected_audience);
 ABSL_DECLARE_FLAG(std::optional<int>, ps_verbosity);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-inline constexpr char ENABLE_ENCRYPTION[] = "ENABLE_ENCRYPTION";
 inline constexpr char PUBLIC_KEY_ENDPOINT[] = "PUBLIC_KEY_ENDPOINT";
 inline constexpr char PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT[] =
     "PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT";
@@ -95,6 +94,7 @@ inline constexpr char CONSENTED_DEBUG_TOKEN[] = "CONSENTED_DEBUG_TOKEN";
 inline constexpr char ENABLE_OTEL_BASED_LOGGING[] = "ENABLE_OTEL_BASED_LOGGING";
 inline constexpr char ENABLE_PROTECTED_APP_SIGNALS[] =
     "ENABLE_PROTECTED_APP_SIGNALS";
+inline constexpr char ENABLE_PROTECTED_AUDIENCE[] = "ENABLE_PROTECTED_AUDIENCE";
 inline constexpr char PS_VERBOSITY[] = "PS_VERBOSITY";
 inline constexpr char MAX_ALLOWED_SIZE_DEBUG_URL_BYTES[] =
     "MAX_ALLOWED_SIZE_DEBUG_URL_BYTES";
@@ -102,7 +102,6 @@ inline constexpr char MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB[] =
     "MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
-    ENABLE_ENCRYPTION,
     PUBLIC_KEY_ENDPOINT,
     PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT,
     SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT,
@@ -123,6 +122,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     CONSENTED_DEBUG_TOKEN,
     ENABLE_OTEL_BASED_LOGGING,
     ENABLE_PROTECTED_APP_SIGNALS,
+    ENABLE_PROTECTED_AUDIENCE,
     PS_VERBOSITY,
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES,
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB};

@@ -123,7 +123,7 @@ inline constexpr auto kComparator = [](absl::string_view a,
 };
 
 #define RETURN_IF_PREV_ERRORS(error_accumulator, should_fail_fast, to_return) \
-  if (error_accumulator.HasErrors() && should_fail_fast) {                    \
+  if ((error_accumulator).HasErrors() && (should_fail_fast)) {                \
     return to_return;                                                         \
   }
 
@@ -177,7 +177,7 @@ std::string DecodeCborString(const cbor_item_t* item);
     ErrorAccumulator& error_accumulator, bool fail_fast = true);
 
 // Decodes consented debug config object.
-ConsentedDebugConfiguration DecodeConsentedDebugConfig(
+server_common::ConsentedDebugConfiguration DecodeConsentedDebugConfig(
     const cbor_item_t* root, ErrorAccumulator& error_accumulator,
     bool fail_fast);
 
@@ -354,7 +354,8 @@ inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
         kError,               // 8
         kWinReportingUrls,    // 9
         kAdMetadata,          // 10
-        kTopLevelSeller       // 11
+        kTopLevelSeller,      // 11
+        kBidCurrency          // 12
 };
 
 template <std::size_t Size>

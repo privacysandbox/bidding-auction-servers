@@ -22,9 +22,9 @@
 #include "absl/strings/str_format.h"
 #include "proto/hpke.pb.h"
 #include "proto/tink.pb.h"
-#include "scp/cc/core/interface/errors.h"
-#include "scp/cc/public/cpio/interface/crypto_client/type_def.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/core/interface/errors.h"
+#include "src/public/cpio/interface/crypto_client/type_def.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -104,7 +104,7 @@ absl::StatusOr<HpkeEncryptResponse> CryptoClientWrapper::HpkeEncrypt(
       std::move(request),
       [&response, &success](
           const google::scp::core::ExecutionResult& result,
-          const google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse&
+          google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
               encrypt_response) {
         if (result.Successful()) {
           success = true;
@@ -134,7 +134,7 @@ absl::StatusOr<AeadEncryptResponse> CryptoClientWrapper::AeadEncrypt(
   ExecutionResult execution_result = crypto_client_->AeadEncrypt(
       std::move(request),
       [&response, &success](const google::scp::core::ExecutionResult& result,
-                            const AeadEncryptResponse& encrypt_response) {
+                            AeadEncryptResponse encrypt_response) {
         if (result.Successful()) {
           success = true;
           response = std::move(encrypt_response);
@@ -167,12 +167,11 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
   // Only the private_key field needs to be set for decryption.
   google::cmrt::sdk::private_key_service::v1::PrivateKey key;
   key.set_key_id(private_key.key_id);
-  key.set_private_key(
-      std::move(absl::Base64Escape(keyset.SerializeAsString())));
+  key.set_private_key(absl::Base64Escape(keyset.SerializeAsString()));
 
   // Only the ciphertext field needs to be set for decryption.
   HpkeEncryptedData encrypted_data;
-  encrypted_data.set_ciphertext(std::move(ciphertext));
+  encrypted_data.set_ciphertext(ciphertext);
 
   HpkeDecryptRequest request;
   *request.mutable_private_key() = std::move(key);
@@ -189,7 +188,7 @@ absl::StatusOr<HpkeDecryptResponse> CryptoClientWrapper::HpkeDecrypt(
       std::move(request),
       [&response, &success](
           const google::scp::core::ExecutionResult& result,
-          const google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse&
+          google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse
               decrypt_response) {
         if (result.Successful()) {
           success = true;
@@ -219,7 +218,7 @@ absl::StatusOr<AeadDecryptResponse> CryptoClientWrapper::AeadDecrypt(
   ExecutionResult execution_result = crypto_client_->AeadDecrypt(
       std::move(request),
       [&response, &success](const google::scp::core::ExecutionResult& result,
-                            const AeadDecryptResponse& decrypt_response) {
+                            AeadDecryptResponse decrypt_response) {
         if (result.Successful()) {
           success = true;
           response = std::move(decrypt_response);

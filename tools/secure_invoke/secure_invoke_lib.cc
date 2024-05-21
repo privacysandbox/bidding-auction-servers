@@ -30,7 +30,7 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-#include "src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging_utils.h"
@@ -44,8 +44,16 @@ constexpr char kJsonFormat[] = "JSON";
 absl::StatusOr<std::string> ParseSelectAdResponse(
     std::unique_ptr<SelectAdResponse> resp, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& context, const HpkeKeyset& keyset) {
-  absl::StatusOr<AuctionResult> res = UnpackageAuctionResult(
-      resp->auction_result_ciphertext(), client_type, context, keyset);
+  absl::StatusOr<AuctionResult> res;
+  // Server component Auction
+  if (!resp->key_id().empty()) {
+    res = UnpackageResultForServerComponentAuction(
+        *resp->mutable_auction_result_ciphertext(), resp->key_id(), keyset);
+  } else {
+    res = UnpackageAuctionResult(*resp->mutable_auction_result_ciphertext(),
+                                 client_type, context, keyset);
+  }
+
   if (!res.ok()) {
     return res.status();
   }
@@ -149,7 +157,6 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
   // Create service client.
   BuyerServiceClientConfig service_client_config = {
       .server_addr = request_options.host_addr,
-      .encryption_enabled = true,
       .secure_client = !request_options.insecure,
   };
   auto key_fetcher_manager =
@@ -166,8 +173,9 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               raw_response) mutable {
-        VLOG(0) << "Received bid response from BFE in "
-                << ((absl::Now() - start) / absl::Milliseconds(1)) << " ms.";
+        ABSL_VLOG(0) << "Received bid response from BFE in "
+                     << ((absl::Now() - start) / absl::Milliseconds(1))
+                     << " ms.";
         if (!raw_response.ok()) {
           std::move(onDone)(raw_response.status());
         } else {

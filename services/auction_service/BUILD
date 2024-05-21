@@ -15,6 +15,7 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -32,15 +33,9 @@ cc_library(
     hdrs = [
         "auction_constants.h",
     ],
-)
-
-cc_library(
-    name = "seller_adtech_reporting_wrapper",
-    hdrs = [
-        "seller_adtech_reporting_wrapper.h",
-    ],
-    deps = [
-        "@com_google_absl//absl/strings",
+    visibility = [
+        "//services/auction_service:__pkg__",
+        "//services/auction_service/utils:__pkg__",
     ],
 )
 
@@ -73,9 +68,9 @@ cc_library(
         "//services/common/metric:server_definition",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/telemetry",
     ],
 )
 
@@ -93,27 +88,27 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
-        "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/data:runtime_config",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/utils:proto_utils",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",
-        "//services/common/loggers:request_context_impl",
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
+        "//services/common/util:auction_scope_util",
         "//services/common/util:json_util",
-        "//services/common/util:reporting_util",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_util",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@rapidjson",
     ],
 )
@@ -141,7 +136,21 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+    ],
+)
+
+cc_test(
+    name = "score_ads_reactor_top_level_auction_test",
+    size = "small",
+    srcs = ["score_ads_reactor_top_level_auction_test.cc"],
+    deps = [
+        ":auction_constants",
+        ":score_ads_reactor",
+        ":score_ads_reactor_test_util",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -206,7 +215,63 @@ proto_library(
 
 cc_proto_library(
     name = "auction_code_fetch_config_cc_proto",
+    visibility = ["//services/auction_service:__subpackages__"],
     deps = [":auction_code_fetch_config_proto"],
+)
+
+cc_library(
+    name = "seller_code_fetch_manager",
+    srcs = [
+        "seller_code_fetch_manager.cc",
+    ],
+    hdrs = [
+        "seller_code_fetch_manager.h",
+    ],
+    deps = [
+        ":auction_code_fetch_config_cc_proto",
+        ":auction_constants",
+        "//services/auction_service/code_wrapper:buyer_reporting_fetcher",
+        "//services/auction_service/code_wrapper:seller_code_wrapper",
+        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/code_fetch:periodic_bucket_fetcher",
+        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/util:file_util",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "seller_code_fetch_manager_test",
+    size = "small",
+    srcs = ["seller_code_fetch_manager_test.cc"],
+    deps = [
+        ":seller_code_fetch_manager",
+        "//services/auction_service/code_wrapper:seller_code_wrapper",
+        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/http:http_fetcher_async",
+        "//services/common/code_fetch:periodic_bucket_fetcher",
+        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/test:mocks",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+        "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
+    ],
 )
 
 cc_binary(
@@ -215,6 +280,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
+    local_defines = ENABLE_CORE_DUMPS_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
         ":auction_code_fetch_config_cc_proto",
@@ -238,9 +304,10 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 
@@ -269,7 +336,19 @@ cc_library(
     testonly = True,
     srcs = ["score_ads_reactor_test_util.cc"],
     hdrs = ["score_ads_reactor_test_util.h"],
+    visibility = [
+        "//services/auction_service:__pkg__",
+        "//services/auction_service/utils:__pkg__",
+    ],
     deps = [
+        ":auction_constants",
+        ":score_ads_reactor",
+        "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
+        "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/common/constants:common_service_flags",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
         "//services/common/test:random",
         "@com_google_absl//absl/strings",
     ],

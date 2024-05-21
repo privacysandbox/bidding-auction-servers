@@ -20,7 +20,7 @@
 #define SERVICES_ENCRYPTION_KEY_FETCHER_UTIL_H_
 
 #include "services/common/clients/config/trusted_server_config_client.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

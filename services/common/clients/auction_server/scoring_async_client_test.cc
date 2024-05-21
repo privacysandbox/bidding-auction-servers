@@ -21,13 +21,12 @@
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/status/statusor.h"
-#include "cpio/client_providers/interface/crypto_client_provider_interface.h"
 #include "gmock/gmock.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -59,8 +58,7 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
   AuctionServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
       .compression = false,
-      .secure_client = true,
-      .encryption_enabled = true};
+      .secure_client = true};
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -122,12 +120,24 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
 
 TEST(ScoringAsyncClientTest,
      CallServerWithEncryptionEnabled_EncryptionFailure) {
-  // Return an empty key.
+  using ServiceThread =
+      MockServerThread<AuctionServiceMock, ScoreAdsRequest, ScoreAdsResponse>;
+  ScoreAdsResponse mock_server_response;
+
+  // Start a mocked instance Auction Service.
+  auto dummy_service_thread_ = std::make_unique<ServiceThread>(
+      [&](grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response) { return context->DefaultReactor(); });
+
+  AuctionServiceClientConfig client_config = {
+      .server_addr = dummy_service_thread_->GetServerAddr(),
+      .compression = false,
+      .secure_client = true};
+
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPublicKey)
       .WillOnce(testing::Return(absl::InternalError("failure")));
   MockCryptoClientWrapper crypto_client;
-  AuctionServiceClientConfig client_config = {.encryption_enabled = true};
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
 
@@ -164,8 +174,7 @@ TEST(ScoringAsyncClientTest,
   AuctionServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
       .compression = false,
-      .secure_client = true,
-      .encryption_enabled = true};
+      .secure_client = true};
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;

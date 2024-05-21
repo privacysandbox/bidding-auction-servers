@@ -47,7 +47,9 @@ void HttpScoringSignalsAsyncProvider::Get(
     }
   }
   request->client_type = scoring_signals_request.client_type_;
-  http_seller_kv_async_client_->Execute(
+  request->seller_kv_experiment_group_id =
+      scoring_signals_request.seller_kv_experiment_group_id_;
+  auto status = http_seller_kv_async_client_->Execute(
       std::move(request), scoring_signals_request.filtering_metadata_,
       [on_done = std::move(on_done)](
           absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
@@ -66,6 +68,9 @@ void HttpScoringSignalsAsyncProvider::Get(
         std::move(on_done)(std::move(res), get_byte_size);
       },
       timeout);
+  if (!status.ok()) {
+    PS_VLOG(1) << "Unable to get seller KV signals: " << status;
+  }
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

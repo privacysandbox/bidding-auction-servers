@@ -30,7 +30,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "public/cpio/interface/cpio.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
@@ -39,8 +38,10 @@
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/util/rlimit_core_config.h"
+#include "src/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -94,7 +95,7 @@ using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
-    std::string config_param_prefix) {
+    absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
@@ -120,7 +121,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_auction_egress_tls, AUCTION_EGRESS_TLS);
   config_client.SetFlag(FLAGS_buyer_egress_tls, BUYER_EGRESS_TLS);
 
-  config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
   config_client.SetFlag(FLAGS_test_mode, TEST_MODE);
   config_client.SetFlag(FLAGS_public_key_endpoint, PUBLIC_KEY_ENDPOINT);
   config_client.SetFlag(FLAGS_sfe_public_keys_endpoints,
@@ -155,6 +155,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_enable_protected_audience,
+                        ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
@@ -162,10 +164,21 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::PS_VLOG_IS_ON(
+      0, config_client.GetIntParameter(PS_VERBOSITY));
 
+  const bool enable_protected_audience =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
+  const bool enable_protected_app_signals =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  if (!enable_protected_app_signals && !enable_protected_audience) {
+    ABSL_LOG(WARNING) << "Neither protected audience nor protected app signals "
+                         "is enabled";
+  }
+  PS_VLOG(1) << "Protected Audience support enabled on the service: "
+             << enable_protected_audience;
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+             << enable_protected_app_signals;
   PS_VLOG(1) << "Successfully constructed the config client.";
   return config_client;
 }
@@ -249,6 +262,9 @@ absl::Status RunServer() {
 
 int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
+  privacysandbox::server_common::SetRLimits({
+      .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
+  });
   absl::FailureSignalHandlerOptions options;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);

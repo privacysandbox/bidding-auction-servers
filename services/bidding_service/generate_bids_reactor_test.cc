@@ -36,7 +36,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -47,6 +47,7 @@ constexpr char kTestBiddingSignals[] =
 constexpr char kTopLevelSeller[] = "https://www.example-top-ssp.com";
 
 using ::google::protobuf::TextFormat;
+using ::google::protobuf::util::MessageToJsonString;
 
 using Request = GenerateBidsRequest;
 using RawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
@@ -112,7 +113,6 @@ class GenerateBidsReactorTest : public testing::Test {
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
@@ -123,21 +123,19 @@ class GenerateBidsReactorTest : public testing::Test {
   }
 
   void CheckGenerateBids(const RawRequest& raw_request,
-                         Response expected_response,
+                         const Response& expected_response,
                          bool enable_buyer_debug_url_generation = false,
                          bool enable_adtech_code_logging = false) {
     Response response;
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
         std::make_unique<BiddingNoOpLogger>();
     BiddingServiceRuntimeConfig runtime_config = {
-        .encryption_enabled = true,
         .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
         .enable_adtech_code_logging = enable_adtech_code_logging};
     request_.set_request_ciphertext(raw_request.SerializeAsString());
     GenerateBidsReactor reactor(
         dispatcher_, &request_, &response, std::move(benchmarkingLogger),
-        key_fetcher_manager_.get(), crypto_client_.get(),
-        std::move(runtime_config));
+        key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
     reactor.Execute();
     google::protobuf::util::MessageDifferencer diff;
     std::string diff_output;
@@ -241,9 +239,9 @@ void CheckCorrectnessOfIg(std::string& serialized_actual,
   EXPECT_TRUE(match);
   if (!match) {
     std::string expected_as_str, actual_for_comparison_as_str;
-    google::protobuf::util::MessageToJsonString(expected, &expected_as_str);
-    google::protobuf::util::MessageToJsonString(reconstituted_actual_ig,
-                                                &actual_for_comparison_as_str);
+    CHECK_OK(MessageToJsonString(expected, &expected_as_str));
+    CHECK_OK(MessageToJsonString(reconstituted_actual_ig,
+                                 &actual_for_comparison_as_str));
     ABSL_LOG(INFO) << "\nExpected:\n"
                    << expected_as_str << "\nActual:\n"
                    << actual_for_comparison_as_str;
@@ -679,8 +677,8 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         auto input = batch.at(0).input;
         IGForBidding received;
         EXPECT_EQ(*input[3], expected_signals);
-        // Check that browser signals are an empty JSON string.
-        EXPECT_EQ(*input[4], R"JSON("")JSON");
+        // Check that device signals are an empty JSON object.
+        EXPECT_EQ(*input[4], R"JSON("{}")JSON");
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
   RawRequest raw_request;
@@ -832,13 +830,11 @@ TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {
       std::make_unique<BiddingNoOpLogger>();
 
   BiddingServiceRuntimeConfig runtime_config = {
-      .encryption_enabled = true,
       .enable_buyer_debug_url_generation = false,
   };
-  GenerateBidsReactor reactor(dispatcher_, &request_, &response,
-                              std::move(benchmarkingLogger),
-                              key_fetcher_manager_.get(), crypto_client_.get(),
-                              std::move(runtime_config));
+  GenerateBidsReactor reactor(
+      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
+      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 }
@@ -877,11 +873,10 @@ TEST_F(GenerateBidsReactorTest,
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
       std::make_unique<BiddingNoOpLogger>();
 
-  BiddingServiceRuntimeConfig runtime_config = {.encryption_enabled = true};
-  GenerateBidsReactor reactor(dispatcher_, &request_, &response,
-                              std::move(benchmarkingLogger),
-                              key_fetcher_manager_.get(), crypto_client_.get(),
-                              std::move(runtime_config));
+  BiddingServiceRuntimeConfig runtime_config;
+  GenerateBidsReactor reactor(
+      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
+      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 

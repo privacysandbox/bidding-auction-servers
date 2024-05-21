@@ -22,9 +22,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 struct AuctionServiceRuntimeConfig {
-  // Enables request decryption and response encryption.
-  bool encryption_enabled = false;
-
   bool enable_seller_debug_url_generation = false;
   // Sets the timeout used by Roma for dispatch requests
   std::string roma_timeout_ms = "10000";

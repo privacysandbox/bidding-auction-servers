@@ -18,15 +18,13 @@
 
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/metric/server_definition.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 grpc::ServerUnaryReactor* AuctionService::ScoreAds(
     grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
     ScoreAdsResponse* response) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("ScoreAds"));
   LogCommonMetric(request, response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto reactor =

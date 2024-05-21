@@ -23,11 +23,12 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/bidding_service/generate_bids_reactor.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
+#include "services/common/clients/async_grpc/default_async_grpc_client.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
-#include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
+#include "services/common/clients/kv_server/kv_async_client.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -47,8 +48,7 @@ using ProtectedAppSignalsGenerateBidsReactorFactory =
         GenerateProtectedAppSignalsBidsResponse* response,
         server_common::KeyFetcherManagerInterface* key_fetcher_manager,
         CryptoClientWrapperInterface* crypto_client,
-        AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-            http_ad_retrieval_async_client)>;
+        KVAsyncClient* ad_retrieval_client, KVAsyncClient* kv_async_client)>;
 
 // BiddingService implements business logic for generating a bid. It takes
 // input from the BuyerFrontEndService.
@@ -57,8 +57,6 @@ using ProtectedAppSignalsGenerateBidsReactorFactory =
 // V8 to run the AdTech code.
 class BiddingService final : public Bidding::CallbackService {
  public:
-  using AdsRetrievalAsyncHttpClientType =
-      AsyncClient<AdRetrievalInput, AdRetrievalOutput>;
   explicit BiddingService(
       GenerateBidsReactorFactory generate_bids_reactor_factory,
       std::unique_ptr<server_common::KeyFetcherManagerInterface>
@@ -67,8 +65,8 @@ class BiddingService final : public Bidding::CallbackService {
       BiddingServiceRuntimeConfig runtime_config,
       ProtectedAppSignalsGenerateBidsReactorFactory
           protected_app_signals_generate_bids_reactor_factory,
-      std::unique_ptr<AdsRetrievalAsyncHttpClientType>
-          http_ad_retrieval_async_client = nullptr)
+      std::unique_ptr<KVAsyncClient> ad_retrieval_async_client = nullptr,
+      std::unique_ptr<KVAsyncClient> kv_async_client = nullptr)
       : generate_bids_reactor_factory_(
             std::move(generate_bids_reactor_factory)),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
@@ -76,24 +74,26 @@ class BiddingService final : public Bidding::CallbackService {
         runtime_config_(std::move(runtime_config)),
         protected_app_signals_generate_bids_reactor_factory_(
             std::move(protected_app_signals_generate_bids_reactor_factory)),
-        ads_retrieval_executor_(
-            runtime_config_.is_protected_app_signals_enabled
-                ? std::make_unique<server_common::EventEngineExecutor>(
-                      grpc_event_engine::experimental::GetDefaultEventEngine())
-                : nullptr) {
-    if (runtime_config_.is_protected_app_signals_enabled) {
-      if (http_ad_retrieval_async_client) {
-        http_ad_retrieval_async_client_ =
-            std::move(http_ad_retrieval_async_client);
-        return;
-      }
-
-      http_ad_retrieval_async_client_ =
-          std::make_unique<AdsRetrievalAsyncHttpClient>(
-              runtime_config_.ad_retrieval_server_kv_server_addr,
-              std::make_unique<MultiCurlHttpFetcherAsync>(
-                  ads_retrieval_executor_.get()),
-              /*pre_warm=*/true);
+        ad_retrieval_async_client_(std::move(ad_retrieval_async_client)),
+        kv_async_client_(std::move(kv_async_client)) {
+    if (ad_retrieval_async_client_ == nullptr &&
+        !runtime_config_.tee_ad_retrieval_kv_server_addr.empty()) {
+      auto ad_retrieval_stub =
+          kv_server::v2::KeyValueService::NewStub(CreateChannel(
+              runtime_config_.tee_ad_retrieval_kv_server_addr,
+              /*compression=*/true,
+              /*secure=*/runtime_config.ad_retrieval_kv_server_egress_tls));
+      ad_retrieval_async_client_ = std::make_unique<KVAsyncGrpcClient>(
+          key_fetcher_manager_.get(), std::move(ad_retrieval_stub));
+    }
+    if (kv_async_client_ == nullptr &&
+        !runtime_config_.tee_kv_server_addr.empty()) {
+      auto kv_async_client_stub = kv_server::v2::KeyValueService::NewStub(
+          CreateChannel(runtime_config_.tee_kv_server_addr,
+                        /*compression=*/true,
+                        /*secure=*/runtime_config.kv_server_egress_tls));
+      kv_async_client_ = std::make_unique<KVAsyncGrpcClient>(
+          key_fetcher_manager_.get(), std::move(kv_async_client_stub));
     }
   }
 
@@ -128,9 +128,8 @@ class BiddingService final : public Bidding::CallbackService {
   BiddingServiceRuntimeConfig runtime_config_;
   ProtectedAppSignalsGenerateBidsReactorFactory
       protected_app_signals_generate_bids_reactor_factory_;
-  std::unique_ptr<server_common::Executor> ads_retrieval_executor_;
-  std::unique_ptr<AdsRetrievalAsyncHttpClientType>
-      http_ad_retrieval_async_client_;
+  std::unique_ptr<KVAsyncClient> ad_retrieval_async_client_;
+  std::unique_ptr<KVAsyncClient> kv_async_client_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

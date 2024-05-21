@@ -41,3 +41,9 @@ variable "regions" {
 variable "collector_service_name" {
   type = string
 }
+
+variable "fast_nat" {
+  description = "If true, use extra nat options."
+  type        = bool
+  default     = false
+}

@@ -1,0 +1,54 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.inference;
+
+service InferenceService {
+  // Runs inference.
+  rpc Predict(PredictRequest) returns (PredictResponse) {
+  }
+  // Registers model.
+  rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse) {
+  }
+}
+
+message PredictRequest {
+  // Input data.
+  bytes input = 1;
+}
+
+// Response for PredictRequest on a successful run.
+message PredictResponse {
+  // Output data.
+  bytes output = 1;
+}
+
+message ModelSpec {
+  // Required servable model path; e.g. "my_bucket/models/pcvr_models/1".
+  string model_path = 1;
+}
+
+// RegisterModelRequest specifies a model to register.
+message RegisterModelRequest {
+  // Model Specification.
+  ModelSpec model_spec = 1;
+  // Raw payload of a ML model.
+  // This represents a list of file path and content pairs.
+  map<string, bytes> model_files = 2;
+}
+
+message RegisterModelResponse {
+}

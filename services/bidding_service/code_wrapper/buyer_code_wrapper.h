@@ -90,18 +90,17 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       var generateBidResponse = {};
       try {
         generateBidResponse = generateBid($0);
-      } catch({error, message}) {
-        if (featureFlags.enable_logging) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-        }
-      } finally {
-        if( featureFlags.enable_debug_url_generation &&
+      if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
           generateBidResponse.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
+        }
+      } catch({error, message}) {
+        if (featureFlags.enable_logging) {
+          console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
       return {

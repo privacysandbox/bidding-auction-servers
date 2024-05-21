@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -26,105 +27,6 @@ cc_library(
 )
 
 cc_library(
-    name = "buyer_frontend_data",
-    hdrs = [
-        "data/bidding_signals.h",
-        "data/get_bids_config.h",
-    ],
-    deps = [
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "@com_google_absl//absl/container:flat_hash_map",
-    ],
-)
-
-cc_library(
-    name = "buyer_frontend_utils",
-    srcs = [
-        "util/proto_factory.cc",
-    ],
-    hdrs = [
-        "util/proto_factory.h",
-    ],
-    deps = [
-        ":buyer_frontend_data",
-        "//api:bidding_auction_servers_cc_grpc_proto",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-cc_test(
-    name = "buyer_frontend_utils_test",
-    size = "small",
-    testonly = True,
-    srcs = [
-        "util/proto_factory_test.cc",
-    ],
-    deps = [
-        ":buyer_frontend_utils",
-        "//services/common/test:random",
-        "//services/common/test/utils:test_utils",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "bidding_signals_providers",
-    srcs = [
-        "providers/http_bidding_signals_async_provider.cc",
-    ],
-    hdrs = [
-        "providers/bidding_signals_async_provider.h",
-        "providers/http_bidding_signals_async_provider.h",
-    ],
-    deps = [
-        ":buyer_frontend_data",
-        "//services/common/clients:buyer_key_value_async_http_client",
-        "//services/common/clients:client_factory_template",
-        "//services/common/clients:fake_buyer_key_value_async_http_client",
-        "//services/common/providers:async_provider",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-    ],
-)
-
-cc_library(
-    name = "buyer_frontend_test_utils",
-    testonly = True,
-    srcs = ["util/buyer_frontend_test_utils.cc"],
-    hdrs = ["util/buyer_frontend_test_utils.h"],
-    visibility = [
-        "//services:__subpackages__",
-        "//tools/secure_invoke:__subpackages__",
-    ],
-    deps = [
-        ":bidding_signals_providers",
-        ":buyer_frontend_data",
-        "//services/common/test:mocks",
-        "//services/common/test/utils:test_utils",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "bidding_signals_providers_test",
-    size = "small",
-    srcs = [
-        "providers/http_bidding_signals_async_provider_test.cc",
-    ],
-    deps = [
-        "bidding_signals_providers",
-        "//services/common/test:mocks",
-        "//services/common/test:random",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
     name = "get_bids_unary_reactor",
     srcs = [
         "get_bids_unary_reactor.cc",
@@ -133,10 +35,10 @@ cc_library(
         "get_bids_unary_reactor.h",
     ],
     deps = [
-        ":bidding_signals_providers",
-        ":buyer_frontend_utils",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/util:buyer_frontend_utils",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:benchmarking_logger",
@@ -165,19 +67,19 @@ cc_library(
         "//tools/secure_invoke:__subpackages__",
     ],
     deps = [
-        ":bidding_signals_providers",
-        ":buyer_frontend_utils",
         ":get_bids_unary_reactor",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/util:buyer_frontend_utils",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/metric:server_definition",
         "@com_github_grpc_grpc//:grpc++",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/telemetry",
     ],
 )
 
@@ -189,14 +91,14 @@ cc_test(
     ],
     deps = [
         ":buyer_frontend_service",
-        ":buyer_frontend_test_utils",
+        "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:test_utils",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -206,13 +108,14 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
+    local_defines = ENABLE_CORE_DUMPS_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
-        ":bidding_signals_providers",
         ":buyer_frontend_service",
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/buyer_frontend_service/providers:bidding_signals_providers",
         "//services/common/clients/config:config_client",
         "//services/common/clients/config:config_client_util",
         "//services/common/concurrent:local_cache",
@@ -227,10 +130,11 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/telemetry",
+        "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 
@@ -242,7 +146,7 @@ cc_test(
     ],
     deps = [
         ":buyer_frontend_service",
-        ":buyer_frontend_test_utils",
+        "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
@@ -254,6 +158,8 @@ cc_test(
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
+
+3

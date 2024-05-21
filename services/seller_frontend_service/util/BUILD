@@ -33,8 +33,8 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/interface:public_key_fetcher_interface",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:public_key_fetcher_interface",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -80,8 +80,8 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
-        "@google_privacysandbox_servers_common//src/cpp/communication:compression",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/communication:compression",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@libcbor//:cbor",
         "@rapidjson",
     ],
@@ -122,8 +122,9 @@ cc_library(
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/test/utils:ohttp_test_utils",
         "//services/common/util:error_accumulator",
+        "//services/common/util:oblivious_http_utils",
         "//services/seller_frontend_service",
-        "//services/seller_frontend_service:seller_frontend_data",
+        "//services/seller_frontend_service/data:seller_frontend_data",
         "//services/seller_frontend_service/test:app_test_utils",
         "//services/seller_frontend_service/util:framing_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
@@ -131,8 +132,8 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/communication:encoding_utils",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
 
@@ -155,14 +156,15 @@ cc_library(
     srcs = ["key_fetcher_utils.cc"],
     hdrs = ["key_fetcher_utils.h"],
     deps = [
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/util:json_util",
         "//services/seller_frontend_service:runtime_flags",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:fake_key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:private_key_fetcher",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/src:public_key_fetcher",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:private_key_fetcher",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:public_key_fetcher",
     ],
 )
 
@@ -175,5 +177,111 @@ cc_test(
         ":key_fetcher_utils",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "encryption_util",
+    srcs = ["encryption_util.cc"],
+    hdrs = [
+        "encryption_util.h",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/util:oblivious_http_utils",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "encryption_util_test",
+    size = "small",
+    srcs = ["encryption_util_test.cc"],
+    deps = [
+        ":encryption_util",
+        ":select_ad_reactor_test_utils",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
+    ],
+)
+
+cc_library(
+    name = "validation_utils",
+    srcs = [
+        "validation_utils.cc",
+    ],
+    hdrs = [
+        "validation_utils.h",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/util:error_accumulator",
+    ],
+)
+
+cc_test(
+    name = "validation_utils_test",
+    size = "small",
+    srcs = [
+        "validation_utils_test.cc",
+    ],
+    deps = [
+        ":select_ad_reactor_test_utils",
+        ":validation_utils",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_library(
+    name = "proto_mapping_util",
+    srcs = [
+        "proto_mapping_util.cc",
+    ],
+    hdrs = [
+        "proto_mapping_util.h",
+    ],
+    visibility = [
+        "//services/seller_frontend_service:__pkg__",
+        "//tools/secure_invoke/payload_generator:__pkg__",
+    ],
+    deps = [
+        ":encryption_util",
+        ":validation_utils",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/compression:gzip",
+        "//services/common/util:error_categories",
+        "//services/common/util:hpke_utils",
+        "//services/seller_frontend_service/data:seller_frontend_data",
+        "//services/seller_frontend_service/util:framing_utils",
+        "//services/seller_frontend_service/util:web_utils",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "proto_mapping_util_test",
+    size = "small",
+    srcs = [
+        "proto_mapping_util_test.cc",
+    ],
+    deps = [
+        ":proto_mapping_util",
+        ":select_ad_reactor_test_utils",
+        "//services/common/encryption:crypto_client_factory",
+        "//services/common/test:random",
+        "//services/common/test/utils:ohttp_test_utils",
+        "@com_google_googletest//:gtest",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
     ],
 )

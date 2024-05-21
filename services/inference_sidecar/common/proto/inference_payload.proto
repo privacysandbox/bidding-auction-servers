@@ -1,0 +1,72 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.inference;
+
+// A BatchInferenceRequest can run across multiple models. Each InferenceRequest
+// request is for a single model.
+// WARNING: this proto is not used now, it's used to guide the conversion from
+// a JS request to C++, see services/inference_sidecar/common/utils/request_parser.h.
+message BatchInferenceRequest {
+  repeated InferenceRequest request = 1;
+}
+
+message BatchInferenceResponse {
+  repeated InferenceResponse response = 1;
+}
+
+message InferenceRequest {
+  // Required servable model path; e.g. "my_bucket/models/pcvr_models/1".
+  string model_path = 1;
+  repeated Tensor tensors = 2;
+}
+
+message InferenceResponse {
+  // Required servable model path; e.g. "my_bucket/models/pcvr/1".
+  string model_path = 1;
+  repeated Tensor tensors = 2;
+}
+
+message Tensor {
+  // Type of data stored in tensor_content. A tensor exclusively holds data of
+  // a uniform type.
+  DataType data_type = 1;
+
+  // Tensor shape.
+  // The order of entries in "tensor_shape" matters: It indicates the layout of
+  // the values in the tensor in-memory representation. The first entry is
+  // the outermost dimension. The last entry is the innermost dimension.
+  repeated int64 tensor_shape = 2;
+
+  // Optional name of the tensor.
+  string tensor_name = 3;
+
+  // Serialized raw tensor content. It holds the flattened representation of
+  // the tensor in row-major order. Only the representation corresponding to
+  // "data_type" field can be set. The number of elements in tensor_content
+  // should be equal to the product of tensor_shape elements, for example
+  // a tensor of shape [1,4] will expect a flat array or 4 elements
+  // (e.g. [1, 2, 7, 4]) and one with a shape [2,3] will expect a 6 element one.
+  bytes tensor_content = 4;
+}
+
+// Supported tensor data types.
+enum DataType {
+  FLOAT = 0;  // 32-bit floating point
+  INT64 = 1;  // 64-bit integer (signed)
+  INT32 = 2;  // 32-bit integer (signed)
+  DOUBLE = 3;  // 64-bit floating point
+}

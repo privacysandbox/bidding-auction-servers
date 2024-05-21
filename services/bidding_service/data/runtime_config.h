@@ -19,15 +19,17 @@
 
 #include <string>
 
+#include "services/bidding_service/constants.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 struct BiddingServiceRuntimeConfig {
   // Endpoint where the ad retrieval server is listening for protected app
   // signals. Must be present iff running with protected app signals support.
-  std::string ad_retrieval_server_kv_server_addr = "";
+  std::string tee_ad_retrieval_kv_server_addr = "";
 
-  // Enables request decryption and response encryption.
-  bool encryption_enabled = false;
+  // Endpoint where ads metadata can be retrieved using PAS ad ids.
+  std::string tee_kv_server_addr = "";
 
   bool enable_buyer_debug_url_generation = false;
   // Sets the timeout used by Roma for dispatch requests
@@ -41,6 +43,8 @@ struct BiddingServiceRuntimeConfig {
   bool enable_adtech_code_logging = false;
   // Indicates whether or not protected app signals support is enabled.
   bool is_protected_app_signals_enabled = false;
+  // Indicates whether or not Protected Audience support is enabled.
+  bool is_protected_audience_enabled = true;
   // Time to wait for the ad retrieval request to complete.
   int ad_retrieval_timeout_ms = 60000;
   // The max allowed size of a debug win or loss URL. Default value is 64 KB.
@@ -48,6 +52,17 @@ struct BiddingServiceRuntimeConfig {
   // The max allowed size of all debug win or loss URLs for an auction.
   // Default value is 3000 kilobytes.
   int max_allowed_size_all_debug_urls_kb = 3000;
+  // Whether GRPC client to ad retrieval server should use TLS.
+  bool ad_retrieval_kv_server_egress_tls = true;
+  // Whether GRPC client to KV server should use TLS.
+  bool kv_server_egress_tls = true;
+  // Default UDF versions:
+  std::string default_protected_auction_generate_bid_version =
+      kProtectedAudienceGenerateBidBlobVersion;
+  std::string default_protected_app_signals_generate_bid_version =
+      kProtectedAppSignalsGenerateBidBlobVersion;
+  std::string default_ad_retrieval_version =
+      kPrepareDataForAdRetrievalBlobVersion;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

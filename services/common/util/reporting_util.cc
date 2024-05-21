@@ -23,7 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "services/common/util/json_util.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -38,7 +38,7 @@ inline constexpr int kNumAdditionalWinReportingReplacements = 2;
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
 
                            const std::string& log_type,
-                           log::ContextImpl& log_context) {
+                           server_common::log::ContextImpl& log_context) {
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
@@ -81,6 +81,13 @@ PostAuctionSignals GeneratePostAuctionSignals(
     }
   }
 
+  bool made_highest_scoring_other_bid = false;
+  if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() == 1 &&
+      winning_ad_score->ig_owner_highest_scoring_other_bids_map().contains(
+          winning_ad_score->interest_group_owner())) {
+    made_highest_scoring_other_bid = true;
+  }
+
   // group rejection reasons by buyer and interest group owner.
   absl::flat_hash_map<std::string,
                       absl::flat_hash_map<std::string, SellerRejectionReason>>
@@ -110,7 +117,8 @@ PostAuctionSignals GeneratePostAuctionSignals(
           has_highest_scoring_other_bid,
           winning_score,
           winning_ad_score->render(),
-          std::move(rejection_reason_map)};
+          std::move(rejection_reason_map),
+          made_highest_scoring_other_bid};
 }
 
 HTTPRequest CreateDebugReportingHttpRequest(
@@ -180,7 +188,9 @@ SellerRejectionReason ToSellerRejectionReason(
     absl::string_view rejection_reason_str) {
   if (rejection_reason_str.empty()) {
     return SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
-  } else if (kRejectionReasonInvalidBid == rejection_reason_str) {
+  }
+
+  if (kRejectionReasonInvalidBid == rejection_reason_str) {
     return SellerRejectionReason::INVALID_BID;
   } else if (kRejectionReasonBidBelowAuctionFloor == rejection_reason_str) {
     return SellerRejectionReason::BID_BELOW_AUCTION_FLOOR;
@@ -195,6 +205,12 @@ SellerRejectionReason ToSellerRejectionReason(
     return SellerRejectionReason::LANGUAGE_EXCLUSIONS;
   } else if (kRejectionReasonCategoryExclusions == rejection_reason_str) {
     return SellerRejectionReason::CATEGORY_EXCLUSIONS;
+  } else if (kRejectionReasonBidFromGenBidFailedCurrencyCheck ==
+             rejection_reason_str) {
+    return SellerRejectionReason::BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK;
+  } else if (kRejectionReasonBidFromScoreAdFailedCurrencyCheck ==
+             rejection_reason_str) {
+    return SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK;
   } else {
     return SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE;
   }
@@ -217,6 +233,10 @@ absl::string_view ToSellerRejectionReasonString(
       return kRejectionReasonLanguageExclusions;
     case SellerRejectionReason::CATEGORY_EXCLUSIONS:
       return kRejectionReasonCategoryExclusions;
+    case SellerRejectionReason::BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK:
+      return kRejectionReasonBidFromGenBidFailedCurrencyCheck;
+    case SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK:
+      return kRejectionReasonBidFromScoreAdFailedCurrencyCheck;
     default:
       return kRejectionReasonNotAvailable;
   }
@@ -224,7 +244,7 @@ absl::string_view ToSellerRejectionReasonString(
 
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-                           log::ContextImpl& log_context) {
+                           server_common::log::ContextImpl& log_context) {
   if (!enable_ad_tech_code_logging) {
     return;
   }
@@ -236,7 +256,7 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    log::ContextImpl& log_context) {
+    server_common::log::ContextImpl& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);

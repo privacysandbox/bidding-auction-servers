@@ -21,12 +21,14 @@ module "networking" {
   environment            = var.environment
   regions                = keys(var.region_config)
   collector_service_name = "collector"
+  fast_nat               = var.fast_nat
 }
 
 module "security" {
   source                 = "../../services/security"
   network_id             = module.networking.network_id
   subnets                = module.networking.subnets
+  proxy_subnets          = module.networking.proxy_subnets
   operator               = var.operator
   environment            = var.environment
   collector_service_port = var.collector_service_port
@@ -65,6 +67,7 @@ module "load_balancing" {
   environment                        = var.environment
   operator                           = var.operator
   gcp_project_id                     = var.gcp_project_id
+  subnets                            = module.networking.subnets
   mesh                               = module.networking.mesh
   frontend_ip_address                = module.networking.frontend_address
   frontend_domain_name               = var.frontend_domain_name
@@ -78,7 +81,6 @@ module "load_balancing" {
   backend_address                    = var.runtime_flags["AUCTION_SERVER_HOST"]
   backend_service_name               = "auction"
   backend_service_port               = tonumber(var.runtime_flags["AUCTION_PORT"])
-  collector_ip_address               = module.networking.collector_address
   collector_instance_group_managers  = module.autoscaling.collector_instance_group_managers
   collector_service_name             = "collector"
   collector_service_port             = var.collector_service_port

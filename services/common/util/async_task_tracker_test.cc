@@ -32,8 +32,9 @@ constexpr int kNumMaxThreads = 10;
 
 class AsyncTasksTrackerTest : public testing::Test {
  protected:
-  log::ContextImpl log_context_{absl::btree_map<std::string, std::string>{},
-                                ConsentedDebugConfiguration()};
+  server_common::log::ContextImpl log_context_{
+      absl::btree_map<std::string, std::string>{},
+      server_common::ConsentedDebugConfiguration()};
   absl::Notification notification_;
 };
 
@@ -152,6 +153,7 @@ TEST_F(AsyncTasksTrackerTest, CallbackCalledOnlyOnce) {
                                 });
 
   std::vector<std::thread> threads;
+  threads.reserve(kNumMaxThreads);
   for (int i = 0; i < kNumMaxThreads; ++i) {
     threads.emplace_back(
         [&task_tracker]() { task_tracker.TaskCompleted(TaskStatus::SUCCESS); });
@@ -170,6 +172,7 @@ TEST_F(AsyncTasksTrackerTest, OnSingleTaskDoneCalledWithLock) {
       [this](bool any_successful) { notification_.Notify(); });
 
   std::vector<std::thread> threads;
+  threads.reserve(kNumMaxThreads);
   int count = 0;
   for (int i = 0; i < kNumMaxThreads; ++i) {
     threads.emplace_back([&task_tracker, &count]() {

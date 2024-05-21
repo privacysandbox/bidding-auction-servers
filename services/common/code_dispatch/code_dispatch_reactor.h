@@ -28,8 +28,8 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/loggers/request_context_logger.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -45,14 +45,12 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
       CodeDispatchClient& dispatcher, const Request* request,
       Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client, bool encryption_enabled)
+      CryptoClientWrapperInterface* crypto_client)
       : dispatcher_(dispatcher),
         request_(request),
         response_(response),
         key_fetcher_manager_(key_fetcher_manager),
-        crypto_client_(crypto_client),
-        encryption_enabled_(encryption_enabled) {
-    DCHECK(encryption_enabled);
+        crypto_client_(crypto_client) {
     PS_VLOG(5) << "Encryption is enabled, decrypting request now";
     if (DecryptRequest()) {
       PS_VLOG(3) << "Decrypted request: " << raw_request_.DebugString();
@@ -115,7 +113,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
       return false;
     }
 
-    hpke_secret_ = std::move(decrypt_response->secret());
+    hpke_secret_ = std::move(*decrypt_response->mutable_secret());
     return raw_request_.ParseFromString(decrypt_response->payload());
   }
 
@@ -152,7 +150,6 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;
   std::string hpke_secret_;
-  bool encryption_enabled_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

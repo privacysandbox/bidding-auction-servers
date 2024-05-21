@@ -44,6 +44,11 @@ HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
     AddAmpersandIfNotFirstQueryParam(&request.url);
     absl::StrAppend(&request.url, "hostname=", client_input->hostname);
   }
+  if (!client_input->buyer_kv_experiment_group_id.empty()) {
+    AddAmpersandIfNotFirstQueryParam(&request.url);
+    absl::StrAppend(&request.url, "experimentGroupId=",
+                    client_input->buyer_kv_experiment_group_id);
+  }
   if (!client_input->keys.empty()) {
     AddListItemsAsQueryParamsToUrl(&request.url, "keys", client_input->keys,
                                    kEnableEncodeParams);
@@ -67,7 +72,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout) const {
   HTTPRequest request = BuildBuyerKeyValueRequest(kv_server_base_address_,
                                                   metadata, std::move(keys));
-  PS_VLOG(2) << "BuyerKeyValueAsyncHttpClient Request: " << request.url;
+
   size_t request_size = 0;
   for (std::string& header : request.headers) {
     request_size += header.size();
@@ -106,7 +111,7 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetBuyerValuesInput>();
-    Execute(
+    auto status = Execute(
         std::move(request), {},
         [](absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
                buyer_kv_output) mutable {
@@ -118,6 +123,10 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
         },
         // Longer timeout for first request
         absl::Milliseconds(60000));
+    if (!status.ok()) {
+      PS_VLOG(1) << "BuyerKeyValueAsyncHttpClient pre-warming failed: "
+                 << status;
+    }
   }
 }
 

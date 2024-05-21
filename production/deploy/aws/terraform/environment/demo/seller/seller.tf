@@ -67,10 +67,12 @@ module "seller" {
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
     ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE              = "" # Example: "true"
     PS_VERBOSITY                           = "" # Example: "10"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
-    ENABLE_ENCRYPTION                      = "" # Example: "true"
     TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING              = "" # Example: "true"
+    CONSENTED_DEBUG_TOKEN                  = "" # Example: "123456"
     TEST_MODE                              = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
     # "{
@@ -95,7 +97,7 @@ module "seller" {
     JS_NUM_WORKERS                  = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count.
     JS_WORKER_QUEUE_LEN             = "" # Example: "100".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "false"
+    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:

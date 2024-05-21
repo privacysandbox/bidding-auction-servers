@@ -22,10 +22,11 @@
 #include <utility>
 #include <vector>
 
+#include "public/query/v2/get_values_v2.pb.h"
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/data/runtime_config.h"
-#include "services/common/clients/http_kv_server/buyer/ads_retrieval_async_http_client.h"
+#include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -47,8 +48,7 @@ class ProtectedAppSignalsGenerateBidsReactor
       GenerateProtectedAppSignalsBidsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-          http_ad_retrieval_async_client);
+      KVAsyncClient* ad_retrieval_async_client, KVAsyncClient* kv_async_client);
 
   virtual ~ProtectedAppSignalsGenerateBidsReactor() = default;
 
@@ -67,19 +67,28 @@ class ProtectedAppSignalsGenerateBidsReactor
 
   DispatchRequest CreatePrepareDataForAdsRetrievalRequest();
 
-  void GetPreparedDataForAdsRetrieval();
+  bool IsContextualRetrievalRequest();
+  void StartContextualAdsRetrieval();
+  void StartNonContextualAdsRetrieval();
 
-  std::unique_ptr<AdRetrievalInput> CreateAdsRetrievalRequest(
-      const std::string& prepare_data_for_ads_retrieval_response);
+  using AdRenderIds = google::protobuf::RepeatedPtrField<std::string>;
+  std::unique_ptr<kv_server::v2::GetValuesRequest> CreateAdsRetrievalRequest(
+      const std::string& prepare_data_for_ads_retrieval_response,
+      absl::optional<AdRenderIds> ad_render_ids = absl::nullopt);
+
+  std::unique_ptr<kv_server::v2::GetValuesRequest> CreateKVLookupRequest(
+      const AdRenderIds& ad_render_ids);
 
   void FetchAds(const std::string& prepare_data_for_ads_retrieval_response);
+  void FetchAdsMetadata(
+      const std::string& prepare_data_for_ads_retrieval_response);
 
   DispatchRequest CreateGenerateBidsRequest(
-      std::unique_ptr<AdRetrievalOutput> result,
+      std::unique_ptr<kv_server::v2::GetValuesResponse> result,
       absl::string_view prepare_data_for_ads_retrieval_response);
 
-  void OnFetchAdsDone(
-      std::unique_ptr<AdRetrievalOutput> result,
+  void OnFetchAdsDataDone(
+      std::unique_ptr<kv_server::v2::GetValuesResponse> result,
       const std::string& prepare_data_for_ads_retrieval_response);
 
   void EncryptResponseAndFinish(grpc::Status status);
@@ -138,11 +147,16 @@ class ProtectedAppSignalsGenerateBidsReactor
     }
   }
 
-  AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-      http_ad_retrieval_async_client_;
+  KVAsyncClient* ad_retrieval_async_client_;
+  KVAsyncClient* kv_async_client_;
   int ad_bids_retrieval_timeout_ms_;
   RequestMetadata metadata_;
   std::vector<DispatchRequest> embeddings_requests_;
+  absl::optional<bool> is_contextual_retrieval_request_;
+
+  // UDF versions to use for this request.
+  const std::string& protected_app_signals_generate_bid_version_;
+  const std::string& ad_retrieval_version_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -83,7 +83,7 @@ Utilization ReadCpuTime(const std::vector<size_t>& cpu_times,
 
   // calculate and update total_time
   size_t total_time_new =
-      std::accumulate(cpu_times.begin(), cpu_times.end(), 0);
+      std::accumulate(cpu_times.begin(), cpu_times.end(), 0UL);
   size_t total_time_diff =
       total_time_new >= total_time ? total_time_new - total_time : 0;
   total_time = total_time_new;

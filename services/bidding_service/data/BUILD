@@ -21,4 +21,7 @@ cc_library(
     hdrs = [
         "runtime_config.h",
     ],
+    deps = [
+        "//services/bidding_service:bidding_constants",
+    ],
 )

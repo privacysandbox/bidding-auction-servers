@@ -33,6 +33,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/service_utils.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -41,20 +42,18 @@ using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
 using ::google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse;
+using server_common::KeyFetcherManagerInterface;
 using ::testing::NiceMock;
 
 class BiddingServiceTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_.SetFlagForTest(kTrue, TEST_MODE);
-  }
+  void SetUp() override { config_.SetFlagForTest(kTrue, TEST_MODE); }
 
   MockCodeDispatchClient code_dispatch_client_;
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_ =
       std::make_unique<BiddingNoOpLogger>();
   TrustedServersConfigClient config_{{}};
-  BiddingServiceRuntimeConfig runtime_config_ = {.encryption_enabled = true};
+  BiddingServiceRuntimeConfig runtime_config_;
   std::unique_ptr<NiceMock<MockCryptoClientWrapper>> crypto_client_ =
       std::make_unique<NiceMock<MockCryptoClientWrapper>>();
 };
@@ -94,13 +93,13 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
              GenerateProtectedAppSignalsBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client,
-             AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                 http_ad_retrieval_async_client) {
+             KVAsyncClient* ad_retrieval_async_client,
+             KVAsyncClient* kv_async_client) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
                 context, code_dispatch_client_, runtime_config, request,
                 response, key_fetcher_manager, crypto_client,
-                http_ad_retrieval_async_client);
+                ad_retrieval_async_client, kv_async_client);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
       });
@@ -137,13 +136,13 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
              GenerateProtectedAppSignalsBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client,
-             AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                 http_ad_retrieval_async_client) {
+             KVAsyncClient* ad_retrieval_async_client,
+             KVAsyncClient* kv_async_client) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
                 context, code_dispatch_client_, runtime_config, request,
                 response, key_fetcher_manager, crypto_client,
-                http_ad_retrieval_async_client);
+                ad_retrieval_async_client, kv_async_client);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
       });
@@ -160,20 +159,10 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
 
 class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
  protected:
-  using AdsRetrievalAsyncHttpClientType =
-      AsyncClientMock<AdRetrievalInput, AdRetrievalOutput>;
-  std::unique_ptr<AdsRetrievalAsyncHttpClientType> ad_retrieval_client_ =
-      std::make_unique<AdsRetrievalAsyncHttpClientType>();
-  int num_roma_requests_ = 0;
-
   void SetUp() override {
-    config_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
     config_.SetFlagForTest(kTrue, TEST_MODE);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-
-    runtime_config_ = {.encryption_enabled = true,
-                       .is_protected_app_signals_enabled = true};
-
+    runtime_config_ = {.is_protected_app_signals_enabled = true};
     SetupMockCryptoClientWrapper(*crypto_client_);
     server_common::GrpcInit gprc_init;
   }
@@ -199,17 +188,21 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
                GenerateProtectedAppSignalsBidsResponse* response,
                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                CryptoClientWrapperInterface* crypto_client,
-               AsyncClient<AdRetrievalInput, AdRetrievalOutput>*
-                   http_ad_retrieval_async_client) {
+               KVAsyncClient* ad_retrieval_async_client,
+               KVAsyncClient* kv_async_client) {
           auto reactor =
               std::make_unique<ProtectedAppSignalsGenerateBidsReactor>(
                   context, code_dispatch_client_, runtime_config, request,
                   response, key_fetcher_manager, crypto_client,
-                  http_ad_retrieval_async_client);
+                  ad_retrieval_async_client, kv_async_client);
           return reactor.release();
         },
         std::move(ad_retrieval_client_));
   }
+
+  std::unique_ptr<KVAsyncClientMock> ad_retrieval_client_ =
+      std::make_unique<KVAsyncClientMock>();
+  int num_roma_requests_ = 0;
 };
 
 TEST_F(BiddingProtectedAppSignalsTest, NormalWorkflowWorks) {
@@ -250,7 +243,7 @@ TEST_F(BiddingProtectedAppSignalsTest,
         // First dispatch happens for `prepareDataForAdRetrieval` UDF.
         return absl::InternalError(kInternalServerError);
       });
-  EXPECT_CALL(*ad_retrieval_client_, Execute).Times(0);
+  EXPECT_CALL(*ad_retrieval_client_, ExecuteInternal).Times(0);
   auto bidding_service = CreateBiddingService();
   LocalServiceStartResult start_service_result =
       StartLocalService(&bidding_service);
@@ -279,12 +272,12 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
                                  kPrepareDataForAdRetrievalBlobVersion,
                                  CreatePrepareDataForAdsRetrievalResponse());
       });
-  EXPECT_CALL(*ad_retrieval_client_, Execute)
+  EXPECT_CALL(*ad_retrieval_client_, ExecuteInternal)
       .WillOnce(
-          [](std::unique_ptr<AdRetrievalInput> keys,
+          [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
              absl::AnyInvocable<
-                 void(absl::StatusOr<std::unique_ptr<AdRetrievalOutput>>) &&>
+                 void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
                  on_done,
              absl::Duration timeout) {
             return absl::InternalError(kInternalServerError);
@@ -322,6 +315,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadGenerateBidResponseFinishesRpc) {
           // Second dispatch happens for `generateBid` UDF.
           return absl::InternalError(kInternalServerError);
         }
+        return absl::OkStatus();
       });
   SetupAdRetrievalClientExpectations(*ad_retrieval_client_);
   auto bidding_service = CreateBiddingService();

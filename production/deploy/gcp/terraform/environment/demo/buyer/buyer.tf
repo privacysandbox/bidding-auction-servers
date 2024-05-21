@@ -41,20 +41,21 @@ module "buyer" {
   buyer_frontend_image = "${local.image_repo}/buyer_frontend_service:${local.environment}" # Image built and uploaded by production/packaging/build_and_test_all_in_docker
 
   runtime_flags = {
-    BIDDING_PORT                    = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_PORT             = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_HEALTHCHECK_PORT = "50050"          # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_SERVER_ADDR             = "xds:///bidding" # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS                 = "true"           # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_EGRESS_TLS              = "false"          # Do not change unless you are modifying the default GCP architecture.
-    ENABLE_ENCRYPTION               = "true"           # Do not change unless you are testing without encryption.
-    TEST_MODE                       = "false"          # Do not change unless you are testing without key fetching.
+    BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_FRONTEND_PORT               = "50051"          # Do not change unless you are modifying the default GCP architecture.
+    BUYER_FRONTEND_HEALTHCHECK_PORT   = "50050"          # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_SERVER_ADDR               = "xds:///bidding" # Do not change unless you are modifying the default GCP architecture.
+    BFE_INGRESS_TLS                   = "true"           # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_EGRESS_TLS                = "false"          # Do not change unless you are modifying the default GCP architecture.
+    AD_RETRIEVAL_KV_SERVER_EGRESS_TLS = "false"          # Do not change unless you are modifying the default GCP architecture.
+    KV_SERVER_EGRESS_TLS              = "false"          # Do not change unless you are modifying the default GCP architecture.
+    TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
     BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    AD_RETRIEVAL_KV_SERVER_ADDR                   = "" # Example: "xds:///ad_retrieval_server"
+    TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
+    TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
-    BYOS_AD_RETRIEVAL_SERVER                      = "" # Example: "true"
     GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
     PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
@@ -62,12 +63,14 @@ module "buyer" {
     CREATE_NEW_EVENT_ENGINE                       = "" # Example: "false"
     ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE                     = "" # Example: "true"
     PS_VERBOSITY                                  = "" # Example: "10"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
     BUYER_CODE_FETCH_CONFIG = "" # Example:
     # "{
+    #    "fetchMode": 0,
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
     #    "protectedAppSignalsBiddingJsUrl": "placeholder",
@@ -110,6 +113,10 @@ module "buyer" {
     BFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
+
+    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.

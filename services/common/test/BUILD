@@ -37,10 +37,11 @@ cc_library(
         "//services/common/concurrent:local_cache",
         "//services/common/providers:async_provider",
         "//services/common/reporters:async_reporter",
-        "@com_github_grpc_grpc//:event_engine_base_hdrs",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/cpp/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_grpc",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
     ],
 )
 

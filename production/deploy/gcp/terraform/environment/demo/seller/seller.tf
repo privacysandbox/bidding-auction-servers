@@ -50,7 +50,6 @@ module "seller" {
     SFE_INGRESS_TLS                  = "false"          # Do not change unless you are modifying the default GCP architecture.
     BUYER_EGRESS_TLS                 = "true"           # Do not change unless you are modifying the default GCP architecture.
     AUCTION_EGRESS_TLS               = "false"          # Do not change unless you are modifying the default GCP architecture.
-    ENABLE_ENCRYPTION                = "true"           # Do not change unless you are testing without encryption.
     TEST_MODE                        = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_AUCTION_SERVICE_BENCHMARK       = "" # Example: "false"
@@ -64,6 +63,7 @@ module "seller" {
     ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
     ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
     ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE              = "" # Example: "true"
     PS_VERBOSITY                           = "" # Example: "10"
     CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = "" # Example:
@@ -88,7 +88,7 @@ module "seller" {
     COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
     ENABLE_OTEL_BASED_LOGGING       = "" # Example: "false"
     CONSENTED_DEBUG_TOKEN           = "" # Example: "<unique_id>"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "false"
+    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.

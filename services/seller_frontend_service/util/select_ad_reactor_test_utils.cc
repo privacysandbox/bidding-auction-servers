@@ -14,11 +14,12 @@
 
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <string>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <include/gmock/gmock-actions.h>
 #include <include/gmock/gmock-nice-strict.h>
@@ -28,11 +29,10 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
 #include "gmock/gmock.h"
-#include "services/common/compression/gzip.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/oblivious_http_utils.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
-#include "src/cpp/communication/encoding_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -62,6 +62,18 @@ absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
   return buyer_to_ad_url;
 }
 
+void SetupMockCrytoClient(MockCryptoClientWrapper& crypto_client) {
+  EXPECT_CALL(crypto_client, HpkeEncrypt)
+      .WillOnce([](const PublicKey& key, const std::string& plaintext_payload) {
+        // Mock the HpkeEncrypt() call on the crypto client.
+        google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse
+            hpke_encrypt_response;
+        hpke_encrypt_response.mutable_encrypted_data()->set_ciphertext(
+            plaintext_payload);
+        return hpke_encrypt_response;
+      });
+}
+
 Cardinality BuyerCallCardinality(bool expect_all_buyers_solicited,
                                  bool repeated_get_allowed) {
   if (expect_all_buyers_solicited && repeated_get_allowed) {
@@ -73,6 +85,21 @@ Cardinality BuyerCallCardinality(bool expect_all_buyers_solicited,
   } else {
     return testing::AtMost(1);
   }
+}
+
+GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
+    const std::string& ad_url, absl::optional<std::string> interest_group_name,
+    absl::optional<float> bid_value,
+    const bool enable_event_level_debug_reporting,
+    int number_ad_component_render_urls,
+    const absl::optional<std::string>& bid_currency) {
+  AdWithBid bid =
+      BuildNewAdWithBid(ad_url, std::move(interest_group_name), bid_value,
+                        enable_event_level_debug_reporting,
+                        number_ad_component_render_urls, bid_currency);
+  GetBidsResponse::GetBidsRawResponse response;
+  response.mutable_bids()->Add(std::move(bid));
+  return response;
 }
 
 void SetupBuyerClientMock(
@@ -125,6 +152,7 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   }
   result->set_bid(input.bid());
   result->set_render(input.render());
+  result->set_bid_currency(input.bid_currency());
   result->mutable_ad_components()->CopyFrom(input.ad_components());
   result->set_allow_component_auction(input.allow_component_auction());
   result->set_interest_group_name(input.interest_group_name());
@@ -132,11 +160,13 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   result->set_modeling_signals(kModelingSignals);
 }
 
-AdWithBid BuildNewAdWithBid(const std::string& ad_url,
-                            absl::optional<absl::string_view> interest_group,
-                            absl::optional<float> bid_value,
-                            const bool enable_event_level_debug_reporting,
-                            int number_ad_component_render_urls) {
+AdWithBid BuildNewAdWithBid(
+    const std::string& ad_url,
+    absl::optional<absl::string_view> interest_group_name,
+    absl::optional<float> bid_value,
+    const bool enable_event_level_debug_reporting,
+    int number_ad_component_render_urls,
+    const absl::optional<absl::string_view>& bid_currency) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -144,10 +174,13 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
         absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
   if (bid_value.has_value()) {
-    bid.set_bid(*bid_value);
+    bid.set_bid(bid_value.value());
   }
-  if (interest_group.has_value()) {
-    bid.set_interest_group_name(*interest_group);
+  if (interest_group_name.has_value()) {
+    bid.set_interest_group_name(*interest_group_name);
+  }
+  if (bid_currency.has_value()) {
+    bid.set_bid_currency(*bid_currency);
   }
   bid.set_ad_cost(kAdCost);
   bid.set_modeling_signals(kModelingSignals);
@@ -161,6 +194,32 @@ AdWithBid BuildNewAdWithBid(const std::string& ad_url,
     *bid.mutable_debug_report_urls() = debug_report_urls;
   }
   return bid;
+}
+
+ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
+    const std::string& ad_render_url, absl::optional<float> bid_value,
+    const bool enable_event_level_debug_reporting,
+    absl::optional<absl::string_view> bid_currency) {
+  ProtectedAppSignalsAdWithBid pas_ad_with_bid;
+  pas_ad_with_bid.set_render(ad_render_url);
+  if (bid_value.has_value()) {
+    pas_ad_with_bid.set_bid(bid_value.value());
+  }
+  if (bid_currency.has_value()) {
+    pas_ad_with_bid.set_bid_currency(bid_currency.value());
+  }
+  pas_ad_with_bid.set_ad_cost(kAdCost);
+  pas_ad_with_bid.set_modeling_signals(kModelingSignals);
+
+  if (enable_event_level_debug_reporting) {
+    DebugReportUrls debug_report_urls;
+    debug_report_urls.set_auction_debug_win_url(
+        "https://pas_test.com/debugWin?render=" + ad_render_url);
+    debug_report_urls.set_auction_debug_loss_url(
+        "https://pas_test.com/debugLoss?render=" + ad_render_url);
+    *pas_ad_with_bid.mutable_debug_report_urls() = debug_report_urls;
+  }
+  return pas_ad_with_bid;
 }
 
 server_common::PrivateKey GetPrivateKey() {
@@ -177,12 +236,12 @@ void SetupScoringProviderMock(
     const std::optional<std::string>& scoring_signals_value,
     bool repeated_get_allowed,
     const std::optional<absl::Status>& server_error_to_return,
-    int expected_num_bids) {
+    int expected_num_bids, const std::string& seller_egid) {
   auto MockScoringSignalsProvider =
       [&expected_buyer_bids, scoring_signals_value, server_error_to_return,
-       expected_num_bids](const ScoringSignalsRequest& scoring_signals_request,
-                          ScoringSignalsDoneCallback on_done,
-                          absl::Duration timeout) {
+       expected_num_bids, seller_egid](
+          const ScoringSignalsRequest& scoring_signals_request,
+          ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
         if (expected_num_bids > -1) {
           EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
                     expected_num_bids);
@@ -208,10 +267,12 @@ void SetupScoringProviderMock(
               << diff_output;
         }
 
+        EXPECT_EQ(scoring_signals_request.seller_kv_experiment_group_id_,
+                  seller_egid);
+
         GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {
-          std::move(on_done)(std::move(server_error_to_return.value()),
-                             get_byte_size);
+          std::move(on_done)(*server_error_to_return, get_byte_size);
         } else {
           auto scoring_signals = std::make_unique<ScoringSignals>();
           if (scoring_signals_value.has_value()) {
@@ -236,7 +297,7 @@ TrustedServersConfigClient CreateConfig() {
   config.SetFlagForTest(kAuctionHost, AUCTION_SERVER_HOST);
   config.SetFlagForTest(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
   config.SetFlagForTest(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
-  config.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+  config.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
   return config;
 }
 
@@ -250,8 +311,7 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
           GetEncodedDataSize(encoded_request.size()));
   EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
   HpkeKeyset keyset;
-  auto ohttp_request =
-      CreateValidEncryptedRequest(std::move(*framed_request), keyset);
+  auto ohttp_request = CreateValidEncryptedRequest(*framed_request, keyset);
   EXPECT_TRUE(ohttp_request.ok()) << ohttp_request.status().message();
   std::string encrypted_request =
       '\0' + ohttp_request->EncapsulateAndSerialize();
@@ -260,17 +320,16 @@ GetFramedInputAndOhttpContext(absl::string_view encoded_request) {
 }
 
 AuctionResult DecryptAppProtoAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
-  HpkeKeyset keyset;
-  auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
-  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status().message();
+  auto decrypted_response = FromObliviousHTTPResponse(
+      auction_result_ciphertext, context, kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decompress the encoded response.
   absl::StatusOr<std::string> decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok())
       << decompressed_response.status().message();
 
@@ -282,17 +341,16 @@ AuctionResult DecryptAppProtoAuctionResult(
 }
 
 AuctionResult DecryptBrowserAuctionResult(
-    absl::string_view auction_result_ciphertext,
+    std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context) {
   // Decrypt the response.
-  HpkeKeyset keyset;
-  auto decrypted_response =
-      DecryptEncapsulatedResponse(auction_result_ciphertext, context, keyset);
+  auto decrypted_response = FromObliviousHTTPResponse(
+      auction_result_ciphertext, context, kBiddingAuctionOhttpResponseLabel);
   EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
 
   // Decompress the encoded response.
   auto decompressed_response =
-      UnframeAndDecompressAuctionResult(decrypted_response->GetPlaintextData());
+      UnframeAndDecompressAuctionResult(*decrypted_response);
   EXPECT_TRUE(decompressed_response.ok()) << decompressed_response.status();
 
   absl::StatusOr<AuctionResult> deserialized_auction_result =
@@ -311,6 +369,108 @@ absl::StatusOr<std::string> UnframeAndDecompressAuctionResult(
 
   // Decompress the encoded response.
   return GzipDecompress(unframed_response->compressed_data);
+}
+
+std::string FrameAndCompressProto(absl::string_view serialized_proto) {
+  // Compress the bytes array before framing it with pre-amble and padding.
+  absl::StatusOr<std::string> compressed_data = GzipCompress(serialized_proto);
+  EXPECT_TRUE(compressed_data.ok()) << compressed_data.status().message();
+  absl::StatusOr<std::string> framed_request =
+      server_common::EncodeResponsePayload(
+          server_common::CompressionType::kGzip, *compressed_data,
+          GetEncodedDataSize(compressed_data->size()));
+  EXPECT_TRUE(framed_request.ok()) << framed_request.status().message();
+  return *framed_request;
+}
+
+void FillInAdRenderUrlAndCurrency(
+    absl::string_view matching_currency, absl::string_view mismatching_currency,
+    absl::string_view base_ad_render_url, const int current_iteration,
+    int& mismatched_left_to_add, int& matched_left_to_add,
+    std::string& ad_render_url, std::string& bid_currency) {
+  if ((mismatched_left_to_add > 0) && (matched_left_to_add > 0)) {
+    if ((current_iteration % 2) == 0) {
+      ad_render_url = absl::StrCat(base_ad_render_url, "/", current_iteration,
+                                   "_", matching_currency);
+      bid_currency = matching_currency;
+      matched_left_to_add--;
+    } else {
+      ad_render_url = absl::StrCat(base_ad_render_url, "/", current_iteration,
+                                   "_", mismatching_currency);
+      bid_currency = mismatching_currency;
+      mismatched_left_to_add--;
+    }
+  } else if (matched_left_to_add > 0) {
+    ad_render_url = absl::StrCat(base_ad_render_url, "/", current_iteration,
+                                 "_", matching_currency);
+    bid_currency = matching_currency;
+    matched_left_to_add--;
+  } else {
+    ad_render_url = absl::StrCat(base_ad_render_url, "/", current_iteration,
+                                 "_", mismatching_currency);
+    bid_currency = mismatching_currency;
+    mismatched_left_to_add--;
+  }
+}
+
+std::vector<AdWithBid> GetAdWithBidsInMultipleCurrencies(
+    const int num_ad_with_bids, const int num_mismatched,
+    absl::string_view matching_currency, absl::string_view mismatching_currency,
+    absl::string_view base_ad_render_url, absl::string_view base_ig_name) {
+  DCHECK(num_ad_with_bids >= num_mismatched);
+
+  int mismatched_left_to_add = num_mismatched;
+  int matched_left_to_add = num_ad_with_bids - num_mismatched;
+
+  std::vector<AdWithBid> ads_with_bids;
+  ads_with_bids.reserve(num_ad_with_bids);
+  for (int i = 0; i < num_ad_with_bids; i++) {
+    std::string ad_render_url;
+    std::string bid_currency;
+
+    FillInAdRenderUrlAndCurrency(matching_currency, mismatching_currency,
+                                 base_ad_render_url, i, mismatched_left_to_add,
+                                 matched_left_to_add, ad_render_url,
+                                 bid_currency);
+    ads_with_bids.push_back(BuildNewAdWithBid(
+        ad_render_url, absl::StrCat(base_ig_name, "_", i),
+        /*bid_value=*/1 + 0.001 * i,
+        /*enable_event_level_debug_reporting=*/false,
+        /*number_ad_component_render_urls=*/kDefaultNumAdComponents,
+        bid_currency));
+  }
+  DCHECK_EQ(matched_left_to_add, 0);
+  DCHECK_EQ(mismatched_left_to_add, 0);
+  return ads_with_bids;
+}
+
+std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
+    const int num_ad_with_bids, const int num_mismatched,
+    absl::string_view matching_currency, absl::string_view mismatching_currency,
+    absl::string_view base_ad_render_url) {
+  DCHECK(num_ad_with_bids >= num_mismatched);
+
+  int mismatched_left_to_add = num_mismatched;
+  int matched_left_to_add = num_ad_with_bids - num_mismatched;
+
+  std::vector<ProtectedAppSignalsAdWithBid> pas_ads_with_bids;
+  pas_ads_with_bids.reserve(num_ad_with_bids);
+  for (int i = 0; i < num_ad_with_bids; i++) {
+    std::string ad_render_url;
+    std::string bid_currency;
+
+    FillInAdRenderUrlAndCurrency(matching_currency, mismatching_currency,
+                                 base_ad_render_url, i, mismatched_left_to_add,
+                                 matched_left_to_add, ad_render_url,
+                                 bid_currency);
+    pas_ads_with_bids.push_back(BuildNewPASAdWithBid(
+        ad_render_url,
+        /*bid_value=*/1 + 0.001 * i,
+        /*enable_event_level_debug_reporting=*/false, bid_currency));
+  }
+  DCHECK_EQ(matched_left_to_add, 0);
+  DCHECK_EQ(mismatched_left_to_add, 0);
+  return pas_ads_with_bids;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

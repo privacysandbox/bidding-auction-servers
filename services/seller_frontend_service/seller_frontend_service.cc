@@ -27,7 +27,7 @@
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
 #include "services/seller_frontend_service/select_ad_reactor_invalid_client.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
-#include "src/cpp/telemetry/telemetry.h"
+#include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -68,8 +68,6 @@ SellerFrontEndService::CreateKVClient() {
 grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response) {
-  auto scope = opentelemetry::trace::Scope(
-      server_common::GetTracer()->StartSpan("SelectAd"));
   LogCommonMetric(request, response);
   auto reactor = GetReactorForRequest(context, request, response, clients_,
                                       config_client_);

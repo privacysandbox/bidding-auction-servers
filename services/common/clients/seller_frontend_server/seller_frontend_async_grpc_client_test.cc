@@ -86,12 +86,13 @@ TEST_F(SellerFrontEndAsyncGrpcTest, CallsServerWithMetadata) {
 
   TestClient class_under_test(client_config);
   absl::Notification notification;
-  class_under_test.Execute(
+  auto status = class_under_test.Execute(
       std::make_unique<Request>(), sent_metadata,
       [&notification](
           absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
         notification.Notify();
       });
+  CHECK_OK(status);
   notification.WaitForNotification();
 
   // GRPC might have added some more headers.
@@ -120,7 +121,7 @@ TEST_F(SellerFrontEndAsyncGrpcTest, PassesStatusToCallback) {
   auto input_request_ptr = std::make_unique<Request>();
   absl::Notification notification;
 
-  class_under_test.Execute(
+  auto status = class_under_test.Execute(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
@@ -128,7 +129,7 @@ TEST_F(SellerFrontEndAsyncGrpcTest, PassesStatusToCallback) {
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();
       });
-
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 
@@ -160,13 +161,14 @@ TEST_F(SellerFrontEndAsyncGrpcTest, CallsServerWithTimeout) {
   client_config.server_addr = dummy_service_thread_->GetServerAddr();
 
   TestClient class_under_test(client_config);
-  class_under_test.Execute(
+  auto status = class_under_test.Execute(
       std::move(input_request_ptr), {},
       [&notification](
           absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
         notification.Notify();
       },
       timeout);
+  CHECK_OK(status);
   notification.WaitForNotification();
   // Time diff in ms is expected due to different invocations of absl::Now(),
   // but should within a small range.
@@ -193,7 +195,7 @@ TEST_F(SellerFrontEndAsyncGrpcTest, PassesResponseToCallback) {
   std::unique_ptr<Response> output;
   auto input_request_ptr = std::make_unique<Request>();
 
-  class_under_test.Execute(
+  auto status = class_under_test.Execute(
       std::move(input_request_ptr), {},
       [&notification, &expected_output](
           absl::StatusOr<std::unique_ptr<Response>> get_values_response) {
@@ -201,7 +203,7 @@ TEST_F(SellerFrontEndAsyncGrpcTest, PassesResponseToCallback) {
             *get_values_response.value().get(), expected_output));
         notification.Notify();
       });
-
+  CHECK_OK(status);
   notification.WaitForNotification();
 }
 

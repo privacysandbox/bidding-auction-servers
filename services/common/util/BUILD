@@ -119,8 +119,9 @@ cc_library(
     hdrs = ["error_reporter.h"],
     deps = [
         ":error_categories",
+        "//services/common/loggers:source_location_context",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
+        "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
 
@@ -131,10 +132,11 @@ cc_library(
     deps = [
         ":error_categories",
         ":error_reporter",
-        "//services/common/loggers:request_context_impl",
+        "//services/common/loggers:source_location_context",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
 
@@ -156,6 +158,7 @@ cc_library(
     name = "post_auction_signals",
     hdrs = ["post_auction_signals.h"],
     deps = [
+        "//api:bidding_auction_servers_cc_proto",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
     ],
@@ -171,14 +174,14 @@ cc_library(
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
-        "//services/common/loggers:request_context_impl",
         "//services/common/util:json_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -223,7 +226,7 @@ cc_library(
     name = "signal_handler",
     hdrs = ["signal_handler.h"],
     deps = [
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:examine_stack",
+        "@google_privacysandbox_servers_common//src/util/status_macro:examine_stack",
     ],
 )
 
@@ -232,12 +235,12 @@ cc_library(
     srcs = ["async_task_tracker.cc"],
     hdrs = ["async_task_tracker.h"],
     deps = [
-        "//services/common/loggers:request_context_impl",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:source_location",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
 
@@ -251,4 +254,167 @@ cc_test(
         ":async_task_tracker",
         "@com_google_googletest//:gtest_main",
     ],
+)
+
+cc_library(
+    name = "file_util",
+    srcs = [
+        "file_util.cc",
+    ],
+    hdrs = [
+        "file_util.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "binary_http_utils",
+    hdrs = [
+        "binary_http_utils.h",
+    ],
+    deps = [
+        "@com_github_google_quiche//quiche:binary_http_unstable_api",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "binary_http_utils_test",
+    size = "small",
+    srcs = [
+        "binary_http_utils_test.cc",
+    ],
+    deps = [
+        ":binary_http_utils",
+        "@com_google_googletest//:gtest_main",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_grpc",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "auction_scope_util",
+    srcs = [
+        "auction_scope_util.cc",
+    ],
+    hdrs = [
+        "auction_scope_util.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "auction_scope_util_test",
+    srcs = [
+        "auction_scope_util_test.cc",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":auction_scope_util",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "oblivious_http_utils",
+    srcs = [
+        "oblivious_http_utils.cc",
+    ],
+    hdrs = [
+        "oblivious_http_utils.h",
+    ],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
+    deps = [
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "oblivious_http_utils_test",
+    size = "small",
+    srcs = [
+        "oblivious_http_utils_test.cc",
+    ],
+    deps = [
+        ":oblivious_http_utils",
+        "//services/common/test/utils:ohttp_test_utils",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@service_value_key_fledge_privacysandbox//public:constants",
+    ],
+)
+
+cc_library(
+    name = "hpke_utils",
+    srcs = ["hpke_utils.cc"],
+    hdrs = [
+        "hpke_utils.h",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "//services/common/constants:user_error_strings",
+        "//services/common/encryption:crypto_client_factory",
+        "//services/common/encryption:crypto_client_wrapper_interface",
+        "//services/common/encryption:key_fetcher_factory",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+    ],
+)
+
+cc_test(
+    name = "hpke_utils_test",
+    size = "small",
+    srcs = [
+        "hpke_utils_test.cc",
+    ],
+    deps = [
+        ":hpke_utils",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:random",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+    ],
+)
+
+genrule(
+    name = "generate_build_info",
+    outs = ["build_info.cc"],
+    cmd = "$(execpath :generate_build_info_cc) >$@",
+    # Undocumented attr to depend on workspace status files.
+    # Used here because generate_build_info_cc depends on the workspace status files.
+    stamp = 1,
+    tools = [":generate_build_info_cc"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "build_info",
+    srcs = ["build_info.cc"],
+    hdrs = ["build_info.h"],
+    visibility = ["//services:__subpackages__"],
+    deps = ["@com_google_absl//absl/strings"],
 )

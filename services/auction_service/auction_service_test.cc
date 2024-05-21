@@ -14,13 +14,13 @@
 
 #include "services/auction_service/auction_service.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <grpcpp/server.h>
-
-#include <gmock/gmock-matchers.h>
 
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
@@ -102,7 +102,7 @@ class AuctionServiceTest : public ::testing::Test {
     metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
-    log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::PS_VLOG_IS_ON(0, 10);
 
     request_.set_key_id(kKeyId);
   }
@@ -165,12 +165,11 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
         init_pending.DecrementCount();
         return mock;
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
@@ -215,7 +214,7 @@ TEST_F(AuctionServiceTest, SendsEmptyResponseIfNoAdIsDesirable) {
       .WillRepeatedly([](std::vector<DispatchRequest>& batch,
                          BatchDispatchDoneCallback done_callback) {
         std::vector<absl::StatusOr<DispatchResponse>> responses;
-        for (const auto request : batch) {
+        for (const auto& request : batch) {
           if (std::strcmp(request.handler_name.c_str(),
                           kReportingDispatchHandlerFunctionName) != 0) {
             responses.emplace_back(DispatchResponse{
@@ -248,12 +247,11 @@ TEST_F(AuctionServiceTest, SendsEmptyResponseIfNoAdIsDesirable) {
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
@@ -290,12 +288,11 @@ TEST_F(AuctionServiceTest, RomaExecutionErrorIsPropagated) {
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
@@ -328,12 +325,11 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
@@ -363,12 +359,11 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.encryption_enabled = true;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client_), auction_service_runtime_config);
@@ -443,14 +438,13 @@ TEST_F(AuctionServiceTest, ScoresProtectedAppSignals) {
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
-  config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
+
   config_client_.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /* public_key_fetcher=*/nullptr);
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
-      std::move(crypto_client_),
-      {.encryption_enabled = true, .enable_protected_app_signals = true});
+      std::move(crypto_client_), {.enable_protected_app_signals = true});
 
   LocalAuctionStartResult result = StartLocalAuction(&service);
   std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);

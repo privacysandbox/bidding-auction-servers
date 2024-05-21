@@ -95,13 +95,6 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     // Copy from IG from device.
     CopyIGFromDeviceToIGForBidding(interest_group_from_device,
                                    mutable_interest_group_for_bidding);
-
-    // Copy User Bidding signals from Side Load or KV Server.
-    if (auto it = bidding_signals->ca_user_signals_map.find(
-            &interest_group_from_device);
-        it != bidding_signals->ca_user_signals_map.end()) {
-      mutable_interest_group_for_bidding->set_user_bidding_signals(it->second);
-    }
   }
 
   // 2. Set Auction Signals.
@@ -164,6 +157,13 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   *generate_bids_raw_request->mutable_protected_app_signals() =
       raw_request.protected_app_signals_buyer_input().protected_app_signals();
+  if (raw_request.protected_app_signals_buyer_input()
+          .has_contextual_protected_app_signals_data()) {
+    *generate_bids_raw_request
+         ->mutable_contextual_protected_app_signals_data() =
+        raw_request.protected_app_signals_buyer_input()
+            .contextual_protected_app_signals_data();
+  }
 
   generate_bids_raw_request->set_seller(raw_request.seller());
 

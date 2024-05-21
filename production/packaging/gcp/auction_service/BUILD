@@ -30,7 +30,6 @@ load("//:config.bzl", "LOG_ENV_VARS")
 pkg_files(
     name = "server_executables",
     srcs = [
-        "bin/init_server_basic",
         "//services/auction_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
@@ -54,6 +53,11 @@ pkg_tar(
 container_layer(
     name = "server_binary_layer",
     directory = "/",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
     tars = [
         ":server_binaries_tar",
     ],
@@ -66,14 +70,18 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "/server/bin/init_server_basic",
+        "--init_config_client=true",
     ],
-    entrypoint = ["sh"],
+    entrypoint = [
+        "/server/bin/server",
+    ],
     env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
     ] + select({
+        "//:e2e_build": [
+        ],
         "//conditions:default": [],
     }),
     ports = ["50051"],

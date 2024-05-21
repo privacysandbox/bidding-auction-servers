@@ -92,6 +92,9 @@ class GenerateBidsReactor
   // Impacts the creation of generateBid input params and
   // parsing of generateBid output.
   AuctionScope auction_scope_;
+
+  // UDF version to use for this request.
+  const std::string& protected_auction_generate_bid_version_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

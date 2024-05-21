@@ -20,8 +20,9 @@
 #include <memory>
 #include <vector>
 
+#include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
-#include "src/cpp/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
+#include "src/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -50,6 +51,9 @@ ParseCloudPlatformPublicKeysMap(absl::string_view public_keys_endpoint_map_str);
 // Creates an instance of PublicKeyFetcherInterface.
 absl::StatusOr<std::unique_ptr<server_common::PublicKeyFetcherInterface>>
 CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client);
+
+server_common::CloudPlatform ProtoCloudPlatformToScpCloudPlatform(
+    EncryptionCloudPlatform cloud_platform);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

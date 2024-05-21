@@ -15,13 +15,15 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/numbers.h"
 #include "absl/synchronization/notification.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/test/utils/ohttp_utils.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_utils.h"
+#include "src/encryption/key_fetcher/key_fetcher_utils.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
 #include "tools/secure_invoke/secure_invoke_lib.h"
@@ -39,9 +41,6 @@ using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // Set log level to 0 and to be shown on terminal.
-  google::LogToStderr();
-  google::SetStderrLogging(google::GLOG_INFO);
-  google::InitGoogleLogging(argv[0]);
   std::string input_file = absl::GetFlag(FLAGS_input_file);
   std::string json_input_str = absl::GetFlag(FLAGS_json_input_str);
   std::string op = absl::GetFlag(FLAGS_op);
@@ -76,13 +75,18 @@ int main(int argc, char** argv) {
       << "Failed to unescape public key.";
   std::string public_key_hex = absl::BytesToHexString(public_key_bytes);
 
+  std::string private_key_bytes;
+  CHECK(absl::Base64Unescape(absl::GetFlag(FLAGS_private_key),
+                             &private_key_bytes))
+      << "Failed to unescape private key.";
+  std::string private_key_hex = absl::BytesToHexString(private_key_bytes);
+
   std::string id =
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
-  uint8_t key_id = stoi(id);
   const HpkeKeyset keyset = {
-      .key_id = key_id,
-      .public_key = public_key_hex,
-      .private_key = "unused",
+      .public_key = std::move(public_key_hex),
+      .private_key = std::move(private_key_hex),
+      .key_id = static_cast<uint8_t>(stoi(id)),
   };
 
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);

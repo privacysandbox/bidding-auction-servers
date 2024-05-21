@@ -15,12 +15,13 @@
 
 #include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
-#include <gmock/gmock-matchers.h>
 #include <include/gmock/gmock-actions.h>
 
 #include "absl/functional/any_invocable.h"
@@ -54,8 +55,7 @@ void SetupBiddingProviderMock(
           absl::Duration timeout) {
         GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {
-          std::move(on_done)(std::move(server_error_to_return.value()),
-                             get_byte_size);
+          std::move(on_done)(*server_error_to_return, get_byte_size);
         } else {
           auto bidding_signals = std::make_unique<BiddingSignals>();
           if (bidding_signals_value.has_value()) {

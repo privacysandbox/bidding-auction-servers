@@ -8,8 +8,8 @@
     "interestGroups": {
       "patternProperties": {
         "^https://": {
-            "type": "string",
-            "description": "CBOR encoded list of interest groups compressed using the method described in `compression`."
+          "type": "string",
+          "description": "CBOR encoded list of interest groups compressed using the method described in `compression`."
         }
       },
       "additionalProperties": false
@@ -20,7 +20,5 @@
     },
     "enableDebugReporting": { "type": "boolean" }
   },
-  "required": [
-    "version", "interestGroups", "publisher", "generationId"
-  ]
+  "required": ["version", "interestGroups", "publisher", "generationId"]
 }

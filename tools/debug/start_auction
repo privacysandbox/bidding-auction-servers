@@ -29,7 +29,6 @@ export SERVER_START_CMD=$(cat << END
 --js_worker_queue_len=100 \
 --test_mode="true" \
 --telemetry_config="mode: EXPERIMENT" \
---enable_encryption="true" \
 --roma_timeout_ms="120000" \
 --enable_report_win_input_noising="false" \
 --seller_code_fetch_config='{
@@ -47,6 +46,7 @@ export SERVER_START_CMD=$(cat << END
 --enable_otel_based_logging="false" \
 --consented_debug_token="" \
 --ps_verbosity=2 \
+--enable_protected_audience="true" \
 --enable_protected_app_signals="false" && exit
 END
 )

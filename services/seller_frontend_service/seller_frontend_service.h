@@ -33,9 +33,9 @@
 #include "services/seller_frontend_service/providers/scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/util/config_param_parser.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -47,6 +47,7 @@ struct ClientRegistry {
   const ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>&
       buyer_factory;
   server_common::KeyFetcherManagerInterface& key_fetcher_manager_;
+  CryptoClientWrapperInterface* const crypto_client_ptr_;
   std::unique_ptr<AsyncReporter> reporting;
 };
 
@@ -82,9 +83,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 .compression = config_client_.GetBooleanParameter(
                     ENABLE_AUCTION_COMPRESSION),
                 .secure_client =
-                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS),
-                .encryption_enabled =
-                    config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)})),
+                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS)})),
         buyer_factory_([this]() {
           absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
               ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(
@@ -97,13 +96,14 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                   .compression = config_client_.GetBooleanParameter(
                       ENABLE_BUYER_COMPRESSION),
                   .secure_client =
-                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS),
-                  .encryption_enabled =
-                      config_client_.GetBooleanParameter(ENABLE_ENCRYPTION)});
+                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS)});
         }()),
         clients_{
-            *scoring_signals_async_provider_, *scoring_, *buyer_factory_,
+            *scoring_signals_async_provider_,
+            *scoring_,
+            *buyer_factory_,
             *key_fetcher_manager_,
+            crypto_client_.get(),
             std::make_unique<AsyncReporter>(
                 std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))} {
   }

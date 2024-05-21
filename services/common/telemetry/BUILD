@@ -28,7 +28,8 @@ cc_library(
         "//services/common/clients/config:config_client_util",
         "//services/common/constants:common_service_flags",
         "//services/common/metric:server_definition",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry",
+        "//services/common/util:build_info",
+        "@google_privacysandbox_servers_common//src/telemetry",
         "@io_opentelemetry_cpp//sdk/src/resource",
     ],
 )

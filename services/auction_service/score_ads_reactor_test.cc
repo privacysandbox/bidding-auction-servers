@@ -40,23 +40,95 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
-#include "src/cpp/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/cpp/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
+#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr char kSecret[] = "secret";
-constexpr char kKeyId[] = "keyid";
 constexpr char kTestReportingResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
+constexpr char kTestComponentReportingWinResponseJson[] =
+    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com&bid=2.10&modifiedBid=1.0","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
+"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com&bid=2.10&modifiedBid=1.0","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
 constexpr char kTestReportingWinResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
 "reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
 constexpr int kTestDesirability = 5;
 constexpr char kTestConsentToken[] = "testConsentedToken";
 constexpr char kTestEgressFeatures[] = "testEgressFeatures";
-constexpr char kTestComponentSeller[] = "testComponentSeller";
+constexpr char kTestComponentReportResultUrl[] =
+    "http://reportResultUrl.com&bid=2.10&modifiedBid=1.0";
+constexpr char kTestComponentReportWinUrl[] =
+    "http://reportWinUrl.com&bid=2.10&modifiedBid=1.0";
+constexpr char kUsdIsoCode[] = "USD";
+constexpr char kEuroIsoCode[] = "EUR";
+constexpr char kFooComponentsRenderUrl[] =
+    "fooMeOnceAds.com/render_ad?id=hasFooComp";
+
+constexpr char kOneSellerSimpleAdScoreTemplate[] = R"(
+      {
+      "response" : {
+        "desirability" : $0,
+        "incomingBidInSellerCurrency": $1,
+        "allowComponentAuction" : $2
+      },
+      "logs":[]
+      }
+)";
+
+constexpr char kComponentWithCurrencyAdScoreTemplate[] = R"(
+      {
+      "response": {
+        "ad": "adMetadata",
+        "desirability": $0,
+        "bid": $1,
+        "bidCurrency": "$2",
+        "incomingBidInSellerCurrency": $3,
+        "allowComponentAuction": $4
+      },
+      "logs":[]
+      }
+)";
+
+constexpr char kComponentWithCurrencyButNoIncomingAdScoreTemplate[] = R"(
+      {
+      "response": {
+        "ad": "adMetadata",
+        "desirability": $0,
+        "bid": $1,
+        "bidCurrency": "$2",
+        "allowComponentAuction": $3
+      },
+      "logs":[]
+      }
+)";
+
+constexpr char kComponentNoCurrencyAdScoreTemplate[] = R"(
+      {
+      "response" : {
+        "ad": "adMetadata",
+        "desirability" : $0,
+        "bid" : $1,
+        "incomingBidInSellerCurrency": $2,
+        "allowComponentAuction": $3
+      },
+      "logs":[]
+      }
+)";
+
+constexpr char kComponentWithCurrencyAdScore[] = R"(
+      {
+      "response" : {
+        "ad": {"key1":"adMetadata"},
+        "desirability" : 0.1,
+        "bid" : 0.1,
+        "bidCurrency": "USD",
+        "allowComponentAuction" : true
+      },
+      "logs":[]
+      }
+)";
 
 using ::google::protobuf::TextFormat;
 using ::testing::AnyNumber;
@@ -91,11 +163,11 @@ void GetTestAdWithBidFoo(AdWithBidMetadata& foo) {
 
 void GetTestAdWithBidSameComponentAsFoo(AdWithBidMetadata& foo) {
   int number_of_component_ads = 3;
-  std::string render_url = "fooMeOnceAds.com/render_ad?id=hasFooComp";
   foo.mutable_ad()->mutable_struct_value()->MergeFrom(
-      MakeAnAd(render_url, "arbitraryMetadataKey", 2));
-  foo.set_render(render_url);
+      MakeAnAd(kFooComponentsRenderUrl, "arbitraryMetadataKey", 2));
+  foo.set_render(kFooComponentsRenderUrl);
   foo.set_bid(2.10);
+  foo.set_bid_currency(kUsdIsoCode);
   foo.set_interest_group_name("foo");
   foo.set_interest_group_owner("https://fooAds.com");
   for (int i = 0; i < number_of_component_ads; i++) {
@@ -118,6 +190,7 @@ void GetTestAdWithBidBar(AdWithBidMetadata& bar) {
 
   bar.set_render(render_url);
   bar.set_bid(2);
+  bar.set_bid_currency(kUsdIsoCode);
   bar.set_interest_group_name("ig_bar");
   bar.set_interest_group_owner(kInterestGroupOwnerOfBarBidder);
   for (int i = 0; i < number_of_component_ads; i++) {
@@ -217,38 +290,17 @@ constexpr char kTestProtectedAppScoringSignals[] = R"json(
 )json";
 constexpr char kTestPublisherHostname[] = "publisher_hostname";
 
-absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
-                         BatchDispatchDoneCallback done_callback,
-                         std::vector<std::string> json,
-                         const bool call_wrapper_method = false,
-                         const bool enable_adtech_code_logging = false) {
-  std::vector<absl::StatusOr<DispatchResponse>> responses;
-  auto response_iterator = json.begin();
-
-  for (const auto& request : batch) {
-    if (std::strcmp(request.handler_name.c_str(),
-                    kReportingDispatchHandlerFunctionName) != 0) {
-      EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
-    }
-    DispatchResponse dispatch_response = {};
-    dispatch_response.resp = *response_iterator++;
-    dispatch_response.id = request.id;
-    responses.emplace_back(dispatch_response);
-  }
-  done_callback(responses);
-  return absl::OkStatus();
-}
-
 namespace {
 
-void BuildRawRequest(const std::vector<AdWithBidMetadata> ads_with_bids_to_add,
+void BuildRawRequest(std::vector<AdWithBidMetadata> ads_with_bids_to_add,
                      absl::string_view seller_signals,
                      absl::string_view auction_signals,
                      absl::string_view scoring_signals,
                      absl::string_view publisher_hostname, RawRequest& output,
                      const bool enable_debug_reporting = false,
                      const bool enable_adtech_code_logging = false,
-                     absl::string_view top_level_seller = "") {
+                     absl::string_view top_level_seller = "",
+                     absl::string_view seller_currency = "") {
   for (int i = 0; i < ads_with_bids_to_add.size(); i++) {
     output.mutable_per_buyer_signals()->try_emplace(
         ads_with_bids_to_add[i].interest_group_owner(), kTestBuyerSignals);
@@ -259,6 +311,9 @@ void BuildRawRequest(const std::vector<AdWithBidMetadata> ads_with_bids_to_add,
   output.set_scoring_signals(scoring_signals);
   output.set_publisher_hostname(publisher_hostname);
   output.set_enable_debug_reporting(enable_debug_reporting);
+  if (!seller_currency.empty()) {
+    output.set_seller_currency(seller_currency);
+  }
   if (!top_level_seller.empty()) {
     output.set_top_level_seller(top_level_seller);
   }
@@ -271,11 +326,13 @@ void BuildRawRequestForComponentAuction(
     std::vector<AdWithBidMetadata> ads_with_bids_to_add,
     absl::string_view seller_signals, absl::string_view auction_signals,
     absl::string_view scoring_signals, absl::string_view publisher_hostname,
-    RawRequest& output, const bool enable_debug_reporting = false) {
+    RawRequest& output, const bool enable_debug_reporting = false,
+    absl::string_view seller_currency = "") {
   output.set_top_level_seller(kTestTopLevelSeller);
-  BuildRawRequest(ads_with_bids_to_add, seller_signals, auction_signals,
-                  scoring_signals, publisher_hostname, output,
-                  enable_debug_reporting);
+  BuildRawRequest(std::move(ads_with_bids_to_add), seller_signals,
+                  auction_signals, scoring_signals, publisher_hostname, output,
+                  enable_debug_reporting, /*enable_adtech_code_logging=*/false,
+                  /*top_level_seller=*/"", seller_currency);
 }
 
 }  // namespace
@@ -307,7 +364,7 @@ void CheckInputCorrectForBar(std::vector<std::shared_ptr<std::string>> input) {
       R"JSON({"adComponentRenderUrls":{"adComponent.com/bar_components/id=0":["bar0"],"adComponent.com/bar_components/id=1":["bar1"],"adComponent.com/bar_components/id=2":["bar2"]},"renderUrl":{"barStandardAds.com/render_ad?id=bar":["barScoringSignalValue1","barScoringSignalValue2"]}})JSON");
   EXPECT_EQ(
       *input[4],
-      R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/bar_components/id=0","adComponent.com/bar_components/id=1","adComponent.com/bar_components/id=2"],"renderUrl":"barStandardAds.com/render_ad?id=bar"})JSON");
+      R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/bar_components/id=0","adComponent.com/bar_components/id=1","adComponent.com/bar_components/id=2"],"bidCurrency":"USD","renderUrl":"barStandardAds.com/render_ad?id=bar"})JSON");
   EXPECT_EQ(*input[5], "{}");
 }
 
@@ -323,7 +380,7 @@ void CheckInputCorrectForAdWithFooComp(
       R"JSON({"adComponentRenderUrls":{"adComponent.com/foo_components/id=0":["foo0"],"adComponent.com/foo_components/id=1":["foo1"],"adComponent.com/foo_components/id=2":["foo2"]},"renderUrl":{"fooMeOnceAds.com/render_ad?id=hasFooComp":[1689,1868]}})JSON");
   EXPECT_EQ(
       *input[4],
-      R"JSON({"interestGroupOwner":"https://fooAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/foo_components/id=0","adComponent.com/foo_components/id=1","adComponent.com/foo_components/id=2"],"renderUrl":"fooMeOnceAds.com/render_ad?id=hasFooComp"})JSON");
+      R"JSON({"interestGroupOwner":"https://fooAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/foo_components/id=0","adComponent.com/foo_components/id=1","adComponent.com/foo_components/id=2"],"bidCurrency":"USD","renderUrl":"fooMeOnceAds.com/render_ad?id=hasFooComp"})JSON");
   EXPECT_EQ(*input[5], "{}");
 }
 
@@ -376,46 +433,15 @@ void SetupMockCryptoClientWrapper(Request request,
 
 class ScoreAdsReactorTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    server_common::telemetry::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
-        ->Get(&request_);
-  }
+  void SetUp() override {}
   ScoreAdsResponse ExecuteScoreAds(
-      RawRequest& raw_request, MockCodeDispatchClient& dispatcher,
-      AuctionServiceRuntimeConfig runtime_config,
+      const RawRequest& raw_request, MockCodeDispatchClient& dispatcher,
+      const AuctionServiceRuntimeConfig& runtime_config,
       bool enable_report_result_url_generation = false) {
-    ScoreAdsResponse response;
-    *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
-    std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
-        std::make_unique<ScoreAdsNoOpLogger>();
-
-    // Mock Reporting Client.
-    std::unique_ptr<MockAsyncReporter> async_reporter =
-        std::make_unique<MockAsyncReporter>(
-            std::make_unique<MockHttpFetcherAsync>());
-    MockCryptoClientWrapper crypto_client;
-    SetupMockCryptoClientWrapper(raw_request, crypto_client);
-    TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
-    auto key_fetcher_manager = CreateKeyFetcherManager(
-        config_client, /* public_key_fetcher= */ nullptr);
-    runtime_config.encryption_enabled = true;
-    request_.set_key_id(kKeyId);
-    // The last parameter is a flag for whether to parse the Trusted Scoring
-    // Signals. It must be set to true for this test to pass.
-    ScoreAdsReactor reactor(dispatcher, &request_, &response,
-                            std::move(benchmarkingLogger),
-                            key_fetcher_manager.get(), &crypto_client,
-                            async_reporter.get(), runtime_config);
-    reactor.Execute();
-    return response;
+    ScoreAdsReactorTestHelper test_helper;
+    return test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config,
+                                       enable_report_result_url_generation);
   }
-
-  ScoreAdsRequest request_;
 };
 
 TEST_F(
@@ -428,7 +454,7 @@ TEST_F(
                    BatchDispatchDoneCallback done_callback) {
         EXPECT_EQ(batch.size(), 2);
         if (batch.size() == 2) {
-          if (batch.at(0).id == "fooMeOnceAds.com/render_ad?id=hasFooComp") {
+          if (batch.at(0).id == kFooComponentsRenderUrl) {
             CheckInputCorrectForAdWithFooComp(batch.at(0).input);
             CheckInputCorrectForFoo(batch.at(1).input);
           } else {
@@ -485,9 +511,8 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
-        for (auto request : batch) {
-          auto input = request.input;
-          CheckInputCorrectForFoo(input);
+        for (const auto& request : batch) {
+          CheckInputCorrectForFoo(request.input);
         }
         return absl::OkStatus();
       });
@@ -506,9 +531,8 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
-        for (auto request : batch) {
-          auto input = request.input;
-          CheckInputCorrectForBar(input);
+        for (const auto& request : batch) {
+          CheckInputCorrectForBar(request.input);
         }
         return absl::OkStatus();
       });
@@ -527,7 +551,7 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           auto input = request.input;
           EXPECT_EQ(*input[0],
                     R"JSON(["brisket","pulled_pork","smoked_chicken"])JSON");
@@ -559,7 +583,7 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           auto input = request.input;
           EXPECT_EQ(*input[0],
                     R"JSON(["brisket","pulled_pork","smoked_chicken"])JSON");
@@ -650,12 +674,18 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
+  // Setting a seller currency requires correctly populating
+  // incomingBidInSellerCurrency.
   BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
-                  kTestScoringSignals, kTestPublisherHostname, raw_request);
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  /*enable_debug_reporting=*/false,
+                  /*enable_adtech_code_logging=*/false,
+                  /*top_level_seller=*/"",
+                  /*seller_currency=*/kUsdIsoCode);
   RawRequest raw_request_copy = raw_request;
 
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
-  for (auto ad : raw_request_copy.ad_bids()) {
+  for (const auto& ad : raw_request_copy.ad_bids()) {
     // Make sure id is tracked to render urls to stay unique.
     id_to_ad.insert_or_assign(ad.render(), ad);
   }
@@ -663,30 +693,27 @@ TEST_F(ScoreAdsReactorTest,
 
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
-                       &id_to_ad](std::vector<DispatchRequest>& batch,
-                                  BatchDispatchDoneCallback done_callback) {
+                       &id_to_ad, &foo,
+                       &bar](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback done_callback) {
         ABSL_LOG(INFO) << "Batch executing";
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
           ++current_score;
           score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
           ABSL_LOG(INFO) << "Successfully accessed id ad mapping for "
                          << request.id;
           score_logic.push_back(absl::Substitute(
-              R"(
-      {
-      "response" : {
-        "desirability" : $0,
-        "allowComponentAuction" : $1
-      },
-      "logs":[]
-      }
-)",
-              current_score, (allowComponentAuction) ? "true" : "false"));
+              kOneSellerSimpleAdScoreTemplate, current_score,
+              // Both bar.currency and sellerCurrency are USD,
+              // so incomingBidInSellerCurrency must be unchanged,
+              // or the bid will be rejected.
+              (request.id == foo.render()) ? foo.bid() : bar.bid(),
+              (allowComponentAuction) ? "true" : "false"));
         }
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic));
@@ -713,11 +740,13 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_EQ(scored_ad.interest_group_owner(),
             original_ad_with_bid.interest_group_owner());
   EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
+  // Not a component auction, bid should not be set.
+  EXPECT_FLOAT_EQ(scored_ad.bid(), 0.0f);
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
   // Since in the above test we are assuming not component auctions, verify.
   EXPECT_FALSE(scored_ad.allow_component_auction());
-  EXPECT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
+  ASSERT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 1);
   EXPECT_EQ(scored_ad.ad_type(), AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
   ABSL_LOG(INFO)
       << "Accessing mapping for ig_owner_highest_scoring_other_bids_map";
@@ -729,6 +758,107 @@ TEST_F(ScoreAdsReactorTest,
             2);
   ABSL_LOG(INFO)
       << "Accessed mapping for ig_owner_highest_scoring_other_bids_map";
+}
+
+TEST_F(ScoreAdsReactorTest,
+       RejectsBidsForFailureToMatchIncomingBidInSellerCurrency) {
+  MockCodeDispatchClient dispatcher;
+  const int low_score = 1, high_score = 10;
+  bool allowComponentAuction = false;
+  RawRequest raw_request;
+  // foo_two and bar are already in USD.
+  AdWithBidMetadata foo_two, bar;
+  GetTestAdWithBidSameComponentAsFoo(foo_two);
+  GetTestAdWithBidBar(bar);
+  // Setting seller_currency to USD requires the converting of all bids to USD.
+  BuildRawRequest({foo_two, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  /*enable_debug_reporting=*/false,
+                  /*enable_adtech_code_logging=*/false,
+                  /*top_level_seller=*/"",
+                  /*seller_currency=*/kUsdIsoCode);
+  RawRequest raw_request_copy = raw_request;
+
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&allowComponentAuction, &score_to_ad, &id_to_ad,
+                       &foo_two,
+                       &bar](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback done_callback) {
+        ABSL_LOG(INFO) << "Batch executing";
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> json_ad_scores;
+        for (const auto& request : batch) {
+          ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
+          score_to_ad.insert_or_assign(
+              (request.id == foo_two.render()) ? low_score : high_score,
+              id_to_ad.at(request.id));
+          ABSL_LOG(INFO) << "Successfully accessed id ad mapping for "
+                         << request.id;
+          json_ad_scores.push_back(absl::Substitute(
+              kOneSellerSimpleAdScoreTemplate,
+              // Explicitly setting foo_two to the lower score and bar to the
+              // higher should make bar win.... but see below!
+              (request.id == foo_two.render()) ? low_score : high_score,
+              // Both foo_two and bar have a bid_currency of USD, and
+              // sellerCurrency is USD, so incomingBidInSellerCurrency must be
+              // either A) unset or B) unchanged, else the bid will be rejected.
+              // Setting to bar.bid plus 1689 will thus cause rejection (as it
+              // does not match bar.bid) whereas setting to 0 is acceptable.
+              // foo_two has the lower bid but will win
+              // because bar will be rejected for modified bid currency.
+              (request.id == foo_two.render()) ? 0.0f : bar.bid() + 1689,
+              (allowComponentAuction) ? "true" : "false"));
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(json_ad_scores));
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  ASSERT_TRUE(raw_response.has_ad_score());
+  auto scored_ad = raw_response.ad_score();
+
+  ABSL_LOG(INFO) << "Accessing score to ad mapping for "
+                 << scored_ad.desirability();
+  auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
+  ABSL_LOG(INFO) << "Accessed score to ad mapping for "
+                 << scored_ad.desirability();
+
+  // We expect foo_two to win the auction even though it is explicitly set to
+  // the lower bid. This is because we modified the incomingBidInSellerCurrency
+  // on bar, but just didn't set it.
+  EXPECT_EQ(scored_ad.render(), kFooComponentsRenderUrl);
+  EXPECT_EQ(scored_ad.buyer_bid(), foo_two.bid());
+
+  EXPECT_EQ(scored_ad.component_renders_size(), 3);
+  EXPECT_EQ(scored_ad.component_renders().size(),
+            original_ad_with_bid.ad_components().size());
+  EXPECT_EQ(scored_ad.interest_group_name(),
+            original_ad_with_bid.interest_group_name());
+  EXPECT_EQ(scored_ad.interest_group_owner(),
+            original_ad_with_bid.interest_group_owner());
+  EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
+  // Not a component auction, bid should not be set.
+  EXPECT_FLOAT_EQ(scored_ad.bid(), 0.0f);
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Since in the above test we are assuming not component auctions, verify.
+  EXPECT_FALSE(scored_ad.allow_component_auction());
+  // The other bid should have been straighr-up rejected for illegally modifying
+  // the incomingBidInSellerCurrency.
+  ASSERT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 0);
+  EXPECT_EQ(scored_ad.ad_type(), AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -745,7 +875,7 @@ TEST_F(ScoreAdsReactorTest,
   RawRequest raw_request_copy = raw_request;
 
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
-  for (auto ad : raw_request_copy.ad_bids()) {
+  for (const auto& ad : raw_request_copy.ad_bids()) {
     // Make sure id is tracked to render urls to stay unique.
     id_to_ad.insert_or_assign(ad.render(), ad);
   }
@@ -759,7 +889,7 @@ TEST_F(ScoreAdsReactorTest,
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
           score_logic.push_back(absl::Substitute(
               R"(
@@ -839,12 +969,14 @@ TEST_F(ScoreAdsReactorTest,
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
-  BuildRawRequestForComponentAuction({foo, bar}, kTestSellerSignals,
-                                     kTestAuctionSignals, kTestScoringSignals,
-                                     kTestPublisherHostname, raw_request);
+  // Currency checking will take place; these two match.
+  BuildRawRequestForComponentAuction(
+      {foo, bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      /*enable_debug_reporting=*/false, kUsdIsoCode);
   RawRequest raw_request_copy = raw_request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
-  for (auto ad : raw_request_copy.ad_bids()) {
+  for (const auto& ad : raw_request_copy.ad_bids()) {
     // Make sure id is tracked to render urls to stay unique.
     id_to_ad.insert_or_assign(ad.render(), ad);
   }
@@ -858,21 +990,11 @@ TEST_F(ScoreAdsReactorTest,
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
           score_logic.push_back(absl::Substitute(
-              R"(
-      {
-      "response" : {
-        "ad": "adMetadata",
-        "desirability" : $0,
-        "bid" : $1,
-        "allowComponentAuction" : $2
-      },
-      "logs":[]
-      }
-)",
-              current_score++, 1 + (std::rand() % 20),
+              kComponentWithCurrencyAdScoreTemplate, current_score++,
+              1 + (std::rand() % 20), kUsdIsoCode, 3,
               (allowComponentAuction) ? "true" : "false"));
         }
         return FakeExecute(batch, std::move(done_callback),
@@ -889,6 +1011,8 @@ TEST_F(ScoreAdsReactorTest,
   // The next three of these are all taken from the ad_with_bid.
   EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
   EXPECT_EQ(scored_ad.component_renders_size(), 3);
+  EXPECT_EQ(scored_ad.bid_currency(), kUsdIsoCode);
+  EXPECT_EQ(scored_ad.incoming_bid_in_seller_currency(), 3);
   EXPECT_EQ(scored_ad.component_renders().size(),
             original_ad_with_bid.ad_components().size());
   EXPECT_EQ(scored_ad.interest_group_name(),
@@ -899,8 +1023,463 @@ TEST_F(ScoreAdsReactorTest,
   // Since in the above test we are assuming component auctions, check that the
   // required fields for component auctions are set.
   EXPECT_TRUE(scored_ad.allow_component_auction());
-  EXPECT_EQ(scored_ad.ad_metadata(), "adMetadata");
+  EXPECT_EQ(scored_ad.ad_metadata(), "\"adMetadata\"");
   EXPECT_GT(scored_ad.bid(), std::numeric_limits<float>::min());
+}
+
+TEST_F(ScoreAdsReactorTest,
+       SetsCurrencyOnAdScorefromAdWithBidForComponentAuctionAndNoModifiedBid) {
+  MockCodeDispatchClient dispatcher;
+  // Desirability must be greater than 0 to count a winner.
+  // Initialize to 1 so first bit could win if it's the only bid.
+  int current_score = 1;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata bar;
+  // Bar's bid currency is USD
+  GetTestAdWithBidBar(bar);
+  // Currency checking will take place since seller_currency set.
+  // No modified bid will be set, so the original bid currency will be checked.
+  BuildRawRequestForComponentAuction(
+      {bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      /*enable_debug_reporting=*/false, kUsdIsoCode);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad,
+                       &bar](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(
+              absl::Substitute(kComponentNoCurrencyAdScoreTemplate,
+                               // NOLINTNEXTLINE
+                               /*desirability=*/current_score++,
+                               // This is set to 0 so the buyer's (original) bid
+                               // will be used. NOLINTNEXTLINE
+                               /*(modified) bid=*/0,
+                               // Since seller_currency is set to USD, and bar's
+                               // currency is USD, this needs to match the
+                               // original bid, else the AdScore will be
+                               // rejected. NOLINTNEXTLINE
+                               /*incomingBidInSellerCurrency=*/bar.bid(),
+                               (allowComponentAuction) ? "true" : "false"));
+          // Component auction and modified bid of 0 means
+          // device will receive the original bid.
+          // No explicitly set bid currency means that
+          // the original bid's currency must be used
+          // and will be set in the reactor here.
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
+  // All scored ads must have these next four fields present and set.
+  // The next three of these are all taken from the ad_with_bid.
+  EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
+  EXPECT_EQ(scored_ad.component_renders_size(), 3);
+  // Expect USD because original AdWithBid's currency is USD.
+  EXPECT_EQ(scored_ad.bid_currency(), kUsdIsoCode);
+  // Bar's bid was already in USD, and the seller currency is USD, so it must be
+  // bar.bid().
+  EXPECT_EQ(scored_ad.incoming_bid_in_seller_currency(), bar.bid());
+  EXPECT_EQ(scored_ad.component_renders().size(),
+            original_ad_with_bid.ad_components().size());
+  EXPECT_EQ(scored_ad.interest_group_name(),
+            original_ad_with_bid.interest_group_name());
+  EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Since in the above test we are assuming component auctions, check that the
+  // required fields for component auctions are set.
+  EXPECT_TRUE(scored_ad.allow_component_auction());
+  EXPECT_EQ(scored_ad.ad_metadata(), "\"adMetadata\"");
+  // Modified bid set to 0, so buyer_bid should be used.
+  EXPECT_EQ(scored_ad.bid(), bar.bid());
+}
+
+TEST_F(ScoreAdsReactorTest, BidRejectedForModifiedIncomingBidInSellerCurrency) {
+  MockCodeDispatchClient dispatcher;
+  // Desirability must be greater than 0 to count a winner.
+  // Initialize to 1 so first bit could win if it's the only bid.
+  int current_score = 1;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata bar;
+  // Bar's bid currency is USD
+  GetTestAdWithBidBar(bar);
+  // Seller currency set to USD.
+  // Currency checking will take place since seller_currency is set.
+  BuildRawRequestForComponentAuction(
+      {bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      /*enable_debug_reporting=*/false, kUsdIsoCode);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad,
+                       &bar](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(absl::Substitute(
+              kComponentNoCurrencyAdScoreTemplate,
+              // NOLINTNEXTLINE
+              /*desirability=*/current_score++,
+              // This is set to 0 so the buyer's (original) bid will be used.
+              /*(modified) bid=*/0,
+              // Since seller_currency is set to USD, and bar's currency is USD,
+              // this needs to match the original bid, else the AdScore
+              // will be rejected.
+              // We are deliberately setting it wrong so it is rejected.
+              // NOLINTNEXTLINE
+              /*incomingBidInSellerCurrency=*/bar.bid() + 1,
+              (allowComponentAuction) ? "true" : "false"));
+          // Component auction and modified bid of 0 means
+          // device will receive the original bid.
+          // No explicitly set bid currency means that
+          // the original bid's currency must be used
+          // and will be set in the reactor here.
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_FALSE(raw_response.has_ad_score());
+}
+
+TEST_F(ScoreAdsReactorTest,
+       BidWithMismatchedModifiedCurrencyAcceptedSinceModifiedBidNotSet) {
+  MockCodeDispatchClient dispatcher;
+  // Desirability must be greater than 0 to count a winner.
+  // Initialize to 1 so first bit could win if it's the only bid.
+  int current_score = 1;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata bar;
+  // Bar's bid currency is USD
+  GetTestAdWithBidBar(bar);
+  // Seller currency omitted so currency checking will NOT take place.
+  BuildRawRequestForComponentAuction(
+      {bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      /*enable_debug_reporting=*/false, kUsdIsoCode);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad,
+                       &bar](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(absl::Substitute(
+              kComponentWithCurrencyAdScoreTemplate,
+              // NOLINTNEXTLINE
+              /*desirability=*/current_score++,
+              // This is set to 0 so the buyer's (original) bid will be used.
+              /*(modified) bid=*/0,
+              // Setting this to EUR would normally fail currency checking,
+              // but in this case the adScore will pass
+              // because EUR will be IGNORED as it is the currency
+              // of the modified bid, and the modified bid was not set.
+              // NOLINTNEXTLINE
+              /*bidCurrency=*/kEuroIsoCode,
+              // Since seller_currency is set, this must match the original bid.
+              // NOLINTNEXTLINE
+              /*incomingBidInSellerCurrency=*/bar.bid(),
+              (allowComponentAuction) ? "true" : "false"));
+          // Component auction and modified bid of 0 means
+          // device will receive the original bid.
+          // No explicitly set bid currency means that
+          // the original bid's currency must be used
+          // and will be set in the reactor here.
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
+  // All scored ads must have these next four fields present and set.
+  // The next three of these are all taken from the ad_with_bid.
+  EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
+  EXPECT_EQ(scored_ad.component_renders_size(), 3);
+  // Expect USD because original AdWithBid's currency is USD.
+  EXPECT_EQ(scored_ad.bid_currency(), kUsdIsoCode);
+  // USD->USD means no translation.
+  EXPECT_EQ(scored_ad.incoming_bid_in_seller_currency(), bar.bid());
+  EXPECT_EQ(scored_ad.component_renders().size(),
+            original_ad_with_bid.ad_components().size());
+  EXPECT_EQ(scored_ad.interest_group_name(),
+            original_ad_with_bid.interest_group_name());
+  EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Since in the above test we are assuming component auctions, check that the
+  // required fields for component auctions are set.
+  EXPECT_TRUE(scored_ad.allow_component_auction());
+  EXPECT_EQ(scored_ad.ad_metadata(), "\"adMetadata\"");
+  // Modified bid not set, so buyer_bid used.
+  EXPECT_EQ(scored_ad.bid(), bar.bid());
+}
+
+TEST_F(ScoreAdsReactorTest, BidCurrencyCanBeModifiedWhenNoSellerCurrencySet) {
+  MockCodeDispatchClient dispatcher;
+  // Desirability must be greater than 0 to count a winner.
+  // Initialize to 1 so first bit could win if it's the only bid.
+  int current_score = 1;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata bar;
+  // Bar's bid currency is USD
+  GetTestAdWithBidBar(bar);
+  // Seller currency omitted so currency checking will NOT take place.
+  BuildRawRequestForComponentAuction({bar}, kTestSellerSignals,
+                                     kTestAuctionSignals, kTestScoringSignals,
+                                     kTestPublisherHostname, raw_request,
+                                     /*enable_debug_reporting=*/false);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad](std::vector<DispatchRequest>& batch,
+                                  BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(absl::Substitute(
+              kComponentWithCurrencyAdScoreTemplate,
+              // NOLINTNEXTLINE
+              /*desirability=*/current_score++,
+              // This is set to a positive and nonzero value so it will be used.
+              /*(modified) bid=*/1.689,
+              // Setting this to EUR is fine as no seller_currency is set.
+              // NOLINTNEXTLINE
+              /*bidCurrency=*/kEuroIsoCode,
+              // Since seller_currency is not set, this is ignored.
+              // NOLINTNEXTLINE
+              /*incomingBidInSellerCurrency=*/1.776,
+              (allowComponentAuction) ? "true" : "false"));
+          // Component auction and modified bid of 0 means
+          // device will receive the original bid.
+          // No explicitly set bid currency means that
+          // the original bid's currency must be used
+          // and will be set in the reactor here.
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  auto original_ad_with_bid = score_to_ad.at(scored_ad.desirability());
+  // All scored ads must have these next four fields present and set.
+  // The next three of these are all taken from the ad_with_bid.
+  EXPECT_EQ(scored_ad.render(), original_ad_with_bid.render());
+  EXPECT_EQ(scored_ad.component_renders_size(), 3);
+  EXPECT_FLOAT_EQ(scored_ad.bid(), 1.689);
+  // Expect EUR even though original AdWithBid's currency is USD, as this is
+  // what scoreAd() chose to set the currency to.
+  EXPECT_EQ(scored_ad.bid_currency(), kEuroIsoCode);
+  EXPECT_FLOAT_EQ(scored_ad.incoming_bid_in_seller_currency(), 1.776);
+  EXPECT_EQ(scored_ad.component_renders().size(),
+            original_ad_with_bid.ad_components().size());
+  EXPECT_EQ(scored_ad.interest_group_name(),
+            original_ad_with_bid.interest_group_name());
+  EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Since in the above test we are assuming component auctions, check that the
+  // required fields for component auctions are set.
+  EXPECT_TRUE(scored_ad.allow_component_auction());
+  EXPECT_EQ(scored_ad.ad_metadata(), "\"adMetadata\"");
+}
+
+/**
+ * What's going on in this test?
+ * - This is a component auction.
+ * - The bids coming out of scoreAd() have no set (modified) bid.
+ * - Therefore their original buyer bids will be used.
+ * - Therefore the currency of those original buyer bids will be used.
+ * - As with all component auctions, any adScore with a set currency must
+ * undergo currency checking with the seller_currency.
+ * - The seller currency set below is EUR.
+ * - The AdWithBid used is bar, which has a currency of USD.
+ * - So the original buyer_bid will be set on the AdScore as the modified bid,
+ * and the original buyer_bid_currency (USD) will be set on the AdScore.
+ * - USD is not EUR, so the AdScore will be rejected.
+ */
+TEST_F(ScoreAdsReactorTest,
+       AdScoreRejectedForMismatchedCurrencyWhenBuyerBidCurrencyUsed) {
+  MockCodeDispatchClient dispatcher;
+  // Desirability must be greater than 0 to count a winner.
+  // Initialize to 1 so first bit could win if it's the only bid.
+  int current_score = 1;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata bar;
+  // Bar's bid currency is USD
+  GetTestAdWithBidBar(bar);
+  // Currency checking will take place since seller_currency set.
+  // No modified bid will be set, so the original bid currency will be checked.
+  // This will cause a mismatch and a rejection.
+  BuildRawRequestForComponentAuction(
+      {bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      /*enable_debug_reporting=*/false, kEuroIsoCode);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad](std::vector<DispatchRequest>& batch,
+                                  BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(absl::Substitute(
+              kComponentNoCurrencyAdScoreTemplate,
+              // NOLINTNEXTLINE
+              /*desirability=*/current_score++,
+              // This is set to 0 so the buyer's (original) bid will be used.
+              /*(modified) bid=*/0,
+              // Since seller_currency is set to EUR, and bar's currency is USD,
+              // scoreAd() is responsible for setting this correctly,
+              // but B&A can't verify that it is set correctly.
+              // NOLINTNEXTLINE
+              /*incomingBidInSellerCurrency=*/1.776,
+              (allowComponentAuction) ? "true" : "false"));
+          // Component auction and modified bid of 0 means
+          // device will receive the original bid.
+          // No explicitly set bid currency means that
+          // the original bid's currency must be used
+          // and will be set in the reactor here.
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_FALSE(raw_response.has_ad_score());
+}
+
+TEST_F(ScoreAdsReactorTest, ModifiedBidOnScoreRejectedForCurrencyMismatch) {
+  MockCodeDispatchClient dispatcher;
+  int current_score = 0;
+  bool allowComponentAuction = true;
+  RawRequest raw_request;
+  AdWithBidMetadata foo, bar;
+  GetTestAdWithBidFoo(foo);
+  GetTestAdWithBidBar(bar);
+  BuildRawRequestForComponentAuction(
+      {foo, bar}, kTestSellerSignals, kTestAuctionSignals, kTestScoringSignals,
+      kTestPublisherHostname, raw_request,
+      // EUR will not match the AdScore.bid_currency of USD.
+      /*enable_debug_reporting=*/false, kEuroIsoCode);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad](std::vector<DispatchRequest>& batch,
+                                  BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        for (const auto& request : batch) {
+          score_to_ad.insert_or_assign(current_score, id_to_ad.at(request.id));
+          score_logic.push_back(absl::Substitute(
+              kComponentWithCurrencyButNoIncomingAdScoreTemplate,
+              // USD will not match the seller_currency of EUR.
+              current_score++, 1 + (std::rand() % 20), kUsdIsoCode,
+              (allowComponentAuction) ? "true" : "false"));
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), false);
+      });
+  auto response =
+      ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_FALSE(raw_response.has_ad_score());
 }
 
 TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
@@ -920,21 +1499,8 @@ TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
-        std::vector<std::string> score_logic;
-        for (const auto& request : batch) {
-          score_logic.push_back(
-              R"(
-      {
-      "response" : {
-        "ad": {"key1":"adMetadata"},
-        "desirability" : 0.1,
-        "bid" : 0.1,
-        "allowComponentAuction" : true
-      },
-      "logs":[]
-      }
-)");
-        }
+        std::vector<std::string> score_logic(batch.size(),
+                                             kComponentWithCurrencyAdScore);
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), false);
       });
@@ -951,41 +1517,47 @@ TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
 
 TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
   MockCodeDispatchClient dispatcher;
-  int current_score = 0;
   bool allowComponentAuction = false;
   RawRequest raw_request;
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
   GetTestAdWithBidBar(bar);
+  // Setting seller currency will not trigger currency checking as the AdScores
+  // have no currency.
   BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
                   kTestScoringSignals, kTestPublisherHostname, raw_request,
-                  true);
+                  /*enable_debug_reporting=*/true,
+                  /*enable_adtech_code_logging*/ false,
+                  /*top_level_seller=*/"",
+                  /*seller_currency=*/kUsdIsoCode);
 
   EXPECT_CALL(dispatcher, BatchExecute)
-      .WillRepeatedly([&current_score, &allowComponentAuction](
-                          std::vector<DispatchRequest>& batch,
-                          BatchDispatchDoneCallback done_callback) {
-        // Each original ad request (AdWithBidMetadata) is stored by its
-        // expected score and later compared to the output AdScore with the
-        // matching score.
-        std::vector<std::string> score_logic;
-        for (auto request : batch) {
-          score_logic.push_back(absl::StrCat(
-              "{\"response\":"
-              "{\"desirability\": ",
-              current_score++, ", \"bid\": ", 1 + (std::rand() % 20),
-              ", \"allowComponentAuction\": ",
-              ((allowComponentAuction) ? "true" : "false"),
-              ", \"debugReportUrls\": {",
-              "    \"auctionDebugLossUrl\" : "
-              "\"https://example-ssp.com/debugLoss\",",
-              "    \"auctionDebugWinUrl\" : "
-              "\"https://example-ssp.com/debugWin\"",
-              "}}, \"logs\":[]}"));
-        }
-        return FakeExecute(batch, std::move(done_callback),
-                           std::move(score_logic), true, true);
-      });
+      .WillRepeatedly(
+          [&allowComponentAuction](std::vector<DispatchRequest>& batch,
+                                   BatchDispatchDoneCallback done_callback) {
+            // Each original ad request (AdWithBidMetadata) is stored by its
+            // expected score and later compared to the output AdScore with the
+            // matching score.
+            std::vector<std::string> score_logic;
+            score_logic.reserve(batch.size());
+            for (int current_score = 0; current_score < batch.size();
+                 ++current_score) {
+              score_logic.push_back(absl::StrCat(
+                  "{\"response\":"
+                  "{\"desirability\": ",
+                  current_score, ", \"bid\": ", 1 + (std::rand() % 20),
+                  ", \"allowComponentAuction\": ",
+                  ((allowComponentAuction) ? "true" : "false"),
+                  ", \"debugReportUrls\": {",
+                  "    \"auctionDebugLossUrl\" : "
+                  "\"https://example-ssp.com/debugLoss\",",
+                  "    \"auctionDebugWinUrl\" : "
+                  "\"https://example-ssp.com/debugWin\"",
+                  "}}, \"logs\":[]}"));
+            }
+            return FakeExecute(batch, std::move(done_callback),
+                               std::move(score_logic), true, true);
+          });
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = true};
   auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
@@ -1189,7 +1761,7 @@ TEST_F(ScoreAdsReactorTest,
           if (std::strcmp(request.handler_name.c_str(),
                           kReportingDispatchHandlerFunctionName) == 0) {
             if (enable_report_result_win_generation) {
-              response.emplace_back(kTestReportingWinResponseJson);
+              response.emplace_back(kTestComponentReportingWinResponseJson);
             } else {
               response.emplace_back(kTestReportingResponseJson);
             }
@@ -1201,13 +1773,14 @@ TEST_F(ScoreAdsReactorTest,
               {
               "response": {
                 "desirability":%d,
+                "ad":"adMetadata",
                 "bid":%f,
                 "allowComponentAuction":%s
               },
               "logs":["test log"]
               }
               )JSON",
-                current_score++, 1 + (std::rand() % 20),
+                current_score++, 1.0,
                 ((allowComponentAuction) ? "true" : "false")));
           }
         }
@@ -1231,7 +1804,7 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .component_seller_reporting_urls()
                 .reporting_url(),
-            kTestReportResultUrl);
+            kTestComponentReportResultUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .component_seller_reporting_urls()
                 .interaction_reporting_urls()
@@ -1244,7 +1817,7 @@ TEST_F(ScoreAdsReactorTest,
             kTestInteractionUrl);
   EXPECT_EQ(
       scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
-      kTestReportWinUrl);
+      kTestComponentReportWinUrl);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .buyer_reporting_urls()
                 .interaction_reporting_urls()
@@ -1512,8 +2085,9 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
                   kTestScoringSignals, kTestPublisherHostname, raw_request);
 
   ScoreAdsResponse response;
-  request_.set_key_id("key_id");
-  request_.set_request_ciphertext("ciphertext");
+  ScoreAdsRequest request;
+  request.set_key_id("key_id");
+  request.set_request_ciphertext("ciphertext");
   std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
       std::make_unique<ScoreAdsNoOpLogger>();
 
@@ -1540,14 +2114,16 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   EXPECT_CALL(crypto_client, AeadEncrypt)
       .WillOnce(testing::Return(encrypt_response));
 
+  SetupTelemetryCheck(request);
+
   // Mock Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  AuctionServiceRuntimeConfig runtime_config = {.encryption_enabled = true};
-  ScoreAdsReactor reactor(dispatcher, &request_, &response,
+  ScoreAdsReactor reactor(dispatcher, &request, &response,
                           std::move(benchmarkingLogger), &key_fetcher_manager,
-                          &crypto_client, async_reporter.get(), runtime_config);
+                          &crypto_client, async_reporter.get(),
+                          AuctionServiceRuntimeConfig());
   reactor.Execute();
 
   EXPECT_FALSE(response.response_ciphertext().empty());
@@ -1581,7 +2157,7 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> score_logic;
-        for (auto request : batch) {
+        for (const auto& request : batch) {
           std::string rejection_reason = id_to_rejection_reason.at(request.id);
           score_logic.push_back(absl::Substitute(
               R"(
@@ -1634,10 +2210,8 @@ TEST_F(ScoreAdsReactorTest,
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
-        std::vector<std::string> score_logic;
-        for (const auto& request : batch) {
-          score_logic.push_back(
-              R"(
+        std::vector<std::string> score_logic(batch.size(),
+                                             R"(
                   {
                   "response" : {
                     "desirability" : 1000,
@@ -1647,7 +2221,6 @@ TEST_F(ScoreAdsReactorTest,
                   },
                   "logs":[]
                   })");
-        }
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), true);
       });
@@ -1676,13 +2249,11 @@ TEST_F(ScoreAdsReactorTest, ZeroDesirabilityAdsConsideredAsRejected) {
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
-        std::vector<std::string> score_logic;
-        for (const auto& request : batch) {
-          score_logic.push_back(R"(
+        std::vector<std::string> score_logic(batch.size(),
+                                             R"(
           {
             "response" : 0
           })");
-        }
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), true);
       });
@@ -1731,8 +2302,7 @@ TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
 }
 
 void BuildProtectedAppSignalsRawRequest(
-    const std::vector<ProtectedAppSignalsAdWithBidMetadata>&
-        ads_with_bids_to_add,
+    std::vector<ProtectedAppSignalsAdWithBidMetadata> ads_with_bids_to_add,
     const std::string& seller_signals, const std::string& auction_signals,
     const std::string& scoring_signals, const std::string& publisher_hostname,
     RawRequest& output, bool enable_debug_reporting = false) {
@@ -1756,6 +2326,7 @@ ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
       MakeAnAd(render_url, "arbitraryMetadataKey", 2));
   ad.set_render(render_url);
   ad.set_bid(bid);
+  ad.set_bid_currency(kUsdIsoCode);
   ad.set_owner(kTestProtectedAppSignalsAdOwner);
   ad.set_egress_features(kTestEgressFeatures);
   return ad;
@@ -1763,49 +2334,15 @@ ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
 
 class ScoreAdsReactorProtectedAppSignalsTest : public ScoreAdsReactorTest {
  protected:
-  void SetUp() override {
-    server_common::telemetry::TelemetryConfig config_proto;
-    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
-        ->Get(&request_);
-
-    config_client_.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
-    config_client_.SetFlagForTest(kTrue, TEST_MODE);
-
-    runtime_config_.encryption_enabled = true;
-    runtime_config_.enable_protected_app_signals = true;
-
-    key_fetcher_manager_ =
-        CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
-  }
+  void SetUp() override { runtime_config_.enable_protected_app_signals = true; }
 
   ScoreAdsResponse ExecuteScoreAds(const RawRequest& raw_request,
                                    MockCodeDispatchClient& dispatcher) {
-    SetupMockCryptoClientWrapper(raw_request, crypto_client_);
-    *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
-    request_.set_key_id(kKeyId);
-
-    ScoreAdsResponse response;
-    ScoreAdsReactor reactor(dispatcher, &request_, &response,
-                            std::move(benchmarkingLogger_),
-                            key_fetcher_manager_.get(), &crypto_client_,
-                            async_reporter_.get(), runtime_config_);
-    reactor.Execute();
-    return response;
+    return ScoreAdsReactorTest::ExecuteScoreAds(raw_request, dispatcher,
+                                                runtime_config_);
   }
 
-  ScoreAdsRequest request_;
   AuctionServiceRuntimeConfig runtime_config_;
-  TrustedServersConfigClient config_client_{{}};
-  std::unique_ptr<MockAsyncReporter> async_reporter_ =
-      std::make_unique<MockAsyncReporter>(
-          std::make_unique<MockHttpFetcherAsync>());
-  MockCryptoClientWrapper crypto_client_;
-  std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger_ =
-      std::make_unique<ScoreAdsNoOpLogger>();
-  std::unique_ptr<server_common::KeyFetcherManagerInterface>
-      key_fetcher_manager_;
 };
 
 TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
@@ -1830,8 +2367,9 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
         EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kScoringSignals)],
                   "{\"renderUrl\":{\"testAppAds.com/"
                   "render_ad?id=bar\":[\"test_signal\"]}}");
-        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kDeviceSignals)],
-                  "\"\"");
+        EXPECT_EQ(
+            *req.input[static_cast<int>(ScoreAdArgs::kBidMetadata)],
+            R"JSON({"interestGroupOwner":"https://PAS-Ad-Owner.com","topWindowHostname":"publisher_hostname","bidCurrency":"USD","renderUrl":"testAppAds.com/render_ad?id=bar"})JSON");
         EXPECT_EQ(
             *req.input[static_cast<int>(ScoreAdArgs::kDirectFromSellerSignals)],
             "{}");
@@ -1935,7 +2473,6 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
         });
   }
   runtime_config_ = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = enable_debug_reporting,
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =

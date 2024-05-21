@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "src/cpp/util/status_macro/examine_stack.h"
+#include "src/util/status_macro/examine_stack.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

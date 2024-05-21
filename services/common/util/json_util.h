@@ -30,9 +30,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-#define PS_ASSIGN_IF_PRESENT(dst, src, key, getter)           \
-  if (auto it = src.FindMember(key); it != src.MemberEnd()) { \
-    dst = it->value.getter();                                 \
+#define PS_ASSIGN_IF_PRESENT(dst, src, key, getter)               \
+  if (auto it = (src).FindMember(key); it != (src).MemberEnd()) { \
+    (dst) = it->value.getter();                                   \
   }
 
 inline constexpr char kMissingMember[] = "Missing %s in the JSON document";
@@ -123,7 +123,7 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
   return absl::InternalError("Unknown JSON to string serialization error");
 }
 
-// Retrieves the string value of the specified member in the document/Value.
+// Retrieves the string value of the specified member in the document.
 template <typename T>
 inline absl::StatusOr<std::string> GetStringMember(
     const T& document, const std::string& member_name,
@@ -147,6 +147,25 @@ inline absl::StatusOr<std::string> GetStringMember(
   }
 
   return result;
+}
+
+// Retrieves the array value of the specified member in the document.
+template <typename T>
+inline absl::StatusOr<rapidjson::GenericValue<rapidjson::UTF8<>>::ConstArray>
+GetArrayMember(const T& document, const std::string& member_name) {
+  auto it = document.FindMember(member_name.c_str());
+  if (it == document.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kMissingMember, member_name));
+  }
+
+  if (!it->value.IsArray()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kArrayType, it->value.GetType()));
+  }
+
+  return it->value.GetArray();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

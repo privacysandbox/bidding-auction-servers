@@ -32,23 +32,27 @@ class MockCryptoClientWrapper : public CryptoClientWrapperInterface {
  public:
   virtual ~MockCryptoClientWrapper() = default;
 
+  // NOLINTNEXTLINE
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse>,
               HpkeEncrypt,
               (const google::cmrt::sdk::public_key_service::v1::PublicKey&,
                const std::string&),
               (noexcept, override));
+  // NOLINTNEXTLINE
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse>,
               HpkeDecrypt,
               (const server_common::PrivateKey& private_key,
                const std::string& ciphertext),
               (noexcept, override));
+  // NOLINTNEXTLINE
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>,
               AeadEncrypt,
               (const std::string& plaintext_payload, const std::string& secret),
               (noexcept, override));
+  // NOLINTNEXTLINE
   MOCK_METHOD(absl::StatusOr<
                   google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>,
               AeadDecrypt,

@@ -32,7 +32,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "public/cpio/interface/cpio.h"
 #include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
@@ -47,10 +46,12 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
-#include "src/cpp/encryption/key_fetcher/src/key_fetcher_manager.h"
-#include "src/cpp/util/status_macro/status_macros.h"
+#include "src/encryption/key_fetcher/key_fetcher_manager.h"
+#include "src/public/cpio/interface/cpio.h"
+#include "src/util/rlimit_core_config.h"
+#include "src/util/status_macro/status_macros.h"
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -82,13 +83,12 @@ using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
-    std::string config_param_prefix) {
+    absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_enable_auction_service_benchmark,
                         ENABLE_AUCTION_SERVICE_BENCHMARK);
-  config_client.SetFlag(FLAGS_enable_encryption, ENABLE_ENCRYPTION);
   config_client.SetFlag(FLAGS_test_mode, TEST_MODE);
   config_client.SetFlag(FLAGS_roma_timeout_ms, ROMA_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_public_key_endpoint, PUBLIC_KEY_ENDPOINT);
@@ -140,7 +140,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  log::PS_VLOG_IS_ON(0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::PS_VLOG_IS_ON(
+      0, config_client.GetIntParameter(PS_VERBOSITY));
 
   PS_VLOG(1) << "Protected App Signals support enabled on the service: "
              << config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -193,11 +194,13 @@ absl::Status RunServer() {
   CHECK(!config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).empty())
       << "SELLER_CODE_FETCH_CONFIG is a mandatory flag.";
 
-  DispatchConfig config;
-  config.worker_queue_max_items =
-      config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
-  config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
-  auto dispatcher = V8Dispatcher(config);
+  auto dispatcher = V8Dispatcher([&config_client]() {
+    DispatchConfig config;
+    config.worker_queue_max_items =
+        config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
+    config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+    return config;
+  }());
   CodeDispatchClient client(dispatcher);
 
   PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
@@ -256,7 +259,7 @@ absl::Status RunServer() {
               << " and blobs count:" << ad_tech_code_blobs.size();
           // Collect code blobs for protected audience.
           auto buyer_origin_code_map = GetCodeBlobMap(
-              /*start=*/0, num_protected_audience_endpoints, buyer_origins,
+              /*first=*/0, num_protected_audience_endpoints, buyer_origins,
               ad_tech_code_blobs, "buyer_report_win_js_urls");
           // Collect code blobs for protected app signals.
           absl::flat_hash_map<std::string, std::string>
@@ -276,9 +279,9 @@ absl::Status RunServer() {
 
     code_fetcher = std::make_unique<PeriodicCodeFetcher>(
         endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
-        std::move(http_fetcher), dispatcher, executor.get(),
+        http_fetcher.get(), &dispatcher, executor.get(),
         absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()),
-        std::move(wrap_code));
+        std::move(wrap_code), "v1");
 
     code_fetcher->Start();
   } else if (!code_fetch_proto.auction_js_path().empty()) {
@@ -324,15 +327,13 @@ absl::Status RunServer() {
       };
 
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled =
-          config_client.GetBooleanParameter(ENABLE_ENCRYPTION),
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
+      .roma_timeout_ms =
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
       .enable_report_win_url_generation = enable_report_win_url_generation,
-      .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
       .enable_protected_app_signals =
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
       .enable_report_win_input_noising =
@@ -381,14 +382,15 @@ absl::Status RunServer() {
   if (code_fetcher) {
     code_fetcher->End();
   }
-  PS_RETURN_IF_ERROR(dispatcher.Stop())
-      << "Error shutting down code dispatcher.";
   return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
+  privacysandbox::server_common::SetRLimits({
+      .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
+  });
   absl::FailureSignalHandlerOptions options;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);

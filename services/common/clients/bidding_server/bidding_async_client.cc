@@ -14,7 +14,7 @@
 
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 
-#include "scp/cc/public/cpio/interface/crypto_client/crypto_client_interface.h"
+#include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -57,9 +57,7 @@ BiddingAsyncGrpcClient::BiddingAsyncGrpcClient(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceClientConfig& client_config, Bidding::Stub* stub)
-    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled),
-      stub_(stub) {}
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void BiddingAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
@@ -69,8 +67,7 @@ void BiddingAsyncGrpcClient::SendRpc(
   PS_VLOG(5) << "BiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
+      [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateBidsRequest, GenerateBidsResponse,
                   GenerateBidsResponse::GenerateBidsRawResponse>(
             status, params,
@@ -85,9 +82,7 @@ ProtectedAppSignalsBiddingAsyncGrpcClient::
         server_common::KeyFetcherManagerInterface* key_fetcher_manager,
         CryptoClientWrapperInterface* crypto_client,
         const BiddingServiceClientConfig& client_config, Bidding::Stub* stub)
-    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client,
-                             client_config.encryption_enabled),
-      stub_(stub) {}
+    : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
     const std::string& hpke_secret,
@@ -97,8 +92,7 @@ void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
   PS_VLOG(5) << "ProtectedAppSignalsBiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateProtectedAppSignalsBids(
       params->ContextRef(), params->RequestRef(), params->ResponseRef(),
-      [this, params, hpke_secret](grpc::Status status) {
-        DCHECK(encryption_enabled_);
+      [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateProtectedAppSignalsBidsRequest,
                   GenerateProtectedAppSignalsBidsResponse,
                   GenerateProtectedAppSignalsBidsRawResponse>(

@@ -18,16 +18,20 @@ package(default_visibility = ["//:__subpackages__"])
 
 cc_library(
     name = "config_client_util",
-    srcs = ["trusted_server_config_client_util.cc"],
+    srcs = ["trusted_server_config_client_util.cc"] + select({
+        "//:aws_instance": ["add_zone_aws.cc"],
+        "//:gcp_instance": ["add_zone_gcp.cc"],
+        "//conditions:default": ["add_zone_default.cc"],
+    }),
     hdrs = ["trusted_server_config_client_util.h"],
     deps = [
-        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/instance_client",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/instance_client",
     ],
 )
 
@@ -36,17 +40,17 @@ cc_library(
     srcs = ["trusted_server_config_client.cc"],
     hdrs = ["trusted_server_config_client.h"],
     deps = [
-        "//services/common/loggers:request_context_logger",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:str_format",
-        "@google_privacysandbox_servers_common//scp/cc/public/core/interface:errors",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface/parameter_client",
-        "@google_privacysandbox_servers_common//src/cpp/telemetry/flag:telemetry_flag",
-        "@google_privacysandbox_servers_common//src/cpp/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/parameter_client",
+        "@google_privacysandbox_servers_common//src/telemetry/flag:telemetry_flag",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 
@@ -60,7 +64,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/interface:cpio",
-        "@google_privacysandbox_servers_common//scp/cc/public/cpio/mock/parameter_client:parameter_client_mock",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/public/cpio/mock/parameter_client:parameter_client_mock",
     ],
 )

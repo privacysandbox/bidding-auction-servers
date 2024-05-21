@@ -24,9 +24,10 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "services/common/loggers/request_context_impl.h"
+#include "services/common/loggers/source_location_context.h"
 #include "services/common/util/error_reporter.h"
-#include "src/cpp/util/status_macro/source_location.h"
+#include "src/logger/request_context_impl.h"
+#include "src/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -40,7 +41,7 @@ class ErrorAccumulator : public ErrorReporter {
   using ErrorMap = std::map<ErrorCode, std::set<std::string>>;
 
   ErrorAccumulator() = default;
-  explicit ErrorAccumulator(log::ContextImpl* log_context);
+  explicit ErrorAccumulator(server_common::log::ContextImpl* log_context);
   virtual ~ErrorAccumulator() = default;
 
   // ErrorAccumulator is neither copyable nor movable.
@@ -62,13 +63,16 @@ class ErrorAccumulator : public ErrorReporter {
   // Gets the list of errors known to this object.
   const ErrorMap& GetErrors(ErrorVisibility error_visibility) const;
 
+  // Gets a string of all errors concatenated by visibility.
+  std::string GetAccumulatedErrorString(ErrorVisibility error_visibility);
+
  private:
   // Mapping from error visibility => { Error Code => List of Errors }.
   absl::flat_hash_map<ErrorVisibility, ErrorMap> dst_error_map_;
   const ErrorMap empty_error_map_ = {};
 
   // Optional log_context to be used for error reporting.
-  log::ContextImpl* log_context_ = nullptr;
+  server_common::log::ContextImpl* log_context_ = nullptr;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

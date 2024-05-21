@@ -23,6 +23,7 @@
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
@@ -34,10 +35,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr absl::Duration sfe_client_max_timeout =
     absl::Milliseconds(60000);
 
-using SellerFrontEndAsyncClient =
-    AsyncClient<SelectAdRequest, SelectAdResponse, SelectAdRequest,
-                SelectAdResponse>;
-
 struct SellerFrontEndServiceClientConfig {
   std::string server_addr;
   bool compression = false;
@@ -45,7 +42,7 @@ struct SellerFrontEndServiceClientConfig {
 };
 
 // This class is an async grpc client for the Fledge Bidding Service.
-class SellerFrontEndGrpcClient : SellerFrontEndAsyncClient {
+class SellerFrontEndGrpcClient {
  public:
   explicit SellerFrontEndGrpcClient(
       const SellerFrontEndServiceClientConfig& client_config);
@@ -55,10 +52,13 @@ class SellerFrontEndGrpcClient : SellerFrontEndAsyncClient {
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<SelectAdResponse>>) &&>
           on_done,
-      absl::Duration timeout = sfe_client_max_timeout) const override;
+      absl::Duration timeout = sfe_client_max_timeout);
+  ~SellerFrontEndGrpcClient();
 
  private:
   std::unique_ptr<SellerFrontEnd::Stub> stub_;
+  absl::Mutex active_calls_mutex_;
+  int active_calls_count_ ABSL_GUARDED_BY(active_calls_mutex_);
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

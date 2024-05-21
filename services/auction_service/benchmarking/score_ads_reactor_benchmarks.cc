@@ -215,6 +215,10 @@ AdWithBidMetadata BuildAdWithBid(
     ad_with_bid_metadata.add_ad_components(
         absl::StrCat("adComponent.com/foo_components/id=", i));
   }
+  ad_with_bid_metadata.set_modeling_signals(1);
+  ad_with_bid_metadata.set_recency(5000);
+  ad_with_bid_metadata.set_join_count(10000);
+  ad_with_bid_metadata.set_ad_cost(8.123456789101);
   return ad_with_bid_metadata;
 }
 
@@ -237,6 +241,7 @@ ProtectedAppSignalsAdWithBidMetadata BuildProtectedAppSignalsAdWithBid(int id) {
 std::vector<AdWithBidMetadata> BuildAdWithBids(
     int num_interest_groups = kNumInterestGroups) {
   std::vector<AdWithBidMetadata> ads_with_bid_metadata;
+  ads_with_bid_metadata.reserve(num_interest_groups);
   for (int i = 0; i < num_interest_groups; ++i) {
     ads_with_bid_metadata.emplace_back(BuildAdWithBid(i, kNumComponentsPerAd));
   }
@@ -247,6 +252,7 @@ std::vector<ProtectedAppSignalsAdWithBidMetadata>
 BuildProtectedAppSignalsAdWithBids(int num_pas_ads = kNumPasAds) {
   std::vector<ProtectedAppSignalsAdWithBidMetadata>
       protected_app_signals_ads_with_bid_metadata;
+  protected_app_signals_ads_with_bid_metadata.reserve(num_pas_ads);
   for (int i = 0; i < num_pas_ads; ++i) {
     protected_app_signals_ads_with_bid_metadata.emplace_back(
         BuildProtectedAppSignalsAdWithBid(i));
@@ -258,6 +264,7 @@ std::string BuildScoringSignals(int num_interest_groups = kNumInterestGroups,
                                 int num_pas_ads = kNumPasAds) {
   std::vector<std::string> scoring_signals;
   absl::BitGen bit_gen;
+  scoring_signals.reserve(num_interest_groups + num_pas_ads);
   for (int i = 0; i < num_interest_groups; ++i) {
     scoring_signals.emplace_back(absl::StrFormat(
         kScoringSignalKvTemplate, absl::StrFormat(kRenderUrlTemplate, i),
@@ -326,16 +333,15 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = true,
       .enable_adtech_code_logging = false,
       .enable_report_result_url_generation = true,
-      .enable_report_win_url_generation = true};
+      .enable_report_win_url_generation = true,
+      .enable_report_win_input_noising = true};
   score_ads_request.set_request_ciphertext(
       score_ads_raw_request.SerializeAsString());
   score_ads_request.set_key_id(kTestKeyId);
@@ -372,17 +378,16 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, ENABLE_ENCRYPTION);
   config_client.SetFlagForTest(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
-      .encryption_enabled = true,
       .enable_seller_debug_url_generation = true,
       .enable_adtech_code_logging = true,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
-      .enable_protected_app_signals = true};
+      .enable_protected_app_signals = true,
+      .enable_report_win_input_noising = true};
   score_ads_request.set_request_ciphertext(
       score_ads_raw_request.SerializeAsString());
   score_ads_request.set_key_id(kTestKeyId);
@@ -407,12 +412,7 @@ BENCHMARK(BM_ScoreAdsProtectedAudience);
 BENCHMARK(BM_ScoreAdsProtectedAudienceAndAppSignals);
 
 // Run the benchmark
-int main(int argc, char* argv[]) {
-  benchmark::Initialize(&argc, argv);
-  benchmark::RunSpecifiedBenchmarks();
-  benchmark::Shutdown();
-  return 0;
-}
+BENCHMARK_MAIN();
 
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -58,11 +58,16 @@ ABSL_FLAG(std::string, target_service, "SFE",
           "Service name to which the request must be sent to.");
 
 // Coordinator key defaults correspond to defaults in
-// https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/cpp/encryption/key_fetcher/src/fake_key_fetcher_manager.h#L29C34-L29C34
+// https://github.com/privacysandbox/data-plane-shared-libraries/blob/e293c1bdd52e3cf3c0735cd182183eeb8ebf032d/src/encryption/key_fetcher/fake_key_fetcher_manager.h#L29C34-L29C34
 ABSL_FLAG(std::string, public_key,
           "87ey8XZPXAd+/+ytKv2GFUWW5j9zdepSJ2G4gebDwyM=",
           "Use exact output from the coordinator. Public key. Must be base64."
           " Defaults to a test public key");
+ABSL_FLAG(std::string, private_key,
+          "57KS9J3yi4BlmSzerbydAyoOCehHbLbY1QchLnvjubQ=",
+          "Required for component server auctions. "
+          "Use exact output from the coordinator. Private key. Must be base64."
+          " Defaults to a test private key");
 ABSL_FLAG(std::string, key_id, "4000000000000000",
           "Use exact output from the coordinator. Hexadecimal key id string "
           "with trailing zeros. Defaults to a test key ID.");

@@ -28,7 +28,7 @@
 #include "absl/synchronization/notification.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/clients/http/multi_curl_request_manager.h"
-#include "src/cpp/concurrent/event_engine_executor.h"
+#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -167,6 +167,9 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // the acquisition of the in_loop_mu_ mutex.
   void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
       ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
+  // Parses curl message to result string or an error message for the callback.
+  std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
 
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(

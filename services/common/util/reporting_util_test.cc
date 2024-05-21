@@ -159,8 +159,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidSuccess) {
       .rejection_reason =
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   expected_url = "https://wikipedia.org?hob=2.18&m_hob=false";
-  request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_2), true);
+  request = CreateDebugReportingHttpRequest(url, placeholder_2, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -178,7 +177,7 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithHighestOtherBidAsZero) {
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url = "https://wikipedia.org?hob=0.00&m_hob=false";
   HTTPRequest request =
-      CreateDebugReportingHttpRequest(url, std::move(placeholder_1), true);
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
 }
 
@@ -210,6 +209,46 @@ TEST(CreateDebugReportingHttpRequestTest, GetWithRejectionReasonNotAvailable) {
           SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE};
   absl::string_view expected_url =
       "https://wikipedia.org?seller_rejection_reason=not-available";
+  HTTPRequest request =
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
+  EXPECT_EQ(request.url, expected_url);
+}
+
+TEST(CreateDebugReportingHttpRequestTest,
+     GetWithRejectionReasonBidFromGenBidFailedCurrencyCheck) {
+  absl::string_view url =
+      "https://wikipedia.org?seller_rejection_reason=${rejectReason}";
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK};
+  absl::string_view expected_url =
+      "https://"
+      "wikipedia.org?seller_rejection_reason=bid-from-gen-bid-failed-currency-"
+      "check";
+  HTTPRequest request =
+      CreateDebugReportingHttpRequest(url, placeholder_1, true);
+  EXPECT_EQ(request.url, expected_url);
+}
+
+TEST(CreateDebugReportingHttpRequestTest,
+     GetWithRejectionReasonBidFromScoreAdFailedCurrencyCheck) {
+  absl::string_view url =
+      "https://wikipedia.org?seller_rejection_reason=${rejectReason}";
+  DebugReportingPlaceholder placeholder_1 = {
+      .winning_bid = 1.9,
+      .made_winning_bid = false,
+      .highest_scoring_other_bid = 0.0,
+      .made_highest_scoring_other_bid = false,
+      .rejection_reason =
+          SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK};
+  absl::string_view expected_url =
+      "https://"
+      "wikipedia.org?seller_rejection_reason=bid-from-score-ad-failed-currency-"
+      "check";
   HTTPRequest request =
       CreateDebugReportingHttpRequest(url, placeholder_1, true);
   EXPECT_EQ(request.url, expected_url);
@@ -427,6 +466,12 @@ TEST(SellerRejectionReasonTest, ToSellerRejectionReasonSuccess) {
                                     SellerRejectionReason::LANGUAGE_EXCLUSIONS);
   ToSellerRejectionReasonAndCompare("category-exclusions",
                                     SellerRejectionReason::CATEGORY_EXCLUSIONS);
+  ToSellerRejectionReasonAndCompare(
+      "bid-from-gen-bid-failed-currency-check",
+      SellerRejectionReason::BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK);
+  ToSellerRejectionReasonAndCompare(
+      "bid-from-score-ad-failed-currency-check",
+      SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK);
 }
 
 TEST(SellerRejectionReasonTest, ToSellerRejectionReasonStringSuccess) {
@@ -450,6 +495,12 @@ TEST(SellerRejectionReasonTest, ToSellerRejectionReasonStringSuccess) {
       SellerRejectionReason::LANGUAGE_EXCLUSIONS, "language-exclusions");
   ToSellerRejectionReasonStringAndCompare(
       SellerRejectionReason::CATEGORY_EXCLUSIONS, "category-exclusions");
+  ToSellerRejectionReasonStringAndCompare(
+      SellerRejectionReason::BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK,
+      "bid-from-gen-bid-failed-currency-check");
+  ToSellerRejectionReasonStringAndCompare(
+      SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK,
+      "bid-from-score-ad-failed-currency-check");
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

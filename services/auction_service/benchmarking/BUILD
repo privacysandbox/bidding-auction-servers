@@ -55,6 +55,6 @@ cc_binary(
         "//services/common/test:random",
         "@google_benchmark//:benchmark",
         "@google_benchmark//:benchmark_main",
-        "@google_privacysandbox_servers_common//src/cpp/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

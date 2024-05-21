@@ -23,40 +23,12 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "services/common/loggers/request_context_logger.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
 
 namespace {
-
-// Parses curl message to result string or an error message for the callback.
-std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg) {
-  void* output;
-  absl::Status status;
-  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
-  if (msg->msg == CURLMSG_DONE) {
-    auto result_msg = curl_easy_strerror(msg->data.result);
-    switch (msg->data.result) {
-      case CURLE_OK:
-        status = absl::OkStatus();
-        break;
-      case CURLE_OPERATION_TIMEDOUT:
-        status = absl::DeadlineExceededError(result_msg);
-        break;
-      case CURLE_URL_MALFORMAT:
-        status = absl::InvalidArgumentError(result_msg);
-        break;
-      default:
-        status = absl::InternalError(result_msg);
-        break;
-    }
-  } else {
-    status = absl::InternalError(
-        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
-  }
-  return std::make_pair(status, output);
-}
 
 constexpr int log_level = 2;
 struct CurlTimeStats {
@@ -74,9 +46,9 @@ struct CurlTimeStats {
   curl_off_t new_conns = -1;
 };
 void GetTraceFromCurl(CURL* handle) {
-  if (log::PS_VLOG_IS_ON(log_level)) {
+  if (server_common::log::PS_VLOG_IS_ON(log_level)) {
     CurlTimeStats curl_time_stats;
-    char* request_url = NULL;
+    char* request_url = nullptr;
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME,
                       &curl_time_stats.time_namelookup);
@@ -297,7 +269,7 @@ void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
       // Release request data ownership so it can be tracked
       // completely through the curl easy handle. This will be manually cleaned
       // when the request completes or when this class is destroyed.
-      request.release();
+      request.release();  // NOLINT
       return;
     case CURLM_BAD_HANDLE:
     case CURLM_BAD_EASY_HANDLE:
@@ -332,8 +304,8 @@ void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
       CreateCurlRequest(http_request, timeout_ms, keepalive_idle_sec_,
                         keepalive_interval_sec_, std::move(done_callback));
 
-  request->body = std::make_unique<DataToUpload>(
-      DataToUpload{std::move(http_request.body)});
+  request->body =
+      std::make_unique<DataToUpload>(DataToUpload{http_request.body});
   curl_easy_setopt(request->req_handle, CURLOPT_UPLOAD, 1L);
   curl_easy_setopt(request->req_handle, CURLOPT_PUT, 1L);
   curl_easy_setopt(request->req_handle, CURLOPT_POSTFIELDSIZE_LARGE,
@@ -354,6 +326,47 @@ void MultiCurlHttpFetcherAsync::ExecuteLoop() ABSL_LOCKS_EXCLUDED(in_loop_mu_) {
     in_loop_mu_.Unlock();
   }
   // Another ExecuteLoop is already running.
+}
+
+std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
+    CURLMsg* msg) {
+  void* output;
+  absl::Status status;
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
+  if (msg->msg == CURLMSG_DONE) {
+    auto result_msg = curl_easy_strerror(msg->data.result);
+    switch (msg->data.result) {
+      case CURLE_OK: {
+        long http_code = 400;
+        curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
+        if (http_code >= 400) {
+          char* request_url = nullptr;
+          curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL,
+                            &request_url);
+          auto request_data = static_cast<CurlRequestData*>(output);
+          status = absl::InternalError(
+              absl::StrCat("Failed to curl ", request_url,
+                           "\nHTTP Code: ", http_code, "\nEndpoint returned: ",
+                           request_data->output ? *request_data->output : ""));
+        } else {
+          status = absl::OkStatus();
+        }
+      } break;
+      case CURLE_OPERATION_TIMEDOUT:
+        status = absl::DeadlineExceededError(result_msg);
+        break;
+      case CURLE_URL_MALFORMAT:
+        status = absl::InvalidArgumentError(result_msg);
+        break;
+      default:
+        status = absl::InternalError(result_msg);
+        break;
+    }
+  } else {
+    status = absl::InternalError(
+        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
+  }
+  return std::make_pair(status, output);
 }
 
 void MultiCurlHttpFetcherAsync::PerformCurlUpdate()

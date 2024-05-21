@@ -17,13 +17,13 @@
 schemaVersion: 2.0.0
 
 fileExistenceTests:
-  - name: init_server_basic
-    path: /server/bin/init_server_basic
+  - name: server
+    path: /server/bin/server
     shouldExist: true
     isExecutableBy: any
 
-  - name: server
-    path: /server/bin/server
+  - name: init_server_basic
+    path: /server/bin/init_server_basic
     shouldExist: true
     isExecutableBy: any
 
