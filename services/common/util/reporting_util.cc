@@ -45,7 +45,7 @@ void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
-      PS_VLOG(kNoisyInfo, log_context) << log_type << ": " << log.GetString();
+      PS_VLOG(kUdfLog, log_context) << log_type << ": " << log.GetString();
     }
   }
 }

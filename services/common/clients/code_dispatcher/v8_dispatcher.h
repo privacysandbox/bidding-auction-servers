@@ -20,24 +20,27 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "services/common/clients/code_dispatcher/request_context.h"
 #include "src/roma/interface/roma.h"
 #include "src/roma/roma_service/roma_service.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// The following aliases are part  of the exported API so the
+// The following aliases are part of the exported API so the
 // user does not have to explicitly import the underlying library.
-using DispatchRequest = google::scp::roma::InvocationSharedRequest<>;
+using DispatchRequest =
+    google::scp::roma::InvocationSharedRequest<RomaRequestSharedContext>;
 using DispatchResponse = google::scp::roma::ResponseObject;
 using DispatchDoneCallback = google::scp::roma::Callback;
-using DispatchService = google::scp::roma::sandbox::roma_service::RomaService<>;
+using DispatchService = google::scp::roma::sandbox::roma_service::RomaService<
+    RomaRequestSharedContext>;
 using BatchDispatchDoneCallback = google::scp::roma::BatchCallback;
 // The DispatchConfig controls the number of worker processes, the number of
 // threads per worker process, the IPC shared memory size (in bytes), and
 // the max amount of tasks in the work queue before requests are rejected.
 // Default values of {0, 0, 0, 0} allow the underlying library to choose
 // these values as necessary.
-using DispatchConfig = google::scp::roma::Config<>;
+using DispatchConfig = DispatchService::Config;
 
 // This class is a wrapper around Roma, a library which provides an interface
 // for multi-process javascript and wasm execution in V8.
@@ -45,7 +48,7 @@ class V8Dispatcher {
  public:
   explicit V8Dispatcher(DispatchConfig&& config = DispatchConfig());
 
-  ~V8Dispatcher();
+  virtual ~V8Dispatcher();
 
   // Init the dispatcher. Note that this call may bring up multiple processes,
   // which can be slow and should only happen on server startup.

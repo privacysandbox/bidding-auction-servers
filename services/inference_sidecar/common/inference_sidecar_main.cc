@@ -29,6 +29,10 @@ int main(int argc, char** argv) {
   CHECK(google::protobuf::util::JsonStringToMessage(argv[0], &config).ok())
       << "Could not parse inference sidecar runtime config JsonString to a "
          "proto message.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::SetCpuAffinity(
+            config)
+            .ok())
+      << "Could not set CPU affinity.";
   if (absl::Status run_status =
           privacy_sandbox::bidding_auction_servers::inference::Run(config);
       !run_status.ok()) {

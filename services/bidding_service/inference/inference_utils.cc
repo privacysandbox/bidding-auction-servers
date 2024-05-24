@@ -34,6 +34,7 @@
 #include "absl/synchronization/mutex.h"
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "services/bidding_service/inference/inference_flags.h"
+#include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/logger/request_context_logger.h"
 #include "src/roma/interface/roma.h"
@@ -130,7 +131,9 @@ absl::Status RegisterModelsFromBucket(
   return absl::OkStatus();
 }
 
-void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper) {
+void RunInference(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper) {
   const std::string& payload = wrapper.io_proto.input_string();
 
   SandboxExecutor& executor = Executor();

@@ -20,6 +20,8 @@
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
+absl::Status SetCpuAffinity(const InferenceSidecarRuntimeConfig& config);
+
 // Runs a simple gRPC server. It is thread safe.
 absl::Status Run(const InferenceSidecarRuntimeConfig& config);
 

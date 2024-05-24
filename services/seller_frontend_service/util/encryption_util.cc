@@ -64,8 +64,9 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
                         absl::StrFormat(kMissingPrivateKey, str_key_id));
   }
 
-  PS_VLOG(3) << "Private Key Id: " << private_key->key_id << ", Key Hex: "
-             << absl::BytesToHexString(private_key->private_key);
+  PS_VLOG(kSuccess) << "Private Key Id: " << private_key->key_id
+                    << ", Key Hex: "
+                    << absl::BytesToHexString(private_key->private_key);
   // Decrypt the ciphertext.
   absl::StatusOr<quiche::ObliviousHttpRequest> ohttp_request =
       server_common::DecryptEncapsulatedRequest(*private_key,

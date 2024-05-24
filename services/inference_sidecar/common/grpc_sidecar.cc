@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/server.h>
@@ -36,6 +37,7 @@
 #include "sandbox/sandbox_worker.h"
 #include "sandboxed_api/sandbox2/comms.h"
 #include "src/util/status_macro/status_util.h"
+#include "utils/cpu.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -75,6 +77,14 @@ class InferenceServiceImpl final : public InferenceService::Service {
 };
 
 }  // namespace
+
+absl::Status SetCpuAffinity(const InferenceSidecarRuntimeConfig& config) {
+  if (config.cpuset().empty()) {
+    return absl::OkStatus();
+  }
+  std::vector<int> cpuset(config.cpuset().begin(), config.cpuset().end());
+  return SetCpuAffinity(cpuset);
+}
 
 absl::Status Run(const InferenceSidecarRuntimeConfig& config) {
   SandboxWorker worker;

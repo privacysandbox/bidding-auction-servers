@@ -173,4 +173,5 @@ module "buyer" {
       }
     }
   }
+  enable_tee_container_log_redirect = false
 }

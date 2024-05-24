@@ -85,8 +85,8 @@ absl::StatusOr<ProtoMessageType> FromBinaryHTTP(
       return absl::InvalidArgumentError(
           "Unable to convert the Binary HTTP response to proto");
     }
-    PS_VLOG(kSuccess) << "Converted the http request to proto: "
-                      << response_proto.DebugString();
+    PS_VLOG(kNoisyInfo) << "Converted the http request to proto: "
+                        << response_proto.DebugString();
   }
   return response_proto;
 }

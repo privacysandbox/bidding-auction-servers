@@ -18,6 +18,7 @@
 
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -95,10 +96,9 @@ void AsyncTaskTracker::SetNumTasksToTrack(int num_tasks_to_track) {
   empty_tasks_count_ = 0;
   skipped_tasks_count_ = 0;
   error_tasks_count_ = 0;
-  PS_VLOG(3, log_context_) << "Reset of task tracker to track: "
-                           << num_tasks_to_track
-                           << " number of tasks done. New tracker: "
-                           << ToString();
+  PS_VLOG(kStats, log_context_)
+      << "Reset of task tracker to track: " << num_tasks_to_track
+      << " number of tasks done. New tracker: " << ToString();
 }
 
 bool AsyncTaskTracker::AnyTaskSuccessfullyCompleted() {

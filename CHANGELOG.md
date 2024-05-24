@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.8.0 (2024-05-24)
+
+
+### Features
+
+* Add tee-container-log-redirect option in terraform
+* Create logging library for inference consented logs
+* Forward per request consented debugging config to roma callback
+* Support CPU isolation in the inference sidecar
+
+
+### Bug Fixes
+
+* [IsolateBuyerAndSellerCodeExecution] Add a new code wrapper with only scoreAd and reportResult
+* clean up log verbosity 3
+
 ## 3.7.0 (2024-05-13)
 
 

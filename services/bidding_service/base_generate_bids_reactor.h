@@ -17,10 +17,12 @@
 #ifndef SERVICES_BIDDING_SERVICE_BASE_GENERATE_BIDS_REACTOR_H_
 #define SERVICES_BIDDING_SERVICE_BASE_GENERATE_BIDS_REACTOR_H_
 
+#include <memory>
 #include <optional>
 #include <string>
 
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/logger/request_context_impl.h"
@@ -54,6 +56,9 @@ class BaseGenerateBidsReactor
         enable_buyer_debug_url_generation_(
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
+        roma_request_context_factory_(
+            GetLoggingContext(this->raw_request_),
+            this->raw_request_.consented_debug_config()),
         enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
         log_context_(
             GetLoggingContext(this->raw_request_),
@@ -84,6 +89,7 @@ class BaseGenerateBidsReactor
 
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
+  RomaRequestContextFactory roma_request_context_factory_;
   bool enable_adtech_code_logging_;
   server_common::log::ContextImpl log_context_;
   int max_allowed_size_debug_url_chars_;

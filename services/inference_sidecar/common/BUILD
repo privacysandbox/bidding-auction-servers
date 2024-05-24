@@ -47,6 +47,7 @@ cc_library(
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_worker",
+        "//utils:cpu",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",

@@ -262,6 +262,7 @@ cc_library(
     srcs = ["async_task_tracker.cc"],
     hdrs = ["async_task_tracker.h"],
     deps = [
+        "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",

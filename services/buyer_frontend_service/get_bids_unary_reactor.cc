@@ -168,7 +168,7 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
                                     << get_bids_response_->ShortDebugString();
 
   if (!any_successful_bids) {
-    PS_VLOG(3, log_context_)
+    PS_LOG(WARNING, log_context_)
         << "Finishing the GetBids RPC with an error, since there are "
            "no successful bids returned by the bidding service";
     benchmarking_logger_->End();
@@ -244,8 +244,8 @@ void GetBidsUnaryReactor::Execute() {
   if (num_bidding_calls == 0) {
     // This is unlikely to happen since we already have this check in place
     // in SFE.
-    PS_VLOG(3, log_context_) << "No protected audience or protected app "
-                                "signals input found in the request";
+    PS_LOG(ERROR, log_context_) << "No protected audience or protected app "
+                                   "signals input found in the request";
     benchmarking_logger_->End();
     FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT, kMissingInputs));
     return;
@@ -279,7 +279,7 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   if (!raw_request_.has_protected_app_signals_buyer_input() ||
       !raw_request_.protected_app_signals_buyer_input()
            .has_protected_app_signals()) {
-    PS_VLOG(3, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "No protected app buyer signals input found, skipping fetching bids "
            "for protected app signals";
     return;
@@ -350,13 +350,13 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
   if (!config_.is_protected_audience_enabled) {
-    PS_VLOG(3, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "Protected Audience is not enabled, skipping bids fetching for PA";
     return;
   }
 
   if (raw_request_.buyer_input().interest_groups().empty()) {
-    PS_VLOG(3, log_context_)
+    PS_VLOG(kNoisyWarn, log_context_)
         << "No interest groups found, skipping bidding for protected audience";
     return;
   }

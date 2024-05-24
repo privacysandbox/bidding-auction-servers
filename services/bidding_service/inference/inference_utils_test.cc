@@ -31,8 +31,12 @@ constexpr absl::string_view kInit = "non-empty";
 constexpr absl::string_view kTestModelPath =
     "external/inference_common/testdata/models/tensorflow_1_mib_saved_model.pb";
 constexpr absl::string_view kBucketName = "test_bucket";
-constexpr absl::string_view kRuntimeConfig =
-    R"json({"num_interop_threads": 4, "num_intraop_threads": 5, "module_name": "test"})json";
+constexpr absl::string_view kRuntimeConfig = R"json({
+  "num_interop_threads": 4,
+  "num_intraop_threads": 5,
+  "module_name": "test",
+  "cpuset": [0, 1]
+})json";
 
 class InferenceUtilsTest : public ::testing::Test {
  protected:
@@ -56,7 +60,8 @@ TEST_F(InferenceUtilsTest, ReturnValueIsSet) {
 
   ASSERT_TRUE(RegisterModelsFromLocal({std::string(kTestModelPath)}).ok());
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
-  google::scp::roma::FunctionBindingPayload<> wrapper{input_output_proto, {}};
+  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper{
+      input_output_proto, {}};
   wrapper.io_proto.set_input_string(absl::StrCat("1.0"));
   wrapper.io_proto.set_output_string(kInit);
   RunInference(wrapper);
