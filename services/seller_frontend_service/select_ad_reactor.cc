@@ -404,7 +404,7 @@ void SelectAdReactor::Execute() {
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-  PS_VLOG(3, log_context_) << "No client / Adtech server errors found";
+  PS_VLOG(kNoisyInfo, log_context_) << "No client / Adtech server errors found";
 
   benchmarking_logger_->Begin();
 
@@ -501,8 +501,9 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
 
   if (!is_protected_audience_enabled_ &&
       get_bids_request->mutable_buyer_input()->interest_groups_size() > 0) {
-    PS_VLOG(3) << "Clearing interest groups in the input since protected "
-                  "audience support is disabled";
+    PS_VLOG(kNoisyWarn)
+        << "Clearing interest groups in the input since protected "
+           "audience support is disabled";
     get_bids_request->mutable_buyer_input()->clear_interest_groups();
   }
   return get_bids_request;
@@ -646,7 +647,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
       LogIfError(
           metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
               1, metric::kSfeSelectAdNoSuccessfulBid));
-      PS_VLOG(3, log_context_)
+      PS_LOG(WARNING, log_context_)
           << "Finishing the SelectAdRequest RPC with an error";
 
       FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
@@ -899,7 +900,7 @@ void SelectAdReactor::ScoreAds() {
     OnScoreAdsDone(std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
     return;
   }
-  PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
+  PS_VLOG(kOriginated, log_context_) << "ScoreAdsRawRequest:\n"
                                      << raw_request->DebugString();
 
   auto auction_request =
@@ -951,7 +952,7 @@ void SelectAdReactor::OnScoreAdsDone(
         response) {
   std::optional<AdScore> high_score;
   if (HaveAdServerVisibleErrors()) {
-    PS_VLOG(3, log_context_)
+    PS_LOG(WARNING, log_context_)
         << "Finishing the SelectAdRequest RPC with ad server visible error";
 
     FinishWithStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,

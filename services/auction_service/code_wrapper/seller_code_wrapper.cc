@@ -142,4 +142,14 @@ std::string GetSellerWrappedCode(
   return wrap_code;
 }
 
+std::string GetSellerWrappedCode(absl::string_view seller_js_code,
+                                 bool enable_report_result_url_generation) {
+  std::string wrap_code{kEntryFunction};
+  if (enable_report_result_url_generation) {
+    wrap_code.append(kReportResultWrapperFunction);
+  }
+  wrap_code.append(seller_js_code);
+  return wrap_code;
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -53,7 +53,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         crypto_client_(crypto_client) {
     PS_VLOG(5) << "Encryption is enabled, decrypting request now";
     if (DecryptRequest()) {
-      PS_VLOG(3) << "Decrypted request: " << raw_request_.DebugString();
+      PS_VLOG(5) << "Decrypted request: " << raw_request_.DebugString();
     } else {
       PS_LOG(ERROR) << "Failed to decrypt the request";
     }

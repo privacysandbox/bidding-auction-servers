@@ -246,7 +246,8 @@ absl::Status RunServer() {
     if (enable_inference) {
       PS_LOG(INFO) << "Register runInference API.";
       auto run_inference_function_object =
-          std::make_unique<google::scp::roma::FunctionBindingObjectV2<>>();
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContext>>();
       run_inference_function_object->function_name =
           std::string(inference::kInferenceFunctionName);
       run_inference_function_object->function = inference::RunInference;

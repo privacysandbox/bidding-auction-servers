@@ -911,7 +911,7 @@ void ScoreAdsReactor::ReportingCallback(
       }
       if (PS_VLOG_IS_ON(1) && enable_adtech_code_logging_) {
         for (std::string& log : reporting_response.value().seller_logs) {
-          PS_VLOG(kNoisyInfo, log_context_)
+          PS_VLOG(kUdfLog, log_context_)
               << "Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().seller_error_logs) {
@@ -920,11 +920,11 @@ void ScoreAdsReactor::ReportingCallback(
         }
         for (std::string& log :
              reporting_response.value().seller_warning_logs) {
-          PS_LOG(ERROR, log_context_)
+          PS_LOG(WARNING, log_context_)
               << "Warning Log from Seller's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_logs) {
-          PS_VLOG(kNoisyInfo, log_context_)
+          PS_VLOG(kUdfLog, log_context_)
               << "Log from Buyer's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_error_logs) {
@@ -932,7 +932,7 @@ void ScoreAdsReactor::ReportingCallback(
               << "Error Log from Buyer's execution script:" << log;
         }
         for (std::string& log : reporting_response.value().buyer_warning_logs) {
-          PS_LOG(ERROR, log_context_)
+          PS_LOG(WARNING, log_context_)
               << "Warning Log from Buyer's execution script:" << log;
         }
       }

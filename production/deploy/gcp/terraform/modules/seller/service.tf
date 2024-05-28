@@ -60,6 +60,7 @@ module "autoscaling" {
   instance_template_waits_for_instances = var.instance_template_waits_for_instances
   depends_on                            = [module.security, module.networking, resource.google_secret_manager_secret.runtime_flag_secrets, resource.google_secret_manager_secret_version.runtime_flag_secret_values]
   collector_startup_script              = var.collector_startup_script
+  enable_tee_container_log_redirect     = var.enable_tee_container_log_redirect
 }
 
 module "load_balancing" {

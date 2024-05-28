@@ -314,7 +314,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -353,12 +353,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/bfe.initiated_request.to_bidding.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
@@ -398,12 +398,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/js_execution.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -442,12 +442,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/bidding.business_logic.bids_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -485,12 +485,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/bidding.business_logic.zero_bid_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -529,7 +529,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -569,12 +569,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/initiated_request.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"server_name\"",
@@ -613,7 +613,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -652,7 +652,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -691,7 +691,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -730,7 +730,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -770,7 +770,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
@@ -810,12 +810,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/bfe.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"error_code\"",
@@ -854,12 +854,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/bidding.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"error_code\"",
@@ -899,12 +899,12 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "perSeriesAligner": "ALIGN_RATE"
                     },
                     "filter": "metric.type=\"workload.googleapis.com/initiated_request.to_kv.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
                     "secondaryAggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
@@ -987,7 +987,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
                     "aggregation": {
-                      "alignmentPeriod": "60s",
+                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_PERCENTILE_95",
                       "groupByFields": [
                         "metric.label.\"service_name\"",

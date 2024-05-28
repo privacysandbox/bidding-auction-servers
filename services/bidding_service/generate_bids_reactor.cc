@@ -362,7 +362,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   }
   generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)] =
       std::make_shared<std::string>(std::move(serialized_ig.value()));
-  PS_VLOG(3, log_context)
+  PS_VLOG(kStats, log_context)
       << "\nInterest Group Serialize Time: "
       << ToInt64Microseconds((absl::Now() - start_parse_time))
       << " microseconds for "
@@ -475,13 +475,14 @@ void GenerateBidsReactor::Execute() {
                                 log_context_, enable_adtech_code_logging_,
                                 protected_auction_generate_bid_version_);
     if (!generate_bid_request.ok()) {
-      PS_VLOG(3, log_context_)
+      PS_VLOG(kNoisyWarn, log_context_)
           << "Unable to build GenerateBidRequest: "
           << generate_bid_request.status().ToString(
                  absl::StatusToStringMode::kWithEverything);
     } else {
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
+      dispatch_request.metadata = roma_request_context_factory_.Create();
       dispatch_requests_.push_back(dispatch_request);
     }
   }

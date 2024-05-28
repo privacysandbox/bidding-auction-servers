@@ -21,8 +21,12 @@
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
-constexpr absl::string_view kRuntimeConfig =
-    R"json({"num_interop_threads": 4, "num_intraop_threads": 5, "module_name": "test"})json";
+constexpr absl::string_view kRuntimeConfig = R"json({
+    "num_interop_threads": 4,
+    "num_intraop_threads": 5,
+    "module_name": "test",
+    "cpuset": [0, 1]
+})json";
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

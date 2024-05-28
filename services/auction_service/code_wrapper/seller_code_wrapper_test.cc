@@ -38,6 +38,16 @@ TEST(GetSellerWrappedCode, GeneratesCompleteFinalCode) {
                                           << "Expected: " << kExpectedFinalCode;
 }
 
+TEST(GetSellerWrappedCode, GeneratesWrappedCodeWithScoreAdAndReportResult) {
+  bool enable_report_result_url_generation = true;
+  std::string observed = GetSellerWrappedCode(
+      kSellerBaseCode, enable_report_result_url_generation);
+  EXPECT_EQ(observed, kExpectedSellerCodeWithScoreAdAndReportResult)
+      << "Observed:\n"
+      << observed << "\n\n"
+      << "Expected: " << kExpectedSellerCodeWithScoreAdAndReportResult;
+}
+
 TEST(GetSellerWrappedCode, GeneratesCompleteFinalCodeWithProtectedAppSignals) {
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;

@@ -26,6 +26,7 @@
 
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/util/request_response_constants.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
@@ -103,7 +104,8 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
       config_client.GetStringParameter(SECONDARY_COORDINATOR_REGION);
 
   if (config_client.HasParameter(GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER)) {
-    PS_VLOG(3) << "Found GCP Workload Identity Pool Provider, proceeding...";
+    PS_VLOG(kNoisyInfo)
+        << "Found GCP Workload Identity Pool Provider, proceeding...";
     primary.gcp_private_key_vending_service_cloudfunction_url =
         config_client.GetStringParameter(
             GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);

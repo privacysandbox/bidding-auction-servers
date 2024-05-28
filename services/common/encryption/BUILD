@@ -48,6 +48,7 @@ cc_library(
     deps = [
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
+        "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",

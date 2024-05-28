@@ -121,7 +121,7 @@ repos:
 
   - id: ps_vlog_123
     name: Don't use PS_VLOG(0/1/2/3)
-    entry: sh -c '! grep --files-with-matches --recursive -E "PS_VLOG[(][012][,)]" services/'
+    entry: sh -c '! grep --files-with-matches --recursive -E "PS_VLOG[(][0123][,)]" services/'
     language: system
     types_or:
     - c++

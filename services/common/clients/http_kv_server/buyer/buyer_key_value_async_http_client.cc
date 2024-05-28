@@ -83,7 +83,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
       PS_VLOG(kKVLog) << "BuyerKeyValueAsyncHttpClient Success Response:\n"
-                      << resultStr.value() << "\n";
+                      << resultStr.value();
       size_t response_size = resultStr->size();
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
           std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(

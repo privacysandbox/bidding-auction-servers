@@ -751,8 +751,8 @@ bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
     absl::string_view actual_type = kCborDataTypesLookup[item->type];
     std::string error = absl::StrFormat(kInvalidTypeError, field_name,
                                         expected_type, actual_type);
-    PS_VLOG(3) << "CBOR type validation failure at: " << location.file_name()
-               << ":" << location.line();
+    PS_VLOG(kNoisyWarn) << "CBOR type validation failure at: "
+                        << location.file_name() << ":" << location.line();
     error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
                                   ErrorCode::CLIENT_SIDE);
     return false;

@@ -120,8 +120,9 @@ class ProtectedAppSignalsGenerateBidsReactor
             return;
           }
 
-          PS_VLOG(3, log_context_) << "Response from " << roma_entry_function
-                                   << ": " << result[0]->resp;
+          PS_VLOG(kDispatch, log_context_)
+              << "Response from " << roma_entry_function << ": "
+              << result[0]->resp;
           auto parsed_response = std::move(parse_response)(result[0]->resp);
           if (!parsed_response.ok()) {
             PS_VLOG(kNoisyWarn, log_context_)
@@ -133,7 +134,7 @@ class ProtectedAppSignalsGenerateBidsReactor
             return;
           }
 
-          PS_VLOG(3, log_context_)
+          PS_VLOG(kDispatch, log_context_)
               << "Successful V8 Response from: " << roma_entry_function;
 
           std::move(on_successful_response)(*std::move(parsed_response));

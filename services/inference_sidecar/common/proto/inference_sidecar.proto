@@ -28,12 +28,16 @@ service InferenceService {
 message PredictRequest {
   // Input data.
   bytes input = 1;
+  // Should consented logs be collected for the given predict request.
+  bool is_consented = 2;
 }
 
 // Response for PredictRequest on a successful run.
 message PredictResponse {
   // Output data.
   bytes output = 1;
+  // Consented debugging log.
+  InferenceDebugInfo debug_info = 2;
 }
 
 message ModelSpec {
@@ -68,4 +72,15 @@ message InferenceSidecarRuntimeConfig {
   // Specifies the inference backend module required.
   // Currently supports "test", "tensorflow_v2_14_0", "pytorch_v2_1_1"
   string module_name = 3;
+
+  // Specifies a list of CPU IDs to set the CPU affinity for the sidecar.
+  // The sidecar process will run only on the specified CPUs.
+  // If `cpuset` is empty, the CPU affinity is not used.
+  repeated int32 cpuset = 4;
+}
+
+// Proto to store consented debugging logs. It's passed back with
+// PredictResponse to the caller of the Predict RPC.
+message InferenceDebugInfo {
+  repeated string logs = 1;
 }

@@ -21,6 +21,7 @@ cc_library(
     srcs = ["v8_dispatcher.cc"],
     hdrs = ["v8_dispatcher.h"],
     deps = [
+        ":request_context",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
@@ -66,5 +67,18 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "request_context",
+    srcs = [
+        "request_context.cc",
+    ],
+    hdrs = [
+        "request_context.h",
+    ],
+    deps = [
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
     ],
 )

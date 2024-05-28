@@ -221,6 +221,7 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
       .version_string = protected_app_signals_generate_bid_version_,
       .handler_name = kDispatchHandlerFunctionNameWithCodeWrapper,
       .input = std::move(input),
+      .metadata = roma_request_context_factory_.Create(),
   };
   request.tags[kTimeoutMs] = roma_timeout_ms_;
   return request;
@@ -267,7 +268,7 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
               << "Skipping protected app signals bid (" << GetBidDebugInfo(bid)
               << ")";
         } else {
-          PS_VLOG(3, log_context_)
+          PS_VLOG(kNoisyInfo, log_context_)
               << "Successful non-zero protected app signals bid received";
           auto* added_bid = raw_response_.add_bids();
           *added_bid = bid;
@@ -312,10 +313,11 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
       .version_string = ad_retrieval_version_,
       .handler_name = kPrepareDataForAdRetrievalEntryFunctionName,
       .input = std::move(input),
+      .metadata = roma_request_context_factory_.Create(),
   };
   if (server_common::log::PS_VLOG_IS_ON(3)) {
     for (const auto& i : request.input) {
-      PS_VLOG(3, log_context_)
+      PS_VLOG(kDispatch, log_context_)
           << "Roma request input to prepared data for ads retrieval: " << *i;
     }
   }

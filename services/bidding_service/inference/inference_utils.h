@@ -15,6 +15,7 @@
 #ifndef SERVICES_BIDDING_SERVICE_INFERENCE_INFERENCE_UTILS_H_
 #define SERVICES_BIDDING_SERVICE_INFERENCE_INFERENCE_UTILS_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,7 @@
 #include "proto/inference_sidecar.pb.h"
 #include "sandbox/sandbox_executor.h"
 #include "services/common/blob_fetch/blob_fetcher.h"
+#include "services/common/clients/code_dispatcher/request_context.h"
 #include "src/roma/interface/roma.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -42,7 +44,9 @@ absl::Status RegisterModelsFromBucket(
 // single inference request to the inference sidecar.
 //
 // wrapper: Inference request backed by JS string.
-void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper);
+void RunInference(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 
