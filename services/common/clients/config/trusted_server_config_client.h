@@ -72,6 +72,9 @@ class TrustedServersConfigClient {
   // Checks if a parameter is present in the config client.
   bool HasParameter(absl::string_view name) const noexcept;
 
+  // Checks if a parameter is present with a non-empty value in the config client.
+  bool HasParameterWithValue(absl::string_view name) const noexcept;
+
   // Fetches the string value for the specified config parameter.
   absl::string_view GetStringParameter(absl::string_view name) const noexcept;
 

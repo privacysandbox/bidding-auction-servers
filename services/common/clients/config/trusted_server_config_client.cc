@@ -114,6 +114,11 @@ bool TrustedServersConfigClient::HasParameter(
   return config_entries_map_.contains(name);
 }
 
+bool TrustedServersConfigClient::HasParameterWithValue(
+    absl::string_view name) const noexcept {
+  return HasParameter(name) && config_entries_map_.at(name) != kEmptyValue;
+}
+
 absl::string_view TrustedServersConfigClient::GetStringParameter(
     absl::string_view name) const noexcept {
   DCHECK(HasParameter(name)) << "Flag " << name << " not found";
