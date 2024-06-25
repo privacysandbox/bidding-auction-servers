@@ -58,7 +58,7 @@ module "buyer" {
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
     BIDDING_SERVER_ADDR                           = "" # Example: "dns:///bidding1.com:443"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
     TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "60000"
@@ -86,7 +86,6 @@ module "buyer" {
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
     #    "enableBuyerDebugUrlGeneration": true,
-    #    "enableAdtechCodeLogging": false,
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
@@ -97,20 +96,23 @@ module "buyer" {
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
 
+    # Coordinator-based attestation flags.
+    # These flags are production-ready and you do not need to change them.
+    PUBLIC_KEY_ENDPOINT                        = "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
+    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "https://privatekeyservice-a.pa-3.aws.privacysandboxservices.com/v1alpha/encryptionKeys"
+    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "https://privatekeyservice-b.pa-4.aws.privacysandboxservices.com/v1alpha/encryptionKeys"
+    PRIMARY_COORDINATOR_REGION                 = "us-east-1"
+    SECONDARY_COORDINATOR_REGION               = "us-east-1"
+    PRIVATE_KEY_CACHE_TTL_SECONDS              = "3974400"
+    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "20000"
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
-    PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
-    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY       = "" # Example: "arn:aws:iam::574738241111:role/mp-prim-ba_574738241111_coordinator_assume_role"
-    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY     = "" # Example: "arn:aws:iam::574738241111:role/mp-sec-ba_574738241111_coordinator_assume_role"
-    PRIMARY_COORDINATOR_REGION                 = "" # Example: "us-east-1"
-    SECONDARY_COORDINATOR_REGION               = "" # Example: "us-east-1"
-    PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "3974400" (46 days)
-    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
-    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
-    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
+    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY   = "" # Example: "arn:aws:iam::811625435250:role/a_<YOUR AWS ACCOUNT ID>_coordinator_assume_role"
+    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY = "" # Example: "arn:aws:iam::891377198286:role/b_<YOUR AWS ACCOUNT ID>_coordinator_assume_role"
+
+    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
+    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
 
     INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
     INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"

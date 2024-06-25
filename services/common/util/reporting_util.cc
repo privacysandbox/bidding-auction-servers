@@ -41,11 +41,13 @@ inline constexpr absl::string_view kFeatureEnabled = "true";
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
 
                            const std::string& log_type,
-                           server_common::log::ContextImpl& log_context) {
+                           RequestLogContext& log_context) {
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
-      PS_VLOG(kUdfLog, log_context) << log_type << ": " << log.GetString();
+      std::string log_str = absl::StrCat(log_type, ": ", log.GetString());
+      PS_VLOG(kUdfLog, log_context) << log_str;
+      log_context.SetEventMessageField(log_str);
     }
   }
 }
@@ -63,17 +65,18 @@ void AppendFeatureFlagValue(std::string& feature_flags,
 
 }  // namespace
 
-PostAuctionSignals GeneratePostAuctionSignals(
-    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
-    absl::string_view seller_currency) {
+PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
+    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
   // If there is no winning ad, return with default signals values.
   if (!winning_ad_score.has_value()) {
     return {kDefaultWinningInterestGroupName,
             kDefaultWinningInterestGroupOwner,
             kDefaultWinningBid,
-            /*DefaultWinningBidCurrency=*/kEmptyBidCurrencyCode,
+            /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
+            /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
+            kUnknownBidCurrencyCode,
             /*DefaultHighestScoringOtherBid=*/0.0,
-            /*DefaultHighestScoringOtherBidCurrency=*/kEmptyBidCurrencyCode,
+            /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
             kDefaultHighestScoringOtherBidInterestGroupOwner,
             /*DefaultHasHighestScoringOtherBid=*/false,
             kDefaultWinningScore,
@@ -81,6 +84,45 @@ PostAuctionSignals GeneratePostAuctionSignals(
             {}};
   }
   float winning_bid = winning_ad_score->buyer_bid();
+  float winning_score = winning_ad_score->desirability();
+
+  return {winning_ad_score->interest_group_name(),
+          winning_ad_score->interest_group_owner(),
+          winning_bid,
+          /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
+          /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
+          kUnknownBidCurrencyCode,
+          /*DefaultHighestScoringOtherBid=*/0.0,
+          /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
+          kDefaultHighestScoringOtherBidInterestGroupOwner,
+          /*DefaultHasHighestScoringOtherBid=*/false,
+          winning_score,
+          winning_ad_score->render(),
+          {}};
+}
+
+PostAuctionSignals GeneratePostAuctionSignals(
+    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
+    std::string seller_currency) {
+  // If there is no winning ad, return with default signals values.
+  if (!winning_ad_score.has_value()) {
+    return {kDefaultWinningInterestGroupName,
+            kDefaultWinningInterestGroupOwner,
+            kDefaultWinningBid,
+            /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
+            /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
+            std::move(seller_currency),
+            /*DefaultHighestScoringOtherBid=*/0.0,
+            /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
+            kDefaultHighestScoringOtherBidInterestGroupOwner,
+            /*DefaultHasHighestScoringOtherBid=*/false,
+            kDefaultWinningScore,
+            kDefaultWinningAdRenderUrl,
+            {}};
+  }
+  float winning_bid = winning_ad_score->buyer_bid();
+  float winning_bid_in_seller_currency =
+      winning_ad_score->incoming_bid_in_seller_currency();
   float winning_score = winning_ad_score->desirability();
   // Set second highest other bid information in signals if available.
   std::string highest_scoring_other_bid_ig_owner =
@@ -99,11 +141,10 @@ PostAuctionSignals GeneratePostAuctionSignals(
   }
 
   std::string bid_currency = (winning_ad_score->buyer_bid_currency().empty())
-                                 ? kEmptyBidCurrencyCode
+                                 ? kUnknownBidCurrencyCode
                                  : winning_ad_score->buyer_bid_currency();
   std::string highest_scoring_other_bid_currency =
-      (seller_currency.empty()) ? kEmptyBidCurrencyCode
-                                : std::string(seller_currency);
+      (seller_currency.empty()) ? kUnknownBidCurrencyCode : seller_currency;
 
   bool made_highest_scoring_other_bid = false;
   if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() == 1 &&
@@ -137,6 +178,8 @@ PostAuctionSignals GeneratePostAuctionSignals(
           winning_ad_score->interest_group_owner(),
           winning_bid,
           bid_currency,
+          winning_bid_in_seller_currency,
+          std::move(seller_currency),
           highest_scoring_other_bid,
           highest_scoring_other_bid_currency,
           std::move(highest_scoring_other_bid_ig_owner),
@@ -202,12 +245,34 @@ DebugReportingPlaceholder GetPlaceholderDataForInterestGroup(
       rejection_reason = ig_name_itr->second;
     }
   }
-  return {.winning_bid = post_auction_signals.winning_bid,
-          .made_winning_bid = made_winning_bid,
-          .highest_scoring_other_bid =
-              post_auction_signals.highest_scoring_other_bid,
-          .made_highest_scoring_other_bid = made_highest_scoring_other_bid,
-          .rejection_reason = rejection_reason};
+  float winning_bid;
+  absl::string_view both_currency_codes;
+  if (!post_auction_signals.seller_currency.empty()) {
+    winning_bid = post_auction_signals.winning_bid_in_seller_currency;
+    // In DebugReporting, when seller currency is set, all currency markers are
+    // set to it.
+    both_currency_codes = post_auction_signals.seller_currency;
+  } else {
+    // In the PostAuctionSignals, the winning bid is always the original
+    // buyer_bid.
+    winning_bid = post_auction_signals.winning_bid;
+    // In DebugReporting, when seller currency is un-set, all currency markers
+    // are set to Unknown.
+    both_currency_codes = kUnknownBidCurrencyCode;
+  }
+  return {
+      .winning_bid = winning_bid,
+      .winning_bid_currency = std::string(both_currency_codes),
+      .made_winning_bid = made_winning_bid,
+      // The PostAuctionSignals just retrieves and sets the
+      // highest_scoring_other_bid. highest_scoring_other_bid was already set to
+      // the original value if no seller_currency, and the modified value if
+      // some seller currency.
+      .highest_scoring_other_bid =
+          post_auction_signals.highest_scoring_other_bid,
+      .highest_scoring_other_bid_currency = std::string(both_currency_codes),
+      .made_highest_scoring_other_bid = made_highest_scoring_other_bid,
+      .rejection_reason = rejection_reason};
 }
 
 SellerRejectionReason ToSellerRejectionReason(
@@ -270,7 +335,7 @@ absl::string_view ToSellerRejectionReasonString(
 
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-                           server_common::log::ContextImpl& log_context) {
+                           RequestLogContext& log_context) {
   if (!enable_ad_tech_code_logging) {
     return;
   }
@@ -282,7 +347,7 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    server_common::log::ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);

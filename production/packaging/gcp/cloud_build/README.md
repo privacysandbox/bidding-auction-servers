@@ -25,7 +25,10 @@ First, follow the steps to
 [connect a Github repository](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen)
 and create a host connection. You will need to clone the
 [Bidding and Auction repo](https://github.com/privacysandbox/bidding-auction-servers) to your own
-Github account before you can connect it to your GCP project's Cloud Build.
+Github account before you can connect it to your GCP project's Cloud Build. Make sure that your
+fork, if updated automatically, also fetches the tags from the upstream repo -- that way, you can
+build directly from the semantically versioned tags. See [here](sync_bidding_auction_repo.yaml) for
+an example Github Action that handles syncing.
 
 #### Configuring an Image Repo
 
@@ -51,6 +54,10 @@ You must create a build trigger. Starting with a
 [Github](https://cloud.google.com/build/docs/triggers#github) trigger is recommended. Please make
 sure to use a '2nd gen' repository source type.
 
+Recommendation 1: Use a `Push a new tag` Event to build `.*` tags.
+
+Recommendation 2: Create a separate trigger for each `_BUILD_FLAVOR` (see below).
+
 #### Configuration
 
 1. Type: Cloud Build configuration file (yaml or json)
@@ -65,8 +72,14 @@ sure to use a '2nd gen' repository source type.
     Note: these will override variables in the cloudbuild.yaml.
 
     ```plaintext
-     key: _GCP_IMAGE_REPO value: service images repo URI from prerequisites (default: us-docker.pkg.dev/${PROJECT_ID}/services)
-     key: _GCP_IMAGE_TAG value: any tag (default: from-cloudbuild)
+     key: _BUILD_FLAVOR
+     value: prod or non_prod. While 'prod' allows for attestation against production private keys, non_prod has enhanced logging.
+
+     key: _GCP_IMAGE_REPO
+     value: service images repo URI from prerequisites (default: us-docker.pkg.dev/${PROJECT_ID}/services)
+
+     key: _GCP_IMAGE_TAG
+     value: any tag (default: ${GIT_TAG}, only useful if building from a tag directly)
     ```
 
 1. Service account: Use the account created [previously](#service-account-permissions).

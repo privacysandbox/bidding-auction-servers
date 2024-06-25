@@ -33,7 +33,7 @@ cc_library(
     srcs = [
         "select_ad_reactor.cc",
         "select_ad_reactor_app.cc",
-        "select_ad_reactor_invalid_client.cc",
+        "select_ad_reactor_invalid.cc",
         "select_ad_reactor_web.cc",
         "select_auction_result_reactor.cc",
         "seller_frontend_service.cc",
@@ -41,7 +41,7 @@ cc_library(
     hdrs = [
         "select_ad_reactor.h",
         "select_ad_reactor_app.h",
-        "select_ad_reactor_invalid_client.h",
+        "select_ad_reactor_invalid.h",
         "select_ad_reactor_web.h",
         "select_auction_result_reactor.h",
         "seller_frontend_service.h",
@@ -51,6 +51,7 @@ cc_library(
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common:feature_flags",
         "//services/common/clients/auction_server:async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client_factory",
@@ -137,6 +138,7 @@ cc_test(
         ":seller_frontend_service",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common:feature_flags",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
@@ -154,6 +156,7 @@ cc_test(
     ],
     deps = [
         ":seller_frontend_service",
+        "//services/common:feature_flags",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",
@@ -195,6 +198,7 @@ cc_test(
     ],
     deps = [
         ":seller_frontend_service",
+        "//services/common:feature_flags",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",
@@ -217,6 +221,7 @@ cc_test(
     ],
     deps = [
         ":seller_frontend_service",
+        "//services/common:feature_flags",
         "//services/common/compression:gzip",
         "//services/common/test:mocks",
         "//services/common/test:random",

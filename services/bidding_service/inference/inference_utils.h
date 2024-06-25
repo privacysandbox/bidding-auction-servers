@@ -29,6 +29,7 @@
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 constexpr absl::string_view kInferenceFunctionName = "runInference";
+constexpr absl::string_view kGetModelPathsFunctionName = "getModelPaths";
 
 // Accesses a sandbox exectuor that uses static storage.
 SandboxExecutor& Executor();
@@ -47,6 +48,15 @@ absl::Status RegisterModelsFromBucket(
 void RunInference(
     google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
         wrapper);
+
+// Registered with Roma to provide an API to query the currently available
+// models from JS code.
+void GetModelPaths(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper);
+
+// Converts a GetModelPaths response to Json string
+std::string GetModelResponseToJson(const GetModelPathsResponse& response);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

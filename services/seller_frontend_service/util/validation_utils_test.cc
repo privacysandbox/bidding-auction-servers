@@ -59,7 +59,7 @@ TEST(ValidateEncryptedSelectAdRequest, AddsErrorsToAccumulatorForSingleSeller) {
   EXPECT_THAT(errors, Contains(kEmptyAuctionSignals));
   EXPECT_THAT(errors, Contains(kEmptySeller));
   EXPECT_THAT(errors, Contains(kWrongSellerDomain));
-  EXPECT_THAT(errors, Contains(kUnknownClientType));
+  EXPECT_THAT(errors, Contains(kUnsupportedClientType));
 }
 
 TEST(ValidateEncryptedSelectAdRequest, ValidatesDeviceComponentSellerInput) {
@@ -93,7 +93,7 @@ TEST(ValidateEncryptedSelectAdRequest,
   EXPECT_THAT(errors, Contains(kEmptyAuctionSignals));
   EXPECT_THAT(errors, Contains(kEmptySeller));
   EXPECT_THAT(errors, Contains(kWrongSellerDomain));
-  EXPECT_THAT(errors, Contains(kUnknownClientType));
+  EXPECT_THAT(errors, Contains(kUnsupportedClientType));
 }
 
 TEST(ValidateEncryptedSelectAdRequest, ValidatesServerComponentSellerInput) {
@@ -127,7 +127,7 @@ TEST(ValidateEncryptedSelectAdRequest,
   EXPECT_THAT(errors, Contains(kEmptyAuctionSignals));
   EXPECT_THAT(errors, Contains(kEmptySeller));
   EXPECT_THAT(errors, Contains(kWrongSellerDomain));
-  EXPECT_THAT(errors, Contains(kUnknownClientType));
+  EXPECT_THAT(errors, Contains(kUnsupportedClientType));
 }
 
 TEST(ValidateEncryptedSelectAdRequest,
@@ -146,7 +146,7 @@ TEST(ValidateEncryptedSelectAdRequest,
   EXPECT_THAT(errors, Contains(kEmptyAuctionSignals));
   EXPECT_THAT(errors, Contains(kEmptySeller));
   EXPECT_THAT(errors, Contains(kWrongSellerDomain));
-  EXPECT_THAT(errors, Contains(kUnknownClientType));
+  EXPECT_THAT(errors, Contains(kUnsupportedClientType));
   EXPECT_THAT(errors, Contains(kNoComponentAuctionResults));
 }
 

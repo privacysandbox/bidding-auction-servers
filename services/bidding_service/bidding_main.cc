@@ -254,6 +254,17 @@ absl::Status RunServer() {
       config.RegisterFunctionBinding(std::move(run_inference_function_object));
       PS_LOG(INFO) << "RunInference registered.";
 
+      PS_LOG(INFO) << "Register getModelPaths API.";
+      auto get_model_paths_function_object =
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContext>>();
+      get_model_paths_function_object->function_name =
+          std::string(inference::kGetModelPathsFunctionName);
+      get_model_paths_function_object->function = inference::GetModelPaths;
+      config.RegisterFunctionBinding(
+          std::move(get_model_paths_function_object));
+      PS_LOG(INFO) << "getModelPaths registered.";
+
       PS_LOG(INFO) << "Start the inference sidecar.";
       // This usage of the following two flags is not consistent with rest of
       // the codebase, where we use the parameter from the config client
@@ -290,7 +301,6 @@ absl::Status RunServer() {
 
   bool enable_buyer_debug_url_generation =
       udf_config.enable_buyer_debug_url_generation();
-  bool enable_adtech_code_logging = udf_config.enable_adtech_code_logging();
   const bool enable_protected_audience =
       config_client.HasParameter(ENABLE_PROTECTED_AUDIENCE) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
@@ -396,7 +406,6 @@ absl::Status RunServer() {
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
-      .enable_adtech_code_logging = enable_adtech_code_logging,
       .is_protected_app_signals_enabled = enable_protected_app_signals,
       .is_protected_audience_enabled = enable_protected_audience,
       .ad_retrieval_timeout_ms =
@@ -410,7 +419,7 @@ absl::Status RunServer() {
       .kv_server_egress_tls =
           config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS)};
 
-  if (udf_config.fetch_mode() == bidding_service::FETCH_MODE_BUCKET) {
+  if (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     if (enable_protected_audience) {
       runtime_config.default_protected_auction_generate_bid_version =
           udf_config.protected_auction_bidding_js_bucket_default_blob();

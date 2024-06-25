@@ -38,9 +38,9 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using ::testing::Matcher;
 using ::testing::Return;
-using GetBidDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                GetBidsResponse::GetBidsRawResponse>>) &&>;
+using GetBidDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>,
+         ResponseMetadata) &&>;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using ScoringSignalsDoneCallback =
@@ -113,7 +113,7 @@ void SetupBuyerClientMock(
       [bid, num_buyers_solicited, top_level_seller](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
           const RequestMetadata& metadata, GetBidDoneCallback on_done,
-          absl::Duration timeout) {
+          absl::Duration timeout, RequestConfig request_config) {
         ABSL_LOG(INFO) << "Returning mock bids";
         // Check top level seller is populated for component auctions.
         if (!top_level_seller.empty()) {
@@ -121,7 +121,8 @@ void SetupBuyerClientMock(
         }
         if (bid.has_value()) {
           std::move(on_done)(
-              std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid));
+              std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid),
+              /* response_metadata= */ {});
         }
         if (num_buyers_solicited) {
           ++(*num_buyers_solicited);
@@ -137,6 +138,7 @@ void SetupBuyerClientMock(
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
+
   auto MockBuyerFactoryCall = [SetupMockBuyer](absl::string_view hostname) {
     return SetupMockBuyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
   };
@@ -304,6 +306,9 @@ TrustedServersConfigClient CreateConfig() {
   config.SetFlagForTest("2", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
   config.SetFlagForTest("3", SCORE_ADS_RPC_TIMEOUT_MS);
   config.SetFlagForTest(kAuctionHost, AUCTION_SERVER_HOST);
+  config.SetFlagForTest(
+      "auction-seller1-tjs-appmesh-virtual-server.seller1-frontend.com",
+      GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config.SetFlagForTest(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
   config.SetFlagForTest(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
   config.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
@@ -480,6 +485,20 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
   DCHECK_EQ(matched_left_to_add, 0);
   DCHECK_EQ(mismatched_left_to_add, 0);
   return pas_ads_with_bids;
+}
+
+void MockEntriesCallOnBuyerFactory(
+    const google::protobuf::Map<std::string, std::string>& buyer_input,
+    const BuyerFrontEndAsyncClientFactoryMock& factory) {
+  std::vector<std::pair<absl::string_view,
+                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+      entries;
+  for (const auto& [buyer, unused] : buyer_input) {
+    entries.emplace_back(buyer,
+                         std::make_shared<BuyerFrontEndAsyncClientMock>());
+  }
+
+  EXPECT_CALL(factory, Entries).WillRepeatedly(Return(std::move(entries)));
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

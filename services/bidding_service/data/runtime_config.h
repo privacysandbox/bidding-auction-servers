@@ -39,8 +39,6 @@ struct BiddingServiceRuntimeConfig {
   // - Exporting console.logs from Roma
   // - Event level debug win and loss reporting
   bool enable_buyer_code_wrapper = false;
-  // Enables exporting console.logs from Roma to Bidding Service
-  bool enable_adtech_code_logging = false;
   // Indicates whether or not protected app signals support is enabled.
   bool is_protected_app_signals_enabled = false;
   // Indicates whether or not Protected Audience support is enabled.

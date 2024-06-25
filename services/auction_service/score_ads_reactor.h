@@ -37,10 +37,10 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -71,6 +71,13 @@ struct ScoringData {
   std::optional<ScoreAdsResponse::AdScore> winning_ad;
 
   void UpdateWinner(int index, const ScoreAdsResponse::AdScore& ad_score);
+};
+
+// Fields needed from component level AuctionResult for
+// reporting in the Top level Seller
+struct ComponentReportingDataInAuctionResult {
+  std::string component_seller;
+  WinReportingUrls win_reporting_urls;
 };
 
 // This is a gRPC reactor that serves a single ScoreAdsRequest.
@@ -144,6 +151,7 @@ class ScoreAdsReactor
   static constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 
   void DispatchReportingRequestForPA(
+      absl::string_view dispatch_id,
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata);
@@ -220,6 +228,12 @@ class ScoreAdsReactor
       std::string,
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>>
       ad_data_;
+
+  // Map of dispatch id to component level reporting data in a component auction
+  // result.
+  absl::flat_hash_map<std::string, ComponentReportingDataInAuctionResult>
+      component_level_reporting_data_;
+
   absl::flat_hash_map<std::string,
                       std::unique_ptr<ProtectedAppSignalsAdWithBidMetadata>>
       protected_app_signals_ad_data_;
@@ -227,7 +241,7 @@ class ScoreAdsReactor
   const AsyncReporter& async_reporter_;
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
-  server_common::log::ContextImpl log_context_;
+  RequestLogContext log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
@@ -240,7 +254,6 @@ class ScoreAdsReactor
   // code.
   bool enable_adtech_code_logging_;
   bool enable_report_result_url_generation_;
-  bool enable_report_win_url_generation_;
   const bool enable_protected_app_signals_;
   bool enable_report_win_input_noising_;
   std::string seller_origin_;
@@ -251,10 +264,9 @@ class ScoreAdsReactor
   // Impacts the creation of scoreAd input params and
   // parsing of scoreAd output.
   AuctionScope auction_scope_;
-
   // Specifies which verison of scoreAd to use for this request.
   absl::string_view code_version_;
-
+  bool enable_report_win_url_generation_;
   google::protobuf::RepeatedPtrField<std::string>
   GetEmptyAdComponentRenderUrls() {
     static google::protobuf::RepeatedPtrField<std::string>

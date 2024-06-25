@@ -73,9 +73,14 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
   std::string encoded_data;
-  const auto decode_lambda = [&encoded_data]() {
+  const auto decode_lambda = [&encoded_data, this]() {
     auto result = CborDecodeAuctionResultToProto(encoded_data);
-    return result.ok() ? result->DebugString() : result.status().ToString();
+    if (result.ok()) {
+      log_context_.SetEventMessageField(*result);
+      return result->DebugString();
+    } else {
+      return result.status().ToString();
+    }
   };
 
   if (auction_scope_ ==
@@ -107,6 +112,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
 
     PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
                                   << auction_result.ShortDebugString();
+    log_context_.SetEventMessageField(auction_result);
   } else {
     // SINGLE_SELLER or SERVER_TOP_LEVEL Auction
     PS_ASSIGN_OR_RETURN(

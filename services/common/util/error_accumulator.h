@@ -24,9 +24,9 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/loggers/source_location_context.h"
 #include "services/common/util/error_reporter.h"
-#include "src/logger/request_context_impl.h"
 #include "src/util/status_macro/source_location.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -41,7 +41,7 @@ class ErrorAccumulator : public ErrorReporter {
   using ErrorMap = std::map<ErrorCode, std::set<std::string>>;
 
   ErrorAccumulator() = default;
-  explicit ErrorAccumulator(server_common::log::ContextImpl* log_context);
+  explicit ErrorAccumulator(RequestLogContext* log_context);
   virtual ~ErrorAccumulator() = default;
 
   // ErrorAccumulator is neither copyable nor movable.
@@ -72,7 +72,7 @@ class ErrorAccumulator : public ErrorReporter {
   const ErrorMap empty_error_map_ = {};
 
   // Optional log_context to be used for error reporting.
-  server_common::log::ContextImpl* log_context_ = nullptr;
+  RequestLogContext* log_context_ = nullptr;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -30,6 +30,7 @@
 #include "absl/strings/str_format.h"
 #include "gtest/gtest.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
+#include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/cbor_test_utils.h"
@@ -51,9 +52,9 @@ using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::Return;
 using Context = ::quiche::ObliviousHttpRequest::Context;
-using GetBidDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                GetBidsResponse::GetBidsRawResponse>>) &&>;
+using GetBidDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>,
+         ResponseMetadata) &&>;
 using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                             GetByteSize) &&>;
@@ -70,6 +71,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    absl::SetFlag(&FLAGS_enable_chaffing, false);
   }
 
   void SetProtectedAuctionCipherText(const T& protected_auction_input,
@@ -115,6 +117,10 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
@@ -183,6 +189,10 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
@@ -265,13 +275,14 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
          const RequestMetadata& metadata, GetBidDoneCallback on_done,
-         absl::Duration timeout) {
+         absl::Duration timeout, RequestConfig request_config) {
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         auto* bid = get_bids_response->mutable_bids()->Add();
         bid->set_bid(kSampleBidValue);
         bid->set_interest_group_name(kSampleBuyer);
-        std::move(on_done)(std::move(get_bids_response));
+        std::move(on_done)(std::move(get_bids_response),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       };
   auto SetupMockBuyer =
@@ -280,7 +291,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
         EXPECT_CALL(*buyer,
                     ExecuteInternal(Pointee(EqGetBidsRawRequestWithLogContext(
                                         expected_get_bid_request)),
-                                    _, _, _))
+                                    _, _, _, _))
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
@@ -314,7 +325,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   EXPECT_CALL(scoring_client,
               ExecuteInternal(Pointee(EqScoreAdsRawRequestWithLogContext(
                                   expected_score_ads_request)),
-                              _, _, _));
+                              _, _, _, _));
 
   // Set log context that should be propagated to the downstream services.
   auto [protected_auction_input, request, context] =
@@ -325,6 +336,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
                              ->mutable_per_buyer_config())[kSampleBuyer];
   buyer_config.set_buyer_debug_id(kSampleBuyerDebugId);
   buyer_config.set_buyer_signals(kSampleBuyerSignals);
+
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
@@ -605,13 +619,14 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
          const RequestMetadata& metadata, GetBidDoneCallback on_done,
-         absl::Duration timeout) {
+         absl::Duration timeout, RequestConfig request_config) {
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         auto* bid = get_bids_response->mutable_bids()->Add();
         bid->set_bid(kSampleBidValue);
         bid->set_interest_group_name(kSampleBuyer);
-        std::move(on_done)(std::move(get_bids_response));
+        std::move(on_done)(std::move(get_bids_response),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       };
   auto SetupMockBuyer =
@@ -621,7 +636,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
             *buyer,
             ExecuteInternal(Pointee(EqGetBidsRawRequestWithConsentedDebugConfig(
                                 expected_get_bid_request)),
-                            _, _, _))
+                            _, _, _, _))
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
@@ -658,7 +673,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
       scoring_client,
       ExecuteInternal(Pointee(EqScoreAdsRawRequestWithConsentedDebugConfig(
                           expected_score_ads_request)),
-                      _, _, _));
+                      _, _, _, _));
 
   // Set consented debug config that should be propagated to the downstream
   // services.
@@ -672,6 +687,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
                              ->mutable_per_buyer_config())[kSampleBuyer];
   buyer_config.set_buyer_debug_id(kSampleBuyerDebugId);
   buyer_config.set_buyer_signals(kSampleBuyerSignals);
+
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
@@ -695,6 +713,10 @@ TYPED_TEST(SelectAdReactorForWebTest,
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true,
           kTestTopLevelSellerOriginDomain);
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
@@ -721,16 +743,18 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   std::string base64_response;
   absl::Base64Escape(*decompressed_response, &base64_response);
-  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
-                 << base64_response;
+  ABSL_LOG(INFO)
+      << "Decrypted, decompressed but CBOR encoded auction result :\n "
+      << base64_response;
 
   absl::StatusOr<AuctionResult> deserialized_auction_result =
       CborDecodeAuctionResultToProto(*decompressed_response);
   EXPECT_TRUE(deserialized_auction_result.ok());
   EXPECT_FALSE(deserialized_auction_result->is_chaff());
 
-  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
-                 << MessageToJson(*deserialized_auction_result);
+  ABSL_LOG(INFO)
+      << "Decrypted, decompressed and CBOR decoded auction result :\n "
+      << MessageToJson(*deserialized_auction_result);
 
   // Validate that the bidding groups data is present.
   EXPECT_EQ(deserialized_auction_result->bidding_groups().size(), 1);
@@ -770,6 +794,10 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/true);
 
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request);
@@ -782,6 +810,7 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       request_with_context.context, kBiddingAuctionOhttpResponseLabel);
   EXPECT_FALSE(decrypted_response.ok()) << decrypted_response.status();
 }
+
 TYPED_TEST(SelectAdReactorForWebTest,
            VerifyServerComponentAuctionProtoEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
@@ -808,6 +837,10 @@ TYPED_TEST(SelectAdReactorForWebTest,
           /*force_set_modified_bid_to_zero=*/false,
           {&crypto_client,
            EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP});
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_proto =
       RunReactorRequest<SelectAdReactorForWeb>(

@@ -146,6 +146,10 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
     absl::string_view matching_currency, absl::string_view mismatching_currency,
     absl::string_view base_ad_render_url);
 
+void MockEntriesCallOnBuyerFactory(
+    const google::protobuf::Map<std::string, std::string>& buyer_input,
+    const BuyerFrontEndAsyncClientFactoryMock& factory);
+
 TrustedServersConfigClient CreateConfig();
 
 template <class T>
@@ -356,7 +360,8 @@ GetSelectAdRequestAndClientRegistryForTest(
   }
   using ScoreAdsDoneCallback =
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                  ScoreAdsResponse::ScoreAdsRawResponse>>) &&>;
+                                  ScoreAdsResponse::ScoreAdsRawResponse>>,
+                              ResponseMetadata) &&>;
   // Sets up scoring Client
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
@@ -364,7 +369,7 @@ GetSelectAdRequestAndClientRegistryForTest(
            force_set_modified_bid_to_zero](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestConfig request_config) {
             for (const auto& bid : request->ad_bids()) {
               auto response =
                   std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
@@ -416,7 +421,8 @@ GetSelectAdRequestAndClientRegistryForTest(
               if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }
-              std::move(on_done)(std::move(response));
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
               // Expect only one bid.
               break;
             }

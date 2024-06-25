@@ -73,7 +73,7 @@ variable "enclave_cpu_count" {
 }
 
 variable "service" {
-  description = "One of: bidding, auction, buyer-frontend, seller-frontend"
+  description = "One of: bidding, auction, bfe, sfe"
   type        = string
 }
 
@@ -87,4 +87,49 @@ variable "enclave_log_path" {
   description = "Absolute path to where nitro enclave logs will be written. Only used if enclave_debug_mode = true."
   type        = string
   default     = "/output.log"
+}
+
+variable "cloud_map_service_id" {
+  description = "The ID of the service discovery service"
+  type        = string
+}
+
+variable "region" {
+  description = "AWS region in which services have been created"
+  type        = string
+}
+
+variable "app_mesh_name" {
+  description = "Name of the AWS App Mesh in which this service will communicate."
+  type        = string
+}
+
+variable "virtual_node_name" {
+  description = "Name of the App Mesh Virtual Node of which instance in this ASG will be a part."
+  type        = string
+}
+
+variable "healthcheck_interval_sec" {
+  description = "Amount of time between health check intervals in seconds."
+  type        = number
+}
+
+variable "healthcheck_timeout_sec" {
+  description = "Amount of time to wait for a health check response in seconds."
+  type        = number
+}
+
+variable "healthcheck_healthy_threshold" {
+  description = "Consecutive health check successes required to be considered healthy."
+  type        = number
+}
+
+variable "healthcheck_unhealthy_threshold" {
+  description = "Consecutive health check failures required to be considered unhealthy."
+  type        = number
+}
+
+variable "healthcheck_grace_period_sec" {
+  description = "Amount of time to wait for service inside enclave to start up before starting health checks, in seconds."
+  type        = number
 }

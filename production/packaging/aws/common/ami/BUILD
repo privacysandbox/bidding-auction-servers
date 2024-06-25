@@ -19,6 +19,9 @@ filegroup(
     srcs = select({
         "//conditions:default": [
             "envoy.yaml",
+            "envoy_networking.sh",
+            "hc.bash",
+            "health.proto",
             "otel_collector_config.yaml",
         ],
     }),

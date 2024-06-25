@@ -64,6 +64,18 @@ inline constexpr absl::string_view kWinningAd = "winning_ad";
 inline constexpr char kValidCurrencyCodePattern[] = "^[A-Z]{3}$";
 const std::regex kValidCurrencyCodeRegex(kValidCurrencyCodePattern);
 
+inline constexpr int kMinChaffRequestSizeBytes = 9000;
+inline constexpr int kMaxChaffRequestSizeBytes = 95000;
+
+inline constexpr int kMinChaffRequests = 1;
+inline constexpr int kMinChaffRequestsWithNoRealRequests = 2;
+
+struct ChaffingConfig {
+  absl::flat_hash_set<std::string_view> chaff_request_candidates;
+  int num_chaff_requests = 0;
+  int num_real_requests = 0;
+};
+
 // This is a gRPC reactor that serves a single GenerateBidsRequest.
 // It stores state relevant to the request and after the
 // response is finished being served, SelectAdReactor cleans up all
@@ -203,13 +215,18 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // whether decryption was successful.
   grpc::Status DecryptRequest();
 
+  // Dispatches the GetBids calls for both 'real' and 'fake' (AKA chaff) buyers.
+  void FetchBids();
+
   // Fetches the bids from a single buyer by initiating an asynchronous GetBids
   // rpc.
   //
   // buyer: a string representing the buyer, identified as an IG owner.
-  // buyer_input: input for bidding.
-  void FetchBid(const std::string& buyer_ig_owner,
-                const BuyerInput& buyer_input);
+  // get_bids_request: the GetBids request proto for the specified buyer.
+  void FetchBid(
+      const std::string& buyer_ig_owner,
+      std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request);
+
   // Handles recording the fetched bid to state.
   // This is called by the grpc buyer client when the request is finished,
   // and will subsequently call update pending bids state which will update how
@@ -314,7 +331,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Encryption context needed throughout the lifecycle of the request.
   std::unique_ptr<OhttpHpkeDecryptedMessage> decrypted_request_;
 
-  server_common::log::ContextImpl log_context_;
+  RequestLogContext log_context_;
 
   // Decompressed and decoded buyer inputs.
   absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>
@@ -346,6 +363,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
 
+  // Pseudo random number generator for use in chaffing.
+  std::optional<std::mt19937> generator_;
+
  private:
   // Keeps track of how many buyer bids were expected initially and how many
   // were erroneous. If all bids ended up in an error state then that should be
@@ -357,6 +377,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
                                        const absl::Status& status,
                                        absl::string_view buyer = "");
+
+  ChaffingConfig GetChaffingConfig(
+      const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set);
 
   absl::Time start_ = absl::Now();
 };

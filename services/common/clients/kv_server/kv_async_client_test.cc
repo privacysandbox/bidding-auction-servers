@@ -73,9 +73,8 @@ TEST_F(KVAsyncGrpcTest, CallsServerWithRequest) {
   absl::Status status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(raw_request), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
-        notification.Notify();
-      });
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) { notification.Notify(); });
   notification.WaitForNotification();
   EXPECT_TRUE(status.ok()) << status;
 }
@@ -109,9 +108,8 @@ TEST_F(KVAsyncGrpcTest, CallsServerWithMetadata) {
   absl::Status status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(raw_request), sent_metadata,
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
-        notification.Notify();
-      });
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) { notification.Notify(); });
   notification.WaitForNotification();
   ASSERT_TRUE(status.ok()) << status;
 
@@ -142,7 +140,8 @@ TEST_F(KVAsyncGrpcTest, PassesStatusToCallback) {
   absl::Status status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(raw_request), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) {
         EXPECT_EQ(get_values_response.status().code(),
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();

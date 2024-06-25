@@ -29,33 +29,33 @@ constexpr absl::string_view kLogContent = "log content";
 
 TEST(LogTest, LogIfConsented) {
   PredictResponse predict_response;
-  LogContext log_context(
+  RequestContext request_context(
       [&predict_response]() { return predict_response.mutable_debug_info(); },
       true);
 
-  INFERENCE_LOG(INFO, log_context) << kLogContent;
+  INFERENCE_LOG(INFO, request_context) << kLogContent;
   ASSERT_EQ(predict_response.debug_info().logs_size(), 1);
   EXPECT_THAT(predict_response.debug_info().logs(0), HasSubstr(kLogContent));
 }
 
 TEST(LogTest, LogNothingIfNoConsent) {
   PredictResponse predict_response;
-  LogContext log_context(
+  RequestContext request_context(
       [&predict_response]() { return predict_response.mutable_debug_info(); },
       false);
 
-  INFERENCE_LOG(INFO, log_context) << kLogContent;
+  INFERENCE_LOG(INFO, request_context) << kLogContent;
   EXPECT_EQ(predict_response.debug_info().logs_size(), 0);
 }
 
 TEST(LogTest, CanLogMultipleTimes) {
   PredictResponse predict_response;
-  LogContext log_context(
+  RequestContext request_context(
       [&predict_response]() { return predict_response.mutable_debug_info(); },
       true);
 
   for (int i = 0; i < 10; ++i) {
-    INFERENCE_LOG(INFO, log_context) << kLogContent;
+    INFERENCE_LOG(INFO, request_context) << kLogContent;
   }
   EXPECT_EQ(predict_response.debug_info().logs_size(), 10);
 }

@@ -42,14 +42,33 @@ variable with `--//:inference_runtime=pytorch`.
 ## Start the B&A servers in GCP
 
 -   Create a GCS bucket and store ML models into it.
--   Set runtime flags: `INFERENCE_SIDECAR_BINARY_PATH`, `INFERENCE_MODEL_BUCKET_NAME`,
-    `INFERENCE_MODEL_BUCKET_PATHS`, and `INFERENCE_SIDECAR_RUNTIME_CONFIG`.
+-   The GCS bucket needs to give the service account associated with the GCE instance both storage
+    legacy bucket reader and storage legacy object reader permissions:
+    [guide on setting bucket permissions](https://cloud.google.com/storage/docs/access-control/using-iam-permissions#bucket-add).
+-   Now you need to deploy a B&A server stack:
+    [deployment guide](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
+-   In the B&A deployment terraform configuration, set runtime flags:
+
     -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar`.
-    -   `INFERENCE_SIDECAR_RUNTIME_CONFIG` has the following format: { "num_interop_threads":
-        <integer_value>, "num_intraop_threads": <integer_value>, "module_name": <string_value>, }
-        Currently "module_name" can be one of "test", "tensorflow_v2_14_0", "pytorch_v2_1_1".
--   Refer to
-    [README.md](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
+    -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the GCS bucket that you have created. Note
+        that this _not_ a url. For example, the bucket name can be "test_models".
+    -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
+        bucket. For example, within the "test_models" bucket there are saved models
+        "tensorflow/model1" and "tensorflow/model1". To load these two models, this flag should be
+        set to "tensorflow/model1,tensorflow/model2".
+    -   Set `INFERENCE_SIDECAR_RUNTIME_CONFIG` which has the following format:
+
+        ```javascript
+        {
+            "num_interop_threads": <integer_value>,
+            "num_intraop_threads": <integer_value>,
+            "module_name": <string_value>,
+            "cpuset": <an array of integer values>
+        }
+        ```
+
+        `module_name` flag is required and should be one of "test", "tensorflow_v2_14_0", or
+        "pytorch_v2_1_1". All other flags are optional.
 
 ## Start the B&A servers locally for testing/debugging
 

@@ -142,8 +142,7 @@ constexpr absl::string_view kTestAdMetadataJson = R"JSON(
 constexpr char kTestScoringSignals[] = R"JSON({"RandomScoringSignals":{}})JSON";
 constexpr char kTestAuctionConfig[] = R"JSON({"RandomAuctionConfig":{}})JSON";
 constexpr char kTestBidMetadata[] = R"JSON({"RandomBidMetadata":{}})JSON";
-server_common::log::ContextImpl log_context{
-    {}, server_common::ConsentedDebugConfiguration()};
+RequestLogContext log_context{{}, server_common::ConsentedDebugConfiguration()};
 
 google::protobuf::Value GetTestAdMetadata() {
   auto ads_metadata = JsonStringToValue(kTestAdMetadataJson);

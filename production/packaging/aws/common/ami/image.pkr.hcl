@@ -28,6 +28,12 @@ variable "git_commit" {
 
 variable "build_version" {
   type    = string
+  description    = "git tag if available"
+}
+
+variable "build_flavor" {
+  type    = string
+  description = "prod or non_prod"
 }
 
 variable "build_env" {
@@ -78,7 +84,7 @@ locals { timestamp = regex_replace(timestamp(), "[- TZ:]", "") }
 # build blocks. A build block runs provisioners and post-processors on a
 # source.
 source "amazon-ebs" "dataserver" {
-  ami_name      = "${var.service}-${local.timestamp}"
+  ami_name      = "${var.service}-${var.build_version}-${var.build_flavor}-${local.timestamp}"
   instance_type = "m5.xlarge"
   region        = var.regions[0]
   ami_regions   = var.regions
@@ -94,6 +100,7 @@ source "amazon-ebs" "dataserver" {
   tags = {
     git_commit = var.git_commit
     build_version = var.build_version
+    build_flavor = var.build_flavor
     build_env = var.build_env
   }
   ssh_username = "ec2-user"
@@ -120,6 +127,18 @@ build {
     destination = "/tmp/otel_collector_config.yaml"
   }
   provisioner "file" {
+    source      = join("/", [var.distribution_dir, "envoy_networking.sh"])
+    destination = "/tmp/envoy_networking.sh"
+  }
+  provisioner "file" {
+    source      = join("/", [var.distribution_dir, "hc.bash"])
+    destination = "/tmp/hc.bash"
+  }
+  provisioner "file" {
+    source      = join("/", [var.distribution_dir, "health.proto"])
+    destination = "/tmp/health.proto"
+  }
+  provisioner "file" {
     source      = join("/", [var.distribution_dir, "/${var.service}.eif"])
     destination = "/tmp/server_enclave_image.eif"
   }
@@ -140,7 +159,10 @@ mkdir -p /opt/privacysandbox
 mv /tmp/proxy /opt/privacysandbox/proxy
 mv /tmp/server_enclave_image.eif /opt/privacysandbox/server_enclave_image.eif
 mv /tmp/otel_collector_config.yaml /opt/privacysandbox/otel_collector_config.yaml
-chmod 555 /opt/privacysandbox/{proxy,server_enclave_image.eif,otel_collector_config.yaml}
+mv /tmp/envoy_networking.sh /opt/privacysandbox/envoy_networking.sh
+mv /tmp/hc.bash /opt/privacysandbox/hc.bash
+mv /tmp/health.proto /opt/privacysandbox/health.proto
+chmod 555 /opt/privacysandbox/{proxy,server_enclave_image.eif,otel_collector_config.yaml,envoy_networking.sh,hc.bash,health.proto}
 EOF
     destination = "/tmp/setup_files"
   }

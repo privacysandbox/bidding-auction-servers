@@ -158,10 +158,10 @@ cc_library(
     deps = [
         ":error_categories",
         ":error_reporter",
+        "//services/common/loggers:request_log_context",
         "//services/common/loggers:source_location_context",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
@@ -200,6 +200,7 @@ cc_library(
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -207,7 +208,6 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
@@ -262,12 +262,12 @@ cc_library(
     srcs = ["async_task_tracker.cc"],
     hdrs = ["async_task_tracker.h"],
     deps = [
+        "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
@@ -306,12 +306,12 @@ cc_library(
         "binary_http_utils.h",
     ],
     deps = [
+        "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
         "@com_github_google_quiche//quiche:binary_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -371,11 +371,11 @@ cc_library(
     ],
     deps = [
         "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/loggers:request_log_context",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -454,7 +454,30 @@ cc_library(
         "tcmalloc_utils.h",
     ],
     deps = [
+        "//services/common/loggers:request_log_context",
         "@com_google_tcmalloc//tcmalloc:malloc_extension",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+    ],
+)
+
+cc_library(
+    name = "data_util",
+    hdrs = [
+        "data_util.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_test(
+    name = "data_util_test",
+    size = "small",
+    srcs = [
+        "data_util_test.cc",
+    ],
+    deps = [
+        ":data_util",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
     ],
 )

@@ -28,6 +28,11 @@ variable "region" {
   type        = string
 }
 
+variable "use_service_mesh" {
+  description = "use mesh if true, else if false use load balancers"
+  type        = bool
+}
+
 # TODO(b/260100326): update key to service_operator
 variable "operator" {
   description = "operator name"
@@ -57,24 +62,20 @@ variable "certificate_arn" {
 variable "sfe_instance_type" {
   description = "Hardware and OS configuration for the SFE EC2 instance."
   type        = string
-  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
 
 variable "auction_instance_type" {
   description = "Hardware and OS configuration for the Auction EC2 instance."
   type        = string
-  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
 
 variable "sfe_instance_ami_id" {
   description = "Seller FrontEnd operator Amazon Machine Image to run on EC2 instance."
   type        = string
-  default     = "ami-0ff8ad2fa8512a078"
 }
 variable "auction_instance_ami_id" {
   description = "Auction operator Amazon Machine Image to run on EC2 instance."
   type        = string
-  default     = "ami-0ea85f493f16aba3c"
 }
 
 # Variables related to server configuration.
@@ -94,54 +95,44 @@ variable "server_port" {
 variable "sfe_enclave_cpu_count" {
   description = "The number of vcpus to allocate to the SFE enclave."
   type        = number
-  default     = 6
 }
 variable "sfe_enclave_memory_mib" {
   description = "Amount of memory to allocate to the SFE enclave."
   type        = number
-  default     = 12000
 }
 variable "auction_enclave_cpu_count" {
   description = "The number of vcpus to allocate to the Auction enclave."
   type        = number
-  default     = 6
 }
 variable "auction_enclave_memory_mib" {
   description = "Amount of memory to allocate to the Auction enclave."
   type        = number
-  default     = 12000
 }
 
 
 variable "sfe_autoscaling_desired_capacity" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "sfe_autoscaling_max_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "sfe_autoscaling_min_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "auction_autoscaling_desired_capacity" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "auction_autoscaling_max_size" {
-  type    = number
-  default = 1
+  type = number
 
 }
 
 variable "auction_autoscaling_min_size" {
-  type    = number
-  default = 1
+  type = number
 
 }
 
@@ -177,6 +168,16 @@ variable "healthcheck_interval_sec" {
   type        = number
   default     = 7
 }
+variable "healthcheck_timeout_sec" {
+  description = "Amount of time to wait for a health check response in seconds."
+  type        = number
+  default     = 5
+}
+variable "healthcheck_grace_period_sec" {
+  description = "Amount of time to wait for service inside enclave to start up before starting health checks, in seconds."
+  type        = number
+  default     = 60
+}
 variable "healthcheck_healthy_threshold" {
   description = "Consecutive health check successes required to be considered healthy."
   type        = number
@@ -210,4 +211,34 @@ variable "enclave_debug_mode" {
 variable "runtime_flags" {
   type        = map(string)
   description = "Seller runtime flags. Must exactly match flags specified in <project root>/services/(auction_service|seller_frontend_service)/runtime_flags.h"
+}
+
+variable "business_org_for_cert_auth" {
+  description = "Name of your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "country_for_cert_auth" {
+  description = "Country of your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "state_for_cert_auth" {
+  description = "State or province where your business organization is located, for the private certificate authority"
+  type        = string
+}
+
+variable "org_unit_for_cert_auth" {
+  description = "Name of your particular unit in your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "locality_for_cert_auth" {
+  description = "Locality where your business organization is located, for the private certificate authority"
+  type        = string
+}
+
+variable "use_tls_with_mesh" {
+  type        = bool
+  description = "Whether to use TLS-encrypted communication between service mesh envoy sidecars."
 }

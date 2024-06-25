@@ -17,7 +17,15 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//:__subpackages__"])
 
 cc_library(
+    name = "request_config",
+    hdrs = [
+        "request_config.h",
+    ],
+)
+
+cc_library(
     name = "default_async_grpc_client",
+    srcs = ["default_async_grpc_client.cc"],
     hdrs = [
         "default_async_grpc_client.h",
     ],
@@ -38,9 +46,11 @@ cc_library(
         ),
     deps = [
         ":grpc_client_utils",
+        ":request_config",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients:async_client",
+        "//services/common/constants:common_constants",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper_interface",
         "//services/common/encryption:key_fetcher_factory",

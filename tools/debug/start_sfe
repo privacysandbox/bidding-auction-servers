@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2024 Google LLC
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,16 +21,15 @@ declare -a -r DOCKER_RUN_ARGS=(
 )
 export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
-
 export SERVER_START_CMD=$(cat << END
 /server \
 --init_config_client="false" --port=50053 \
 --auction_server_host="127.0.0.1:50061" \
---key_value_signals_host="https://pubads.g.doubleclick.net/td/sts" \
---seller_origin_domain="https://securepubads.g.doubleclick.net" \
+--key_value_signals_host="${KEY_VALUE_SIGNALS_HOST}" \
+--seller_origin_domain="${SELLER_ORIGIN_DOMAIN}" \
 --seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
 --buyer_server_hosts='{
-  "https://td.doubleclick.net": {
+  "${BUYER_SERVER_HOST}": {
     "url": "127.0.0.1:50051",
     "cloudPlatform": "LOCAL"
   }
@@ -40,8 +40,8 @@ export SERVER_START_CMD=$(cat << END
 --create_new_event_engine="false" \
 --test_mode="true" \
 --telemetry_config="mode: EXPERIMENT" \
---enable_otel_based_logging="false" \
---consented_debug_token="" \
+--enable_otel_based_logging="true"\
+--consented_debug_token="test_token"\
 --ps_verbosity=2 \
 --enable_protected_audience="true" \
 --sfe_tcmalloc_background_release_rate_bytes_per_second=4096 \

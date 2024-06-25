@@ -53,6 +53,8 @@ inline constexpr char kBadBuyerInputProto[] =
 inline constexpr char kPASSignalsForComponentAuction[] =
     "Unsupported component auction input (protected signals) for buyer: %s";
 inline constexpr char kMalformedBuyerInput[] = "Malformed buyer input.";
+inline constexpr char kEmptySelectAdRequest[] =
+    "Empty SelectAdRequest received.";
 inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
     "protected_auction_ciphertext must be non-null.";
 inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
@@ -92,8 +94,6 @@ inline constexpr char kEmptySeller[] =
     "Seller origin missing in auction config";
 inline constexpr char kEmptyBuyerSignals[] =
     "Buyer signals missing in auction config for buyer: %s";
-inline constexpr char kUnknownClientType[] =
-    "Unknown client type in SelectAdRequest";
 inline constexpr char kWrongSellerDomain[] =
     "Seller domain passed in request does not match this server's domain";
 inline constexpr char kEmptyBuyerInPerBuyerConfig[] =

@@ -54,11 +54,11 @@ BuyerCodeFetchManager::~BuyerCodeFetchManager() {
 
 absl::Status BuyerCodeFetchManager::Init() {
   switch (udf_config_.fetch_mode()) {
-    case bidding_service::FETCH_MODE_LOCAL:
+    case blob_fetch::FETCH_MODE_LOCAL:
       return InitializeLocalCodeFetch();
-    case bidding_service::FETCH_MODE_BUCKET:
+    case blob_fetch::FETCH_MODE_BUCKET:
       return InitializeBucketCodeFetch();
-    case bidding_service::FETCH_MODE_URL:
+    case blob_fetch::FETCH_MODE_URL:
       return InitializeUrlCodeFetch();
     default:
       return absl::InvalidArgumentError(kFetchModeInvalid);

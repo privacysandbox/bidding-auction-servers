@@ -47,11 +47,11 @@ constexpr char kTestBuyerSignals[] = "{\"test_key\":\"test_value\"}";
 constexpr int kNumInterestGroups = 90;
 constexpr int kNumPasAds = 90;
 constexpr char kRenderUrlTemplate[] =
-    "https://googleads.g.doubleclick.net/td/adfetch/"
-    "gda?adg_id=142601302539&cr_id=628073386727&cv_id=0&distinguisher_id=%d";
+    "https://adtech/"
+    "?adg_id=142601302539&cr_id=628073386727&cv_id=0&distinguisher_id=%d";
 constexpr char kPasRenderUrlTemplate[] =
-    "https://googleads.g.doubleclick.pas.net/td/adfetch/"
-    "gda?adg_id=142601302539&cr_id=628073386727&cv_id=0&distinguisher_id=%d";
+    "https://adtech/"
+    "?adg_id=142601302539&cr_id=628073386727&cv_id=0&distinguisher_id=%d";
 constexpr char kInterestGroupTemplate[] = "InterestGroup-%d";
 constexpr char kInterestGroupOwnerTemplate[] =
     "https://interest-group-owner.com/-%d";

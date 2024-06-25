@@ -33,6 +33,10 @@ struct PostAuctionSignals {
   float winning_bid;
   // Currency for said winning bid.
   std::string winning_bid_currency;
+  // The winning bid from the auction, in the seller's currency.
+  float winning_bid_in_seller_currency;
+  // The seller's currency.
+  std::string seller_currency;
 
   // The bid which was scored second highest in the auction.
   float highest_scoring_other_bid;

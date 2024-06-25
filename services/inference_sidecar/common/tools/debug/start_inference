@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-
+# Copyright 2024 Google LLC
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,8 +31,8 @@ export PROJECT_ROOT=$(git rev-parse --show-toplevel)
 
 # Default mount variables:
 BIDDING_SERVER_MOUNT=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server
-INFERENCE_SIDECAR_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar:/inference_sidecar
-INFERENCE_MODEL_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_e2e_model1.pt:/test_model
+INFERENCE_SIDECAR_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar_pytorch_v2_1_1:/inference_sidecar_pytorch_v2_1_1
+INFERENCE_MODEL_MOUNT=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_e2e_model1.pt:/generate_bid_model
 
 # Default client JS code:
 BIDDING_JS_PATH="/src/workspace/testing/functional/suts/inference_pytorch/data/buyer-bidding-service/generateBidRunInference.js"
@@ -110,8 +111,8 @@ echo $EXTRA_DOCKER_RUN_ARGS
 
 export SERVER_START_CMD=$(cat << END
 /server \
---inference_sidecar_binary_path="/inference_sidecar" \
---inference_model_local_paths="/test_model" \
+--inference_sidecar_binary_path="/inference_sidecar_pytorch_v2_1_1" \
+--inference_model_local_paths="/generate_bid_model" \
 --inference_sidecar_runtime_config='{
       "num_interop_threads": 4,
       "num_intraop_threads": 4,
@@ -127,13 +128,12 @@ export SERVER_START_CMD=$(cat << END
 --buyer_code_fetch_config='{
       "fetchMode": 2,
       "biddingJsPath": "${BIDDING_JS_PATH}",
-      "protectedAppSignalsBiddingJsUrl": "https://td.doubleclick.net/td/bjs",
+      "protectedAppSignalsBiddingJsUrl": "${PROTECTED_APP_SIGNALS_BIDDING_JS_URL}",
       "biddingWasmHelperUrl": "",
       "protectedAppSignalsBiddingWasmHelperUrl": "",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
       "enableBuyerDebugUrlGeneration": true,
-      "enableAdtechCodeLogging": false,
       "prepareDataForAdsRetrievalJsUrl": "",
       "prepareDataForAdsRetrievalWasmHelperUrl": ""
     }' \

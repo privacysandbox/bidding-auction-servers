@@ -103,7 +103,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       crypto_client_(crypto_client),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
-        return server_common::log::ContextImpl(
+        return RequestLogContext(
             GetLoggingContext(), raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
@@ -155,6 +155,8 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
 
   PS_VLOG(kPlain, log_context_) << "GetBidsRawResponse:\n"
                                 << get_bids_raw_response_->ShortDebugString();
+  log_context_.SetEventMessageField(*get_bids_raw_response_);
+  log_context_.ExportEventMessage();
 
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     PS_LOG(ERROR, log_context_) << "Failed to encrypt the response";
@@ -224,6 +226,7 @@ void GetBidsUnaryReactor::Execute() {
   benchmarking_logger_->Begin();
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
                                     << request_->ShortDebugString();
+  log_context_.SetEventMessageField(*request_);
   PS_VLOG(kPlain, log_context_)
       << "Headers:\n"
       << absl::StrJoin(context_->client_metadata(), "\n",
@@ -239,6 +242,7 @@ void GetBidsUnaryReactor::Execute() {
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
   PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
+  log_context_.SetEventMessageField(raw_request_);
 
   const int num_bidding_calls = GetNumberOfBiddingCalls();
   if (num_bidding_calls == 0) {
@@ -291,9 +295,11 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   absl::Status execute_result =
       protected_app_signals_bidding_async_client_->ExecuteInternal(
           std::move(protected_app_signals_bid_request), bidding_metadata_,
-          [this](absl::StatusOr<
-                 std::unique_ptr<GenerateProtectedAppSignalsBidsRawResponse>>
-                     raw_response) {
+          [this](
+              absl::StatusOr<
+                  std::unique_ptr<GenerateProtectedAppSignalsBidsRawResponse>>
+                  raw_response,
+              ResponseMetadata response_metadata) {
             HandleSingleBidCompletion<
                 GenerateProtectedAppSignalsBidsRawResponse>(
                 std::move(raw_response),
@@ -429,7 +435,8 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       [this, bidding_request = std::move(bidding_request)](
           absl::StatusOr<
               std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
-              raw_response) mutable {
+              raw_response,
+          ResponseMetadata response_metadata) mutable {
         {
           int response_size =
               raw_response.ok() ? (int)raw_response->get()->ByteSizeLong() : 0;
@@ -506,7 +513,6 @@ void GetBidsUnaryReactor::FinishWithStatus(const grpc::Status& status) {
   if (status.error_code() != grpc::StatusCode::OK) {
     metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
   }
-
   Finish(status);
 }
 

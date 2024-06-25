@@ -26,7 +26,6 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
@@ -90,7 +89,6 @@ container_image(
     entrypoint = [
         "/busybox/sh",
     ],
-    env = LOG_ENV_VARS,
     layers = [
         ":server_binary_layer",
     ] + select({

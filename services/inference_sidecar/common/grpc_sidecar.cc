@@ -26,10 +26,12 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/server_posix.h>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.grpc.pb.h"
@@ -38,6 +40,7 @@
 #include "sandboxed_api/sandbox2/comms.h"
 #include "src/util/status_macro/status_util.h"
 #include "utils/cpu.h"
+#include "utils/log.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -56,24 +59,51 @@ class InferenceServiceImpl final : public InferenceService::Service {
     if (!register_model_response.ok()) {
       return server_common::FromAbslStatus(register_model_response.status());
     }
+
+    // save the model path since it was registered successfully
+    absl::WriterMutexLock write_model_paths_lock(&model_paths_mutex_);
+    model_paths_.insert(request->model_spec().model_path());
+
     *response = register_model_response.value();
+
     return grpc::Status::OK;
   }
 
   grpc::Status Predict(grpc::ServerContext* context,
                        const PredictRequest* request,
                        PredictResponse* response) override {
+    RequestContext request_context(
+        [response] { return response->mutable_debug_info(); },
+        request->is_consented());
     absl::StatusOr<PredictResponse> predict_response =
-        inference_module_->Predict(*request);
+        inference_module_->Predict(*request, request_context);
     if (!predict_response.ok()) {
+      ABSL_LOG(ERROR) << predict_response.status().message();
       return server_common::FromAbslStatus(predict_response.status());
     }
-    *response = predict_response.value();
+    *(response->mutable_output()) = predict_response->output();
+    return grpc::Status::OK;
+  }
+
+  // TODO: b/348968123) - Relook at API implementation
+  grpc::Status GetModelPaths(grpc::ServerContext* context,
+                             const GetModelPathsRequest* request,
+                             GetModelPathsResponse* response) override {
+    absl::ReaderMutexLock read_model_paths_lock(&model_paths_mutex_);
+
+    for (std::string model_path : model_paths_) {
+      ModelSpec* model_spec = response->add_model_specs();
+      model_spec->set_model_path(model_path);
+    }
+
     return grpc::Status::OK;
   }
 
  private:
   std::unique_ptr<ModuleInterface> inference_module_;
+  mutable absl::Mutex model_paths_mutex_;
+  absl::flat_hash_set<std::string> model_paths_
+      ABSL_GUARDED_BY(model_paths_mutex_);
 };
 
 }  // namespace
@@ -84,6 +114,16 @@ absl::Status SetCpuAffinity(const InferenceSidecarRuntimeConfig& config) {
   }
   std::vector<int> cpuset(config.cpuset().begin(), config.cpuset().end());
   return SetCpuAffinity(cpuset);
+}
+
+absl::Status EnforceModelResetProbability(
+    InferenceSidecarRuntimeConfig& config) {
+  if (config.model_reset_probability() != 0.0) {
+    return absl::InvalidArgumentError(
+        "model_reset_probability should not be set");
+  }
+  config.set_model_reset_probability(kMinResetProbability);
+  return absl::OkStatus();
 }
 
 absl::Status Run(const InferenceSidecarRuntimeConfig& config) {

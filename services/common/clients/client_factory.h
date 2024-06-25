@@ -16,6 +16,8 @@
 #define FLEDGE_SERVICES_COMMON_CLIENTS_CLIENT_FACTORY_H_
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -32,6 +34,10 @@ class ClientFactory {
   // client_key: This is a value for the key based on which the different
   // client objects are differentiated.
   virtual std::shared_ptr<const Client> Get(ClientKey client_key) const = 0;
+
+  // Returns a <Key, Value> pair of all entries contained by the factory.
+  virtual std::vector<std::pair<ClientKey, std::shared_ptr<const Client>>>
+  Entries() const = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

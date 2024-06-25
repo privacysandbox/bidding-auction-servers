@@ -55,6 +55,8 @@ ABSL_FLAG(std::optional<uint16_t>, healthcheck_port, std::nullopt,
 
 ABSL_FLAG(std::optional<std::string>, bidding_server_addr, std::nullopt,
           "Bidding Server Address");
+ABSL_FLAG(std::optional<std::string>, grpc_arg_default_authority, std::nullopt,
+          "Domain for bidding server, or other domain for TLS Authority");
 ABSL_FLAG(std::optional<std::string>, buyer_kv_server_addr, std::nullopt,
           "Buyer KV Server Address");
 // Added for performance/benchmark testing of both types of http clients.
@@ -108,6 +110,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_bidding_server_addr, BIDDING_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_grpc_arg_default_authority,
+                        GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config_client.SetFlag(FLAGS_buyer_kv_server_addr, BUYER_KV_SERVER_ADDR);
   config_client.SetFlag(FLAGS_generate_bid_timeout_ms, GENERATE_BID_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_protected_app_signals_generate_bid_timeout_ms,
@@ -203,6 +207,8 @@ absl::Status RunServer() {
   int port = config_client.GetIntParameter(PORT);
   std::string bidding_server_addr =
       std::string(config_client.GetStringParameter(BIDDING_SERVER_ADDR));
+  std::string grpc_arg_default_authority = std::string(
+      config_client.GetStringParameter(GRPC_ARG_DEFAULT_AUTHORITY_VAL));
   std::string buyer_kv_server_addr =
       std::string(config_client.GetStringParameter(BUYER_KV_SERVER_ADDR));
   bool enable_buyer_frontend_benchmarking =
@@ -245,7 +251,8 @@ absl::Status RunServer() {
           .secure_client =
               config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
           .is_pas_enabled =
-              config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)},
+              config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
+          .grpc_arg_default_authority = grpc_arg_default_authority},
       CreateKeyFetcherManager(config_client,
                               CreatePublicKeyFetcher(config_client)),
       CreateCryptoClient(),

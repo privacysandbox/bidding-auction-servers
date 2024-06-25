@@ -43,7 +43,7 @@ bool ValidateEncryptedSelectAdRequest(const SelectAdRequest& request,
   report_error_lambda(seller_domain != auction_config.seller(),
                       kWrongSellerDomain);
   report_error_lambda(request.client_type() == CLIENT_TYPE_UNKNOWN,
-                      kUnknownClientType);
+                      kUnsupportedClientType);
 
   if (auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     report_error_lambda(request.component_auction_results_size() == 0,

@@ -92,7 +92,11 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 .compression = config_client_.GetBooleanParameter(
                     ENABLE_AUCTION_COMPRESSION),
                 .secure_client =
-                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS)})),
+                    config_client_.GetBooleanParameter(AUCTION_EGRESS_TLS),
+                .grpc_arg_default_authority =
+                    config_client_
+                        .GetStringParameter(GRPC_ARG_DEFAULT_AUTHORITY_VAL)
+                        .data()})),
         buyer_factory_([this]() {
           absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
               ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(

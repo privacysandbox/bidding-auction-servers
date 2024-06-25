@@ -20,11 +20,64 @@ docker run --rm \
 # load balancer health checks will eventually kill this instance.
 curl --retry 6 --retry-all-errors localhost:9902/ready
 
+if [[ -n "${app_mesh_name}" && -n "${virtual_node_name}" ]]; then
+  # Authenticate with the Envoy Amazon ECR repository in the Region that you want
+  # your Docker client to pull the image from.
+  aws ecr get-login-password \
+    --region ${region} |
+    docker login \
+      --username AWS \
+      --password-stdin 840364872350.dkr.ecr.${region}.amazonaws.com
+
+  # Start the App Mesh Envoy container.
+  sudo docker run --detach --env APPMESH_RESOURCE_ARN=mesh/${app_mesh_name}/virtualNode/${virtual_node_name} \
+    -v /tmp:/tmp \
+    -u 1337 --network host public.ecr.aws/appmesh/aws-appmesh-envoy:v1.29.4.0-prod
+fi
+
+# Install grpcurl
+cd /tmp
+wget -q https://github.com/fullstorydev/grpcurl/releases/download/v1.9.1/grpcurl_1.9.1_linux_amd64.rpm
+sudo rpm -i grpcurl_1.9.1_linux_amd64.rpm
+cd -
+
+# Grab the metadata needed for registering instance.
+# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+IP_ADDRESS=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+
+if [[ -n "${cloud_map_service_id}" && -n "${region}" ]]; then
+  # Actually register the present EC2 with the cloud map.
+  register_instance_out=$(aws servicediscovery register-instance \
+    --service-id ${cloud_map_service_id} \
+    --instance-id $INSTANCE_ID \
+    --attributes "AWS_INSTANCE_IPV4="$IP_ADDRESS \
+    --region ${region} 2>&1)
+  while [[ "$?" -gt 0 ]] && [[ "$register_instance_out" =~ "not authorized to perform" ]]; do
+    echo "Registering service instance failed ... This can be transient and thus trying again in 2 seconds"
+    echo "Observed failure: $register_instance_out"
+    sleep 2
+    register_instance_out=$(aws servicediscovery register-instance \
+      --service-id ${cloud_map_service_id} \
+      --instance-id $INSTANCE_ID \
+      --attributes "AWS_INSTANCE_IPV4="$IP_ADDRESS \
+      --region ${region} 2>&1)
+  done
+fi
+
+if [[ -n "${app_mesh_name}" && -n "${virtual_node_name}" && -n "${cloud_map_service_id}" && -n "${region}" ]]; then
+  echo "Will wait for service mesh envoy proxy to come up"
+  while [ "$(curl localhost:9901/ready)" != "LIVE" ]; do
+    echo "Service mesh envoy proxy is not ready.. will check again in 1 second"
+    sleep 1
+  done
+fi
+
 # Make sure nitro enclave allocator service is stopped
 systemctl stop nitro-enclaves-allocator.service
 
 # Allocate resources available to enclave
-declare -r -x  ALLOCATOR_YAML=/etc/nitro_enclaves/allocator.yaml
+declare -r -x ALLOCATOR_YAML=/etc/nitro_enclaves/allocator.yaml
 cat >"$${ALLOCATOR_YAML}" <<EOF
 ---
 # How much memory to allocate for enclaves (in MiB).
@@ -50,7 +103,7 @@ sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl \
 
 if [[ "${enclave_debug_mode}" == "true" ]]; then
   # Create cloudwatch config
-  cat << EOF > "/amazon-cloudwatch-agent.json"
+  cat <<EOF >"/amazon-cloudwatch-agent.json"
 {
   "agent": {
     "metrics_collection_interval": 10
@@ -62,7 +115,7 @@ if [[ "${enclave_debug_mode}" == "true" ]]; then
           {
             "file_path": "${enclave_log_path}",
             "log_group_name": "${service}-tee-logs",
-            "log_stream_name": "${environment}-{instance_id}",
+            "log_stream_name": "${environment}-$INSTANCE_ID",
             "timestamp_format": "%Y-%m-%d %H:%M:%S"
           }
         ]
@@ -80,10 +133,34 @@ EOF
   nitro-cli run-enclave \
     --cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
     --eif-path /opt/privacysandbox/server_enclave_image.eif \
-    --enclave-cid 16 --attach-console > ${enclave_log_path}
+    --enclave-cid 16 --attach-console >${enclave_log_path} &
 else
   nitro-cli run-enclave \
     --cpu-count ${enclave_cpu_count} --memory ${enclave_memory_mib} \
     --eif-path /opt/privacysandbox/server_enclave_image.eif \
-    --enclave-cid 16
+    --enclave-cid 16 &
+fi
+
+SECONDS_TRIED=0
+
+echo "Will wait for ${healthcheck_grace_period_sec} seconds for the service to come up"
+while ! grpcurl --plaintext localhost:50051 list; do
+  echo "Service/Vsock proxy is not reachable.. will retry in 1 second"
+  ((SECONDS_TRIED++))
+  if (( SECONDS_TRIED > ${healthcheck_grace_period_sec} ))
+  then
+    echo "Timing out: tried for ${healthcheck_grace_period_sec} seconds and the service and its vsock proxy are still not reachable."
+    break
+  fi
+  sleep 1
+done
+
+if [[ -n "${app_mesh_name}" && -n "${virtual_node_name}" && -n "${cloud_map_service_id}" && -n "${region}" ]]; then
+  bash /opt/privacysandbox/hc.bash -p /opt/privacysandbox -n health.proto -a localhost:50051 -i ${healthcheck_interval_sec} -t ${healthcheck_timeout_sec} -h ${healthcheck_healthy_threshold} -u ${healthcheck_unhealthy_threshold} -e $INSTANCE_ID -g 0 -r ${region} -s ${cloud_map_service_id} &
+
+  # Run Cloud Un-Map to catch and de-register any instances shut down by EC2 ASG HCs, or which otherwise did not de-register themselves.
+  sudo docker run --detach spreaker/aws-cloud-unmap --service-id ${cloud_map_service_id} --service-region ${region} --instances-region ${region}
+
+  echo "Setting up iptables to route traffic via service mesh / envoy"
+  sudo bash -x /opt/privacysandbox/envoy_networking.sh -s ${service}
 fi

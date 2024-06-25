@@ -107,47 +107,50 @@ module "buyer_dashboard" {
   region      = var.region
 }
 
-################ Buyer FrontEnd operator Setup ################
-module "load_balancing_bfe" {
-  source                          = "../../services/load_balancing"
-  environment                     = var.environment
-  operator                        = var.operator
-  service                         = "bfe"
-  certificate_arn                 = var.certificate_arn
-  elb_subnet_ids                  = module.networking.public_subnet_ids
-  server_port                     = var.server_port
-  vpc_id                          = module.networking.vpc_id
-  elb_security_group_id           = module.security_groups.elb_security_group_id
-  root_domain                     = var.root_domain
-  root_domain_zone_id             = var.root_domain_zone_id
-  healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
-  healthcheck_interval_sec        = var.healthcheck_interval_sec
-  healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
-}
+module "buyer_app_mesh" {
+  # Only create if using service mesh
+  count = var.use_service_mesh ? 1 : 0
 
-module "autoscaling_bfe" {
-  source                       = "../../services/autoscaling"
-  environment                  = var.environment
-  operator                     = var.operator
-  enclave_debug_mode           = var.enclave_debug_mode
-  service                      = "bfe"
-  autoscaling_subnet_ids       = module.networking.private_subnet_ids
-  instance_ami_id              = var.bfe_instance_ami_id
-  instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.bfe_instance_type
-  target_group_arns            = module.load_balancing_bfe.target_group_arns
-  autoscaling_desired_capacity = var.bfe_autoscaling_desired_capacity
-  autoscaling_max_size         = var.bfe_autoscaling_max_size
-  autoscaling_min_size         = var.bfe_autoscaling_min_size
-  instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.bfe_enclave_cpu_count
-  enclave_memory_mib           = var.bfe_enclave_memory_mib
+  source      = "../../services/app_mesh"
+  operator    = var.operator
+  environment = var.environment
+  vpc_id      = module.networking.vpc_id
 }
 
 ################ Bidding operator Setup ################
 
+module "bidding_mesh_service" {
+  # Only create if using service mesh
+  count = var.use_service_mesh ? 1 : 0
+
+  source                               = "../../services/backend_mesh_service"
+  operator                             = var.operator
+  environment                          = var.environment
+  service                              = "bidding"
+  app_mesh_id                          = module.buyer_app_mesh[0].app_mesh_id
+  app_mesh_name                        = module.buyer_app_mesh[0].app_mesh_name
+  root_domain                          = var.root_domain
+  cloud_map_private_dns_namespace_id   = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_id
+  cloud_map_private_dns_namespace_name = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_name
+  server_instance_role_name            = module.iam_roles.instance_role_name
+  business_org_for_cert_auth           = var.business_org_for_cert_auth
+  country_for_cert_auth                = var.country_for_cert_auth
+  state_for_cert_auth                  = var.state_for_cert_auth
+  locality_for_cert_auth               = var.locality_for_cert_auth
+  org_unit_for_cert_auth               = var.org_unit_for_cert_auth
+  service_port                         = var.server_port
+  root_domain_zone_id                  = var.root_domain_zone_id
+  healthcheck_interval_sec             = var.healthcheck_interval_sec
+  healthcheck_timeout_sec              = var.healthcheck_timeout_sec
+  healthcheck_healthy_threshold        = var.healthcheck_healthy_threshold
+  healthcheck_unhealthy_threshold      = var.healthcheck_unhealthy_threshold
+  use_tls_with_mesh                    = var.use_tls_with_mesh
+}
 
 module "load_balancing_bidding" {
+  # Only create if not using service mesh
+  count = var.use_service_mesh ? 0 : 1
+
   source                          = "../../services/load_balancing"
   environment                     = var.environment
   operator                        = var.operator
@@ -167,22 +170,105 @@ module "load_balancing_bidding" {
 }
 
 module "autoscaling_bidding" {
-  source                       = "../../services/autoscaling"
-  environment                  = var.environment
-  operator                     = var.operator
-  enclave_debug_mode           = var.enclave_debug_mode
-  service                      = "bidding"
-  autoscaling_subnet_ids       = module.networking.private_subnet_ids
-  instance_ami_id              = var.bidding_instance_ami_id
-  instance_security_group_id   = module.security_groups.instance_security_group_id
-  instance_type                = var.bidding_instance_type
-  target_group_arns            = module.load_balancing_bidding.target_group_arns
-  autoscaling_desired_capacity = var.bidding_autoscaling_desired_capacity
-  autoscaling_max_size         = var.bidding_autoscaling_max_size
-  autoscaling_min_size         = var.bidding_autoscaling_min_size
-  instance_profile_arn         = module.iam_roles.instance_profile_arn
-  enclave_cpu_count            = var.bidding_enclave_cpu_count
-  enclave_memory_mib           = var.bidding_enclave_memory_mib
+  source                          = "../../services/autoscaling"
+  environment                     = var.environment
+  operator                        = var.operator
+  enclave_debug_mode              = var.enclave_debug_mode
+  service                         = "bidding"
+  autoscaling_subnet_ids          = module.networking.private_subnet_ids
+  instance_ami_id                 = var.bidding_instance_ami_id
+  instance_security_group_id      = module.security_groups.instance_security_group_id
+  instance_type                   = var.bidding_instance_type
+  target_group_arns               = var.use_service_mesh ? [] : module.load_balancing_bidding[0].target_group_arns
+  autoscaling_desired_capacity    = var.bidding_autoscaling_desired_capacity
+  autoscaling_max_size            = var.bidding_autoscaling_max_size
+  autoscaling_min_size            = var.bidding_autoscaling_min_size
+  instance_profile_arn            = module.iam_roles.instance_profile_arn
+  enclave_cpu_count               = var.bidding_enclave_cpu_count
+  enclave_memory_mib              = var.bidding_enclave_memory_mib
+  cloud_map_service_id            = var.use_service_mesh ? module.bidding_mesh_service[0].cloud_map_service_id : ""
+  region                          = var.region
+  app_mesh_name                   = var.use_service_mesh ? module.buyer_app_mesh[0].app_mesh_name : ""
+  virtual_node_name               = var.use_service_mesh ? module.bidding_mesh_service[0].virtual_node_name : ""
+  healthcheck_interval_sec        = var.healthcheck_interval_sec
+  healthcheck_timeout_sec         = var.healthcheck_timeout_sec
+  healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
+  healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
+  healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
+}
+
+################ Buyer FrontEnd operator Setup ################
+
+module "bfe_mesh_service" {
+  # Only create if using service mesh
+  count = var.use_service_mesh ? 1 : 0
+
+  source                                          = "../../services/frontend_mesh_service"
+  operator                                        = var.operator
+  environment                                     = var.environment
+  service                                         = "bfe"
+  app_mesh_id                                     = module.buyer_app_mesh[0].app_mesh_id
+  app_mesh_name                                   = module.buyer_app_mesh[0].app_mesh_name
+  root_domain                                     = var.root_domain
+  cloud_map_private_dns_namespace_id              = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_id
+  cloud_map_private_dns_namespace_name            = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_name
+  server_instance_role_name                       = module.iam_roles.instance_role_name
+  backend_virtual_service_name                    = module.bidding_mesh_service[0].virtual_service_name
+  backend_virtual_service_port                    = var.server_port
+  backend_virtual_service_private_certificate_arn = (var.use_tls_with_mesh) ? module.bidding_mesh_service[0].acmpca_certificate_authority_arn : "" # This will be empty string for var.use_tls_with_mesh = false anyways.
+  service_port                                    = var.server_port
+  backend_service                                 = "bidding"
+  root_domain_zone_id                             = var.root_domain_zone_id
+  healthcheck_interval_sec                        = var.healthcheck_interval_sec
+  healthcheck_timeout_sec                         = var.healthcheck_timeout_sec
+  healthcheck_healthy_threshold                   = var.healthcheck_healthy_threshold
+  healthcheck_unhealthy_threshold                 = var.healthcheck_unhealthy_threshold
+  use_tls_with_mesh                               = var.use_tls_with_mesh
+}
+
+module "load_balancing_bfe" {
+  source                          = "../../services/load_balancing"
+  environment                     = var.environment
+  operator                        = var.operator
+  service                         = "bfe"
+  certificate_arn                 = var.certificate_arn
+  elb_subnet_ids                  = module.networking.public_subnet_ids
+  server_port                     = var.server_port
+  vpc_id                          = module.networking.vpc_id
+  elb_security_group_id           = module.security_groups.elb_security_group_id
+  root_domain                     = var.root_domain
+  root_domain_zone_id             = var.root_domain_zone_id
+  healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
+  healthcheck_interval_sec        = var.healthcheck_interval_sec
+  healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
+}
+
+module "autoscaling_bfe" {
+  source                          = "../../services/autoscaling"
+  environment                     = var.environment
+  operator                        = var.operator
+  enclave_debug_mode              = var.enclave_debug_mode
+  service                         = "bfe"
+  autoscaling_subnet_ids          = module.networking.private_subnet_ids
+  instance_ami_id                 = var.bfe_instance_ami_id
+  instance_security_group_id      = module.security_groups.instance_security_group_id
+  instance_type                   = var.bfe_instance_type
+  target_group_arns               = module.load_balancing_bfe.target_group_arns
+  autoscaling_desired_capacity    = var.bfe_autoscaling_desired_capacity
+  autoscaling_max_size            = var.bfe_autoscaling_max_size
+  autoscaling_min_size            = var.bfe_autoscaling_min_size
+  instance_profile_arn            = module.iam_roles.instance_profile_arn
+  enclave_cpu_count               = var.bfe_enclave_cpu_count
+  enclave_memory_mib              = var.bfe_enclave_memory_mib
+  cloud_map_service_id            = var.use_service_mesh ? module.bfe_mesh_service[0].cloud_map_service_id : ""
+  region                          = var.region
+  app_mesh_name                   = var.use_service_mesh ? module.buyer_app_mesh[0].app_mesh_name : ""
+  virtual_node_name               = var.use_service_mesh ? module.bfe_mesh_service[0].virtual_node_name : ""
+  healthcheck_interval_sec        = var.healthcheck_interval_sec
+  healthcheck_timeout_sec         = var.healthcheck_timeout_sec
+  healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
+  healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
+  healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
 }
 
 

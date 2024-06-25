@@ -14,6 +14,7 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -183,16 +184,16 @@ BuyerReportingMetadata GetTestBuyerReportingMetadata() {
 ReportingDispatchRequestData GetTestDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const std::string& handler_name, absl::string_view seller_currency) {
-  server_common::log::ContextImpl log_context(
-      {}, server_common::ConsentedDebugConfiguration());
+    const std::string& handler_name, std::string seller_currency) {
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
   ReportingDispatchRequestData reporting_dispatch_request_data = {
       .handler_name = handler_name,
       .auction_config = auction_config,
-      .post_auction_signals =
-          GeneratePostAuctionSignals(winning_ad_score, seller_currency),
+      .post_auction_signals = GeneratePostAuctionSignals(
+          winning_ad_score, std::move(seller_currency)),
       .publisher_hostname = kTestPublisherHostName,
       .log_context = log_context};
   if (dispatch_request_config.enable_report_win_url_generation) {
@@ -211,10 +212,10 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
 ReportingDispatchRequestData GetTestComponentDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const std::string& handler_name, absl::string_view seller_currency) {
+    const std::string& handler_name, std::string seller_currency) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 handler_name, seller_currency);
+                                 handler_name, std::move(seller_currency));
   reporting_dispatch_request_data.component_reporting_metadata = {
       .top_level_seller = kTestTopLevelSeller,
       .component_seller = kTestSeller,
@@ -226,11 +227,11 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestData(
 ReportingDispatchRequestData GetTestComponentDispatchRequestDataForPAS(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    absl::string_view seller_currency) {
+    std::string seller_currency) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingProtectedAppSignalsFunctionName,
-                                 seller_currency);
+                                 std::move(seller_currency));
   reporting_dispatch_request_data.egress_payload = kTestEgressPayload;
   return reporting_dispatch_request_data;
 }
@@ -528,8 +529,8 @@ TEST(GetReportingDispatchRequest,
   winning_ad_score.set_render(kTestRender);
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
-  server_common::log::ContextImpl log_context(
-      {}, server_common::ConsentedDebugConfiguration());
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
   ReportingDispatchRequestConfig dispatch_request_config = {
       .enable_report_win_url_generation = true,
       .enable_report_win_input_noising = true,

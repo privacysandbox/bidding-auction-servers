@@ -92,6 +92,7 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
   }
   PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
                                 << auction_result.ShortDebugString();
+  log_context_.SetEventMessageField(auction_result);
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();

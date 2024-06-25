@@ -71,8 +71,7 @@ inline constexpr char kConsentedDebugToken[] = "xyz";
 inline constexpr char kUsdIso[] = "USD";
 inline constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
 
-server_common::log::ContextImpl log_context{
-    {}, server_common::ConsentedDebugConfiguration()};
+RequestLogContext log_context{{}, server_common::ConsentedDebugConfiguration()};
 
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;

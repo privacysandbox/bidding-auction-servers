@@ -14,21 +14,29 @@
  * limitations under the License.
  */
 
+#include <atomic>
 #include <future>
 #include <istream>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include <torch/torch.h>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/synchronization/notification.h"
+#include "model/model_store.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "src/util/status_macro/status_macros.h"
+#include "utils/log.h"
 #include "utils/request_parser.h"
 
 #include "pytorch_parser.h"
@@ -40,8 +48,9 @@ namespace {
 // the inference result for a single request in a batched predict request.
 // The forward method of a torch module is non-const although we disallow
 // mutable models.
-absl::StatusOr<torch::IValue> PredictInternal(torch::jit::script::Module* model,
-                                              const InferenceRequest& request) {
+absl::StatusOr<torch::IValue> PredictInternal(
+    std::shared_ptr<torch::jit::script::Module> model,
+    const InferenceRequest& request) {
   absl::string_view model_key = request.model_path;
   std::vector<torch::jit::IValue> inputs;
   for (Tensor tensor : request.inputs) {
@@ -94,30 +103,86 @@ absl::Status InitRuntimeThreadConfig(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::unique_ptr<torch::jit::script::Module>>
+PyTorchModelConstructor(const InferenceSidecarRuntimeConfig& config,
+                        const RegisterModelRequest& request) {
+  absl::string_view model_key = request.model_spec().model_path();
+  // Converts PyTorch exception to absl status.
+  try {
+    const std::string& model_payload = request.model_files().begin()->second;
+    std::istringstream is(model_payload);
+    auto model =
+        std::make_unique<torch::jit::script::Module>(torch::jit::load(is));
+    // Turn on eval model for layers that behave differently during train and
+    // eval times, for example, dropout and batch norm layers.
+    model->eval();
+    return model;
+  } catch (...) {
+    return absl::InternalError("Error loading model");
+  }
+}
+
 class PyTorchModule final : public ModuleInterface {
  public:
-  explicit PyTorchModule(const InferenceSidecarRuntimeConfig& config) {
+  explicit PyTorchModule(const InferenceSidecarRuntimeConfig& config)
+      : runtime_config_(config),
+        store_(config, PyTorchModelConstructor),
+        background_thread_running_(true) {
     absl::Status init_result = InitRuntimeThreadConfig(config);
     CHECK(init_result.ok())
         << "Could not initialize runtime flags: " << init_result;
+
+    // TODO(b/332328206): Move reset model logic into the ModelStore.
+    background_thread_ = std::thread([this]() {
+      while (background_thread_running_) {
+        // ResetModels() is continually called in the background thread.
+        ResetModels();
+        // Waits for the completed inference execution.
+        //
+        // Moves on after 1 second and check if the background thread should
+        // terminate. The destructor terminates this thread by setting
+        // |background_thread_running_|.
+        inference_notification_.WaitForNotificationWithTimeout(
+            absl::Seconds(1));
+      }
+    });
+  }
+
+  ~PyTorchModule() override {
+    background_thread_running_ = false;
+    background_thread_.join();
   }
 
   absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
+      const PredictRequest& request,
+      const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
-      const RegisterModelRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
+      const RegisterModelRequest& request) override;
+  void ResetModels() override;
 
  private:
-  // The key to `model map` is the `model_path` field in an inference request.
-  absl::flat_hash_map<std::string, std::unique_ptr<torch::jit::script::Module>>
-      model_map_ ABSL_GUARDED_BY(mu_);
-  absl::Mutex mu_;
+  const InferenceSidecarRuntimeConfig runtime_config_;
+
+  // Stores a set of models. It's thread safe.
+  ModelStore<torch::jit::script::Module> store_;
+
+  // Counts the number of inferences per model. Used for model reset.
+  absl::flat_hash_map<std::string, int> per_model_inference_count_
+      ABSL_GUARDED_BY(per_model_inference_count_mu_);
+  absl::Mutex per_model_inference_count_mu_;
+  // Notification to trigger model reset.
+  absl::Notification inference_notification_;
+
+  // The background thread continuously running ResetModels().
+  std::thread background_thread_;
+  // The background thread is shutdown if set to false.
+  std::atomic<bool> background_thread_running_;
+  // Exclusively used in a single backgrond thread. No need of a mutex.
+  absl::BitGen bitgen_;
 };
 
 absl::StatusOr<PredictResponse> PyTorchModule::Predict(
-    const PredictRequest& request) {
-  absl::ReaderMutexLock lock(&mu_);
-
+    const PredictRequest& request, const RequestContext& request_context) {
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
@@ -129,13 +194,12 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   std::vector<std::future<absl::StatusOr<torch::IValue>>> tasks;
   for (const InferenceRequest& inference_request : (*parsed_requests)) {
     absl::string_view model_key = inference_request.model_path;
-    auto it = model_map_.find(model_key);
-    if (it == model_map_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Model ", model_key, " has not been registered"));
-    }
-    tasks.push_back(std::async(std::launch::async, &PredictInternal,
-                               it->second.get(), inference_request));
+    INFERENCE_LOG(INFO, request_context)
+        << "Received inference request to model: " << model_key;
+    PS_ASSIGN_OR_RETURN(std::shared_ptr<torch::jit::script::Module> model,
+                        store_.GetModel(model_key, request.is_consented()));
+    tasks.push_back(std::async(std::launch::async, &PredictInternal, model,
+                               inference_request));
   }
 
   std::vector<PerModelOutput> batch_result_outputs;
@@ -156,6 +220,16 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   }
   PS_ASSIGN_OR_RETURN(std::string output_json,
                       ConvertBatchOutputsToJson(batch_result_outputs));
+
+  {
+    absl::MutexLock lock(&per_model_inference_count_mu_);
+    for (const InferenceRequest& inference_request : *parsed_requests) {
+      const std::string& model_key = inference_request.model_path;
+      ++per_model_inference_count_[model_key];
+    }
+  }
+  inference_notification_.Notify();
+
   PredictResponse response;
   response.set_output(output_json);
   return response;
@@ -173,26 +247,44 @@ absl::StatusOr<RegisterModelResponse> PyTorchModule::RegisterModel(
         request.model_files().size()));
   }
 
-  absl::WriterMutexLock lock(&mu_);
-  if (model_map_.find(model_key) != model_map_.end()) {
+  if (store_.GetModel(model_key).ok()) {
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_key, " has already been registered"));
   }
+  PS_RETURN_IF_ERROR(store_.PutModel(model_key, request));
+  return RegisterModelResponse();
+}
 
-  // Convert PyTorch exception to absl status.
-  try {
-    const std::string& model_payload = request.model_files().begin()->second;
-    std::istringstream is(model_payload);
-    model_map_[model_key] =
-        std::make_unique<torch::jit::script::Module>(torch::jit::load(is));
-    // Turn on eval model for layers that behave differently during train and
-    // eval times, for example, dropout and batch norm layers.
-    model_map_[model_key]->eval();
-  } catch (...) {
-    return absl::InternalError("Error loading model");
+// TODO(b/346813356): Refactor duplicate logic into a shared library/class.
+void PyTorchModule::ResetModels() {
+  const double reset_probability = runtime_config_.model_reset_probability();
+  if (reset_probability == 0.0) {
+    // Model reset is disabled.
+    return;
   }
 
-  return RegisterModelResponse();
+  std::vector<std::string> models = store_.ListModels();
+  for (const auto& model_key : models) {
+    int count = 0;
+    {
+      absl::MutexLock lock(&per_model_inference_count_mu_);
+      count = per_model_inference_count_[model_key];
+      // Sets the per-model counter to 0.
+      per_model_inference_count_[model_key] = 0;
+    }
+    if (count <= 0) continue;
+    double random = absl::Uniform(bitgen_, 0.0, 1.0);
+    // Boosts the chance of reset multiplied by the number of inferences as
+    // approximation.
+    if (reset_probability != 1.0 && random >= reset_probability * count) {
+      continue;
+    }
+
+    // We should make sure the model reset is successfully done.
+    // Otherwise, we terminate the program to preserve user privacy.
+    CHECK(store_.ResetModel(model_key).ok())
+        << "Failed to reset model: " << model_key;
+  }
 }
 
 }  // namespace

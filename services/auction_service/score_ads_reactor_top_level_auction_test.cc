@@ -15,6 +15,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/score_ads_reactor.h"
 #include "services/auction_service/score_ads_reactor_test_util.h"
 #include "services/common/test/mocks.h"
@@ -29,6 +30,12 @@ constexpr char kTestAuctionSignals[] =
 constexpr char kTestPublisherHostname[] = "publisher_hostname";
 constexpr char kTestTopLevelSeller[] = "top_level_seller";
 constexpr char kTestGenerationId[] = "test_generation_id";
+constexpr char kTestComponentWinReportingUrl[] =
+    "http://componentReportingUrl.com";
+constexpr char kTestComponentEvent[] = "click";
+constexpr char kTestComponentInteractionReportingUrl[] =
+    "http://componentInteraction.com";
+constexpr char kTestComponentSeller[] = "http://componentSeller.com";
 
 using RawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 
@@ -92,18 +99,37 @@ TEST(ScoreAdsReactorTopLevelAuctionTest,
   EXPECT_TRUE(response.response_ciphertext().empty());
 }
 
-TEST(ScoreAdsReactorTopLevelAuctionTest, ReturnsWinningAdFromDispatcher) {
+TEST(ScoreAdsReactorTopLevelAuctionTest,
+     ReturnsWinnerWithComponentUrlsWhenReportingDisabled) {
   MockCodeDispatchClient dispatcher;
-  AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
-                                                          kTestTopLevelSeller);
+  AuctionResult car_1 = MakeARandomComponentAuctionResultWithReportingUrls(
+      MakeARandomString(), kTestTopLevelSeller, kTestComponentEvent,
+      kTestComponentWinReportingUrl, kTestComponentInteractionReportingUrl,
+      kTestComponentSeller);
   RawRequest raw_request = BuildTopLevelAuctionRawRequest(
       {car_1}, kTestSellerSignals, kTestAuctionSignals, kTestPublisherHostname);
+  bool enable_report_win_url_generation = false;
+  bool enable_report_result_url_generation = true;
   EXPECT_CALL(dispatcher, BatchExecute)
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-        std::vector<std::string> score_logic(batch.size(),
-                                             R"(
-                    {
+      .WillRepeatedly([enable_report_win_url_generation,
+                       enable_report_result_url_generation](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportingDispatchHandlerFunctionName) == 0) {
+            if (enable_report_win_url_generation) {
+              response.emplace_back(kTestReportingWinResponseJson);
+            } else if (enable_report_result_url_generation) {
+              response.emplace_back(kTestReportingResponseJson);
+            } else {
+              response.emplace_back(kEmptyTestReportingResponseJson);
+            }
+          } else {
+            response.push_back(
+                R"JSON(
+                {
                     "response" : {
                         "ad": {"key1":"adMetadata"},
                         "desirability" : 1,
@@ -111,13 +137,22 @@ TEST(ScoreAdsReactorTopLevelAuctionTest, ReturnsWinningAdFromDispatcher) {
                         "allowComponentAuction" : true
                     },
                     "logs":[]
-                    }
-                )");
-        return FakeExecute(batch, std::move(done_callback),
-                           std::move(score_logic), false);
+                }
+              )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
       });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation =
+          enable_report_result_url_generation,
+      .enable_report_win_url_generation = enable_report_win_url_generation};
   ScoreAdsReactorTestHelper test_helper;
-  auto response = test_helper.ExecuteScoreAds(raw_request, dispatcher);
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
   const auto& scored_ad = raw_response.ad_score();
@@ -128,12 +163,201 @@ TEST(ScoreAdsReactorTopLevelAuctionTest, ReturnsWinningAdFromDispatcher) {
   EXPECT_EQ(scored_ad.interest_group_name(), car_1.interest_group_name());
   EXPECT_EQ(scored_ad.interest_group_owner(), car_1.interest_group_owner());
   EXPECT_EQ(scored_ad.buyer_bid(), car_1.bid());
-
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .reporting_url(),
+            kTestReportResultUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            1);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .reporting_url(),
+            kTestComponentWinReportingUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestComponentEvent),
+            kTestComponentInteractionReportingUrl);
+  EXPECT_EQ(
+      scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
+      kTestComponentWinReportingUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestComponentEvent),
+            kTestComponentInteractionReportingUrl);
   // Since in the above test we are assuming non-component auctions, check that
   // the required fields for component auctions are not set.
   EXPECT_FALSE(scored_ad.allow_component_auction());
   EXPECT_TRUE(scored_ad.ad_metadata().empty());
   EXPECT_EQ(scored_ad.bid(), 0);
+}
+
+TEST(ScoreAdsReactorTopLevelAuctionTest,
+     ReturnsWinningAdFromDispatcherWithReportingEnabled) {
+  MockCodeDispatchClient dispatcher;
+  AuctionResult car_1 = MakeARandomComponentAuctionResultWithReportingUrls(
+      MakeARandomString(), kTestTopLevelSeller, kTestComponentEvent,
+      kTestComponentWinReportingUrl, kTestComponentInteractionReportingUrl,
+      kTestComponentSeller);
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {car_1}, kTestSellerSignals, kTestAuctionSignals, kTestPublisherHostname);
+  bool enable_report_win_url_generation = true;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([enable_report_win_url_generation](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportingDispatchHandlerFunctionName) == 0) {
+            if (enable_report_win_url_generation) {
+              response.emplace_back(kTestReportingWinResponseJson);
+            } else {
+              response.emplace_back(kTestReportingResponseJson);
+            }
+          } else {
+            response.push_back(
+                R"JSON(
+                {
+                    "response" : {
+                        "ad": {"key1":"adMetadata"},
+                        "desirability" : 1,
+                        "bid" : 0.1,
+                        "allowComponentAuction" : true
+                    },
+                    "logs":[]
+                }
+              )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation = false,
+      .enable_report_win_url_generation = true};
+  ScoreAdsReactorTestHelper test_helper;
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& scored_ad = raw_response.ad_score();
+  EXPECT_TRUE(scored_ad.win_reporting_urls()
+                  .top_level_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            0);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .reporting_url(),
+            kTestComponentWinReportingUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestComponentEvent),
+            kTestComponentInteractionReportingUrl);
+  EXPECT_EQ(
+      scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
+      kTestComponentWinReportingUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestComponentEvent),
+            kTestComponentInteractionReportingUrl);
+}
+
+TEST(ScoreAdsReactorTopLevelAuctionTest,
+     NoUrlsReturnedWhenNoComponentUrlsPresent) {
+  MockCodeDispatchClient dispatcher;
+  AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
+                                                          kTestTopLevelSeller);
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {car_1}, kTestSellerSignals, kTestAuctionSignals, kTestPublisherHostname);
+  bool enable_report_win_url_generation = true;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([enable_report_win_url_generation](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportingDispatchHandlerFunctionName) == 0) {
+            if (enable_report_win_url_generation) {
+              response.emplace_back(kTestReportingWinResponseJson);
+            } else {
+              response.emplace_back(kTestReportingResponseJson);
+            }
+          } else {
+            response.push_back(
+                R"JSON(
+                {
+                    "response" : {
+                        "ad": {"key1":"adMetadata"},
+                        "desirability" : 1,
+                        "bid" : 0.1,
+                        "allowComponentAuction" : true
+                    },
+                    "logs":[]
+                }
+              )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation = false,
+      .enable_report_win_url_generation = true};
+  ScoreAdsReactorTestHelper test_helper;
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& scored_ad = raw_response.ad_score();
+  EXPECT_TRUE(scored_ad.win_reporting_urls()
+                  .top_level_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            0);
+  EXPECT_TRUE(scored_ad.win_reporting_urls()
+                  .component_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .component_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            0);
+  EXPECT_TRUE(scored_ad.win_reporting_urls()
+                  .buyer_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            0);
 }
 
 TEST(ScoreAdsReactorTopLevelAuctionTest, DoesNotPopulateHighestOtherBid) {
@@ -172,70 +396,6 @@ TEST(ScoreAdsReactorTopLevelAuctionTest, DoesNotPopulateHighestOtherBid) {
   EXPECT_TRUE(scored_ad.ig_owner_highest_scoring_other_bids_map().empty());
 }
 
-TEST(ScoreAdsReactorTopLevelAuctionTest, DoesNotSupportWinReporting) {
-  MockCodeDispatchClient dispatcher;
-  AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
-                                                          kTestTopLevelSeller);
-  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
-      {car_1}, kTestSellerSignals, kTestAuctionSignals, kTestPublisherHostname);
-  EXPECT_CALL(dispatcher, BatchExecute)
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-        std::vector<std::string> score_logic(batch.size(),
-                                             R"(
-                    {
-                    "response" : {
-                        "ad": {"key1":"adMetadata"},
-                        "desirability" : 1,
-                        "bid" : 0.1,
-                        "allowComponentAuction" : true
-                    },
-                    "logs":[]
-                    }
-                )");
-        return FakeExecute(batch, std::move(done_callback),
-                           std::move(score_logic), false);
-      });
-  AuctionServiceRuntimeConfig runtime_config = {
-      .enable_seller_debug_url_generation = false,
-      .enable_adtech_code_logging = false,
-      .enable_report_result_url_generation = true,
-      .enable_report_win_url_generation = true};
-  ScoreAdsReactorTestHelper test_helper;
-  auto response =
-      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
-  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
-  const auto& scored_ad = raw_response.ad_score();
-  EXPECT_TRUE(scored_ad.win_reporting_urls()
-                  .top_level_seller_reporting_urls()
-                  .reporting_url()
-                  .empty());
-  EXPECT_EQ(scored_ad.win_reporting_urls()
-                .top_level_seller_reporting_urls()
-                .interaction_reporting_urls()
-                .size(),
-            0);
-  EXPECT_TRUE(scored_ad.win_reporting_urls()
-                  .component_seller_reporting_urls()
-                  .reporting_url()
-                  .empty());
-  EXPECT_EQ(scored_ad.win_reporting_urls()
-                .component_seller_reporting_urls()
-                .interaction_reporting_urls()
-                .size(),
-            0);
-  EXPECT_TRUE(scored_ad.win_reporting_urls()
-                  .buyer_reporting_urls()
-                  .reporting_url()
-                  .empty());
-  EXPECT_EQ(scored_ad.win_reporting_urls()
-                .buyer_reporting_urls()
-                .interaction_reporting_urls()
-                .size(),
-            0);
-}
-
 TEST(ScoreAdsReactorTopLevelAuctionTest, DoesNotPerformDebugReporting) {
   MockCodeDispatchClient dispatcher;
   AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
@@ -243,8 +403,8 @@ TEST(ScoreAdsReactorTopLevelAuctionTest, DoesNotPerformDebugReporting) {
   RawRequest raw_request = BuildTopLevelAuctionRawRequest(
       {car_1}, kTestSellerSignals, kTestAuctionSignals, kTestPublisherHostname);
   EXPECT_CALL(dispatcher, BatchExecute)
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
         std::vector<std::string> score_logic(batch.size(),
                                              R"(
                     {

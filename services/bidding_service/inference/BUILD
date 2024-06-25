@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
 
 cc_library(
     name = "inference_utils",
@@ -22,6 +23,7 @@ cc_library(
     hdrs = [
         "inference_utils.h",
     ],
+    local_defines = IS_PROD_BUILD_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
         ":inference_flags",
@@ -41,6 +43,7 @@ cc_library(
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//sandbox:sandbox_executor",
         "@inference_common//utils:file_util",
+        "@rapidjson",
     ],
 )
 

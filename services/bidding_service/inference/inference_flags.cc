@@ -38,7 +38,7 @@ ABSL_FLAG(std::optional<std::string>, inference_model_bucket_paths,
 //    "num_interop_threads": <integer_value>,
 //    "num_intraop_threads": <integer_value>,
 //    "module_name": <string_value>,
-//    "cpuset": <an array of integer values>
+//    "cpuset": <an array of integer values>,
 //    ...
 // }
 // where each property corresponds to a field of the

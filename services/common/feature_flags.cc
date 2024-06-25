@@ -21,3 +21,8 @@
 ABSL_FLAG(bool, enable_temporary_unlimited_egress, false,
           "If true, temporary unlimited egress is allowed (if "
           "client had also set enable_unlimited_egress flag in request)");
+
+ABSL_FLAG(bool, enable_chaffing, false,
+          "If true, chaff requests are sent out from the SFE. Chaff requests "
+          "are requests sent to buyers not participating in an auction to mask "
+          "the buyers associated with a client request.");

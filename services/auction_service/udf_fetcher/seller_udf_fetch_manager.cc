@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "services/auction_service/seller_code_fetch_manager.h"
+#include "services/auction_service/udf_fetcher/seller_udf_fetch_manager.h"
 
 #include <memory>
 #include <optional>
@@ -20,10 +20,12 @@
 #include <utility>
 #include <vector>
 
-#include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_constants.h"
-#include "services/auction_service/code_wrapper/buyer_reporting_fetcher.h"
+#include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
+#include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
+#include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
+#include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
 #include "services/common/code_fetch/periodic_bucket_fetcher.h"
@@ -32,8 +34,6 @@
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/interface/errors.h"
 #include "src/util/status_macro/status_macros.h"
-
-#include "seller_code_fetch_manager.h"
 
 using ::google::scp::core::errors::GetErrorMessage;
 
@@ -44,23 +44,31 @@ constexpr int kJsBlobIndex = 0;
 
 }  // namespace
 
-absl::Status SellerCodeFetchManager::Init() {
-  if (udf_config_.fetch_mode() != auction_service::FETCH_MODE_LOCAL) {
-    buyer_reporting_fetcher_ = std::make_unique<BuyerReportingFetcher>(
-        udf_config_, &buyer_reporting_http_fetcher_, &executor_);
-    PS_RETURN_IF_ERROR(buyer_reporting_fetcher_->Start())
-        << kBuyerReportingFailedStartup;
+absl::Status SellerUdfFetchManager::Init() {
+  if (udf_config_.fetch_mode() != blob_fetch::FETCH_MODE_LOCAL) {
+    if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+      buyer_reporting_udf_fetch_manager_ =
+          std::make_unique<BuyerReportingUdfFetchManager>(
+              &udf_config_, &buyer_reporting_http_fetcher_, &executor_,
+              GetUdfWrapperForBuyer(), &dispatcher_);
+      PS_RETURN_IF_ERROR(buyer_reporting_udf_fetch_manager_->Start())
+          << kBuyerReportingFailedStartup;
+    } else {
+      buyer_reporting_fetcher_ = std::make_unique<BuyerReportingFetcher>(
+          udf_config_, &buyer_reporting_http_fetcher_, &executor_);
+      PS_RETURN_IF_ERROR(buyer_reporting_fetcher_->Start())
+          << kBuyerReportingFailedStartup;
+    }
   }
-
   switch (udf_config_.fetch_mode()) {
-    case auction_service::FETCH_MODE_LOCAL: {
+    case blob_fetch::FETCH_MODE_LOCAL: {
       return InitializeLocalCodeFetch();
     }
-    case auction_service::FETCH_MODE_BUCKET: {
+    case blob_fetch::FETCH_MODE_BUCKET: {
       PS_ASSIGN_OR_RETURN(seller_code_fetcher_, InitializeBucketCodeFetch());
       return absl::OkStatus();
     }
-    case auction_service::FETCH_MODE_URL: {
+    case blob_fetch::FETCH_MODE_URL: {
       PS_ASSIGN_OR_RETURN(seller_code_fetcher_, InitializeUrlCodeFetch());
       return absl::OkStatus();
     }
@@ -70,15 +78,32 @@ absl::Status SellerCodeFetchManager::Init() {
   }
 }
 
-absl::Status SellerCodeFetchManager::End() {
-  if (udf_config_.fetch_mode() != auction_service::FETCH_MODE_LOCAL) {
-    buyer_reporting_fetcher_->End();
+absl::Status SellerUdfFetchManager::End() {
+  if (udf_config_.fetch_mode() != blob_fetch::FETCH_MODE_LOCAL) {
+    if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+      buyer_reporting_udf_fetch_manager_->End();
+    } else {
+      buyer_reporting_fetcher_->End();
+    }
     seller_code_fetcher_->End();
   }
   return absl::OkStatus();
 }
 
-WrapCodeForDispatch SellerCodeFetchManager::GetUdfWrapper() {
+WrapSingleCodeBlobForDispatch SellerUdfFetchManager::GetUdfWrapperForBuyer() {
+  return [](const std::string& ad_tech_code_blob) {
+    return GetBuyerWrappedCode(ad_tech_code_blob);
+  };
+}
+
+WrapCodeForDispatch SellerUdfFetchManager::GetUdfWrapper() {
+  if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+    return [this](const std::vector<std::string>& ad_tech_code_blobs) {
+      return GetSellerWrappedCode(
+          ad_tech_code_blobs[kJsBlobIndex],
+          udf_config_.enable_report_result_url_generation());
+    };
+  }
   return [this](const std::vector<std::string>& ad_tech_code_blobs) {
     auto protected_auction_reporting =
         buyer_reporting_fetcher_->GetProtectedAuctionReportingByOrigin();
@@ -93,7 +118,7 @@ WrapCodeForDispatch SellerCodeFetchManager::GetUdfWrapper() {
   };
 }
 
-absl::Status SellerCodeFetchManager::InitializeLocalCodeFetch() {
+absl::Status SellerUdfFetchManager::InitializeLocalCodeFetch() {
   if (udf_config_.auction_js_path().empty()) {
     return absl::UnavailableError(
         "Local fetch mode requires a non-empty path.");
@@ -111,7 +136,7 @@ absl::Status SellerCodeFetchManager::InitializeLocalCodeFetch() {
 }
 
 absl::StatusOr<std::unique_ptr<PeriodicBucketFetcher>>
-SellerCodeFetchManager::InitializeBucketCodeFetch() {
+SellerUdfFetchManager::InitializeBucketCodeFetch() {
   PS_RETURN_IF_ERROR(InitBucketClient());
 
   std::string bucket_name = udf_config_.auction_js_bucket();
@@ -133,7 +158,7 @@ SellerCodeFetchManager::InitializeBucketCodeFetch() {
 }
 
 absl::StatusOr<std::unique_ptr<PeriodicCodeFetcher>>
-SellerCodeFetchManager::InitializeUrlCodeFetch() {
+SellerUdfFetchManager::InitializeUrlCodeFetch() {
   if (udf_config_.auction_js_url().empty()) {
     return absl::InvalidArgumentError(
         "URL fetch mode requires a non-empty url.");
@@ -150,12 +175,11 @@ SellerCodeFetchManager::InitializeUrlCodeFetch() {
   return seller_code_fetcher;
 }
 
-absl::Status SellerCodeFetchManager::InitBucketClient() {
+absl::Status SellerUdfFetchManager::InitBucketClient() {
   PS_RETURN_IF_ERROR(blob_storage_client_->Init()).SetPrepend()
       << "Failed to init BlobStorageClient: ";
   PS_RETURN_IF_ERROR(blob_storage_client_->Run()).SetPrepend()
       << "Failed to run BlobStorageClient: ";
   return absl::OkStatus();
 }
-
 }  // namespace privacy_sandbox::bidding_auction_servers

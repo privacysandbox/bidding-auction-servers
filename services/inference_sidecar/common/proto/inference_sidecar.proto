@@ -23,6 +23,9 @@ service InferenceService {
   // Registers model.
   rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse) {
   }
+  // Gets model paths for successfully registered models.
+  rpc GetModelPaths(GetModelPathsRequest) returns (GetModelPathsResponse) {
+  }
 }
 
 message PredictRequest {
@@ -57,6 +60,13 @@ message RegisterModelRequest {
 message RegisterModelResponse {
 }
 
+message GetModelPathsRequest {
+}
+
+message GetModelPathsResponse {
+  repeated ModelSpec model_specs = 1;
+}
+
 message InferenceSidecarRuntimeConfig {
   // The following two parameters control the threading behavior of the
   // inference backend.
@@ -77,6 +87,18 @@ message InferenceSidecarRuntimeConfig {
   // The sidecar process will run only on the specified CPUs.
   // If `cpuset` is empty, the CPU affinity is not used.
   repeated int32 cpuset = 4;
+
+  // Internal use only. Please note that it is outside the scope of Adtech's control.
+  //
+  // Represents the probability of resetting ML models in the inference sidecar.
+  // It's the privacy preserving feature to prevent data leak between users.
+  // Range: 0.0 (never reset) to 1.0 (always reset per inference); and
+  // 0.5 means the reset probability of 50%. Applied to each model independently.
+  //
+  // TODO(b/330362159): Support different reset probability for consented
+  // traffic.
+  // TODO(b/348985774): Remove this field.
+  double model_reset_probability = 5;
 }
 
 // Proto to store consented debugging logs. It's passed back with

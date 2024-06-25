@@ -19,8 +19,8 @@ variable "environment" {
   description = "Assigned environment name to group related resources."
   type        = string
   validation {
-    condition     = length(var.environment) <= 10
-    error_message = "Due to current naming scheme limitations, environment must not be longer than 10."
+    condition     = length(var.environment) <= 3
+    error_message = "Due to current naming scheme limitations, environment must not be longer than 3."
   }
 }
 variable "region" {
@@ -32,6 +32,16 @@ variable "region" {
 variable "operator" {
   description = "operator name"
   type        = string
+}
+
+variable "use_service_mesh" {
+  description = "use mesh if true, else if false use load balancers"
+  type        = bool
+}
+
+variable "use_tls_with_mesh" {
+  type        = bool
+  description = "Whether to use TLS-encrypted communication between service mesh envoy sidecars."
 }
 
 # Variables related to network, dns and certs configuration.
@@ -57,24 +67,20 @@ variable "certificate_arn" {
 variable "bfe_instance_type" {
   description = "Hardware and OS configuration for the BFE EC2 instance."
   type        = string
-  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
 
 variable "bidding_instance_type" {
   description = "Hardware and OS configuration for the Bidding EC2 instance."
   type        = string
-  default     = "c6i.2xlarge" # Recommend at least c6i.12xlarge for AdTechs testing or load testing.
 }
 
 variable "bfe_instance_ami_id" {
   description = "Buyer FrontEnd operator Amazon Machine Image to run on EC2 instance."
   type        = string
-  default     = "ami-0ea7735ce85ec9cf5"
 }
 variable "bidding_instance_ami_id" {
   description = "Bidding operator Amazon Machine Image to run on EC2 instance."
   type        = string
-  default     = "ami-0f2f28fc0914f6575"
 }
 
 # Variables related to server configuration.
@@ -86,51 +92,41 @@ variable "server_port" {
 variable "bfe_enclave_cpu_count" {
   description = "The number of vcpus to allocate to the BFE enclave."
   type        = number
-  default     = 6
 }
 variable "bfe_enclave_memory_mib" {
   description = "Amount of memory to allocate to the BFE enclave."
   type        = number
-  default     = 12000
 }
 variable "bidding_enclave_cpu_count" {
   description = "The number of vcpus to allocate to the Bidding enclave."
   type        = number
-  default     = 6
 }
 variable "bidding_enclave_memory_mib" {
   description = "Amount of memory to allocate to the Bidding enclave."
   type        = number
-  default     = 12000
 }
 variable "bfe_autoscaling_desired_capacity" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "bfe_autoscaling_max_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "bfe_autoscaling_min_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "bidding_autoscaling_desired_capacity" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "bidding_autoscaling_max_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 variable "bidding_autoscaling_min_size" {
-  type    = number
-  default = 1
+  type = number
 }
 
 # Variables related to AWS backend services
@@ -159,6 +155,19 @@ variable "healthcheck_interval_sec" {
   type        = number
   default     = 7
 }
+
+variable "healthcheck_timeout_sec" {
+  description = "Amount of time to wait for a health check response in seconds."
+  type        = number
+  default     = 5
+}
+
+variable "healthcheck_grace_period_sec" {
+  description = "Amount of time to wait for service inside enclave to start up before starting health checks, in seconds."
+  type        = number
+  default     = 60
+}
+
 variable "healthcheck_healthy_threshold" {
   description = "Consecutive health check successes required to be considered healthy."
   type        = number
@@ -192,4 +201,29 @@ variable "enclave_debug_mode" {
 variable "runtime_flags" {
   type        = map(string)
   description = "Buyer runtime flags. Must exactly match flags specified in <project root>/services/(bidding_service|buyer_frontend_service)/runtime_flags.h"
+}
+
+variable "business_org_for_cert_auth" {
+  description = "Name of your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "country_for_cert_auth" {
+  description = "Country of your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "state_for_cert_auth" {
+  description = "State or province where your business organization is located, for the private certificate authority"
+  type        = string
+}
+
+variable "org_unit_for_cert_auth" {
+  description = "Name of your particular unit in your business organization, for the private certificate authority"
+  type        = string
+}
+
+variable "locality_for_cert_auth" {
+  description = "Locality where your business organization is located, for the private certificate authority"
+  type        = string
 }

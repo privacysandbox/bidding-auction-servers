@@ -96,6 +96,6 @@ variable "healthcheck_unhealthy_threshold" {
 }
 
 variable "service" {
-  description = "One of: bidding, auction, buyer-frontend, seller-frontend"
+  description = "One of: bidding, auction, bfe, sfe"
   type        = string
 }

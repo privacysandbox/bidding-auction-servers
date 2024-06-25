@@ -1,6 +1,6 @@
 {
   "adRenderURL": "http://foo.com/ad",
-  "componentAds": ["http://foo/com/ad/component1", "http://foo/com/ad/component2"],
+  "components": ["http://foo/com/ad/component1", "http://foo/com/ad/component2"],
   "interestGroupName": "ad_loving_group",
   "interestGroupOwner": "ad_showing_company",
   "biddingGroups": {
@@ -33,5 +33,34 @@
   "error": {
     "code": 0,
     "message": "Success"
-  }
+  },
+  "kAnonWinnerJoinCandidates": {
+    "adRenderUrlHash": "ad-render-url-hash",
+    "adComponentRenderUrlsHash": ["ad-component-render-urls-hash"],
+    "reportingIdHash": "reporting-id-hash"
+  },
+  "kAnonWinnerPositionalIndex": 0,
+  "kAnonGhostWinners": [
+    {
+      "kAnonJoinCandidates": {
+        "adRenderUrlHash": "ad-render-url-hash",
+        "adComponentRenderUrlsHash": ["ad-component-render-urls-hash"],
+        "reportingIdHash": "reporting-id-hash"
+      },
+      "interestGroupIndex": 23,
+      "owner": "test-owner",
+      "ghostWinnerPrivateAggregationSignals": {
+        "bucket": "a-test-bucket",
+        "value": 51
+      },
+      "ghostWinnerForTopLevelAuction": {
+        "adRenderUrl": "an-ad-render-url",
+        "adComponentRenderUrls": ["ad-component-render-url1"],
+        "modifiedBid": 123.1234,
+        "bidCurrency": "USD",
+        "adMetadata": "arbitrary-data",
+        "buyerAndSellerReportingId": "test-id"
+      }
+    }
+  ]
 }

@@ -167,16 +167,18 @@ std::unique_ptr<BiddingAsyncClientMock> GetValidBiddingAsyncClientMock() {
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
           An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                         GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto raw_response = std::make_unique<GenerateBidsRawResponse>();
         *raw_response->mutable_bids()->Add() = CreateAdWithBid();
-        std::move(on_done)(std::move(raw_response));
+        std::move(on_done)(std::move(raw_response),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return bidding_async_client;
@@ -191,9 +193,10 @@ GetValidBiddingAsyncClientMockNotCalled() {
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
           An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                         GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .Times(0);
   return bidding_async_client;
 }
@@ -209,17 +212,19 @@ GetValidProtectedAppSignalsBiddingClientMock() {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+                       GenerateProtectedAppSignalsBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto raw_response =
             std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>();
         *raw_response->mutable_bids()->Add() =
             CreateProtectedAppSignalsAdWithBid();
-        std::move(on_done)(std::move(raw_response));
+        std::move(on_done)(std::move(raw_response),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return protected_app_signals_bidding_async_client;
@@ -340,15 +345,17 @@ std::unique_ptr<BiddingAsyncClientMock> GetErrorBiddingAsyncClientMock() {
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
           An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                         GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(absl::Status(absl::StatusCode::kInvalidArgument,
-                                        kRejectionReasonBidBelowAuctionFloor));
+                                        kRejectionReasonBidBelowAuctionFloor),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return bidding_async_client;
@@ -394,14 +401,16 @@ GetErrorProtectedAppSignalsBiddingClientMock() {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+                       GenerateProtectedAppSignalsBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(absl::Status(absl::StatusCode::kInvalidArgument,
-                                        kRejectionReasonCategoryExclusions));
+                                        kRejectionReasonCategoryExclusions),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return protected_app_signals_bidding_async_client;
@@ -444,14 +453,16 @@ std::unique_ptr<BiddingAsyncClientMock> GetEmptyBiddingAsyncClientMock() {
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
           An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                         GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
-        std::move(on_done)(std::make_unique<GenerateBidsRawResponse>());
+                   absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(std::make_unique<GenerateBidsRawResponse>(),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return bidding_async_client;
@@ -497,14 +508,16 @@ GetEmptyProtectedAppSignalsBiddingClientMock() {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+                       GenerateProtectedAppSignalsBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .WillOnce([](std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
                        get_values_raw_request,
                    const RequestMetadata& metadata, auto on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(
-            std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>());
+            std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>(),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
   return protected_app_signals_bidding_async_client;
@@ -642,8 +655,9 @@ GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled() {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+                       GenerateProtectedAppSignalsBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .Times(0);
   return protected_app_signals_bidding_async_client;
 }
@@ -688,9 +702,10 @@ TEST_F(BuyerFrontEndServiceTest,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
           An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                         GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
       .Times(0);
   auto protected_app_signals_bidding_async_client =
       GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();

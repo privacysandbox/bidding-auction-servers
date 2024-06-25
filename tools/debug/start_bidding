@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2024 Google LLC
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@ export PROJECT_ROOT=$(git rev-parse --show-toplevel)
 source $(dirname "$0")/common
 declare -a -r DOCKER_RUN_ARGS=(
   "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server"
+  "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
   "--name=bidding"
 )
 export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
@@ -35,19 +37,18 @@ export SERVER_START_CMD=$(cat << END
 --buyer_code_fetch_config='{
       "fetchMode": 0,
       "biddingJsPath": "",
-      "biddingJsUrl": "https://td.doubleclick.net/td/bjs",
-      "protectedAppSignalsBiddingJsUrl": "https://td.doubleclick.net/td/bjs",
+      "biddingJsUrl": "${BIDDING_JS_URL}",
+      "protectedAppSignalsBiddingJsUrl": "${BIDDING_JS_URL}",
       "biddingWasmHelperUrl": "",
       "protectedAppSignalsBiddingWasmHelperUrl": "",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
       "enableBuyerDebugUrlGeneration": true,
-      "enableAdtechCodeLogging": false,
       "prepareDataForAdsRetrievalJsUrl": "",
       "prepareDataForAdsRetrievalWasmHelperUrl": ""
     }' \
---enable_otel_based_logging="false" \
---consented_debug_token="" \
+--enable_otel_based_logging="true"\
+--consented_debug_token="test_token"\
 --enable_protected_app_signals="false" \
 --enable_protected_audience="true" \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \

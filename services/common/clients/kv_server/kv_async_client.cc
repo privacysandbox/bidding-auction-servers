@@ -94,10 +94,10 @@ void KVAsyncGrpcClient::SendRpc(
 absl::Status KVAsyncGrpcClient::ExecuteInternal(
     std::unique_ptr<GetValuesRequest> raw_request,
     const RequestMetadata& metadata,
-    absl::AnyInvocable<
-        void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                            ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestConfig request_config) const {
   PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
   PS_ASSIGN_OR_RETURN(std::string binary_http_msg,
                       ToBinaryHTTP(*raw_request, /*to_json=*/false));

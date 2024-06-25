@@ -229,6 +229,16 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
     std::vector<std::string> buyer_list = {});
 
 // Populates fields for a auction result object for a component seller auction.
+AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
+    std::string generation_id, std::string top_level_seller,
+    std::string test_component_event,
+    std::string test_component_win_reporting_url,
+    std::string test_component_interaction_reporting_url,
+    std::string test_component_seller,
+    std::vector<std::string> buyer_list = {});
+
+// Populates fields for a auction result object for a component seller auction
+// without reporting urls
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list = {});

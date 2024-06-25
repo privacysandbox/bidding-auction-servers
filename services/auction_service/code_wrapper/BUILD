@@ -19,16 +19,54 @@ package(default_visibility = [
 ])
 
 cc_library(
+    name = "buyer_reporting_udf_wrapper",
+    srcs = ["buyer_reporting_udf_wrapper.cc"],
+    hdrs = [
+        "buyer_reporting_udf_wrapper.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "buyer_reporting_udf_wrapper_test",
+    size = "small",
+    srcs = [
+        "buyer_reporting_test_constants.h",
+        "buyer_reporting_udf_wrapper_test.cc",
+    ],
+    deps = [
+        ":buyer_reporting_udf_wrapper",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "seller_code_wrapper",
     srcs = ["seller_code_wrapper.cc"],
     hdrs = [
         "seller_code_wrapper.h",
     ],
     deps = [
+        ":seller_udf_wrapper",
         "//services/common/util:reporting_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "seller_udf_wrapper",
+    srcs = ["seller_udf_wrapper.cc"],
+    hdrs = [
+        "seller_udf_wrapper.h",
+    ],
+    deps = [
         "@com_google_absl//absl/strings",
     ],
 )
@@ -39,6 +77,7 @@ cc_test(
     srcs = [
         "seller_code_wrapper_test.cc",
         "seller_code_wrapper_test_constants.h",
+        "seller_udf_wrapper_test_constants.h",
     ],
     deps = [
         ":seller_code_wrapper",
@@ -52,26 +91,17 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "buyer_reporting_fetcher",
-    srcs = ["buyer_reporting_fetcher.cc"],
-    hdrs = [
-        "buyer_reporting_fetcher.h",
+cc_test(
+    name = "seller_udf_wrapper_test",
+    size = "small",
+    srcs = [
+        "seller_udf_wrapper_test.cc",
+        "seller_udf_wrapper_test_constants.h",
     ],
     deps = [
-        "//services/auction_service:auction_code_fetch_config_cc_proto",
-        "//services/common/clients/http:http_fetcher_async",
-        "//services/common/code_fetch:code_fetcher_interface",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/status",
+        ":seller_udf_wrapper",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

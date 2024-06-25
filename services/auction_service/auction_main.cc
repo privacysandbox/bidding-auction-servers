@@ -32,7 +32,6 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-#include "services/auction_service/auction_code_fetch_config.pb.h"
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
@@ -40,7 +39,8 @@
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/runtime_flags.h"
-#include "services/auction_service/seller_code_fetch_manager.h"
+#include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
+#include "services/auction_service/udf_fetcher/seller_udf_fetch_manager.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
@@ -94,6 +94,8 @@ using ::google::scp::cpio::CpioOptions;
 using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
+
+bool kEnableSellerAndBuyerUdfIsolation = false;
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
@@ -219,12 +221,13 @@ absl::Status RunServer() {
       code_fetch_proto.enable_report_win_url_generation();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-
+  code_fetch_proto.set_enable_seller_and_buyer_udf_isolation(
+      kEnableSellerAndBuyerUdfIsolation);
   MultiCurlHttpFetcherAsync http_fetcher =
       MultiCurlHttpFetcherAsync(executor.get());
   HttpFetcherAsync* seller_udf_fetcher = &http_fetcher;
   HttpFetcherAsync* buyer_reporting_udf_fetcher = &http_fetcher;
-  SellerCodeFetchManager code_fetch_manager(
+  SellerUdfFetchManager code_fetch_manager(
       BlobStorageClientFactory::Create(), executor.get(), seller_udf_fetcher,
       buyer_reporting_udf_fetcher, &dispatcher, code_fetch_proto,
       enable_protected_app_signals);
@@ -261,7 +264,7 @@ absl::Status RunServer() {
       };
 
   std::string default_code_version =
-      code_fetch_proto.fetch_mode() == auction_service::FETCH_MODE_BUCKET
+      code_fetch_proto.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET
           ? code_fetch_proto.auction_js_bucket_default_blob()
           : kScoreAdBlobVersion;
 
@@ -281,7 +284,9 @@ absl::Status RunServer() {
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
       .max_allowed_size_all_debug_urls_kb =
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB),
-      .default_code_version = default_code_version};
+      .default_code_version = default_code_version,
+      .enable_seller_and_buyer_udf_isolation =
+          kEnableSellerAndBuyerUdfIsolation};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),

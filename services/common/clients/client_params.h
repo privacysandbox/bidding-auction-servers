@@ -25,6 +25,7 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
+#include "services/common/clients/async_grpc/request_config.h"
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -52,6 +53,7 @@ class ClientParams {
     request_ = std::move(request);
     callback_ = std::move(callback);
     response_ = std::make_unique<Response>();
+
     for (const auto& it : metadata) {
       context_.AddMetadata(it.first, it.second);
     }
@@ -113,12 +115,15 @@ class RawClientParams {
   // callback - Final callback executed with the response when RPC is finished.
   explicit RawClientParams(
       std::unique_ptr<Request> request,
-      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                              ResponseMetadata) &&>
           callback,
-      const absl::flat_hash_map<std::string, std::string>& metadata = {}) {
+      const absl::flat_hash_map<std::string, std::string>& metadata = {},
+      RequestConfig request_config = {}) {
     request_ = std::move(request);
     raw_callback_ = std::move(callback);
     response_ = std::make_unique<Response>();
+    request_config_ = request_config;
     for (const auto& it : metadata) {
       context_.AddMetadata(it.first, it.second);
     }
@@ -127,6 +132,9 @@ class RawClientParams {
   // GrpcClientParams is neither copyable nor movable.
   RawClientParams(const RawClientParams&) = delete;
   RawClientParams& operator=(const RawClientParams&) = delete;
+
+  // Allows access to request config param by gRPC
+  const RequestConfig RequestConfig() { return request_config_; }
 
   // Allows access to request param by gRPC
   Request* RequestRef() { return request_.get(); }
@@ -137,6 +145,10 @@ class RawClientParams {
   // Allows access to response param by gRPC
   Response* ResponseRef() { return response_.get(); }
 
+  void SetResponseMetadata(ResponseMetadata response_metadata) {
+    response_metadata_ = response_metadata;
+  }
+
   // Sets a deadline for the gRPC request.
   void SetDeadline(absl::Duration timeout) {
     context_.set_deadline(
@@ -146,11 +158,12 @@ class RawClientParams {
 
   void OnDone(const grpc::Status& status) {
     if (status.ok()) {
-      std::move(raw_callback_)(std::move(raw_response_));
+      std::move(raw_callback_)(std::move(raw_response_), response_metadata_);
     } else {
       std::move(raw_callback_)(
           absl::Status(static_cast<absl::StatusCode>(status.error_code()),
-                       status.error_message()));
+                       status.error_message()),
+          response_metadata_);
     }
     delete this;
   }
@@ -170,8 +183,12 @@ class RawClientParams {
   std::unique_ptr<RawResponse> raw_response_;
 
   // callback will only run once for a single gRPC call
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                          ResponseMetadata) &&>
       raw_callback_ = nullptr;
+
+  struct RequestConfig request_config_;
+  ResponseMetadata response_metadata_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
