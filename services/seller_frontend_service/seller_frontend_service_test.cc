@@ -31,6 +31,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
@@ -61,12 +62,12 @@ constexpr absl::string_view kErrorIntendedForAdServer =
 using ::testing::_;
 using ::testing::HasSubstr;
 using ::testing::Return;
-using GetBidDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                GetBidsResponse::GetBidsRawResponse>>) &&>;
-using ScoreAdsDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                ScoreAdsResponse::ScoreAdsRawResponse>>) &&>;
+using GetBidDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>,
+         ResponseMetadata) &&>;
+using ScoreAdsDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+         ResponseMetadata) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
 
@@ -101,6 +102,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
     config_.SetFlagForTest("{}", SELLER_CLOUD_PLATFORMS_MAP);
+    absl::SetFlag(&FLAGS_enable_chaffing, false);
   }
 
   ClientRegistry CreateValidClientRegistry() {
@@ -234,6 +236,38 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
       absl::StrContains(status.error_message(), kUnsupportedClientType));
 }
 
+TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyRequest) {
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
+  auto scoring = ScoringAsyncClientMock();
+  auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /* crypto_client= */ nullptr,
+                         std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  grpc::ClientContext context;
+  SelectAdRequest request;
+  SelectAdResponse response;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_TRUE(absl::StrContains(status.error_message(), kEmptySelectAdRequest));
+}
+
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
@@ -271,7 +305,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kEmptyBuyerList);
+  EXPECT_EQ(status.error_message(), kEmptyBuyerList);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -311,7 +345,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kInvalidSellerCurrency);
+  EXPECT_EQ(status.error_message(), kInvalidSellerCurrency);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -355,7 +389,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  ASSERT_EQ(status.error_message(), kInvalidBuyerCurrency);
+  EXPECT_EQ(status.error_message(), kInvalidBuyerCurrency);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
@@ -426,6 +460,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   BuyerFrontEndAsyncClientFactoryMock client_factory_mock;
   EXPECT_CALL(client_factory_mock, Get)
       .WillOnce([](absl::string_view buyer_ig_owner) { return nullptr; });
+  EXPECT_CALL(client_factory_mock, Entries).WillRepeatedly([]() {
+    return std::vector<std::pair<
+        absl::string_view, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
+  });
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
@@ -458,7 +496,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), encryption_context);
-  ASSERT_TRUE(auction_result.is_chaff());
+  EXPECT_TRUE(auction_result.is_chaff());
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
@@ -497,6 +535,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
   EXPECT_EQ(request.auction_config().buyer_list_size(),
             protected_auction_input.buyer_input_size());
   BuyerBidsResponseMap expected_buyer_bids;
@@ -541,7 +581,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), encryption_context);
-  ASSERT_TRUE(auction_result.is_chaff());
+  EXPECT_TRUE(auction_result.is_chaff());
 }
 
 void SetupFailingBuyerClientMock(
@@ -550,7 +590,7 @@ void SetupFailingBuyerClientMock(
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
          const RequestMetadata& metadata, GetBidDoneCallback on_done,
-         absl::Duration timeout) {
+         absl::Duration timeout, RequestConfig request_config) {
         return absl::InvalidArgumentError("Some Error");
       };
   auto SetupMockBuyer =
@@ -571,9 +611,11 @@ void SetupBuyerClientMock(
   auto MockGetBids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                             get_values_request,
                         const RequestMetadata& metadata,
-                        GetBidDoneCallback on_done, absl::Duration timeout) {
+                        GetBidDoneCallback on_done, absl::Duration timeout,
+                        RequestConfig request_config) {
     ABSL_LOG(INFO) << "Getting mock bids returning mocked response to callback";
-    std::move(on_done)(std::make_unique<GetBidsResponse::GetBidsRawResponse>());
+    std::move(on_done)(std::make_unique<GetBidsResponse::GetBidsRawResponse>(),
+                       /* response_metadata= */ {});
     ABSL_LOG(INFO) << "Getting mock bids returned mocked response to callback";
     return absl::OkStatus();
   };
@@ -647,6 +689,9 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider
   std::string ad_render_urls = "test scoring signals";
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
@@ -658,10 +703,11 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
       .WillRepeatedly(
           [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
-             absl::Duration timeout) {
+             absl::Duration timeout, RequestConfig request_config) {
             auto response =
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
-            std::move(on_done)(std::move(response));
+            std::move(on_done)(std::move(response),
+                               /* response_metadata= */ {});
             return absl::OkStatus();
           });
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -685,7 +731,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   grpc::ClientContext context;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
-  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  EXPECT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
@@ -747,6 +793,9 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider
   absl::Status error_to_return(absl::StatusCode::kUnavailable,
                                "Could not reach Seller KV server.");
@@ -759,10 +808,11 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
       .WillRepeatedly(
           [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
-             absl::Duration timeout) {
+             absl::Duration timeout, RequestConfig request_config) {
             auto response =
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
-            std::move(on_done)(std::move(response));
+            std::move(on_done)(std::move(response),
+                               /* response_metadata= */ {});
             return absl::OkStatus();
           });
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -787,7 +837,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -836,6 +886,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
     SetupFailingBuyerClientMock(local_buyer, buyer_clients);
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -863,8 +916,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
-  ASSERT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
-  ASSERT_EQ(status.error_message(), kInternalServerError);
+  EXPECT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
+  EXPECT_EQ(status.error_message(), kInternalServerError);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
@@ -896,6 +949,9 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
     }
     i++;
   }
+
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
 
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
@@ -969,6 +1025,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
     ++i;
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -985,7 +1044,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
                     const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
+                    RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -1003,7 +1063,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
           winner = score;
         }
         std::move(on_done)(
-            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response));
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response),
+            {});
         scoring_done.DecrementCount();
         return absl::OkStatus();
       });
@@ -1076,6 +1137,9 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
                    get_bids_response));
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -1094,7 +1158,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
                     const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
+                    RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -1112,7 +1177,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
           winner = score;
         }
         std::move(on_done)(
-            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response));
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response),
+            {});
         notification.Notify();
         return absl::OkStatus();
       });
@@ -1185,6 +1251,9 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
                    get_bids_response));
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -1198,8 +1267,10 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                        score_ads_request,
                    const RequestMetadata& metadata,
-                   ScoreAdsDoneCallback on_done, absl::Duration timeout) {
-        std::move(on_done)(absl::InternalError(""));
+                   ScoreAdsDoneCallback on_done, absl::Duration timeout,
+                   RequestConfig request_config) {
+        std::move(on_done)(absl::InternalError(""),
+                           /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -1269,6 +1340,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
                    get_bids_response));
   }
 
+  MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
+                                buyer_clients);
+
   // Scoring signals provider mock.
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -1282,9 +1356,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                        score_ads_request,
                    const RequestMetadata& metadata,
-                   ScoreAdsDoneCallback on_done, absl::Duration timeout) {
+                   ScoreAdsDoneCallback on_done, absl::Duration timeout,
+                   RequestConfig request_config) {
         std::move(on_done)(
-            absl::ResourceExhaustedError(kErrorIntendedForAdServer));
+            absl::ResourceExhaustedError(kErrorIntendedForAdServer),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 

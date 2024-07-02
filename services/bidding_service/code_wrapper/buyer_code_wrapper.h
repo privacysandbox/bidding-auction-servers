@@ -49,7 +49,7 @@ std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
-    function generateBidEntryFunction($0, featureFlags){
+    async function generateBidEntryFunction($0, featureFlags){
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -78,7 +78,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
       var generateBidResponse = {};
       try {
-        generateBidResponse = generateBid($0);
+        generateBidResponse = await generateBid($0);
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
@@ -92,12 +92,16 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      return {
-        response: generateBidResponse !== undefined ? generateBidResponse : {},
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
+      var result = generateBidResponse !== undefined ? generateBidResponse : {};
+      if (featureFlags.enable_logging) {
+        return {
+          response: result,
+          logs: ps_logs,
+          errors: ps_errors,
+          warnings: ps_warns
+        };
       }
+      return result;
     }
 )JS_CODE";
 
@@ -107,7 +111,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 //- Hooks in wasm module
 inline constexpr absl::string_view kPrepareDataForAdRetrievalEntryFunction =
     R"JS_CODE(
-    function $0EntryFunction(onDeviceEncodedSignalsHexString, $1, featureFlags){
+    async function $0EntryFunction(onDeviceEncodedSignalsHexString, $1, featureFlags){
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -127,7 +131,7 @@ inline constexpr absl::string_view kPrepareDataForAdRetrievalEntryFunction =
           Uint8Array.from(encodedOnDeviceSignalsIn.match(/.{1,2}/g).map((byte) =>
             parseInt(byte, 16)));
       return {
-        response: $0(convertToUint8Array(onDeviceEncodedSignalsHexString), $1),
+        response: await $0(convertToUint8Array(onDeviceEncodedSignalsHexString), $1),
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns

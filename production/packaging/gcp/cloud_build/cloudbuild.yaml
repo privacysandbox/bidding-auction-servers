@@ -32,7 +32,7 @@ steps:
       --service-path seller_frontend_service \
       --service-path auction_service \
       --instance gcp --platform gcp \
-      --build-flavor prod \
+      --build-flavor ${_BUILD_FLAVOR} \
       --gcp-image-tag ${_GCP_IMAGE_TAG} \
       --gcp-image-repo ${_GCP_IMAGE_REPO} \
       --no-tests --no-precommit
@@ -41,7 +41,8 @@ substitutions:
     # CloudBuild Trigger GUI.
     # See https://cloud.google.com/build/docs/configuring-builds/substitute-variable-values
     # for more information.
-    _GCP_IMAGE_TAG: from-cloudbuild # Default. Useful for organization. The build already tags the images with verison information.
+    _BUILD_FLAVOR: prod # Default. Use non_prod for enhanced logging output.
+    _GCP_IMAGE_TAG: ${GIT_TAG} # Default. Useful for organization.
     _GCP_IMAGE_REPO: us-docker.pkg.dev/${PROJECT_ID}/services # Default. Artifact Registry repo to house images for each service.
 timeout: 10800s
 options:

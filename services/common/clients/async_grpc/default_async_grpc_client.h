@@ -23,7 +23,9 @@
 #include "absl/log/check.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
+#include "services/common/clients/async_grpc/request_config.h"
 #include "services/common/clients/client_params.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/util/error_categories.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
@@ -35,7 +37,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
 
 // This can be made configurable
-inline constexpr absl::Duration max_timeout = absl::Milliseconds(60000);
+inline constexpr absl::Duration kMaxClientTimeout = absl::Seconds(60);
 
 // This class acts as a template for a basic asynchronous grpc client.
 template <typename Request, typename Response, typename RawRequest,
@@ -72,14 +74,30 @@ class DefaultAsyncGrpcClient
 
   absl::Status ExecuteInternal(
       std::unique_ptr<RawRequest> raw_request, const RequestMetadata& metadata,
-      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                              ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout = max_timeout) const override {
+      absl::Duration timeout = kMaxClientTimeout,
+      RequestConfig request_config = {}) const override {
     PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     PS_VLOG(5) << "Encrypting request ...";
-    auto secret_request = EncryptRequestWithHpke<RawRequest, Request>(
-        std::move(raw_request), *crypto_client_, *key_fetcher_manager_,
-        cloud_platform_);
+
+    return EncryptPayloadAndSendRpc(raw_request->SerializeAsString(), metadata,
+                                    std::move(on_done), timeout,
+                                    request_config);
+  }
+
+ protected:
+  using SecretRequest = std::pair<std::string, std::unique_ptr<Request>>;
+
+  absl::Status EncryptPayloadAndSendRpc(
+      const std::string& plaintext, const RequestMetadata& metadata,
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                              ResponseMetadata) &&>
+          on_done,
+      absl::Duration timeout, RequestConfig request_config = {}) const {
+    auto secret_request = EncryptRequestWithHpke<Request>(
+        plaintext, *crypto_client_, *key_fetcher_manager_, cloud_platform_);
     if (!secret_request.ok()) {
       PS_LOG(ERROR) << "Failed to encrypt the request: "
                     << secret_request.status();
@@ -90,15 +108,12 @@ class DefaultAsyncGrpcClient
 
     auto params =
         std::make_unique<RawClientParams<Request, Response, RawResponse>>(
-            std::move(request), std::move(on_done), metadata);
-    params->SetDeadline(std::min(max_timeout, timeout));
+            std::move(request), std::move(on_done), metadata, request_config);
+    params->SetDeadline(std::min(kMaxClientTimeout, timeout));
     PS_VLOG(5) << "Sending RPC ...";
     SendRpc(hpke_secret, params.release());
     return absl::OkStatus();
   }
-
- protected:
-  using SecretRequest = std::pair<std::string, std::unique_ptr<Request>>;
 
   // Sends an asynchronous request via grpc. This method must be implemented
   // by classes implementing this interface.
@@ -150,24 +165,11 @@ class DefaultAsyncGrpcClient
 // server_addr: the URL or IP for the server DNS
 // compression: flag to enable gRPC level compression for the client.
 // Disabled by default.
-inline std::shared_ptr<grpc::Channel> CreateChannel(
+std::shared_ptr<grpc::Channel> CreateChannel(
     // Const string reference to prevent copies. string_view cannot be casted
     // to argument for grpc::CreateChannel.
-    absl::string_view server_addr, bool compression = false,
-    bool secure = true) {
-  std::shared_ptr<grpc::ChannelCredentials> creds =
-      secure ? grpc::SslCredentials(grpc::SslCredentialsOptions())
-             : grpc::InsecureChannelCredentials();
-  grpc::ChannelArguments args;
-  // Set max message size to 256 MB.
-  args.SetMaxSendMessageSize(256L * 1024L * 1024L);
-  args.SetMaxReceiveMessageSize(256L * 1024L * 1024L);
-  if (compression) {
-    // Set the default compression algorithm for the channel.
-    args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
-  }
-  return grpc::CreateCustomChannel(server_addr.data(), creds, args);
-}
+    absl::string_view server_addr, bool compression = false, bool secure = true,
+    absl::string_view grpc_arg_default_authority = "");
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

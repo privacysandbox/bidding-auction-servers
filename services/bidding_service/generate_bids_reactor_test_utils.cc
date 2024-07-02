@@ -161,14 +161,11 @@ std::string CreateGenerateBidsUdfResponse(
       &base64_encoded_temporary_features_bytes);
   return absl::Substitute(R"JSON(
     {
-      "response": {
-        "render": "$0",
-        "bid": $1,
-        "egressPayload": "$2",
-        "debugReportUrls": $3,
-        "temporaryUnlimitedEgressPayload": "$4"
-      },
-      "logs": []
+      "render": "$0",
+      "bid": $1,
+      "egressPayload": "$2",
+      "debugReportUrls": $3,
+      "temporaryUnlimitedEgressPayload": "$4"
     }
   )JSON",
                           render, bid, base64_encoded_features_bytes,
@@ -249,15 +246,17 @@ void SetupAdRetrievalClientExpectations(
                     std::unique_ptr<GetValuesRequest> raw_request,
                     const RequestMetadata& metadata,
                     absl::AnyInvocable<void(
-                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                        ResponseMetadata)&&>
                         on_done,
-                    absl::Duration timeout) {
+                    absl::Duration timeout, RequestConfig request_config) {
         auto response = ads_retrieval_response.has_value()
                             ? *ads_retrieval_response
                             : CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 }

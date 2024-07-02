@@ -215,7 +215,8 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       request_metadata,
       [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
-              raw_response) mutable {
+              raw_response,
+          ResponseMetadata response_metadata) mutable {
         ABSL_VLOG(0) << "Received bid response from BFE in "
                      << ((absl::Now() - start) / absl::Milliseconds(1))
                      << " ms.";
@@ -317,12 +318,9 @@ std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
       std::make_unique<server_common::FakeKeyFetcherManager>(
           keyset.public_key, "unused", std::to_string(keyset.key_id));
   auto crypto_client = CreateCryptoClient();
-  auto secret_request =
-      EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
-          std::make_unique<GetBidsRequest::GetBidsRawRequest>(
-              get_bids_raw_request),
-          *crypto_client, *key_fetcher_manager,
-          server_common::CloudPlatform::kGcp);
+  auto secret_request = EncryptRequestWithHpke<GetBidsRequest>(
+      get_bids_raw_request.SerializeAsString(), *crypto_client,
+      *key_fetcher_manager, server_common::CloudPlatform::kGcp);
   CHECK(secret_request.ok()) << secret_request.status();
   std::string get_bids_request_json;
   auto get_bids_request_json_status =

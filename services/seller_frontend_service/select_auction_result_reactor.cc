@@ -80,7 +80,8 @@ void SelectAuctionResultReactor::ScoreAds(
   auto on_scoring_done =
       [this, auction_request_metric = std::move(auction_request_metric)](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
-              result) mutable {
+              result,
+          ResponseMetadata response_metadata) mutable {
         {
           int response_size =
               result.ok() ? (int)result->get()->ByteSizeLong() : 0;
@@ -90,6 +91,7 @@ void SelectAuctionResultReactor::ScoreAds(
         }
         OnScoreAdsDone(std::move(result));
       };
+
   absl::Status execute_result = clients_.scoring.ExecuteInternal(
       std::move(raw_request), {}, std::move(on_scoring_done),
       absl::Milliseconds(

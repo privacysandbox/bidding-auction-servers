@@ -136,11 +136,14 @@ cc_library(
         ":tensorflow_parser",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@inference_common//model:model_store",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:request_parser",
@@ -169,12 +172,14 @@ cc_test(
         "//benchmark_models/embedding:embedding_model",
         "//benchmark_models/pctr:pctr_model",
         "//benchmark_models/pcvr:pcvr_model",
+        "//benchmark_models/stateful:stateful_model",
     ],
     deps = [
         ":tensorflow",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@inference_common//proto:inference_sidecar_cc_proto",
@@ -234,7 +239,7 @@ genrule(
     outs = ["inference_sidecar_binary"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p artifacts
-cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar
+cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar_tensorflow_v2_14_0
 EOF""",
     executable = True,
     local = True,
@@ -244,7 +249,7 @@ EOF""",
 # Exports TensorFlow inference sidecar binary to be packaged in the B&A workspace.
 exports_files(
     [
-        "artifacts/inference_sidecar",
+        "artifacts/inference_sidecar_tensorflow_v2_14_0",
     ],
 )
 

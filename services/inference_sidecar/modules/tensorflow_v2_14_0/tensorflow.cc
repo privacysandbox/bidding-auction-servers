@@ -14,21 +14,22 @@
  * limitations under the License.
  */
 
-#include <chrono>
+#include <atomic>
 #include <future>
-#include <iomanip>
-#include <iostream>
-#include <istream>
-#include <random>
+#include <string>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/absl_log.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/synchronization/notification.h"
+#include "model/model_store.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "src/util/status_macro/status_macros.h"
@@ -40,6 +41,7 @@
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/tsl/platform/env.h"
 #include "tensorflow/tsl/platform/file_system.h"
+#include "utils/log.h"
 #include "utils/request_parser.h"
 
 #include "tensorflow_parser.h"
@@ -62,7 +64,7 @@ absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
 }
 
 absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>
-PredictPerModel(const tensorflow::SavedModelBundle* model,
+PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
                 const InferenceRequest& inference_request) {
   std::vector<std::pair<std::string, tensorflow::Tensor>> inputs;
   for (const auto& tensor : inference_request.inputs) {
@@ -111,30 +113,91 @@ PredictPerModel(const tensorflow::SavedModelBundle* model,
   return std::make_pair(std::string(model_key), zipped_vector);
 }
 
+absl::StatusOr<std::unique_ptr<tensorflow::SavedModelBundle>>
+TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
+                           const RegisterModelRequest& request) {
+  tensorflow::SessionOptions session_options;
+  // TODO(b/332599154): Support runtime configuration on a per-session basis.
+  if (config.num_intraop_threads() != 0) {
+    session_options.config.set_intra_op_parallelism_threads(
+        config.num_intraop_threads());
+  }
+  if (config.num_interop_threads() != 0) {
+    session_options.config.set_inter_op_parallelism_threads(
+        config.num_interop_threads());
+  }
+  const std::unordered_set<std::string> tags = {"serve"};
+  const auto& model_path = request.model_spec().model_path();
+  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
+  if (auto status = tensorflow::LoadSavedModel(
+          session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
+          tags, model_bundle.get());
+      !status.ok()) {
+    return absl::InternalError(
+        absl::StrCat("Error loading model: ", model_path));
+  }
+  return model_bundle;
+}
+
 class TensorflowModule final : public ModuleInterface {
  public:
   explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config)
-      : runtime_config_(config) {}
+      : runtime_config_(config),
+        store_(config, TensorFlowModelConstructor),
+        background_thread_running_(true) {
+    // TODO(b/332328206): Move reset model logic into the ModelStore.
+    background_thread_ = std::thread([this]() {
+      while (background_thread_running_) {
+        // ResetModels() is continually called in the background thread.
+        ResetModels();
+        // Waits for the completed inference execution.
+        //
+        // Moves on after 1 second and check if the background thread should
+        // terminate. The destructor terminates this thread by setting
+        // |background_thread_running_|.
+        inference_notification_.WaitForNotificationWithTimeout(
+            absl::Seconds(1));
+      }
+    });
+  }
+
+  ~TensorflowModule() override {
+    background_thread_running_ = false;
+    background_thread_.join();
+  }
+
   absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
+      const PredictRequest& request,
+      const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
-      const RegisterModelRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
+      const RegisterModelRequest& request) override;
+  void ResetModels() override;
 
  private:
-  // Maps each `model_path` from an inference request to its corresponding
-  // tensorflow::SavedModelBundle instance.
-  absl::flat_hash_map<std::string,
-                      std::unique_ptr<tensorflow::SavedModelBundle>>
-      model_map_ ABSL_GUARDED_BY(mu_);
-  // TODO(b/327907675) : Add a test for concurrency
-  absl::Mutex mu_;
   const InferenceSidecarRuntimeConfig runtime_config_;
+
+  // Stores a set of models. It's thread safe.
+  // TODO(b/327907675) : Add a test for concurrency
+  ModelStore<tensorflow::SavedModelBundle> store_;
+
+  // Counts the number of inferences per model. Used for model reset.
+  absl::flat_hash_map<std::string, int> per_model_inference_count_
+      ABSL_GUARDED_BY(per_model_inference_count_mu_);
+  absl::Mutex per_model_inference_count_mu_;
+
+  // Notification to trigger model reset.
+  absl::Notification inference_notification_;
+
+  // The background thread continuously running ResetModels().
+  std::thread background_thread_;
+  // The background thread is shutdown if set to false.
+  std::atomic<bool> background_thread_running_;
+  // Exclusively used in a single backgrond thread. No need of a mutex.
+  absl::BitGen bitgen_;
 };
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
-    const PredictRequest& request) {
-  absl::ReaderMutexLock lock(&mu_);
-
+    const PredictRequest& request, const RequestContext& request_context) {
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
@@ -147,13 +210,12 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 
   for (const InferenceRequest& inference_request : *parsed_requests) {
     absl::string_view model_key = inference_request.model_path;
-    auto it = model_map_.find(model_key);
-    if (it == model_map_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Requested model '", model_key, "' is not registered"));
-    }
-    tasks.push_back(std::async(std::launch::async, &PredictPerModel,
-                               it->second.get(), inference_request));
+    INFERENCE_LOG(INFO, request_context)
+        << "Received inference request to model: " << model_key;
+    PS_ASSIGN_OR_RETURN(std::shared_ptr<tensorflow::SavedModelBundle> model,
+                        store_.GetModel(model_key, request.is_consented()));
+    tasks.push_back(std::async(std::launch::async, &PredictPerModel, model,
+                               inference_request));
   }
 
   std::vector<std::pair<std::string, std::vector<TensorWithName>>>
@@ -176,6 +238,15 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     return absl::InternalError("Error during output parsing to json");
   }
 
+  {
+    absl::MutexLock lock(&per_model_inference_count_mu_);
+    for (const InferenceRequest& inference_request : *parsed_requests) {
+      const std::string& model_key = inference_request.model_path;
+      ++per_model_inference_count_[model_key];
+    }
+  }
+  inference_notification_.Notify();
+
   PredictResponse predict_response;
   predict_response.set_output(output_json.value());
   return predict_response;
@@ -183,44 +254,53 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 
 absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     const RegisterModelRequest& request) {
-  tensorflow::SessionOptions session_options;
-  // TODO(b/332599154): Support runtime configuration on a per-session basis.
-  if (runtime_config_.num_intraop_threads() != 0) {
-    session_options.config.set_intra_op_parallelism_threads(
-        runtime_config_.num_intraop_threads());
-  }
-  if (runtime_config_.num_interop_threads() != 0) {
-    session_options.config.set_inter_op_parallelism_threads(
-        runtime_config_.num_interop_threads());
-  }
-
-  const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
-
   if (model_path.empty()) {
     return absl::InvalidArgumentError("Model path is empty");
   }
 
-  absl::WriterMutexLock lock(&mu_);
-  auto it = model_map_.find(model_path);
-  if (it != model_map_.end()) {
+  if (store_.GetModel(model_path).ok()) {
     return absl::AlreadyExistsError(
-        absl::StrCat("Model '", model_path, "' already registered"));
+        absl::StrCat("Model ", model_path, " has already been registered"));
   }
-
   PS_RETURN_IF_ERROR(SaveToRamFileSystem(request));
 
-  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
-  auto status = tensorflow::LoadSavedModel(
-      session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path), tags,
-      model_bundle.get());
-
-  if (!status.ok()) {
-    return absl::InternalError(
-        absl::StrCat("Error loading model: ", model_path));
-  }
-  model_map_[model_path] = std::move(model_bundle);
+  RegisterModelRequest model_request;
+  *model_request.mutable_model_spec() = request.model_spec();
+  PS_RETURN_IF_ERROR(store_.PutModel(model_path, model_request));
   return RegisterModelResponse();
+}
+
+// TODO(b/346813356): Refactor duplicate logic into a shared library/class.
+void TensorflowModule::ResetModels() {
+  const double reset_probability = runtime_config_.model_reset_probability();
+  if (reset_probability == 0.0) {
+    // Model reset is disabled.
+    return;
+  }
+
+  std::vector<std::string> models = store_.ListModels();
+  for (const auto& model_key : models) {
+    int count = 0;
+    {
+      absl::MutexLock lock(&per_model_inference_count_mu_);
+      count = per_model_inference_count_[model_key];
+      // Sets the per-model counter to 0.
+      per_model_inference_count_[model_key] = 0;
+    }
+    if (count <= 0) continue;
+    double random = absl::Uniform(bitgen_, 0.0, 1.0);
+    // Boosts the chance of reset multiplied by the number of inferences as
+    // approximation.
+    if (reset_probability != 1.0 && random >= reset_probability * count) {
+      continue;
+    }
+
+    // We should make sure the model reset is successfully done.
+    // Otherwise, we terminate the program to preserve user privacy.
+    CHECK(store_.ResetModel(model_key).ok())
+        << "Failed to reset model: " << model_key;
+  }
 }
 
 }  // namespace

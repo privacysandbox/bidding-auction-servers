@@ -220,7 +220,7 @@ absl::StatusOr<std::string> SerializeIG(const IGForBidding& ig) {
 // in a loop for all Interest Groups.
 absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
-    server_common::log::ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   // Parse into JSON.
   auto start_parse_time = absl::Now();
   PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
@@ -285,8 +285,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation,
-    server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, const std::string& version) {
+    RequestLogContext& log_context, const bool enable_adtech_code_logging,
+    const std::string& version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
@@ -446,8 +446,10 @@ void GenerateBidsReactor::Execute() {
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsRequest:\n"
                                     << request_->ShortDebugString();
+  log_context_.SetEventMessageField(*request_);
   PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
+  log_context_.SetEventMessageField(raw_request_);
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
 
@@ -482,7 +484,18 @@ void GenerateBidsReactor::Execute() {
     } else {
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
-      dispatch_request.metadata = roma_request_context_factory_.Create();
+      RomaRequestSharedContext shared_context =
+          roma_request_context_factory_.Create();
+      auto roma_shared_context = shared_context.GetRomaRequestContext();
+      if (roma_shared_context.ok()) {
+        std::shared_ptr<RomaRequestContext> roma_request_context =
+            roma_shared_context.value();
+        roma_request_context->SetIsProtectedAudienceRequest(true);
+      } else {
+        PS_LOG(ERROR, log_context_) << "Failed to retrieve RomaRequestContext: "
+                                    << roma_shared_context.status();
+      }
+      dispatch_request.metadata = shared_context;
       dispatch_requests_.push_back(dispatch_request);
     }
   }
@@ -548,8 +561,10 @@ void GenerateBidsReactor::GenerateBidsCallback(
     if (result.ok()) {
       AdWithBid bid;
       absl::StatusOr<std::string> generate_bid_response =
-          ParseAndGetResponseJson(enable_adtech_code_logging_, result->resp,
-                                  log_context_);
+          enable_adtech_code_logging_
+              ? ParseAndGetResponseJson(enable_adtech_code_logging_,
+                                        result->resp, log_context_)
+              : result->resp;
       if (!generate_bid_response.ok()) {
         PS_LOG(ERROR, log_context_)
             << "Failed to parse response from Roma "
@@ -620,6 +635,8 @@ void GenerateBidsReactor::GenerateBidsCallback(
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
   PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse:\n"
                                 << raw_response_.ShortDebugString();
+  log_context_.SetEventMessageField(raw_response_);
+  log_context_.ExportEventMessage();
 
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)

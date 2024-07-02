@@ -20,8 +20,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-using server_common::log::ContextImpl;
-
 void SetReportingUrls(const WinReportingUrls& win_reporting_urls,
                       AuctionResult& auction_result) {
   auto* mutable_win_reporting_urls =
@@ -112,7 +110,8 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<IgsWithBidsMap>& maybe_bidding_group_map,
     const std::optional<AuctionResult::Error>& error,
-    OhttpHpkeDecryptedMessage& decrypted_request, ContextImpl& log_context) {
+    OhttpHpkeDecryptedMessage& decrypted_request,
+    RequestLogContext& log_context) {
   std::string error_msg;
   absl::Notification wait_for_error_callback;
   auto error_handler = [&wait_for_error_callback,
@@ -136,10 +135,14 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
   } else {
     PS_VLOG(kPlain, log_context)
         << "AuctionResult:\n"
-        << [](absl::string_view encoded_data) {
+        << [&](absl::string_view encoded_data) {
              auto result = CborDecodeAuctionResultToProto(encoded_data);
-             return result.ok() ? result->DebugString()
-                                : result.status().ToString();
+             if (result.ok()) {
+               log_context.SetEventMessageField(*result);
+               return result->DebugString();
+             } else {
+               return result.status().ToString();
+             }
            }(*serialized_data);
   }
   absl::string_view data_to_compress =
@@ -151,12 +154,15 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
 absl::StatusOr<std::string> PackageAuctionResultForApp(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
-    OhttpHpkeDecryptedMessage& decrypted_request, ContextImpl& log_context) {
+    OhttpHpkeDecryptedMessage& decrypted_request,
+    RequestLogContext& log_context) {
   // Map to AuctionResult proto and serialized to bytes array.
-  std::string serialized_result =
-      MapAdScoreToAuctionResult(high_score, error).SerializeAsString();
-  PS_VLOG(kPlain, log_context) << "AuctionResult:\n" << serialized_result;
-  return PackageAuctionResultCiphertext(serialized_result, decrypted_request);
+
+  AuctionResult result = MapAdScoreToAuctionResult(high_score, error);
+  PS_VLOG(kPlain, log_context) << "AuctionResult:\n" << result.DebugString();
+  log_context.SetEventMessageField(result);
+  return PackageAuctionResultCiphertext(result.SerializeAsString(),
+                                        decrypted_request);
 }
 
 absl::StatusOr<std::string> PackageAuctionResultForInvalid(
@@ -241,7 +247,7 @@ absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
     const ScoreAdsResponse::AdScore& ad_score,
     const std::optional<IgsWithBidsMap>& bidding_group_map,
     ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
-    ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   absl::StatusOr<std::string> auction_result_ciphertext;
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
@@ -258,7 +264,8 @@ absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
 
 absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
     const AuctionResult::Error& auction_error, ClientType client_type,
-    OhttpHpkeDecryptedMessage& decrypted_request, ContextImpl& log_context) {
+    OhttpHpkeDecryptedMessage& decrypted_request,
+    RequestLogContext& log_context) {
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
       return PackageAuctionResultForApp(
@@ -275,7 +282,7 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
 
 absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
     ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
-    ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
       return PackageAuctionResultForApp(
@@ -362,7 +369,7 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
     absl::string_view request_generation_id,
     CryptoClientWrapperInterface& crypto_client,
     server_common::KeyFetcherManagerInterface& key_fetcher_manager,
-    ErrorAccumulator& error_accumulator, ContextImpl& log_context) {
+    ErrorAccumulator& error_accumulator, RequestLogContext& log_context) {
   std::vector<AuctionResult> component_auction_results;
   // Keep track of encountered sellers.
   absl::flat_hash_set<std::string> component_sellers;

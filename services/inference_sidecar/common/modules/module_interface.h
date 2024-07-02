@@ -21,6 +21,7 @@
 
 #include "absl/status/statusor.h"
 #include "proto/inference_sidecar.pb.h"
+#include "utils/log.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
@@ -36,10 +37,13 @@ class ModuleInterface {
   virtual ~ModuleInterface() = default;
   // Executes inference on a registered ML model.
   virtual absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) = 0;
+      const PredictRequest& request,
+      const RequestContext& request_context = RequestContext()) = 0;
   // Registers a new model.
   virtual absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) = 0;
+  // Resets models.
+  virtual void ResetModels() = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

@@ -36,8 +36,7 @@ function usage() {
 usage:
   $0 <options>
     --without-shared-cache       Containers will not mount ${HOME}/.cache/bazel
-    --server-image <image.tar>   Server docker image tarfile
-    --service-path               [REQUIRED] One of: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service
+    --service                   [REQUIRED] At least one of: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service. Use multiple times to specify more than one service.
     --with-ami                   AMI region in which to build and store AWS AMIs. Use multiple times to specify more than one region
     --aws-image-tag              Custom image tag for AMI image. Applied to AMI as tag value for key 'build_env'.
 
@@ -54,27 +53,21 @@ USAGE
 declare -a AMI_REGIONS
 declare BUILD_FLAVOR=prod
 declare AWS_IMAGE_TAG=""
+declare SERVICE_LIST=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --server-image)
-      SERVER_IMAGE="$2"
-      shift
-      shift
-      ;;
-    --service-path)
-      SERVICE="$2"
-      shift
-      shift
+    --service)
+      SERVICE_LIST+=("$2")
+      shift 2 || usage
       ;;
     --with-ami)
       AMI_REGIONS+=("$2")
-      shift
-      shift
+      shift 2 || usage
       ;;
     --aws-image-tag)
       AWS_IMAGE_TAG="$2"
-      shift 2
+      shift 2 || usage
       ;;
     --verbose)
       set -o xtrace
@@ -110,25 +103,36 @@ mkdir -p "${DIST}"/aws
 chmod 770 "${DIST}" "${DIST}"/aws
 
 printf "==== build AWS artifacts using build-amazonlinux2 =====\n"
-# build nitro enclave image, collect eif artifacts
-readonly IMAGE_URI=bazel/production/packaging/aws/${SERVICE}
-IMAGE_TAG=$(mktemp --dry-run temp-XXXXXX)
-readonly ENCLAVE_NAME=${SERVICE}
-builder::cbuild_al2 $"
-set -o errexit
-# extract server docker image into local docker client and retag it
-docker load -i ${SERVER_IMAGE}
-docker tag ${IMAGE_URI}:server_docker_image ${IMAGE_URI}:${IMAGE_TAG}
-nitro-cli build-enclave \
-  --docker-uri ${IMAGE_URI}:${IMAGE_TAG} \
-  --output-file /tmp/${ENCLAVE_NAME}.eif \
-  > /tmp/${ENCLAVE_NAME}_${BUILD_FLAVOR}.json
-if [[ $? -eq 0 ]]; then
-  mv /tmp/${ENCLAVE_NAME}.* dist/aws/
-  mv /tmp/${ENCLAVE_NAME}_${BUILD_FLAVOR}.* dist/aws/
-fi
-"
-docker image rm "${IMAGE_URI}:${IMAGE_TAG}"
+declare server_image=""
+declare image_uri=""
+declare image_tag=""
+for service in "${SERVICE_LIST[@]}"; do
+  server_image="dist/debian/${service}_image.tar"
+  if [[ ! -s ${WORKSPACE}/${server_image} ]]; then
+      printf "Error: docker image tar file not found: %s\n" "${server_image}" >&2
+      exit 1
+  fi
+
+  # build nitro enclave image, collect eif artifacts
+  image_uri="bazel/production/packaging/aws/${service}"
+  image_tag=$(mktemp --dry-run temp-XXXXXX)
+
+  builder::cbuild_al2 $"
+  set -o errexit
+  # extract server docker image into local docker client and retag it
+  docker load -i ${server_image}
+  docker tag ${image_uri}:server_docker_image ${image_uri}:${image_tag}
+  nitro-cli build-enclave \
+    --docker-uri ${image_uri}:${image_tag} \
+    --output-file /tmp/${service}.eif \
+    > /tmp/${service}_${BUILD_FLAVOR}.json
+  if [[ $? -eq 0 ]]; then
+    mv /tmp/${service}.* dist/aws/
+    mv /tmp/${service}_${BUILD_FLAVOR}.* dist/aws/
+  fi
+  "
+  docker image rm "${image_uri}:${image_tag}"
+done
 
 builder::cbuild_al2 $"
 trap _collect_logs EXIT
@@ -164,17 +168,21 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   unzip -o -d "${DIST}"/aws "${DIST}"/aws/artifacts_proto.zip
   printf "==== build AWS AMI (using packer) =====\n"
   regions="$(arr_to_string_list AMI_REGIONS)"
-  build_version="$(git -C ${WORKSPACE} describe --tags --always || echo no-git-version)-${BUILD_FLAVOR}"
-  builder::cbuild_al2 "
+  build_version="$(git -C ${WORKSPACE} describe --tags --always || echo no-git-version)"
+  for service in "${SERVICE_LIST[@]}"; do
+    builder::cbuild_al2 "
 set -o errexit
 packer build \
   -var=regions='${regions}' \
-  -var=service=${SERVICE} \
+  -var=service=${service} \
   -var=git_commit=$(git rev-parse HEAD) \
+  -var=build_flavor=${BUILD_FLAVOR} \
   -var=build_version=${build_version} \
   -var=build_env=${AWS_IMAGE_TAG} \
   -var=distribution_dir=dist/aws \
   -var=workspace=/src/workspace \
   production/packaging/aws/common/ami/image.pkr.hcl
-"
+" &
+  done
+  wait
 fi

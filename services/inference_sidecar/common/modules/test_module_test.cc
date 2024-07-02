@@ -53,5 +53,11 @@ TEST(TestModule, Success_ReadModel) {
   EXPECT_GT(module->model_size(), 0);
 }
 
+TEST(TestModule, Success_ResetModels) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<TestModule> module = std::make_unique<TestModule>(config);
+  module->ResetModels();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

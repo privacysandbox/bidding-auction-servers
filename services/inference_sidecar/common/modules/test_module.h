@@ -39,9 +39,11 @@ class TestModule final : public ModuleInterface {
   ~TestModule() override;
 
   absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) override;
+      const PredictRequest& request,
+      const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) override;
+  void ResetModels() override;
 
   void set_model_path(absl::string_view path) { model_path_ = path; }
 

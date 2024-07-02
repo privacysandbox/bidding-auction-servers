@@ -273,7 +273,12 @@ void MultiCurlHttpFetcherAsync::FetchUrls(
   shared_lifetime->all_done_callback = std::move(done_callback);
   shared_lifetime->results =
       std::vector<absl::StatusOr<std::string>>(requests.size());
-
+  if (requests.empty()) {
+    // Execute callback immediately if there are no requests.
+    std::move(shared_lifetime->all_done_callback)(
+        std::move(shared_lifetime->results));
+    return;
+  }
   for (int i = 0; i < requests.size(); i++) {
     FetchUrl(requests.at(i), absl::ToInt64Milliseconds(timeout),
              [i, shared_lifetime](absl::StatusOr<std::string> result) {

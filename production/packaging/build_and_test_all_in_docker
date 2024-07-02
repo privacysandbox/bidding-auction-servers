@@ -67,7 +67,7 @@ usage:
   $0 <options>
     --service-path               [REQUIRED] Recognized values: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service.
                                    Use multiple times to specify more than one service.
-    --instance                   [REQUIRED] Recognized values: local, aws
+    --instance                   [REQUIRED] Recognized values: local, gcp, aws
     --platform                   [REQUIRED] Recognized values: gcp, aws
     --e2e                        Run e2e mode
     --build-flavor               Recognized values: prod, non_prod, inference_non_prod. Default: prod
@@ -260,19 +260,18 @@ function invoke_targets() {
   "
 }
 
-function build_service_for_aws() {
-  declare -r service="$1"
+function build_services_for_aws() {
+  declare -n services="$1"
   declare -n extra_args="$2"
-  # note: use relative path to dist
-  declare -r docker_image=dist/debian/${service}_image.tar
-  if ! [[ -s ${WORKSPACE}/${docker_image} ]]; then
-    printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
-    exit 1
-  fi
-  # shellcheck disable=SC2086
+
+  declare -a service_flags=()
+  for service in "${services[@]}"; do
+    service_flags+=("--service" "$service")
+  done
+
+  # Call build_and_test with service and image flags
   "${SCRIPT_DIR}"/aws/build_and_test ${VERBOSE_ARG} \
-    --server-image "${docker_image}" \
-    --service-path "${service}" \
+    ${service_flags[@]} \
     --build-flavor ${BUILD_FLAVOR} \
     "${extra_args[@]}"
 }
@@ -324,10 +323,7 @@ if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
       if [[ ${VERBOSE} -eq 1 ]]; then
         EXTRA_ARGS+=("--verbose")
       fi
-
-      for svc in "${SERVICES[@]}"; do
-        build_service_for_aws "${svc}" EXTRA_ARGS
-      done
+      build_services_for_aws SERVICES EXTRA_ARGS
       ;;
     gcp)
       source  "${SCRIPT_DIR}"/gcp/lib_gcp_artifacts.sh

@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_SELLER_CODE_FETCH_MANAGER_H_
-#define SERVICES_SELLER_CODE_FETCH_MANAGER_H_
+#ifndef SERVICES_SELLER_UDF_FETCH_MANAGER_H_
+#define SERVICES_SELLER_UDF_FETCH_MANAGER_H_
 
 #include <memory>
 #include <optional>
@@ -21,9 +21,9 @@
 #include <utility>
 #include <vector>
 
-#include "services/auction_service/auction_code_fetch_config.pb.h"
-#include "services/auction_service/code_wrapper/buyer_reporting_fetcher.h"
-#include "services/auction_service/code_wrapper/seller_code_wrapper.h"
+#include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
+#include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
+#include "services/auction_service/udf_fetcher/buyer_reporting_udf_fetch_manager.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
@@ -38,13 +38,13 @@ constexpr char kBuyerReportingFailedStartup[] =
 constexpr char kSellerUDFLoadFailedStartup[] =
     "Failed loading code blob on startup.";
 
-// SellerCodeFetchManager acts as a wrapper for all logic related to fetching
+// SellerUdfFetchManager acts as a wrapper for all logic related to fetching
 // auction service UDFs. This class consumes a SellerCodeFetchConfig and uses
 // it, along with various other dependencies, to create and own all instances of
 // CodeFetcherInterface in the auction service.
-class SellerCodeFetchManager {
+class SellerUdfFetchManager {
  public:
-  SellerCodeFetchManager(
+  SellerUdfFetchManager(
       std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
           blob_storage_client,
       server_common::Executor* executor, HttpFetcherAsync* seller_http_fetcher,
@@ -60,8 +60,8 @@ class SellerCodeFetchManager {
         blob_storage_client_(std::move(blob_storage_client)) {}
 
   // Not copyable or movable.
-  SellerCodeFetchManager(const SellerCodeFetchManager&) = delete;
-  SellerCodeFetchManager& operator=(const SellerCodeFetchManager&) = delete;
+  SellerUdfFetchManager(const SellerUdfFetchManager&) = delete;
+  SellerUdfFetchManager& operator=(const SellerUdfFetchManager&) = delete;
 
   absl::Status Init();
 
@@ -69,6 +69,11 @@ class SellerCodeFetchManager {
 
  private:
   WrapCodeForDispatch GetUdfWrapper();
+  WrapSingleCodeBlobForDispatch GetUdfWrapperForBuyer();
+
+  // This function will replace GetUdfWrapper once seller and buyer code
+  // isolation is enforced
+  WrapCodeForDispatch GetUdfWrapperForSeller();
 
   absl::Status InitializeLocalCodeFetch();
 
@@ -89,9 +94,11 @@ class SellerCodeFetchManager {
       blob_storage_client_;
 
   std::unique_ptr<BuyerReportingFetcher> buyer_reporting_fetcher_;
+  std::unique_ptr<BuyerReportingUdfFetchManager>
+      buyer_reporting_udf_fetch_manager_;
   std::unique_ptr<CodeFetcherInterface> seller_code_fetcher_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_SELLER_CODE_FETCH_MANAGER_H_
+#endif  // SERVICES_SELLER_UDF_FETCH_MANAGER_H_

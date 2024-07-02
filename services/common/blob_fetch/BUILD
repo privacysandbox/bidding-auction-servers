@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_proto_library", "cc_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(default_visibility = ["//:__subpackages__"])
 
@@ -53,4 +54,17 @@ cc_test(
         "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],
+)
+
+proto_library(
+    name = "fetch_mode_proto",
+    srcs = ["fetch_mode.proto"],
+    deps = [
+        "@com_google_googleapis//google/api:annotations_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "fetch_mode_cc_proto",
+    deps = [":fetch_mode_proto"],
 )

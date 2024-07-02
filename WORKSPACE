@@ -23,11 +23,11 @@ http_archive(
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2024-05-24
-    sha256 = "444f76d69afba08dfe7424dae0ff8afb26bd3f4e3396d76b7bf55668d3afd7c6",
-    strip_prefix = "data-plane-shared-libraries-3e09f7993cf6e4ef0fd33360b778f993d3cfd9ef",
+    # 2024-05-28
+    sha256 = "a241ad3d8d897599a6acff89fc759d0e858f8466988f7c56c57b0a83b8cdab5d",
+    strip_prefix = "data-plane-shared-libraries-3e92e75fceb18694f1ce7177e7433824769a89a0",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/3e09f7993cf6e4ef0fd33360b778f993d3cfd9ef.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/3e92e75fceb18694f1ce7177e7433824769a89a0.zip",
     ],
 )
 
@@ -137,4 +137,29 @@ http_archive(
     sha256 = "8836ad722ab211de41cb82fe098911986604f6286f67d10dfb2b6787bf418f49",
     strip_prefix = "libevent-release-2.1.12-stable",
     urls = ["https://github.com/libevent/libevent/archive/refs/tags/release-2.1.12-stable.zip"],
+)
+
+load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
+
+crate_universe_dependencies()
+
+load("//third_party:deps.bzl", cddl_deps = "deps")
+
+cddl_deps()
+
+load("@cddl_crate_index//:defs.bzl", cddl_crate_repositories = "crate_repositories")
+
+cddl_crate_repositories()
+
+http_archive(
+    name = "cddl_lib",
+    build_file = "//third_party/cddl:cddl.BUILD",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party:cddl/cddl.patch",
+    ],
+    sha256 = "01e04989c6482e851dc22f376f1c2e1cc493e1ae7b808ae78180d539e6939acb",
+    strip_prefix = "cddl-0.9.4",
+    urls = ["https://github.com/anweiss/cddl/archive/refs/tags/0.9.4.zip"],
+    workspace_file = "//third_party/cddl:WORKSPACE",
 )

@@ -55,6 +55,8 @@ struct AuctionServiceRuntimeConfig {
 
   // Default code version to pass to Roma.
   std::string default_code_version = kScoreAdBlobVersion;
+  // Temporary flag to enable seller and buyer udf isolation.
+  bool enable_seller_and_buyer_udf_isolation = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

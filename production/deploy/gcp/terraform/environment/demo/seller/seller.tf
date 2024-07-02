@@ -61,8 +61,8 @@ module "seller" {
     GET_BID_RPC_TIMEOUT_MS                 = "" # Example: "60000"
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS = "" # Example: "60000"
     SCORE_ADS_RPC_TIMEOUT_MS               = "" # Example: "60000"
-    SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://securepubads.g.doubleclick.net"
-    KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
+    SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://sellerorigin.com"
+    KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://keyvaluesignals.com/trusted-signals"
     BUYER_SERVER_HOSTS                     = "" # Example: "{ \"https://example-bidder.com\": { \"url\": \"dns:///bidding-service-host:443\", \"cloudPlatform\": \"GCP\" } }"
     SELLER_CLOUD_PLATFORMS_MAP             = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
@@ -80,7 +80,6 @@ module "seller" {
     #     "urlFetchPeriodMs": 13000000,
     #     "urlFetchTimeoutMs": 30000,
     #     "enableSellerDebugUrlGeneration": true,
-    #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": true,
     #     "enableReportWinUrlGeneration": true,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
@@ -103,7 +102,8 @@ module "seller" {
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
     SFE_PUBLIC_KEYS_ENDPOINTS                     = <<EOF
     "{
-        "GCP": "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
+      "GCP": "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys",
+      "AWS": "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
     }"
     EOF
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"

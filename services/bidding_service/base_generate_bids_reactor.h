@@ -24,8 +24,8 @@
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -58,12 +58,13 @@ class BaseGenerateBidsReactor
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
         roma_request_context_factory_(
             GetLoggingContext(this->raw_request_),
-            this->raw_request_.consented_debug_config()),
-        enable_adtech_code_logging_(runtime_config.enable_adtech_code_logging),
+            this->raw_request_.consented_debug_config(),
+            [this]() { return this->raw_response_.mutable_debug_info(); }),
         log_context_(
             GetLoggingContext(this->raw_request_),
             this->raw_request_.consented_debug_config(),
             [this]() { return this->raw_response_.mutable_debug_info(); }),
+        enable_adtech_code_logging_(log_context_.is_consented()),
         max_allowed_size_debug_url_chars_(
             runtime_config.max_allowed_size_debug_url_bytes),
         max_allowed_size_all_debug_urls_chars_(
@@ -90,8 +91,8 @@ class BaseGenerateBidsReactor
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
   RomaRequestContextFactory roma_request_context_factory_;
+  RequestLogContext log_context_;
   bool enable_adtech_code_logging_;
-  server_common::log::ContextImpl log_context_;
   int max_allowed_size_debug_url_chars_;
   long max_allowed_size_all_debug_urls_chars_;
 };

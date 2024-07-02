@@ -26,22 +26,22 @@
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 // The INFERENCE_LOG marcro is used to log to an InferenceDebugInfo proto.
-#define INFERENCE_LOG(level, log_context) \
-  ABSL_LOG(level).ToSinkOnly(log_context.LogSink())
+#define INFERENCE_LOG(level, request_context) \
+  ABSL_LOG(level).ToSinkOnly(request_context.LogSink())
 
 // This class wraps a consented debugging log sink which redirect logs to an
 // InferenceDebugInfo proto. When ABSL_LOG is invoked on the log sink, logging
 // can be redirected to it based on user consent. We currently return the
 // InferenceDebugInfo proto with a PredictResponse to the caller of
 // InferenceService
-class LogContext {
+class RequestContext {
  public:
-  LogContext(absl::AnyInvocable<InferenceDebugInfo*()> debug_info,
-             bool is_consented)
+  RequestContext(absl::AnyInvocable<InferenceDebugInfo*()> debug_info,
+                 bool is_consented)
       : log_sink_(std::make_unique<DebugResponseSinkImpl>(std::move(debug_info),
                                                           is_consented)) {}
 
-  LogContext() : log_sink_(std::make_unique<NoOpSinkImpl>()) {}
+  RequestContext() : log_sink_(std::make_unique<NoOpSinkImpl>()) {}
 
   absl::LogSink* LogSink() const { return log_sink_.get(); }
 

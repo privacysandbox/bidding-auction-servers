@@ -19,6 +19,7 @@
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
+#include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 
@@ -36,16 +37,6 @@ TEST(GetSellerWrappedCode, GeneratesCompleteFinalCode) {
   EXPECT_EQ(observed, kExpectedFinalCode) << "Observed:\n"
                                           << observed << "\n\n"
                                           << "Expected: " << kExpectedFinalCode;
-}
-
-TEST(GetSellerWrappedCode, GeneratesWrappedCodeWithScoreAdAndReportResult) {
-  bool enable_report_result_url_generation = true;
-  std::string observed = GetSellerWrappedCode(
-      kSellerBaseCode, enable_report_result_url_generation);
-  EXPECT_EQ(observed, kExpectedSellerCodeWithScoreAdAndReportResult)
-      << "Observed:\n"
-      << observed << "\n\n"
-      << "Expected: " << kExpectedSellerCodeWithScoreAdAndReportResult;
 }
 
 TEST(GetSellerWrappedCode, GeneratesCompleteFinalCodeWithProtectedAppSignals) {

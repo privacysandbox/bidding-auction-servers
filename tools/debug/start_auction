@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2024 Google LLC
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,18 +35,17 @@ export SERVER_START_CMD=$(cat << END
 --seller_code_fetch_config='{
       "fetchMode": 0,
       "auctionJsPath": "",
-      "auctionJsUrl": "https://pubads.g.doubleclick.net/td/sjs",
+      "auctionJsUrl": "${AUCTION_JS_URL}",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
       "enableSellerDebugUrlGeneration": true,
-      "enableAdtechCodeLogging": false,
       "enableReportResultUrlGeneration": true,
       "enableReportWinUrlGeneration": true,
-      "buyerReportWinJsUrls": {"https://td.doubleclick.net":"https://td.doubleclick.net/td/bjs"},
-      "protectedAppSignalsBuyerReportWinJsUrls": {"https://td.doubleclick.net":"https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js"}
+      "buyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"${BUYER_REPORT_WIN_SCRIPT}"},
+      "protectedAppSignalsBuyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js"}
     }' \
---enable_otel_based_logging="false" \
---consented_debug_token="" \
+--enable_otel_based_logging="true"\
+--consented_debug_token="test_token"\
 --ps_verbosity=2 \
 --enable_protected_audience="true" \
 --auction_tcmalloc_background_release_rate_bytes_per_second=4096 \

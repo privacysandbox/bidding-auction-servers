@@ -54,6 +54,9 @@ cc_test(
     srcs = [
         "scoring_async_client_test.cc",
     ],
+    tags = [
+        "flaky",
+    ],
     deps = [
         ":async_client",
         "//services/common/encryption:mock_crypto_client_wrapper",

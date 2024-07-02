@@ -27,7 +27,7 @@
 #include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
-#include "services/seller_frontend_service/select_ad_reactor_invalid_client.h"
+#include "services/seller_frontend_service/select_ad_reactor_invalid.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 #include "services/seller_frontend_service/select_auction_result_reactor.h"
 #include "src/telemetry/telemetry.h"
@@ -48,7 +48,7 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
       return std::make_unique<SelectAdReactorForWeb>(context, request, response,
                                                      clients, config_client);
     default:
-      return std::make_unique<SelectAdReactorInvalidClient>(
+      return std::make_unique<SelectAdReactorInvalid>(
           context, request, response, clients, config_client);
   }
 }
@@ -72,6 +72,12 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response) {
   LogCommonMetric(request, response);
+  if (request->ByteSizeLong() == 0) {
+    auto reactor = std::make_unique<SelectAdReactorInvalid>(
+        context, request, response, clients_, config_client_);
+    reactor->Execute();
+    return reactor.release();
+  }
   if (AuctionScope auction_scope = GetAuctionScope(*request);
       auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     auto reactor = std::make_unique<SelectAuctionResultReactor>(

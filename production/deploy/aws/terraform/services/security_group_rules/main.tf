@@ -73,6 +73,15 @@ resource "aws_security_group_rule" "allow_elb_to_ec2_ingress" {
   source_security_group_id = var.elb_security_group_id
 }
 
+resource "aws_security_group_rule" "allow_app_mesh_to_ec2_ingress" {
+  from_port         = 50051
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = 50051
+  type              = "ingress"
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
 resource "aws_security_group_rule" "allow_ssh_to_ec2_ingress" {
   from_port                = 22
   protocol                 = "TCP"
@@ -128,6 +137,15 @@ resource "aws_security_group_rule" "allow_ec2_http_egress" {
   protocol          = "TCP"
   security_group_id = var.instances_security_group_id
   to_port           = 80
+  type              = "egress"
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "allow_ec2_app_mesh_egress" {
+  from_port         = 50051
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = 50051
   type              = "egress"
   cidr_blocks       = ["0.0.0.0/0"]
 }

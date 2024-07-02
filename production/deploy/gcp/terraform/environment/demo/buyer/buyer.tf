@@ -57,7 +57,7 @@ module "buyer" {
     TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
     TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
@@ -84,7 +84,6 @@ module "buyer" {
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
     #    "enableBuyerDebugUrlGeneration": true,
-    #    "enableAdtechCodeLogging": false,
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
@@ -119,9 +118,15 @@ module "buyer" {
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = ""                      # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = ""                      # Example: "3000"
 
-    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
-    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
-    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
+    INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_BUCKET_PATHS     = "" # Example: "<model_path1>,<model_path2>"
+    INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:
+    # "{
+    #    "num_interop_threads": 4,
+    #    "num_intraop_threads": 4,
+    #    "module_name": "tensorflow_v2_14_0",
+    # }"
 
     # TCMalloc related config parameters.
     # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md

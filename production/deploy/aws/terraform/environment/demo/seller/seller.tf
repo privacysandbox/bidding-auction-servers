@@ -59,9 +59,9 @@ module "seller" {
     GET_BID_RPC_TIMEOUT_MS                 = "" # Example: "60000"
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS = "" # Example: "60000"
     SCORE_ADS_RPC_TIMEOUT_MS               = "" # Example: "60000"
-    SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://securepubads.g.doubleclick.net"
+    SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://sellerorigin.com"
     AUCTION_SERVER_HOST                    = "" # Example: "dns:///auction.seller-frontend.com:443"
-    KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
+    KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://keyvaluesignals.com/trusted-signals"
     BUYER_SERVER_HOSTS                     = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
     SELLER_CLOUD_PLATFORMS_MAP             = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
     ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
@@ -87,7 +87,6 @@ module "seller" {
     # execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
-    #     "enableAdtechCodeLogging": false,
     #     "enableReportResultUrlGeneration": true,
     #     "enableReportWinUrlGeneration": true,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
@@ -100,25 +99,30 @@ module "seller" {
     JS_WORKER_QUEUE_LEN             = "" # Example: "100".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
     ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
+
+    # Coordinator-based attestation flags.
+    # These flags are production-ready and you do not need to change them.
+    SFE_PUBLIC_KEYS_ENDPOINTS                  = <<EOF
+    {
+      "GCP": "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys",
+      "AWS": "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
+    }
+    EOF
+    PUBLIC_KEY_ENDPOINT                        = "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
+    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "https://privatekeyservice-a.pa-3.aws.privacysandboxservices.com/v1alpha/encryptionKeys"
+    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "https://privatekeyservice-b.pa-4.aws.privacysandboxservices.com/v1alpha/encryptionKeys"
+    PRIMARY_COORDINATOR_REGION                 = "us-east-1"
+    SECONDARY_COORDINATOR_REGION               = "us-east-1"
+    PRIVATE_KEY_CACHE_TTL_SECONDS              = "3974400"
+    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "20000"
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:
-    PUBLIC_KEY_ENDPOINT       = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
-    SFE_PUBLIC_KEYS_ENDPOINTS = "" # Example:
-    # "{
-    #     "GCP": "https://sample-public-key-service-0.cloudfront.net/v1alpha/publicKeys"
-    #     "AWS": "https://sample-public-key-service-1.cloudfront.net/v1alpha/publicKeys"
-    # }"
-    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY       = "" # Example: "arn:aws:iam::574738241422:role/mp-prim-ba_574738241422_coordinator_assume_role"
-    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY     = "" # Example: "arn:aws:iam::574738241422:role/mp-sec-ba_574738241422_coordinator_assume_role"
-    PRIMARY_COORDINATOR_REGION                 = "" # Example: "us-east-1"
-    SECONDARY_COORDINATOR_REGION               = "" # Example: "us-east-1"
-    PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "3974400" (46 days)
-    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
-    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
-    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
+    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY   = "" # Example: "arn:aws:iam::811625435250:role/a_<YOUR AWS ACCOUNT ID>_coordinator_assume_role"
+    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY = "" # Example: "arn:aws:iam::891377198286:role/b_<YOUR AWS ACCOUNT ID>_coordinator_assume_role"
+
+    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
+    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
 
     # TCMalloc related config parameters.
     # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md

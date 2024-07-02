@@ -29,7 +29,6 @@ using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
-using server_common::log::ContextImpl;
 
 namespace {
 
@@ -185,7 +184,7 @@ std::string MakeOpenBidMetadataJson(
   } else {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                     kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
-                    kEmptyBidCurrencyCode, R"JSON(",)JSON");
+                    kUnknownBidCurrencyCode, R"JSON(",)JSON");
   }
   return bid_metadata;
 }
@@ -227,7 +226,7 @@ inline absl::string_view GetDebugUrlIfInLimit(
 }  // namespace
 
 void MayLogScoreAdsInput(const std::vector<std::shared_ptr<std::string>>& input,
-                         ContextImpl& log_context) {
+                         RequestLogContext& log_context) {
   PS_VLOG(kDispatch, log_context)
       << "\n\nScore Ad Input Args:" << "\nAdMetadata:\n"
       << *(input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]) << "\nBid:\n"
@@ -293,7 +292,7 @@ std::string MakeBidMetadataForTopLevelAuction(
 absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
 BuildTrustedScoringSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-    ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   rapidjson::Document trusted_scoring_signals_value;
   // TODO (b/285214424): De-nest, use a guard.
   if (!raw_request.scoring_signals().empty()) {
@@ -391,7 +390,7 @@ void MayPopulateScoringSignalsForProtectedAppSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
     absl::flat_hash_map<std::string, rapidjson::Document>& render_url_signals,
     absl::flat_hash_map<std::string, rapidjson::Document>& combined_signals,
-    ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   PS_VLOG(8, log_context) << __func__;
   for (const auto& protected_app_signals_ad_bid :
        raw_request.protected_app_signals_ad_bids()) {
@@ -420,7 +419,7 @@ void MayPopulateScoringSignalsForProtectedAppSignals(
 
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-    ContextImpl& log_context) {
+    RequestLogContext& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   rapidjson::Document response_obj;
@@ -439,7 +438,7 @@ std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
 ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
                        absl::string_view interest_group_owner,
                        absl::string_view interest_group_name,
-                       ContextImpl& log_context) {
+                       RequestLogContext& log_context) {
   auto reject_reason_itr =
       score_ad_resp.FindMember(kRejectReasonPropertyForScoreAd);
   if (reject_reason_itr == score_ad_resp.MemberEnd() ||
@@ -574,8 +573,7 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
     absl::string_view ad_render_url, absl::string_view ad_metadata_json,
     absl::string_view scoring_signals, float ad_bid,
     const std::shared_ptr<std::string>& auction_config,
-    absl::string_view bid_metadata,
-    server_common::log::ContextImpl& log_context,
+    absl::string_view bid_metadata, RequestLogContext& log_context,
     const bool enable_adtech_code_logging, const bool enable_debug_reporting,
     absl::string_view code_version) {
   // Construct the wrapper struct for our V8 Dispatch Request.

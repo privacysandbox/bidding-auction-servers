@@ -33,6 +33,10 @@
 #include "absl/strings/str_split.h"
 #include "absl/synchronization/mutex.h"
 #include "proto/inference_sidecar.grpc.pb.h"
+#include "rapidjson/document.h"
+#include "rapidjson/error/en.h"
+#include "rapidjson/pointer.h"
+#include "rapidjson/writer.h"
 #include "services/bidding_service/inference/inference_flags.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/util/request_response_constants.h"
@@ -144,6 +148,20 @@ void RunInference(
   PredictRequest predict_request;
   predict_request.set_input(payload);
 
+  absl::StatusOr<std::shared_ptr<RomaRequestContext>> roma_request_context =
+      wrapper.metadata.GetRomaRequestContext();
+  if (roma_request_context.ok()) {
+    // Check if it is a Protected Audience request and the build flavor is prod
+    if ((*roma_request_context)->IsProtectedAudienceRequest() &&
+        PS_IS_PROD_BUILD) {
+      PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
+          << "Inference is not supported for Protected Audience requests in "
+             "production build.";
+      return;
+    }
+    predict_request.set_is_consented((*roma_request_context)->IsConsented());
+  }
+
   grpc::ClientContext context;
   PredictResponse predict_response;
   grpc::Status rpc_status =
@@ -152,11 +170,64 @@ void RunInference(
     wrapper.io_proto.set_output_string(predict_response.output());
     PS_VLOG(10) << "Inference response received: "
                 << predict_response.DebugString();
+    if (roma_request_context.ok()) {
+      PS_VLOG(kNoisyInfo, (*roma_request_context)->GetLogContext())
+          << "Inference sidecar consented debugging log: "
+          << predict_response.debug_info();
+    }
     return;
   }
   absl::Status status = server_common::ToAbslStatus(rpc_status);
   // TODO(b/321284008): Communicate inference failure with JS caller.
-  PS_LOG(ERROR) << "Response error: " << status.message();
+  if (roma_request_context.ok()) {
+    PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
+        << "Response error: " << status.message();
+  }
+}
+
+std::string GetModelResponseToJson(const GetModelPathsResponse& response) {
+  rapidjson::Document document;
+  document.SetArray();
+  rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+  for (const ModelSpec& spec : response.model_specs()) {
+    rapidjson::Value value;
+    value.SetString(spec.model_path().c_str(), spec.model_path().length(),
+                    allocator);
+    document.PushBack(value, allocator);
+  }
+
+  rapidjson::StringBuffer strbuf;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
+  document.Accept(writer);
+
+  return strbuf.GetString();
+}
+
+void GetModelPaths(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper) {
+  SandboxExecutor& executor = Executor();
+  std::unique_ptr<InferenceService::StubInterface> stub =
+      InferenceService::NewStub(InferenceChannel(executor));
+
+  PS_VLOG(kNoisyInfo) << "GetModelPaths called";
+  GetModelPathsRequest get_model_paths_request;
+
+  grpc::ClientContext context;
+  GetModelPathsResponse get_model_paths_response;
+  grpc::Status rpc_status = stub->GetModelPaths(
+      &context, get_model_paths_request, &get_model_paths_response);
+  if (rpc_status.ok()) {
+    wrapper.io_proto.set_output_string(
+        GetModelResponseToJson(get_model_paths_response));
+    PS_VLOG(10) << "GetModelPaths response received: "
+                << get_model_paths_response.DebugString();
+    return;
+  }
+
+  absl::Status status = server_common::ToAbslStatus(rpc_status);
+  PS_LOG(ERROR) << "GetModelPaths response error: " << status.message();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

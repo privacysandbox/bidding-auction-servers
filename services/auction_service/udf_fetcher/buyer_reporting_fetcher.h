@@ -24,7 +24,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/synchronization/mutex.h"
-#include "services/auction_service/auction_code_fetch_config.pb.h"
+#include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
 #include "src/concurrent/executor.h"

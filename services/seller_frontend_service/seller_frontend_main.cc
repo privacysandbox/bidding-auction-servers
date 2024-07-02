@@ -58,6 +58,9 @@ ABSL_FLAG(
     "Domain of this seller. Incoming requests are validated against this.");
 ABSL_FLAG(std::optional<std::string>, auction_server_host, std::nullopt,
           "Domain address of the auction server used for ad scoring.");
+ABSL_FLAG(std::optional<std::string>, grpc_arg_default_authority, std::nullopt,
+          "Authority for auction server name, see "
+          "https://www.rfc-editor.org/rfc/rfc3986#section-3.2");
 ABSL_FLAG(std::optional<std::string>, key_value_signals_host, std::nullopt,
           "Domain address of the Key-Value server for the scoring signals.");
 ABSL_FLAG(std::optional<std::string>, buyer_server_hosts, std::nullopt,
@@ -118,6 +121,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         SCORE_ADS_RPC_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_seller_origin_domain, SELLER_ORIGIN_DOMAIN);
   config_client.SetFlag(FLAGS_auction_server_host, AUCTION_SERVER_HOST);
+  config_client.SetFlag(FLAGS_grpc_arg_default_authority,
+                        GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config_client.SetFlag(FLAGS_key_value_signals_host, KEY_VALUE_SIGNALS_HOST);
   config_client.SetFlag(FLAGS_buyer_server_hosts, BUYER_SERVER_HOSTS);
   config_client.SetFlag(FLAGS_enable_buyer_compression,
@@ -177,6 +182,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_sfe_tcmalloc_max_total_thread_cache_bytes,
                         SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";

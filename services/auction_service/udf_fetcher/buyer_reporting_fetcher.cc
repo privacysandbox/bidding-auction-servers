@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "services/auction_service/code_wrapper/buyer_reporting_fetcher.h"
+#include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 
 #include <optional>
 #include <string>

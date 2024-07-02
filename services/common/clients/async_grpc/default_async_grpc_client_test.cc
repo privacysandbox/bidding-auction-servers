@@ -166,7 +166,8 @@ TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
 
   auto status = client.ExecuteInternal(
       std::make_unique<MockRawRequest>(raw_request), metadata,
-      [](absl::StatusOr<std::unique_ptr<MockRawResponse>> result) {},
+      [](absl::StatusOr<std::unique_ptr<MockRawResponse>> result,
+         ResponseMetadata response_metadata) {},
       timeout_ms);
   CHECK_OK(status);
   notification.WaitForNotification();

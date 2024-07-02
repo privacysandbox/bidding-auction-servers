@@ -26,9 +26,9 @@ ScoringAsyncGrpcClient::ScoringAsyncGrpcClient(
     CryptoClientWrapperInterface* crypto_client,
     const AuctionServiceClientConfig& client_config)
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client) {
-  stub_ = Auction::NewStub(CreateChannel(client_config.server_addr,
-                                         client_config.compression,
-                                         client_config.secure_client));
+  stub_ = Auction::NewStub(CreateChannel(
+      client_config.server_addr, client_config.compression,
+      client_config.secure_client, client_config.grpc_arg_default_authority));
 }
 
 void ScoringAsyncGrpcClient::SendRpc(

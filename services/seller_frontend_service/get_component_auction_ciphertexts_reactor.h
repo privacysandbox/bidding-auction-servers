@@ -25,8 +25,8 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -60,7 +60,7 @@ class GetComponentAuctionCiphertextsReactor : public grpc::ServerUnaryReactor {
   server_common::KeyFetcherManagerInterface& key_fetcher_manager_;
   const absl::flat_hash_map<std::string, server_common::CloudPlatform>&
       seller_cloud_platforms_map_;
-  server_common::log::ContextImpl log_context_;
+  RequestLogContext log_context_;
 
   // Cleans up and deletes the GetComponentAuctionCiphertextsReactor. Called by
   // the grpc library after the response has finished.

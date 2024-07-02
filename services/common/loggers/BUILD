@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,6 +22,25 @@ cc_library(
     hdrs = ["timer.h"],
     deps = [
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
+    name = "request_log_context",
+    hdrs = ["request_log_context.h"],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+    ],
+)
+
+cc_test(
+    name = "request_log_context_test",
+    timeout = "short",
+    srcs = ["request_log_context_test.cc"],
+    deps = [
+        ":request_log_context",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

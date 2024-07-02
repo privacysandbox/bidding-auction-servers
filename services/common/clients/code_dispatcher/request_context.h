@@ -23,6 +23,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,12 +35,26 @@ class RomaRequestContext {
   RomaRequestContext(
       const absl::btree_map<std::string, std::string>& context_map,
       const privacy_sandbox::server_common::ConsentedDebugConfiguration&
-          debug_config);
+          debug_config,
+      absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()>
+          debug_info);
 
-  const privacy_sandbox::server_common::log::ContextImpl& GetLogContext() const;
+  RequestLogContext& GetLogContext();
+
+  // Set if it is a protected audience request.
+  void SetIsProtectedAudienceRequest(bool is_protected_audience_request) {
+    is_protected_audience_request_ = is_protected_audience_request;
+  }
+  // Returns true if this is a Protected Audience request.
+  bool IsProtectedAudienceRequest() const {
+    return is_protected_audience_request_;
+  }
+
+  bool IsConsented() { return request_logging_context_.is_consented(); }
 
  private:
-  privacy_sandbox::server_common::log::ContextImpl request_logging_context_;
+  RequestLogContext request_logging_context_;
+  bool is_protected_audience_request_ = false;
 };
 
 class RomaRequestContextFactory;
@@ -50,6 +65,9 @@ class RomaRequestSharedContext {
  public:
   RomaRequestSharedContext() {}
 
+  // The returned status indicates if RomaRequestContext has gone out of the
+  // scope. This can happen during Roma request processing timeout during which
+  // the caller owning the context could have returned.
   absl::StatusOr<std::shared_ptr<RomaRequestContext>> GetRomaRequestContext()
       const;
 
@@ -69,7 +87,9 @@ class RomaRequestContextFactory {
   RomaRequestContextFactory(
       const absl::btree_map<std::string, std::string>& context_map,
       const privacy_sandbox::server_common::ConsentedDebugConfiguration&
-          debug_config);
+          debug_config,
+      absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()>
+          debug_info);
   RomaRequestSharedContext Create();
 
   RomaRequestContextFactory(RomaRequestContextFactory&& other) = delete;

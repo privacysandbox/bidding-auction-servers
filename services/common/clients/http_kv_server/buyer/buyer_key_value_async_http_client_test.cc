@@ -28,8 +28,7 @@ constexpr char kEgId[] = "1776";
 
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
-  static constexpr char hostname_[] =
-      "https://googleads.g.doubleclick.net/td/bts";
+  static constexpr char hostname_[] = "https://trustedhost.com";
   std::unique_ptr<MockHttpFetcherAsync> mock_http_fetcher_async_ =
       std::make_unique<MockHttpFetcherAsync>();
   const absl::flat_hash_set<std::string> expected_urls_1 = {

@@ -110,19 +110,24 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   return reporting_response;
 }
 
-// Stochastically rounds floating point value to 8 bit mantissa and 8
-// bit exponent. If there is an error while generating the rounded
-// number, -1 will be returned.
-double GetEightBitRoundedValue(bool enable_noising, double value) {
-  if (!enable_noising) {
-    return value;
-  }
+double GetEightBitRoundedValue(double value) {
   absl::StatusOr<double> rounded_value =
       RoundStochasticallyToKBits(value, kStochasticalRoundingBits);
   if (rounded_value.ok()) {
     return rounded_value.value();
   }
   return -1;
+}
+
+// Stochastically rounds floating point value to 8 bit mantissa and 8
+// bit exponent. If there is an error while generating the rounded
+// number, -1 will be returned. Returns the value as it is if enable_noising
+// is false
+double GetEightBitRoundedValue(bool enable_noising, double value) {
+  if (!enable_noising) {
+    return value;
+  }
+  return GetEightBitRoundedValue(value);
 }
 
 absl::StatusOr<std::string> GetSellerReportingSignals(
@@ -148,12 +153,12 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
       dispatch_request_data.post_auction_signals.winning_ig_owner.c_str(),
       document.GetAllocator());
 
-  document.AddMember(kTopWindowHostname, hostname_value,
+  document.AddMember(kTopWindowHostnameTag, hostname_value,
                      document.GetAllocator());
   document.AddMember(kInterestGroupOwner, interest_group_owner,
                      document.GetAllocator());
-  document.AddMember(kRenderURL, render_URL_value, document.GetAllocator());
-  document.AddMember(kRenderUrl, render_url_value, document.GetAllocator());
+  document.AddMember(kRenderURLTag, render_URL_value, document.GetAllocator());
+  document.AddMember(kRenderUrlTag, render_url_value, document.GetAllocator());
   double bid = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.post_auction_signals.winning_bid);
@@ -184,10 +189,10 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.post_auction_signals.winning_score);
   if (desirability > -1) {
-    document.AddMember(kDesirability, desirability, document.GetAllocator());
+    document.AddMember(kDesirabilityTag, desirability, document.GetAllocator());
   }
   document.AddMember(
-      kHighestScoringOtherBid,
+      kHighestScoringOtherBidTag,
       dispatch_request_data.post_auction_signals.highest_scoring_other_bid,
       document.GetAllocator());
 
@@ -196,11 +201,6 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
     rapidjson::Value top_level_seller;
     top_level_seller.SetString(
         dispatch_request_data.component_reporting_metadata.top_level_seller
-            .c_str(),
-        document.GetAllocator());
-    rapidjson::Value component_seller;
-    component_seller.SetString(
-        dispatch_request_data.component_reporting_metadata.component_seller
             .c_str(),
         document.GetAllocator());
     document.AddMember(kTopLevelSellerTag, top_level_seller,
@@ -221,9 +221,18 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
       document.AddMember(kModifiedBidCurrencyTag, modified_bid_currency,
                          document.GetAllocator());
     }
+  }
+  if (!dispatch_request_data.component_reporting_metadata.component_seller
+           .empty()) {
+    rapidjson::Value component_seller;
+    component_seller.SetString(
+        dispatch_request_data.component_reporting_metadata.component_seller
+            .c_str(),
+        document.GetAllocator());
     document.AddMember(kComponentSeller, component_seller,
                        document.GetAllocator());
   }
+
   return SerializeJsonDoc(document);
 }
 
@@ -415,6 +424,7 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
       << *(input[ReportingArgIndex(ReportingArgs::kDirectFromSellerSignals)])
       << "\nBuyer Reporting Metadata:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]);
+
   return input;
 }
 
@@ -430,5 +440,4 @@ DispatchRequest GetReportingDispatchRequest(
           GetReportingInput(dispatch_request_config, dispatch_request_data),
   };
 }
-
 }  // namespace privacy_sandbox::bidding_auction_servers

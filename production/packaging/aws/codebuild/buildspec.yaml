@@ -42,5 +42,6 @@ phases:
           --service-path auction_service \
           --instance aws --platform aws \
           --with-ami ${AMI_REGION} \
-          --build-flavor prod \
+          --build-flavor ${BUILD_FLAVOR} \
+          --aws-image-tag ${CODEBUILD_SOURCE_VERSION} \
           --no-tests --no-precommit

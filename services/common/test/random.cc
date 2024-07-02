@@ -22,7 +22,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kTestIgWithTwoAds[] =
     R"json({"ad_render_ids":["adg_id=134256827445&cr_id=594352291621&cv_id=4", "adg_id=134256827445&cr_id=605048329089&cv_id=2"],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
-
 std::string MakeARandomString() {
   return std::to_string(ToUnixNanos(absl::Now()));
 }
@@ -629,6 +628,43 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
   return result;
 }
 
+AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
+    std::string generation_id, std::string top_level_seller,
+    std::string test_component_event,
+    std::string test_component_win_reporting_url,
+    std::string test_component_interaction_reporting_url,
+    std::string test_component_seller, std::vector<std::string> buyer_list) {
+  AuctionResult result =
+      MakeARandomSingleSellerAuctionResult(std::move(buyer_list));
+  result.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->set_reporting_url(test_component_win_reporting_url);
+  result.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(test_component_event,
+                    test_component_interaction_reporting_url);
+  result.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(std::move(test_component_win_reporting_url));
+  result.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(std::move(test_component_event),
+                    std::move(test_component_interaction_reporting_url));
+  result.set_top_level_seller(std::move(top_level_seller));
+  result.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
+  result.mutable_auction_params()->set_ciphertext_generation_id(
+      std::move(generation_id));
+  result.mutable_auction_params()->set_component_seller(
+      std::move(test_component_seller));
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.set_bid(1);
+  result.set_bid_currency(MakeARandomString());
+  return result;
+}
+
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list) {
@@ -645,5 +681,4 @@ AuctionResult MakeARandomComponentAuctionResult(
   result.set_bid_currency(MakeARandomString());
   return result;
 }
-
 }  // namespace privacy_sandbox::bidding_auction_servers

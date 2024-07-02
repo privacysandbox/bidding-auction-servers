@@ -173,6 +173,14 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+config_setting(
+    name = "prod_build",
+    flag_values = {
+        ":build_flavor": "prod",
+    },
+    visibility = ["//visibility:public"],
+)
+
 string_flag(
     name = "inference_build",
     build_setting_default = "no",
@@ -189,6 +197,7 @@ string_flag(
         "noop",
         "pytorch",
         "tensorflow",
+        "all",
     ],
 )
 
@@ -214,6 +223,15 @@ config_setting(
     flag_values = {
         ":inference_build": "yes",
         ":inference_runtime": "tensorflow",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "include_all_inference_binaries",
+    flag_values = {
+        ":inference_build": "yes",
+        ":inference_runtime": "all",
     },
     visibility = ["//visibility:public"],
 )

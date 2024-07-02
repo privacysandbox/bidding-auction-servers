@@ -79,6 +79,9 @@ cc_library(
         "request_context.h",
     ],
     deps = [
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "//services/common/loggers:request_log_context",
+        "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/status:statusor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )

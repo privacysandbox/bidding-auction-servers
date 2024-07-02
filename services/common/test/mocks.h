@@ -129,13 +129,14 @@ class AsyncClientMock
        absl::Duration timeout),
       (const, override));
 
-  MOCK_METHOD(
-      absl::Status, ExecuteInternal,
-      (std::unique_ptr<RawRequest> raw_request, const RequestMetadata& metadata,
-       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
-           on_done,
-       absl::Duration timeout),
-      (const, override));
+  using OnDoneCallbackType =
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                              ResponseMetadata) &&>;
+  MOCK_METHOD(absl::Status, ExecuteInternal,
+              (std::unique_ptr<RawRequest> raw_request,
+               const RequestMetadata& metadata, OnDoneCallbackType on_done,
+               absl::Duration timeout, RequestConfig request_config),
+              (const, override));
 };
 
 using BuyerFrontEndAsyncClientMock =
@@ -306,6 +307,11 @@ class BuyerFrontEndAsyncClientFactoryMock
  public:
   MOCK_METHOD(std::shared_ptr<const BuyerFrontEndAsyncClient>, Get,
               (absl::string_view), (const, override));
+
+  MOCK_METHOD(
+      (std::vector<std::pair<absl::string_view,
+                             std::shared_ptr<const BuyerFrontEndAsyncClient>>>),
+      Entries, (), (const, override));
 };
 
 // Dummy server in lieu of no support for mocking async stubs.

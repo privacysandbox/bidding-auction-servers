@@ -19,11 +19,12 @@ namespace privacy_sandbox::bidding_auction_servers {
 RomaRequestContext::RomaRequestContext(
     const absl::btree_map<std::string, std::string>& context_map,
     const privacy_sandbox::server_common::ConsentedDebugConfiguration&
-        debug_config)
-    : request_logging_context_(context_map, debug_config) {}
+        debug_config,
+    absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()> debug_info)
+    : request_logging_context_(context_map, debug_config,
+                               std::move(debug_info)) {}
 
-const privacy_sandbox::server_common::log::ContextImpl&
-RomaRequestContext::GetLogContext() const {
+RequestLogContext& RomaRequestContext::GetLogContext() {
   return request_logging_context_;
 }
 
@@ -45,10 +46,10 @@ RomaRequestSharedContext::GetRomaRequestContext() const {
 RomaRequestContextFactory::RomaRequestContextFactory(
     const absl::btree_map<std::string, std::string>& context_map,
     const privacy_sandbox::server_common::ConsentedDebugConfiguration&
-        debug_config) {
-  roma_request_context_ =
-      std::make_shared<RomaRequestContext>(context_map, debug_config);
-}
+        debug_config,
+    absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()> debug_info)
+    : roma_request_context_(std::make_shared<RomaRequestContext>(
+          context_map, debug_config, std::move(debug_info))) {}
 
 RomaRequestSharedContext RomaRequestContextFactory::Create() {
   return RomaRequestSharedContext(roma_request_context_);

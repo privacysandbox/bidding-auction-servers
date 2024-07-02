@@ -32,7 +32,7 @@ inline constexpr char kTestIgName[] = "test_ig_name";
 inline constexpr char kWinningIgName[] = "winning_ig_name";
 inline constexpr char kWinningIgOwner[] = "winning_ig_owner";
 inline constexpr char kSellerCurrency[] = "GBP";
-inline constexpr char kDefaultHighestScoringOtherBidCurrency[] = "???";
+inline constexpr float kIncomingBidInSellerCurrency = 1.776f;
 
 TEST(PostAuctionSignalsTest, HasAllSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
@@ -61,7 +61,7 @@ TEST(PostAuctionSignalsTest, HasWinningBidSignals) {
   EXPECT_EQ(ad_score->desirability(), signals.winning_score);
   EXPECT_EQ(ad_score->render(), signals.winning_ad_render_url);
   EXPECT_EQ(signals.highest_scoring_other_bid_currency,
-            kDefaultHighestScoringOtherBidCurrency);
+            kUnknownBidCurrencyCode);
 }
 
 TEST(PostAuctionSignalsTest, HasHighestOtherBidSignals) {
@@ -92,7 +92,7 @@ TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
   EXPECT_FALSE(signals.has_highest_scoring_other_bid);
   EXPECT_EQ(signals.highest_scoring_other_bid_ig_owner, "");
   EXPECT_EQ(signals.highest_scoring_other_bid_currency,
-            kDefaultHighestScoringOtherBidCurrency);
+            kUnknownBidCurrencyCode);
   EXPECT_EQ(signals.highest_scoring_other_bid, 0.0);
   EXPECT_EQ(signals.rejection_reason_map.size(), 0);
 }
@@ -298,45 +298,74 @@ TEST(CreateDebugReportingHttpRequestTest,
 }
 
 TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsNone) {
-  absl::flat_hash_map<std::string,
-                      absl::flat_hash_map<std::string, SellerRejectionReason>>
-      rejection_reason_map;
   PostAuctionSignals signals = {
       .winning_ig_name = kEmptyString,
       .winning_ig_owner = kEmptyString,
       .winning_bid = 0.0,
+      .winning_bid_currency = "YEN",
+      .winning_bid_in_seller_currency = 0.0,
+      .seller_currency = "",
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
-      .rejection_reason_map = std::move(rejection_reason_map)};
+      .rejection_reason_map = {}};
   DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kTestIgName, signals);
   EXPECT_FALSE(placeholder.made_winning_bid);
   EXPECT_FALSE(placeholder.made_highest_scoring_other_bid);
   EXPECT_EQ(placeholder.winning_bid, signals.winning_bid);
+  // No Seller Currency set, so currency is expected to be the unknown marker.
+  EXPECT_EQ(placeholder.winning_bid_currency, kUnknownBidCurrencyCode);
   EXPECT_EQ(placeholder.highest_scoring_other_bid,
             signals.highest_scoring_other_bid);
+  // No Seller Currency set, so currency is expected to be the unknown marker.
+  EXPECT_EQ(placeholder.highest_scoring_other_bid_currency,
+            kUnknownBidCurrencyCode);
+  EXPECT_EQ(placeholder.rejection_reason,
+            SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
+}
+
+TEST(GetPlaceholderDataForInterestGroupOwnerTest, SellerCurrencySet) {
+  PostAuctionSignals signals = {
+      .winning_ig_name = kEmptyString,
+      .winning_ig_owner = kEmptyString,
+      .winning_bid = 0.0,
+      .winning_bid_in_seller_currency = kIncomingBidInSellerCurrency,
+      .seller_currency = kSellerCurrency,
+      .highest_scoring_other_bid = 0.1776,
+      .highest_scoring_other_bid_ig_owner = kEmptyString,
+      .has_highest_scoring_other_bid = false,
+      .winning_score = 0.0,
+      .winning_ad_render_url = kEmptyString,
+      .rejection_reason_map = {}};
+  DebugReportingPlaceholder placeholder =
+      GetPlaceholderDataForInterestGroup(kTestIgOwner, kTestIgName, signals);
+  EXPECT_FALSE(placeholder.made_winning_bid);
+  EXPECT_FALSE(placeholder.made_highest_scoring_other_bid);
+  EXPECT_EQ(placeholder.winning_bid, kIncomingBidInSellerCurrency);
+  EXPECT_EQ(placeholder.highest_scoring_other_bid,
+            signals.highest_scoring_other_bid);
+  EXPECT_EQ(placeholder.highest_scoring_other_bid_currency, kSellerCurrency);
   EXPECT_EQ(placeholder.rejection_reason,
             SellerRejectionReason::SELLER_REJECTION_REASON_NOT_AVAILABLE);
 }
 
 TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsWinner) {
   float winning_bid = 1.9;
-  absl::flat_hash_map<std::string,
-                      absl::flat_hash_map<std::string, SellerRejectionReason>>
-      rejection_reason_map;
   PostAuctionSignals signals = {
       .winning_ig_name = kTestIgName,
       .winning_ig_owner = kTestIgOwner,
       .winning_bid = winning_bid,
+      .winning_bid_in_seller_currency = 0.0,
+      .seller_currency = "",
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
-      .rejection_reason_map = std::move(rejection_reason_map)};
+      .rejection_reason_map = {}};
   DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kTestIgName, signals);
 
@@ -347,19 +376,18 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsWinner) {
 TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerMadeHighestOtherBid) {
   float winning_bid = 1.9;
   float highest_scoring_other_bid = 2.18;
-  absl::flat_hash_map<std::string,
-                      absl::flat_hash_map<std::string, SellerRejectionReason>>
-      rejection_reason_map;
   PostAuctionSignals signals = {
       .winning_ig_name = kWinningIgName,
       .winning_ig_owner = kWinningIgOwner,
       .winning_bid = winning_bid,
+      .winning_bid_in_seller_currency = 0.0,
+      .seller_currency = "",
       .highest_scoring_other_bid = highest_scoring_other_bid,
       .highest_scoring_other_bid_ig_owner = kTestIgOwner,
       .has_highest_scoring_other_bid = true,
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
-      .rejection_reason_map = std::move(rejection_reason_map)};
+      .rejection_reason_map = {}};
   DebugReportingPlaceholder placeholder =
       GetPlaceholderDataForInterestGroup(kTestIgOwner, kWinningIgName, signals);
 
@@ -371,19 +399,18 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerMadeHighestOtherBid) {
 TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsBoth) {
   float winning_bid = 1.9;
   float highest_scoring_other_bid = 2.18;
-  absl::flat_hash_map<std::string,
-                      absl::flat_hash_map<std::string, SellerRejectionReason>>
-      rejection_reason_map;
   PostAuctionSignals signals = {
       .winning_ig_name = kWinningIgName,
       .winning_ig_owner = kWinningIgOwner,
       .winning_bid = winning_bid,
+      .winning_bid_in_seller_currency = 0.0,
+      .seller_currency = "",
       .highest_scoring_other_bid = highest_scoring_other_bid,
       .highest_scoring_other_bid_ig_owner = kWinningIgOwner,
       .has_highest_scoring_other_bid = true,
       .winning_score = 0.0,
       .winning_ad_render_url = kEmptyString,
-      .rejection_reason_map = std::move(rejection_reason_map)};
+      .rejection_reason_map = {}};
 
   absl::string_view test_ig_name = "test_ig_name";
   DebugReportingPlaceholder placeholder = GetPlaceholderDataForInterestGroup(
@@ -410,6 +437,8 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgHasRejectionReason) {
       .winning_ig_name = kWinningIgName,
       .winning_ig_owner = kWinningIgOwner,
       .winning_bid = winning_bid,
+      .winning_bid_in_seller_currency = 0.0,
+      .seller_currency = "",
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,

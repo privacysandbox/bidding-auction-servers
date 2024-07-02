@@ -28,6 +28,8 @@ constexpr absl::string_view kRuntimeConfig = R"json({
     "cpuset": [0, 1]
 })json";
 
+constexpr absl::string_view kConsentedLogMsg = "Consented Log";
+
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 
 #endif  // SERVICES_BIDDING_SERVICE_CONSTANTS_H_

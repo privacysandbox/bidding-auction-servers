@@ -175,6 +175,20 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
   done.Wait();
 }
 
+TEST_F(MultiCurlHttpFetcherAsyncTest, InvokesCallbackForEmptyRequestVector) {
+  absl::BlockingCounter done(1);
+  std::vector<HTTPRequest> test_requests = {};
+  auto done_cb = [&done, &test_requests](
+                     const std::vector<absl::StatusOr<std::string>>& results) {
+    EXPECT_EQ(results.size(), test_requests.size());
+    done.DecrementCount();
+  };
+
+  fetcher_->FetchUrls(test_requests, absl::Milliseconds(kNormalTimeoutMs),
+                      std::move(done_cb));
+  done.Wait();
+}
+
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
   std::string msg;
   absl::Notification notification;

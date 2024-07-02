@@ -35,6 +35,8 @@ inline constexpr absl::string_view SCORE_ADS_RPC_TIMEOUT_MS =
 inline constexpr absl::string_view SELLER_ORIGIN_DOMAIN =
     "SELLER_ORIGIN_DOMAIN";
 inline constexpr absl::string_view AUCTION_SERVER_HOST = "AUCTION_SERVER_HOST";
+inline constexpr absl::string_view GRPC_ARG_DEFAULT_AUTHORITY_VAL =
+    "GRPC_ARG_DEFAULT_AUTHORITY";
 inline constexpr absl::string_view KEY_VALUE_SIGNALS_HOST =
     "KEY_VALUE_SIGNALS_HOST";
 inline constexpr absl::string_view BUYER_SERVER_HOSTS = "BUYER_SERVER_HOSTS";
@@ -61,7 +63,7 @@ inline constexpr absl::string_view
 inline constexpr absl::string_view SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
     "SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr int kNumRuntimeFlags = 22;
+inline constexpr int kNumRuntimeFlags = 23;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -70,6 +72,7 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     SCORE_ADS_RPC_TIMEOUT_MS,
     SELLER_ORIGIN_DOMAIN,
     AUCTION_SERVER_HOST,
+    GRPC_ARG_DEFAULT_AUTHORITY_VAL,
     KEY_VALUE_SIGNALS_HOST,
     BUYER_SERVER_HOSTS,
     ENABLE_BUYER_COMPRESSION,

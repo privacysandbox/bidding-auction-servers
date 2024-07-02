@@ -123,12 +123,22 @@ Set Github as your source provider, and use the public repository:
 `https://github.com/privacysandbox/bidding-auction-servers.git`. No other source repo config is
 necessary.
 
-However, if you want to enable webhook events (after selecting 'Repository in my GitHub account',
-webhook events are not available for the 'Public repository' option) and run an automatic build for
-every release, you will have to clone the public repo into a Github repo under your ownership and
-keep your clone up to date with the public repo. If you prefer to avoid cloning the public
-repository, any time you want a new build for Bidding and Auction serivces you must follow the steps
-[here](#start-build).
+#### Webhooks
+
+Webhook events are not available for the 'Public repository' option. If you want to run an automatic
+build for every release, you will have to clone the public repo into a Github repo under your
+ownership and keep your clone up to date with the public repo. If you prefer to avoid cloning the
+public repository, any time you want a new build for Bidding and Auction serivces you must follow
+the steps [here](#start-build).
+
+If you do choose to use webhook events, select 'Repository in my Github account', and in the
+'Primary source webhook events' section select 'Rebuild every time a code change is pushed to this
+repository' for a 'Single build'. Then, add a 'Start a build' filter group of event type `PUSH`,
+type `HEAD_REF`, and pattern `^refs/tags/.*`. This will build on every release tag.
+
+Make sure that your Github fork, if updated automatically, also fetches the tags from the upstream
+repo -- that way, you can build directly from the semantically versioned tags. See
+[here](sync_bidding_auction_repo.yaml) for an example Github Action that handles syncing.
 
 ### Environment
 
@@ -154,9 +164,17 @@ Additional configuration:
 1. Environment variables:
 
     ```plaintext
-    key: AMI_REGION value: <YOUR CHOSEN REGION>
-    key: DOCKERHUB_USERNAME value: <DOCKERHUB USERNAME CREATED IN PREREQUISITES>
-    key: DOCKERHUB_PASSWORD_SECRET_NAME value: <NAME OF SECRET CREATED IN PREREQUISITES>
+    key: AMI_REGION
+    value: <YOUR CHOSEN REGION>
+
+    key: DOCKERHUB_USERNAME
+    value: <DOCKERHUB USERNAME CREATED IN PREREQUISITES>
+
+    key: DOCKERHUB_PASSWORD_SECRET_NAME
+    value: <NAME OF SECRET CREATED IN PREREQUISITES>
+
+    key: BUILD_FLAVOR
+    value: <prod or non_prod>
     ```
 
 ### Buildspec

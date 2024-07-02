@@ -24,7 +24,9 @@ cc_library(
     hdrs = ["buyer_frontend_async_client.h"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/async_grpc:default_async_grpc_client",
+        "@com_github_google_quiche//quiche:quiche_unstable_api",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/time",
@@ -44,9 +46,12 @@ cc_test(
     ],
     deps = [
         ":buyer_frontend_async_client",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/seller_frontend_service:runtime_flags",
+        "@com_github_google_quiche//quiche:quiche_unstable_api",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",

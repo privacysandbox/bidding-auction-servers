@@ -82,7 +82,6 @@ class GenerateBidsReactorTest : public ::testing::Test {
     if (!runtime_config.has_value()) {
       runtime_config = {
           .enable_buyer_debug_url_generation = false,
-          .enable_adtech_code_logging = false,
       };
     }
     // Create a request.
@@ -117,13 +116,15 @@ TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -153,9 +154,10 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         EXPECT_EQ(timeout, absl::Milliseconds(kTestAdRetrievalTimeoutMs));
         return absl::OkStatus();
       });
@@ -167,7 +169,6 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
   RunReactorWithRequest(
       raw_request, BiddingServiceRuntimeConfig({
                        .enable_buyer_debug_url_generation = false,
-                       .enable_adtech_code_logging = false,
                        .ad_retrieval_timeout_ms = kTestAdRetrievalTimeoutMs,
                    }));
 }
@@ -224,9 +225,10 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         EXPECT_EQ(raw_request->partitions().size(), 1);
         const auto& udf_arguments = raw_request->partitions()[0].arguments();
         EXPECT_EQ(udf_arguments.size(), kNumAdRetrievalUdfArguments);
@@ -252,7 +254,8 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -317,13 +320,15 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -346,13 +351,15 @@ TEST_F(GenerateBidsReactorTest, egressPayloadAreNotPopulated) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -404,13 +411,15 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -450,13 +459,15 @@ TEST_F(GenerateBidsReactorTest,
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse("");
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -478,13 +489,15 @@ TEST_F(GenerateBidsReactorTest, NoContextualAdsMeansAdRetrievalServiceInvoked) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
   EXPECT_CALL(kv_async_client_, ExecuteInternal).Times(0);
@@ -517,13 +530,15 @@ TEST_F(GenerateBidsReactorTest, ContextualAdsMeansKVServiceInvoked) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
   ContextualProtectedAppSignalsData contextual_pas_data;
@@ -553,9 +568,10 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         EXPECT_EQ(raw_request->partitions().size(), 1);
         const auto& udf_arguments = raw_request->partitions()[0].arguments();
         EXPECT_EQ(udf_arguments.size(), kNumKVLookupUdfArguments);
@@ -568,7 +584,8 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -600,13 +617,15 @@ TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -639,13 +658,15 @@ TEST_F(GenerateBidsReactorTest,
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 
@@ -678,13 +699,15 @@ TEST_F(GenerateBidsReactorTest,
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
-                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>)&&>
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
                        on_done,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestConfig request_config) {
         auto response = CreateAdsRetrievalOrKvLookupResponse();
         EXPECT_TRUE(response.ok()) << response.status();
         std::move(on_done)(
-            std::make_unique<GetValuesResponse>(*std::move(response)));
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
         return absl::OkStatus();
       });
 

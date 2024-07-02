@@ -28,9 +28,9 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/build_info.h"
-#include "src/logger/request_context_impl.h"
 #include "src/telemetry/flag/telemetry_flag.h"
 #include "src/telemetry/telemetry.h"
 

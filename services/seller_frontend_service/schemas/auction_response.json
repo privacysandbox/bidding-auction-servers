@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "/SellerFrontEnd/AuctionResponse",
   "type": "object",
+  "additionalProperties": false,
   "$defs": {
     "errorDef": {
       "type": "object",
@@ -29,6 +30,109 @@
       "buyerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
       "componentSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
       "topLevelSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" }
+    },
+    "KAnonJoinCandidate": {
+        "properties": {
+            "adRenderUrlHash": {
+                "type": "string",
+                "description": "Protected Audience: - SHA-256 hash of the tuple: render_url, interest group owner, reportWin()   UDF endpoint. Protected App Signals: - SHA-256 hash of render_url, reportWin UDF endpoint. NOTE: The buyer's reportWin() UDF url endpoint must match with what Chrome has. Refer to the spec to create key hashes-   https://wicg.github.io/turtledove/#query-ad-k-anonymity-count"
+            },
+            "adComponentRenderUrlsHash": {
+                "items": {
+                    "type": "string"
+                },
+                "type": "array",
+                "description": "Protected Audience: - SHA-256 hash of an ad_component_render_url. Refer to the spec to create key hashes- https://wicg.github.io/turtledove/#query-component-ad-k-anonymity-count Note: There is a maximum limit of 40 ad component render urls per render url. Note: Currently component ads are not in scope of Protected App Signals for Android."
+            },
+            "reportingIdHash": {
+                "type": "string",
+                "description": "Protected Audience: - SHA-256 hash should include IG owner, ad render url, reportWin() UDF url and one of the following:   - If buyerAndSellerReportingId exists, this hash should  include that.   - Else if buyerReportingId exists, hash should include that.   - Else IG name should be included in the hash. Note: By design, an adtech can use either buyerReportingId or buyerAndSellerReportingId. Note: Currently reporting Ids are not in scope of Protected Audience for Android and Protected App Signal for Android."
+            }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "K Anon Join Candidate",
+        "description": "Join candidates for K-Anonymity for the winner. This should include key hashes corresponding to the winning ad only. Refer https://wicg.github.io/turtledove/#k-anonymity for details around how clients call the Join API using the hash."
+    },
+    "GhostWinnerForTopLevelAuction": {
+        "properties": {
+            "adRenderUrl": {
+                "type": "string",
+                "description": "The ad render url corresponding to ghost winner."
+            },
+            "adComponentRenderUrls": {
+                "items": {
+                    "type": "string"
+                },
+                "type": "array",
+                "description": "Render URLs for ads which are components of the main ghost winning ad."
+            },
+            "modifiedBid": {
+                "type": "number",
+                "description": "Modified bid price corresponding to ghost winning bid."
+            },
+            "bidCurrency": {
+                "type": "string",
+                "description": "Optional. Indicates the currency used for the bid price corresponding to the ghost winner (expressed as ISO 4217 alpha code)."
+            },
+            "adMetadata": {
+                "type": "string",
+                "description": "Arbitrary metadata associated with ghost winner to pass to the top-level seller during top level auction."
+            },
+            "buyerAndSellerReportingId": {
+                "type": "string",
+                "description": "BuyerAndSellerReportingId of the ghost winning Ad. This will be verified with the buyerAndSellerReportingId in the Ad properties on the browser."
+            }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Ghost Winner For Top Level Auction",
+        "description": "In case of multiseller auction, the associated data for the ghost winner will be returned so that the ghost winning bid can be scored during top level auction. This is true if there is a ghost winner after component level auction. - In case of device orchestrated component auction for web, this data will returned to the browser so that the ghost winner can be passed to the top level auction on-device. - In case of server orchestrated component auction (for web, Android), this data will be returned to the top level seller by the component level sellers."
+    },
+    "GhostWinnerPrivateAggregationSignals": {
+        "properties": {
+            "bucket": {
+                "type": "string",
+                "description": "128 bit integer in the form of bytestring.",
+                "format": "binary"
+            },
+            "value": {
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Ghost Winner Private Aggregation Signals",
+        "description": "Private aggregation signals for the ghost winner. Single seller auctions: This would correspond to a ghost winner if available. Note: Event type is \"reserved.loss\" and bid rejection reason is 8 when K-Anonymity threshold is not. The client should incorporate these static values; these won't be sent back."
+    },
+    "KAnonGhostWinner": {
+        "properties": {
+            "kAnonJoinCandidates": {
+                "$ref": "#/$defs/KAnonJoinCandidate",
+                "additionalProperties": false,
+                "description": "Join candidates for the K-Anon ghost winner."
+            },
+            "interestGroupIndex": {
+                "type": "integer",
+                "description": "Interest group index corresponding to buyer / DSP that generated the ghost winning bid. Note: This is only relevant in case of Protected Audience."
+            },
+            "owner": {
+                "type": "string",
+                "description": "Origin (Chrome) and domain (Android) of the buyer / DSP who owns the ghost winner. Protected Audience: This refers to the Interest Group owner. Proptected App Signal: This refers to the buyer domain."
+            },
+            "ghostWinnerPrivateAggregationSignals": {
+                "$ref": "#/$defs/GhostWinnerPrivateAggregationSignals",
+                "additionalProperties": false
+            },
+            "ghostWinnerForTopLevelAuction": {
+                "$ref": "#/$defs/GhostWinnerForTopLevelAuction",
+                "additionalProperties": false
+            }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "K Anon Ghost Winner",
+        "description": "Data for the ghost winner sent back to the client. This should also include key-hashes corresponding to the ghost winning ad. Refer https://wicg.github.io/turtledove/#k-anonymity for details around how clients call the Join API using the hash."
     }
   },
   "properties": {
@@ -98,6 +202,21 @@
     "topLevelSeller": {
       "type": "string",
       "description": "Optional name/domain for top-level seller in case this is a component auction."
+    },
+    "kAnonWinnerJoinCandidates": {
+        "$ref": "#/$defs/KAnonJoinCandidate",
+        "additionalProperties": false
+    },
+    "kAnonWinnerPositionalIndex": {
+        "type": "integer",
+        "description": "Positional index of the k-anon winner, if there is a winner returned to the client (web browser, Android) for emitting metrics. Note: Positional index \u003e= 0. - If this is equal to 0, that would imply the highest scored bid is also K-Anonymous and hence a winner. - If this is greater than 0, the positional index would imply the index of first K-Anonymous scored bid in a sorted list in decreasing order of scored bids. In this case, the highest scored bid that is not K-Anonymous is the ghost winner. - In case all scored bids fail the K-Anonymity constraint, this would be set to -1 since there is no winner. - In case all scored bids \u003c= 0, this would be set to -1 since there is no winner."
+    },
+    "kAnonGhostWinners": {
+        "items": {
+            "$ref": "#/$defs/KAnonGhostWinner"
+        },
+        "additionalProperties": false,
+        "type": "array"
     }
   }
 }

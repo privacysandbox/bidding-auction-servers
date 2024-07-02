@@ -157,9 +157,11 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
     const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__;
   auto status = ad_retrieval_async_client_->ExecuteInternal(
-      CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response), {},
+      CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response),
+      /* metadata= */ {},
       [this, prepare_data_for_ads_retrieval_response](
-          KVLookUpResult ad_retrieval_result) {
+          KVLookUpResult ad_retrieval_result,
+          ResponseMetadata response_metadata) {
         if (!ad_retrieval_result.ok()) {
           PS_VLOG(kNoisyWarn, log_context_) << "Ad retrieval request failed: "
                                             << ad_retrieval_result.status();
@@ -231,11 +233,18 @@ absl::StatusOr<ProtectedAppSignalsAdWithBid>
 ProtectedAppSignalsGenerateBidsReactor::
     ParseProtectedSignalsGenerateBidsResponse(const std::string& response) {
   PS_VLOG(8, log_context_) << __func__;
-  PS_ASSIGN_OR_RETURN(auto generate_bid_response,
-                      ParseAndGetResponseJson(enable_adtech_code_logging_,
-                                              response, log_context_),
-                      _ << "Failed to parse ProtectedAppSignalsAdWithBid JSON "
-                           "response from Roma");
+  std::string generate_bid_response;
+  if (enable_adtech_code_logging_) {
+    PS_ASSIGN_OR_RETURN(
+        generate_bid_response,
+        ParseAndGetResponseJson(enable_adtech_code_logging_, response,
+                                log_context_),
+        _ << "Failed to parse ProtectedAppSignalsAdWithBid JSON "
+             "response from Roma");
+  } else {
+    generate_bid_response = response;
+  }
+
   ProtectedAppSignalsAdWithBid bid;
   PS_RETURN_IF_ERROR(
       google::protobuf::util::JsonStringToMessage(generate_bid_response, &bid));
@@ -379,9 +388,10 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
                                       .ad_render_ids(),
                                   ", ");
   auto status = kv_async_client_->ExecuteInternal(
-      CreateKVLookupRequest(ad_render_ids), {},
+      CreateKVLookupRequest(ad_render_ids), /* metadata= */ {},
       [this, prepare_data_for_ads_retrieval_response](
-          KVLookUpResult kv_look_up_result) {
+          KVLookUpResult kv_look_up_result,
+          ResponseMetadata response_metadata) {
         PS_VLOG(8) << "On KV response";
         if (!kv_look_up_result.ok()) {
           PS_VLOG(kNoisyWarn, log_context_)
@@ -413,8 +423,10 @@ void ProtectedAppSignalsGenerateBidsReactor::Execute() {
   PS_VLOG(8, log_context_) << __func__;
   PS_VLOG(kEncrypted, log_context_) << "GenerateBidsRequest:\n"
                                     << request_->ShortDebugString();
+  log_context_.SetEventMessageField(*request_);
   PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
+  log_context_.SetEventMessageField(raw_request_);
 
   if (IsContextualRetrievalRequest()) {
     StartContextualAdsRetrieval();
@@ -435,6 +447,11 @@ void ProtectedAppSignalsGenerateBidsReactor::OnCancel() {}
 void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
     grpc::Status status) {
   PS_VLOG(8, log_context_) << __func__;
+  PS_VLOG(kPlain, log_context_)
+      << "GenerateProtectedAppSignalsBidsRawResponse:\n"
+      << raw_response_.ShortDebugString();
+  log_context_.SetEventMessageField(raw_response_);
+  log_context_.ExportEventMessage();
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)
         << "Failed to encrypt the generate app signals bids response.";

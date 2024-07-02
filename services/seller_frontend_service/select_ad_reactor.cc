@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
@@ -30,6 +31,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
 #include "services/common/constants/user_error_strings.h"
+#include "services/common/feature_flags.h"
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/util/auction_scope_util.h"
 #include "services/common/util/reporting_util.h"
@@ -212,11 +214,19 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   std::visit(
       [this](auto& input) {
         buyer_inputs_ = GetDecodedBuyerinputs(input.buyer_input());
-        for (auto& each_buyer_input : *input.mutable_buyer_input()) {
-          each_buyer_input.second = "encoded buyer input erased";
-        }
       },
       protected_auction_input_);
+
+  if (absl::GetFlag(FLAGS_enable_chaffing)) {
+    std::visit(
+        [this](const auto& protected_auction_input) {
+          std::size_t hash = absl::Hash<std::string>{}(
+              protected_auction_input.generation_id());
+          generator_ = std::mt19937(hash);
+        },
+        protected_auction_input_);
+  }
+
   return grpc::Status::OK;
 }
 
@@ -275,11 +285,6 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
     }
   }
 
-  if (request_->client_type() == CLIENT_TYPE_UNKNOWN) {
-    ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kUnknownClientType,
-                ErrorCode::CLIENT_SIDE);
-  }
-
   // Device Component Auction not allowed with Android client type.
   if (request_->client_type() == CLIENT_TYPE_ANDROID &&
       auction_scope_ ==
@@ -302,6 +307,153 @@ void SelectAdReactor::MayLogBuyerInput() {
                                      absl::StrAppend(
                                          out, "{", bi.ShortDebugString(), "}");
                                    }));
+  }
+}
+
+ChaffingConfig SelectAdReactor::GetChaffingConfig(
+    const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set) {
+  if (!absl::GetFlag(FLAGS_enable_chaffing)) {
+    return {};
+  }
+
+  int num_chaff_requests = 0;
+  absl::flat_hash_set<std::string_view> chaff_request_candidates;
+
+  // 'real' requests means non-chaff requests, e.g. buyers that will actually
+  // generate bids to show an ad to this client.
+  int num_real_requests = 0;
+
+  // Loop through the buyers this SFE instance is configured to talk to.
+  for (const auto& [buyer, unused] : clients_.buyer_factory.Entries()) {
+    (void)unused;
+    if (!auction_config_buyer_set.contains(buyer)) {
+      continue;
+    }
+
+    // Check if the buyer is contained in the top level auction config of the
+    // SelectAd request.
+    if (buyer_inputs_->find(buyer) == buyer_inputs_->end()) {
+      // If the buyer is NOT in the ciphertext, e.g. the buyer's interest
+      // groups, they are a chaff request candidate.
+      chaff_request_candidates.emplace(buyer);
+    } else {
+      // If the buyer was present in all 3 (SFE config, auction config, and
+      // ciphertext), we will send this buyer a 'real' GetBids request.
+      num_real_requests++;
+    }
+  }
+
+  // Use the RNG seeded w/ the generation ID to deterministically determine
+  // how many chaff requests to send for a given ciphertext.
+  if (!chaff_request_candidates.empty()) {
+    // We cannot have a static lower bound for the number of chaff requests the
+    // SFE sends. If we did and a network snooper ever saw that many requests go
+    // out, that would leak that the client was not associated with any of the
+    // buyers. To avoid this, we (attempt to) set the lower bound for
+    // num_chaff_requests to 2 when num_real_requests = 0, and 1 otherwise.
+    int num_chaff_requests_lower_bound = kMinChaffRequests;
+    if (num_real_requests == 0) {
+      num_chaff_requests_lower_bound = kMinChaffRequestsWithNoRealRequests;
+    }
+
+    num_chaff_requests_lower_bound = std::min(
+        num_chaff_requests_lower_bound, (int)chaff_request_candidates.size());
+    std::uniform_int_distribution<int> num_chaff_buyers_dist(
+        num_chaff_requests_lower_bound, chaff_request_candidates.size());
+    num_chaff_requests = num_chaff_buyers_dist(*generator_);
+  }
+
+  return {.chaff_request_candidates = std::move(chaff_request_candidates),
+          .num_chaff_requests = num_chaff_requests,
+          .num_real_requests = num_real_requests};
+}
+
+void SelectAdReactor::FetchBids() {
+  const bool chaffing_enabled = absl::GetFlag(FLAGS_enable_chaffing);
+
+  int num_buyers_solicited = 0;
+  absl::flat_hash_set<absl::string_view> auction_config_buyer_set(
+      request_->auction_config().buyer_list().begin(),
+      request_->auction_config().buyer_list().end());
+
+  ChaffingConfig chaffing_config = GetChaffingConfig(auction_config_buyer_set);
+  if (chaffing_enabled) {
+    async_task_tracker_.SetNumTasksToTrack(chaffing_config.num_real_requests +
+                                           chaffing_config.num_chaff_requests);
+
+    if ((chaffing_config.num_real_requests +
+         chaffing_config.num_chaff_requests) == 0) {
+      OnAllBidsDone(true);
+      return;
+    }
+  }
+
+  for (const auto& buyer_ig_owner : request_->auction_config().buyer_list()) {
+    if (chaffing_enabled &&
+        chaffing_config.chaff_request_candidates.contains(buyer_ig_owner)) {
+      // We verify above that any buyers in chaff_request_candidates are not
+      // present in the ciphertext.
+      continue;
+    }
+
+    if (auction_config_buyer_set.erase(buyer_ig_owner) == 0) {
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Duplicate buyer found " << buyer_ig_owner << ", skipping buyer";
+      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      continue;
+    }
+
+    if (num_buyers_solicited >= max_buyers_solicited_) {
+      // Skipped buyers should not be left pending.
+      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Exceeded cap of " << max_buyers_solicited_
+          << " buyers called. Skipping buyer";
+      continue;
+    }
+
+    const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
+    if (buyer_input_iterator == buyer_inputs_->end()) {
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "No buyer input found for buyer: " << buyer_ig_owner
+          << ", skipping buyer";
+
+      // Pending bids count is set on reactor construction to
+      // buyer_list_size(). If no BuyerInput is found for a buyer in
+      // buyer_list, must decrement pending bids count.
+      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
+      continue;
+    }
+
+    auto get_bids_request =
+        CreateGetBidsRequest(buyer_ig_owner, buyer_input_iterator->second);
+    FetchBid(buyer_ig_owner, std::move(get_bids_request));
+    num_buyers_solicited++;
+  }
+
+  if (!chaffing_enabled || chaffing_config.chaff_request_candidates.empty()) {
+    return;
+  }
+
+  // Loop through chaff candidates and send 'num_chaff_requests' requests.
+  for (auto it = chaffing_config.chaff_request_candidates.begin();
+       it != chaffing_config.chaff_request_candidates.end(); ++it) {
+    if (std::distance(it, chaffing_config.chaff_request_candidates.begin()) >=
+        chaffing_config.num_chaff_requests) {
+      break;
+    }
+
+    auto get_bids_request =
+        std::make_unique<GetBidsRequest::GetBidsRawRequest>();
+    get_bids_request->set_is_chaff(true);
+    auto* log_context = get_bids_request->mutable_log_context();
+    std::visit(
+        [log_context](const auto& protected_auction_input) {
+          log_context->set_generation_id(
+              protected_auction_input.generation_id());
+        },
+        protected_auction_input_);
+    FetchBid(it->data(), std::move(get_bids_request));
   }
 }
 
@@ -346,6 +498,8 @@ void SelectAdReactor::Execute() {
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdRequest:\n"
                                     << request_->ShortDebugString();
+  log_context_.SetEventMessageField(*request_);
+
   PS_VLOG(kPlain, log_context_)
       << "Headers:\n"
       << absl::StrJoin(context_->client_metadata(), "\n",
@@ -358,7 +512,11 @@ void SelectAdReactor::Execute() {
     return;
   }
   std::visit(
-      [this](const auto& input) {
+      [this](auto& input) {
+        log_context_.SetEventMessageField(input);
+        for (auto& each_buyer_input : *input.mutable_buyer_input()) {
+          each_buyer_input.second = "encoded buyer input erased";
+        }
         PS_VLOG(kPlain, log_context_)
             << (is_protected_auction_request_ ? "ProtectedAuctionInput"
                                               : "ProtectedAudienceInput")
@@ -411,46 +569,7 @@ void SelectAdReactor::Execute() {
   PS_VLOG(6, log_context_) << "Buyer list size: "
                            << request_->auction_config().buyer_list().size();
 
-  int num_buyers_solicited = 0;
-  absl::flat_hash_set<absl::string_view> buyer_set(
-      request_->auction_config().buyer_list().begin(),
-      request_->auction_config().buyer_list().end());
-
-  for (const auto& buyer_ig_owner : request_->auction_config().buyer_list()) {
-    if (buyer_set.erase(buyer_ig_owner) == 0) {
-      PS_VLOG(kNoisyWarn, log_context_)
-          << "Duplicate buyer found " << buyer_ig_owner << ", skipping buyer";
-      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
-      continue;
-    }
-
-    if (num_buyers_solicited >= max_buyers_solicited_) {
-      // Skipped buyers should not be left pending.
-      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
-      PS_VLOG(kNoisyWarn, log_context_)
-          << "Exceeded cap of " << max_buyers_solicited_
-          << " buyers called. Skipping buyer";
-      continue;
-    }
-
-    const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
-    if (buyer_input_iterator == buyer_inputs_->end()) {
-      PS_VLOG(kNoisyWarn, log_context_)
-          << "No buyer input found for buyer: " << buyer_ig_owner
-          << ", skipping buyer";
-
-      // Pending bids count is set on reactor construction to
-      // buyer_list_size(). If no BuyerInput is found for a buyer in
-      // buyer_list, must decrement pending bids count.
-      async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
-      continue;
-    }
-
-    FetchBid(buyer_ig_owner, buyer_input_iterator->second);
-    num_buyers_solicited++;
-  }
-  PS_VLOG(5, log_context_)
-      << "Finishing execute call, response may be available later";
+  FetchBids();
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
@@ -477,6 +596,7 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
           per_buyer_config_itr->second.buyer_signals());
     }
   }
+
   *get_bids_request->mutable_buyer_input() = buyer_input;
   get_bids_request->set_top_level_seller(
       request_->auction_config().top_level_seller());
@@ -509,56 +629,69 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
   return get_bids_request;
 }
 
-void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
-                               const BuyerInput& buyer_input) {
-  auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
+void SelectAdReactor::FetchBid(
+    const std::string& buyer_ig_owner,
+    std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request) {
+  const std::shared_ptr<const BuyerFrontEndAsyncClient>& buyer_client =
+      clients_.buyer_factory.Get(buyer_ig_owner);
+
   if (buyer_client == nullptr) {
     PS_VLOG(kNoisyWarn, log_context_)
         << "No buyer client found for buyer: " << buyer_ig_owner;
 
     async_task_tracker_.TaskCompleted(TaskStatus::SKIPPED);
-  } else {
-    PS_VLOG(6, log_context_) << "Getting bid from a BFE";
-    absl::Duration timeout = absl::Milliseconds(
-        config_client_.GetIntParameter(GET_BID_RPC_TIMEOUT_MS));
-    if (request_->auction_config().buyer_timeout_ms() > 0) {
-      timeout =
-          absl::Milliseconds(request_->auction_config().buyer_timeout_ms());
-    }
-    auto get_bids_request = CreateGetBidsRequest(buyer_ig_owner, buyer_input);
-    auto bfe_request =
-        metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get());
-    bfe_request->SetBuyer(buyer_ig_owner);
-    bfe_request->SetRequestSize((int)get_bids_request->ByteSizeLong());
-    absl::Status execute_result = buyer_client->ExecuteInternal(
-        std::move(get_bids_request), buyer_metadata_,
-        [buyer_ig_owner, this, bfe_request = std::move(bfe_request)](
-            absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
-                response) mutable {
-          {
-            int response_size =
-                response.ok() ? (int)response->get()->ByteSizeLong() : 0;
-            bfe_request->SetResponseSize(response_size);
+    return;
+  }
 
-            // destruct bfe_request, destructor measures request time
-            auto not_used = std::move(bfe_request);
-          }
-          PS_VLOG(6, log_context_) << "Received a response from a BFE";
-          OnFetchBidsDone(std::move(response), buyer_ig_owner);
-        },
-        timeout);
-    if (!execute_result.ok()) {
-      LogIfError(
-          metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
-              1, metric::kSfeGetBidsFailedToCall));
-      PS_LOG(ERROR, log_context_) << absl::StrFormat(
-          "Failed to make async GetBids call: (buyer: %s, "
-          "seller: %s, error: "
-          "%s)",
-          buyer_ig_owner, request_->auction_config().seller(),
-          execute_result.ToString());
-      async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
-    }
+  PS_VLOG(6, log_context_) << "Getting bid from a BFE";
+
+  absl::Duration timeout = absl::Milliseconds(
+      config_client_.GetIntParameter(GET_BID_RPC_TIMEOUT_MS));
+  if (request_->auction_config().buyer_timeout_ms() > 0) {
+    timeout = absl::Milliseconds(request_->auction_config().buyer_timeout_ms());
+  }
+  auto bfe_request =
+      metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get());
+  bfe_request->SetBuyer(buyer_ig_owner);
+  bfe_request->SetRequestSize((int)get_bids_request->ByteSizeLong());
+
+  size_t chaff_request_size = 0;
+  if (absl::GetFlag(FLAGS_enable_chaffing)) {
+    std::uniform_int_distribution<size_t> request_size_dist(
+        kMinChaffRequestSizeBytes, kMaxChaffRequestSizeBytes);
+    chaff_request_size = request_size_dist(*generator_);
+  }
+
+  RequestConfig request_config = {.chaff_request_size = chaff_request_size};
+
+  absl::Status execute_result = buyer_client->ExecuteInternal(
+      std::move(get_bids_request), buyer_metadata_,
+      [buyer_ig_owner, this, bfe_request = std::move(bfe_request)](
+          absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
+              response,
+          ResponseMetadata response_metadata) mutable {
+        {
+          int response_size = std::max(0UL, response_metadata.response_size);
+          bfe_request->SetResponseSize(response_size);
+
+          // destruct bfe_request, destructor measures request time
+          auto not_used = std::move(bfe_request);
+        }
+        PS_VLOG(6, log_context_) << "Received a response from a BFE";
+        OnFetchBidsDone(std::move(response), buyer_ig_owner);
+      },
+      timeout, request_config);
+  if (!execute_result.ok()) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeGetBidsFailedToCall));
+    PS_LOG(ERROR, log_context_) << absl::StrFormat(
+        "Failed to make async GetBids call: (buyer: %s, "
+        "seller: %s, error: "
+        "%s)",
+        buyer_ig_owner, request_->auction_config().seller(),
+        execute_result.ToString());
+    async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
   }
 }
 
@@ -909,7 +1042,8 @@ void SelectAdReactor::ScoreAds() {
   auto on_scoring_done =
       [this, auction_request = std::move(auction_request)](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
-              result) mutable {
+              result,
+          ResponseMetadata response_metadata) mutable {
         {
           int response_size =
               result.ok() ? (int)result->get()->ByteSizeLong() : 0;
@@ -944,6 +1078,7 @@ void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
         static_cast<int>((absl::Now() - start_) / absl::Milliseconds(1))));
   }
   benchmarking_logger_->End();
+  log_context_.ExportEventMessage();
   Finish(status);
 }
 

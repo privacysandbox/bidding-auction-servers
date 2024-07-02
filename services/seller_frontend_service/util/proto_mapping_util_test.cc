@@ -31,7 +31,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 using google::scp::core::test::EqualsProto;
-using server_common::log::ContextImpl;
 
 constexpr char kTestSeller[] = "sample-seller";
 constexpr char kBuyer1[] = "bg1";
@@ -402,7 +401,7 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
     bidding_group_map_ =
         MakeARandomSingleSellerAuctionResult().bidding_groups();
     absl::btree_map<std::string, std::string> context_map;
-    log_context_ = std::make_unique<ContextImpl>(
+    log_context_ = std::make_unique<RequestLogContext>(
         context_map, server_common::ConsentedDebugConfiguration());
   }
 
@@ -410,7 +409,7 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
   ScoreAdsResponse::AdScore valid_score_;
   AuctionResult::Error valid_error_;
   IgsWithBidsMap bidding_group_map_;
-  std::unique_ptr<ContextImpl> log_context_;
+  std::unique_ptr<RequestLogContext> log_context_;
   std::unique_ptr<OhttpHpkeDecryptedMessage> MakeDecryptedMessage() {
     auto [request, context] =
         GetFramedInputAndOhttpContext(MakeARandomString());

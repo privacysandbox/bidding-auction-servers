@@ -23,7 +23,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 AsyncTaskTracker::AsyncTaskTracker(
-    int num_tasks_to_track, server_common::log::ContextImpl& log_context,
+    int num_tasks_to_track, RequestLogContext& log_context,
     absl::AnyInvocable<void(bool) &&> on_all_tasks_done)
     : num_tasks_to_track_(num_tasks_to_track),
       pending_tasks_count_(num_tasks_to_track),

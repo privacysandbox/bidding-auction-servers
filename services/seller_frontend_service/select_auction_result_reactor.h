@@ -80,7 +80,7 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
 
-  server_common::log::ContextImpl log_context_;
+  RequestLogContext log_context_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::SfeContext> metric_context_;

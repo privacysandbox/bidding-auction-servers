@@ -1,0 +1,60 @@
+From ed9dc15297502ef9d0aeb89d2514e03217e9776a Mon Sep 17 00:00:00 2001
+From: Salman <salmanmalik@google.com>
+Date: Thu, 6 Jun 2024 23:01:57 +0000
+Subject: [PATCH] wrapper
+
+---
+ src/lib.rs | 33 +++++++++++++++++++++++++++------
+ 1 file changed, 27 insertions(+), 6 deletions(-)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index f55a41c..8b6ded5 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -541,6 +541,9 @@ extern crate uriparse;
+ #[cfg(feature = "std")]
+ extern crate base64_url;
+ 
++#[cfg(feature = "std")]
++extern crate libc;
++
+ /// Abstract syntax tree representing a CDDL definition
+ pub mod ast;
+ /// Static error messages
+@@ -575,9 +578,27 @@ pub use self::{
+ #[cfg(not(target_arch = "wasm32"))]
+ pub use self::validator::validate_cbor_from_slice;
+ 
+-#[doc(inline)]
+-#[cfg(feature = "std")]
+-#[cfg(feature = "json")]
+-#[cfg(not(feature = "lsp"))]
+-#[cfg(not(target_arch = "wasm32"))]
+-pub use self::validator::validate_json_from_str;
++
++use libc::c_char;
++use std::ffi::CStr;
++
++#[no_mangle]
++/// Validate JSON string from a given CDDL document string
++pub extern fn validate_json_str(cddl: *const c_char, json: *const c_char) -> bool {
++  #[cfg(feature = "std")]
++  #[cfg(feature = "json")]
++  #[cfg(not(feature = "lsp"))]
++  #[cfg(not(target_arch = "wasm32"))]
++  use self::validator::validate_json_from_str;
++
++  let cddl_str: &CStr = unsafe { CStr::from_ptr(cddl) };
++  let cddl_str_slice : &str = cddl_str.to_str().unwrap();
++  let json_str: &CStr = unsafe { CStr::from_ptr(json) };
++  let json_str_slice : &str = json_str.to_str().unwrap();
++
++  #[cfg(feature = "std")]
++  #[cfg(feature = "json")]
++  #[cfg(not(feature = "lsp"))]
++  #[cfg(not(target_arch = "wasm32"))]
++  return validate_json_from_str(cddl_str_slice, json_str_slice,  Some(&["json"])).is_ok();
++}
+-- 
+2.45.2.505.gda0bf45e8d-goog
+

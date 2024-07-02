@@ -54,10 +54,11 @@ class InferenceUtilsTest : public ::testing::Test {
 // TODO(b/322030670): Making static SandboxExecutor compatible with multiple
 // tests.
 
-TEST_F(InferenceUtilsTest, ReturnValueIsSet) {
+TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   SandboxExecutor& inference_executor = Executor();
   CHECK_EQ(inference_executor.StartSandboxee().code(), absl::StatusCode::kOk);
 
+  // register a model
   ASSERT_TRUE(RegisterModelsFromLocal({std::string(kTestModelPath)}).ok());
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
   google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper{
@@ -69,6 +70,14 @@ TEST_F(InferenceUtilsTest, ReturnValueIsSet) {
   // logic. Currently, this test uses a test inference module that doesn't
   // populate the output string.
   ASSERT_EQ(wrapper.io_proto.output_string(), "0.57721");
+
+  // make sure GetModelPaths returns the registered model
+  google::scp::roma::proto::FunctionBindingIoProto input_output_proto_1;
+  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper_1{
+      input_output_proto_1, {}};
+  GetModelPaths(wrapper_1);
+  ASSERT_EQ(wrapper_1.io_proto.output_string(),
+            "[\"" + std::string(kTestModelPath) + "\"]");
 
   absl::StatusOr<sandbox2::Result> result = inference_executor.StopSandboxee();
   ASSERT_TRUE(result.ok());
@@ -96,6 +105,22 @@ TEST_F(InferenceUtilsTest, RegisterModelsFromBucket_Error) {
             absl::StatusCode::kNotFound);
   EXPECT_EQ(RegisterModelsFromBucket(kBucketName, {""}, {{"", ""}}).code(),
             absl::StatusCode::kNotFound);
+}
+
+TEST_F(InferenceUtilsTest, GetModelResponseToJsonOuput) {
+  GetModelPathsResponse get_model_paths_response;
+  EXPECT_EQ("[]", GetModelResponseToJson(get_model_paths_response));
+  ModelSpec* spec;
+
+  spec = get_model_paths_response.add_model_specs();
+  spec->set_model_path("a");
+
+  EXPECT_EQ("[\"a\"]", GetModelResponseToJson(get_model_paths_response));
+
+  spec = get_model_paths_response.add_model_specs();
+  spec->set_model_path("b");
+
+  EXPECT_EQ("[\"a\",\"b\"]", GetModelResponseToJson(get_model_paths_response));
 }
 
 }  // namespace

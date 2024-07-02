@@ -33,6 +33,11 @@ int main(int argc, char** argv) {
             config)
             .ok())
       << "Could not set CPU affinity.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::
+            EnforceModelResetProbability(config)
+                .ok())
+      << "Could not set the model reset probability";
+
   if (absl::Status run_status =
           privacy_sandbox::bidding_auction_servers::inference::Run(config);
       !run_status.ok()) {

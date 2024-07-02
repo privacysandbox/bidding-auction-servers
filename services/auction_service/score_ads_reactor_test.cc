@@ -170,14 +170,12 @@ void GetTestAdWithBidFoo(AdWithBidMetadata& foo,
                          absl::string_view buyer_reporting_id = "") {
   int number_of_component_ads = 3;
   foo.mutable_ad()->mutable_struct_value()->MergeFrom(
-      MakeAnAd("https://googleads.g.doubleclick.net/td/adfetch/"
-               "gda?adg_id=142601302539&cr_id=628073386727&cv_id=0",
+      MakeAnAd("https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0",
                "arbitraryMetadataKey", 2));
 
   // This must have an entry in kTestScoringSignals.
   foo.set_render(
-      "https://googleads.g.doubleclick.net/td/adfetch/"
-      "gda?adg_id=142601302539&cr_id=628073386727&cv_id=0");
+      "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0");
   foo.set_bid(2.10);
   foo.set_interest_group_name("foo");
   foo.set_interest_group_owner("https://fooAds.com");
@@ -311,7 +309,7 @@ constexpr char kTestAuctionSignals[] =
 constexpr char kTestScoringSignals[] = R"json(
   {
     "renderUrls": {
-      "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0": [
+      "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0": [
           123
         ],
       "barStandardAds.com/render_ad?id=bar": [
@@ -423,10 +421,10 @@ void CheckInputCorrectForFoo(std::vector<std::shared_ptr<std::string>> input,
       R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
   EXPECT_EQ(
       *input[3],
-      R"JSON({"adComponentRenderUrls":{"adComponent.com/foo_components/id=0":["foo0"],"adComponent.com/foo_components/id=1":["foo1"],"adComponent.com/foo_components/id=2":["foo2"]},"renderUrl":{"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0":[123]}})JSON");
+      R"JSON({"adComponentRenderUrls":{"adComponent.com/foo_components/id=0":["foo0"],"adComponent.com/foo_components/id=1":["foo1"],"adComponent.com/foo_components/id=2":["foo2"]},"renderUrl":{"https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0":[123]}})JSON");
   EXPECT_EQ(
       *input[4],
-      R"JSON({"interestGroupOwner":"https://fooAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/foo_components/id=0","adComponent.com/foo_components/id=1","adComponent.com/foo_components/id=2"],"bidCurrency":"???","renderUrl":"https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"})JSON");
+      R"JSON({"interestGroupOwner":"https://fooAds.com","topWindowHostname":"publisher_hostname","adComponents":["adComponent.com/foo_components/id=0","adComponent.com/foo_components/id=1","adComponent.com/foo_components/id=2"],"bidCurrency":"???","renderUrl":"https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"})JSON");
   EXPECT_EQ(*input[5], "{}");
 }
 
@@ -548,13 +546,13 @@ TEST_F(
       R"JSON(
       {
         "metadata": {"arbitraryMetadataKey": 2},
-        "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"
+        "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
       })JSON");
   CHECK_OK(expected_foo_ad) << "Malformed ad JSON";
   auto expected_foo_comp_ad_1 = JsonStringToValue(
       R"JSON(
       {
-        "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0",
+        "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0",
         "metadata": {"arbitraryMetadataKey": 2}
       })JSON");
   CHECK_OK(expected_foo_comp_ad_1) << "Malformed ad JSON";
@@ -614,7 +612,7 @@ TEST_F(ScoreAdsReactorTest,
       "metadata": {
         "arbitraryMetadataKey": 2
       },
-      "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"
+      "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_foo_ad_2) << "Malformed ad JSON";
   auto expected_bar_ad_1 = JsonStringToValue(
@@ -623,7 +621,7 @@ TEST_F(ScoreAdsReactorTest,
       "metadata": {
         "arbitraryMetadataKey":2
       },
-      "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"
+      "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_bar_ad_1) << "Malformed ad JSON";
   auto expected_bar_ad_2 = JsonStringToValue(
@@ -677,7 +675,7 @@ TEST_F(ScoreAdsReactorTest,
       "metadata": {
         "arbitraryMetadataKey": 2
       },
-      "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"
+      "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_foo_ad_2) << "Malformed ad JSON";
 
@@ -711,7 +709,7 @@ TEST_F(ScoreAdsReactorTest,
       "metadata": {
         "arbitraryMetadataKey":2
       },
-      "renderUrl": "https://googleads.g.doubleclick.net/td/adfetch/gda?adg_id=142601302539&cr_id=628073386727&cv_id=0"
+      "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_bar_ad_1) << "Malformed ad JSON";
   auto expected_bar_ad_2 = JsonStringToValue(

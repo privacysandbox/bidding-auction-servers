@@ -27,6 +27,7 @@
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/common/util/data_util.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
@@ -147,18 +148,6 @@ absl::StatusOr<std::string> EncodeComponent(
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler);
-
-// Finds the provided string needle index in the haystack array.
-template <std::size_t Size>
-int FindItemIndex(const std::array<absl::string_view, Size>& haystack,
-                  absl::string_view needle) {
-  auto it = std::find(haystack.begin(), haystack.end(), needle);
-  if (it == haystack.end()) {
-    return -1;
-  }
-
-  return std::distance(haystack.begin(), it);
-}
 
 // Helper to validate the type of a CBOR object.
 bool IsTypeValid(

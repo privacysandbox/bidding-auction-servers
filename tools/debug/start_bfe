@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2024 Google LLC
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,15 +25,15 @@ export SERVER_START_CMD=$(cat << END
 /server \
 --init_config_client="false" --port=50051 \
 --bidding_server_addr="127.0.0.1:50057" \
---buyer_kv_server_addr="https://googleads.g.doubleclick.net/td/bts" \
+--buyer_kv_server_addr="${BUYER_KV_SERVER_ADDR}" \
 --enable_buyer_frontend_benchmarking="true" \
 --generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
 --protected_app_signals_generate_bid_timeout_ms=60000 \
 --create_new_event_engine="false" \
 --test_mode="true" \
 --telemetry_config="mode: EXPERIMENT" \
---enable_otel_based_logging="false" \
---consented_debug_token="" \
+--enable_otel_based_logging="true"\
+--consented_debug_token="test_token"\
 --ps_verbosity=2 \
 --enable_protected_audience="true" \
 --bfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
