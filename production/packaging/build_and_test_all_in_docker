@@ -99,6 +99,9 @@ environment variables (all optional):
     BAZEL_STARTUP_ARGS           Additional startup arguments to pass to bazel invocations
     BAZEL_EXTRA_ARGS             Additional command arguments to pass to bazel invocations
     EXTRA_DOCKER_RUN_ARGS        Additional arguments to pass to docker run invocations
+    DOCKER_REGISTRY              Docker registry
+    DOCKER_USER                  Docker user for DOCKER_REGISTRY
+    DOCKER_PASSWORD              Docker password for DOCKER_REGISTRY
 USAGE
   exit ${exitval}
 }
@@ -274,6 +277,10 @@ function invoke_targets() {
     exit \${STATUS}
   }
   set -o errexit
+
+  if [[ -n "$DOCKER_PASSWORD" ]]; then
+    docker login $DOCKER_REGISTRY -u ${DOCKER_USER} -p ${DOCKER_PASSWORD}
+  fi
 
   if [[ ${NO_TESTS} -eq 0 ]]; then
     bazel ${BAZEL_STARTUP_ARGS} test ${BAZEL_EXTRA_ARGS} --build_tests_only --config=coretests ${test_targets}
