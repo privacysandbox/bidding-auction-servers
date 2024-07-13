@@ -35,7 +35,12 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
+constexpr absl::string_view kExpectedReportResultUrl =
+    "http://"
+    "test.com&bid=1&bidCurrency=EUR&highestScoringOtherBid=0&"
+    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
+    "com&interestGroupOwner=barStandardAds.com";
+constexpr char kTestIgOwner[] = "barStandardAds.com";
 class AuctionServiceReportingIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -47,7 +52,7 @@ class AuctionServiceReportingIntegrationTest : public ::testing::Test {
 };
 
 TEST_F(AuctionServiceReportingIntegrationTest,
-       ScoresAdsReturnsSuccessFullyWithSellerAndBuyerCodeIsolation) {
+       ScoresAdsReturnsReportResultUrlsWithSellerAndBuyerCodeIsolation) {
   ScoreAdsResponse response;
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
@@ -56,22 +61,28 @@ TEST_F(AuctionServiceReportingIntegrationTest,
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
-      .buyer_reporting_id = ""};
+      .buyer_reporting_id = kBuyerReportingId,
+      .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
                           response);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
   const auto& scoredAd = raw_response.ad_score();
   EXPECT_GT(scoredAd.desirability(), 0);
-  EXPECT_TRUE(scoredAd.win_reporting_urls()
-                  .top_level_seller_reporting_urls()
-                  .reporting_url()
-                  .empty());
+  EXPECT_EQ(scoredAd.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .reporting_url(),
+            kExpectedReportResultUrl);
   EXPECT_EQ(scoredAd.win_reporting_urls()
                 .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
                 .size(),
-            0);
+            1);
+  EXPECT_EQ(scoredAd.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionReportingUrl);
   EXPECT_TRUE(scoredAd.win_reporting_urls()
                   .buyer_reporting_urls()
                   .reporting_url()

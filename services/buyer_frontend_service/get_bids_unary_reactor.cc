@@ -18,6 +18,7 @@
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/buyer_frontend_service/util/proto_factory.h"
+#include "services/common/chaffing/transcoding_utils.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
@@ -81,8 +82,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     grpc::CallbackServerContext& context,
     const GetBidsRequest& get_bids_request, GetBidsResponse& get_bids_response,
     const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
-    const BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
-    const ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
+    BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
+    ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, bool enable_benchmarking)
     : context_(&context),
@@ -101,6 +102,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       config_(config),
       key_fetcher_manager_(key_fetcher_manager),
       crypto_client_(crypto_client),
+      chaffing_enabled_(absl::GetFlag(FLAGS_enable_chaffing)),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
         return RequestLogContext(
@@ -131,13 +133,20 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
   DCHECK(!config_.is_protected_app_signals_enabled ||
          protected_app_signals_bidding_async_client_ != nullptr)
       << "PAS is enabled but no PAS bidding async client available";
+
+  if (chaffing_enabled_ && raw_request_.is_chaff()) {
+    // The RNG is only needed for chaff requests.
+    std::size_t hash =
+        absl::Hash<std::string>{}(raw_request_.log_context().generation_id());
+    generator_ = std::mt19937(hash);
+  }
 }
 
 GetBidsUnaryReactor::GetBidsUnaryReactor(
     grpc::CallbackServerContext& context,
     const GetBidsRequest& get_bids_request, GetBidsResponse& get_bids_response,
-    const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
-    const BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
+    BiddingSignalsAsyncProvider& bidding_signals_async_provider,
+    BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, bool enable_benchmarking)
     : GetBidsUnaryReactor(context, get_bids_request, get_bids_response,
@@ -187,23 +196,49 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   if (request_->key_id().empty()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError};
   }
+
   if (request_->request_ciphertext().empty()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kEmptyCiphertextError};
   }
+
   std::optional<server_common::PrivateKey> private_key =
       key_fetcher_manager_->GetPrivateKey(request_->key_id());
   if (!private_key.has_value()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError};
   }
+
   absl::StatusOr<HpkeDecryptResponse> decrypt_response =
       crypto_client_->HpkeDecrypt(*private_key, request_->request_ciphertext());
   if (!decrypt_response.ok()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
+
   hpke_secret_ = std::move(*decrypt_response->mutable_secret());
-  if (!raw_request_.ParseFromString(decrypt_response->payload())) {
+
+  // If the payload begins with the null terminator, this indicates the request
+  // is using the new SFE <> BFE request format.
+  if (chaffing_enabled_ && (decrypt_response->payload().front() == '\0')) {
+    // Save that the request is following the new format; the BFE response
+    // format will also follow the new format.
+    use_new_payload_encoding_ = true;
+    absl::StatusOr<DecodedGetBidsPayload<GetBidsRequest::GetBidsRawRequest>>
+        decoded_payload =
+            DecodeGetBidsPayload<GetBidsRequest::GetBidsRawRequest>(
+                decrypt_response->payload());
+    if (!decoded_payload.ok()) {
+      return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
+    }
+    if (decoded_payload->version_and_compression_num != 0) {
+      // For now, we don't support any version/compression bytes besides 0.
+      return {grpc::StatusCode::INVALID_ARGUMENT, kUnsupportedMetadataValues};
+    }
+
+    raw_request_ = std::move(decoded_payload->get_bids_proto);
+  } else if (!raw_request_.ParseFromString(decrypt_response->payload())) {
+    // If not, try to parse the request as before.
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
+
   return grpc::Status::OK;
 }
 
@@ -244,6 +279,11 @@ void GetBidsUnaryReactor::Execute() {
                                 << raw_request_.ShortDebugString();
   log_context_.SetEventMessageField(raw_request_);
 
+  if (chaffing_enabled_ && raw_request_.is_chaff()) {
+    ExecuteChaffRequest();
+    return;
+  }
+
   const int num_bidding_calls = GetNumberOfBiddingCalls();
   if (num_bidding_calls == 0) {
     // This is unlikely to happen since we already have this check in place
@@ -258,6 +298,38 @@ void GetBidsUnaryReactor::Execute() {
   async_task_tracker_.SetNumTasksToTrack(num_bidding_calls);
   MayGetProtectedAudienceBids();
   MayGetProtectedSignalsBids();
+}
+
+void GetBidsUnaryReactor::ExecuteChaffRequest() {
+  // Sleep to make it seem (from the client's perspective) that the BFE is
+  // processing the request.
+  size_t chaff_request_duration = 0;
+  std::uniform_int_distribution<size_t> request_duration_dist(
+      kMinChaffRequestDurationMs, kMaxChaffRequestDurationMs);
+  chaff_request_duration = request_duration_dist(*generator_);
+  absl::SleepFor(absl::Milliseconds((int)chaff_request_duration));
+
+  // Produce chaff response.
+  size_t chaff_response_size = 0;
+  std::uniform_int_distribution<size_t> chaff_response_size_dist(
+      kMinChaffResponseSizeBytes, kMaxChaffResponseSizeBytes);
+  chaff_response_size = chaff_response_size_dist(*generator_);
+  std::string encoded_payload =
+      EncodeGetBidsPayload(*get_bids_raw_response_, chaff_response_size);
+
+  absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
+      aead_encrypt = crypto_client_->AeadEncrypt(encoded_payload, hpke_secret_);
+  if (!aead_encrypt.ok()) {
+    PS_LOG(ERROR, log_context_)
+        << "Failed to encrypt chaff response: " << aead_encrypt.status();
+    FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
+    return;
+  }
+
+  PS_VLOG(kNoisyInfo, log_context_) << "Chaff request encrypted successfully";
+  get_bids_response_->set_response_ciphertext(
+      aead_encrypt->encrypted_data().ciphertext());
+  FinishWithStatus(grpc::Status::OK);
 }
 
 void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
@@ -493,7 +565,13 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
 }
 
 absl::Status GetBidsUnaryReactor::EncryptResponse() {
-  std::string payload = get_bids_raw_response_->SerializeAsString();
+  std::string payload;
+  if (use_new_payload_encoding_) {
+    payload = EncodeGetBidsPayload(*get_bids_raw_response_);
+  } else {
+    payload = get_bids_raw_response_->SerializeAsString();
+  }
+
   PS_ASSIGN_OR_RETURN(auto aead_encrypt,
                       crypto_client_->AeadEncrypt(payload, hpke_secret_));
 

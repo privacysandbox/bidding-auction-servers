@@ -219,6 +219,8 @@ absl::Status RunServer() {
       code_fetch_proto.enable_report_result_url_generation();
   bool enable_report_win_url_generation =
       code_fetch_proto.enable_report_win_url_generation();
+  bool enable_private_aggregate_reporting =
+      code_fetch_proto.enable_private_aggregate_reporting();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   code_fetch_proto.set_enable_seller_and_buyer_udf_isolation(
@@ -286,7 +288,8 @@ absl::Status RunServer() {
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB),
       .default_code_version = default_code_version,
       .enable_seller_and_buyer_udf_isolation =
-          kEnableSellerAndBuyerUdfIsolation};
+          kEnableSellerAndBuyerUdfIsolation,
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),

@@ -31,6 +31,7 @@
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/score_ads_reactor_test_util.h"
@@ -2083,6 +2084,89 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
                 .interaction_reporting_urls()
                 .at(kTestInteractionEvent),
             kTestInteractionUrl);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       SellerReportingUrlsEmptyWhenParsingUdfResponseFails) {
+  MockCodeDispatchClient dispatcher;
+  int current_score = 0;
+  bool allowComponentAuction = false;
+  bool enable_adtech_code_logging = false;
+  bool enable_report_result_url_generation = true;
+  bool enable_debug_reporting = false;
+  RawRequest raw_request;
+  AdWithBidMetadata foo, bar;
+  GetTestAdWithBidFoo(foo);
+  GetTestAdWithBidBar(bar);
+  BuildRawRequest({foo, bar}, kTestSellerSignals, kTestAuctionSignals,
+                  kTestScoringSignals, kTestPublisherHostname, raw_request,
+                  enable_debug_reporting);
+  RawRequest raw_request_copy = raw_request;
+  absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
+  for (const auto& ad : raw_request_copy.ad_bids()) {
+    // Make sure id is tracked to render urls to stay unique.
+    id_to_ad.insert_or_assign(ad.render(), ad);
+  }
+  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&current_score, &allowComponentAuction, &score_to_ad,
+                       &id_to_ad, enable_adtech_code_logging,
+                       enable_debug_reporting](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportResultEntryFunction) == 0) {
+            response.emplace_back(kTestReportingResponseJson);
+          } else {
+            score_to_ad.insert_or_assign(current_score,
+                                         id_to_ad.at(request.id));
+            response.push_back(absl::StrFormat(
+                R"JSON(
+              {
+              "response": {
+                "desirability":%d,
+                "bid":%f,
+                "allowComponentAuction":%s
+              },
+              "logs":["test log"]
+              }
+              )JSON",
+                current_score++, 1 + (std::rand() % 20),
+                ((allowComponentAuction) ? "true" : "false")));
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           enable_debug_reporting, enable_adtech_code_logging);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = enable_debug_reporting,
+      .enable_adtech_code_logging = enable_adtech_code_logging,
+      .enable_report_result_url_generation =
+          enable_report_result_url_generation,
+      .enable_seller_and_buyer_udf_isolation = true};
+  const auto& response = ExecuteScoreAds(
+      raw_request, dispatcher, runtime_config, enable_debug_reporting);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  EXPECT_TRUE(scored_ad.win_reporting_urls()
+                  .top_level_seller_reporting_urls()
+                  .reporting_url()
+                  .empty());
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .top_level_seller_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            0);
 }
 
 TEST_F(ScoreAdsReactorTest,

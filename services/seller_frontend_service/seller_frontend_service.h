@@ -52,7 +52,7 @@ ParseSellerCloudPlarformMap(absl::string_view seller_platforms_map_json) {
 // by SellerFrontEndService.
 struct ClientRegistry {
   const ScoringSignalsAsyncProvider& scoring_signals_async_provider;
-  const ScoringAsyncClient& scoring;
+  ScoringAsyncClient& scoring;
   const ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>&
       buyer_factory;
   server_common::KeyFetcherManagerInterface& key_fetcher_manager_;

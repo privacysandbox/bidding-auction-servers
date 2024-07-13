@@ -18,6 +18,7 @@
 
 #include "include/grpcpp/support/status_code_enum.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
+#include "src/communication/encoding_utils.h"
 #include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "src/public/cpio/proto/public_key_service/v1/public_key_service.pb.h"
 
@@ -58,7 +59,6 @@ void KVAsyncGrpcClient::SendRpc(
           params->OnDone(status);
           return;
         }
-
         PS_VLOG(6) << "SendRPC completion status ok";
         auto plain_text_binary_http_response =
             FromObliviousHTTPResponse(*params->ResponseRef()->mutable_data(),
@@ -71,9 +71,18 @@ void KVAsyncGrpcClient::SendRpc(
               plain_text_binary_http_response.status().ToString()));
           return;
         }
-
+        auto deframed_req =
+            privacy_sandbox::server_common::DecodeRequestPayload(
+                *plain_text_binary_http_response);
+        if (!deframed_req.ok()) {
+          PS_LOG(ERROR) << "Unpadding response failed: "
+                        << deframed_req.status();
+          params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                      deframed_req.status().ToString()));
+          return;
+        }
         auto response = FromBinaryHTTP<GetValuesResponse>(
-            *plain_text_binary_http_response, /*from_json=*/false);
+            deframed_req->compressed_data, /*from_json=*/false);
         PS_VLOG(7) << "Retrieved proto response: " << response->DebugString();
         if (!response->has_single_partition()) {
           PS_LOG(ERROR)
@@ -97,7 +106,7 @@ absl::Status KVAsyncGrpcClient::ExecuteInternal(
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                             ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout, RequestConfig request_config) const {
+    absl::Duration timeout, RequestConfig request_config) {
   PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
   PS_ASSIGN_OR_RETURN(std::string binary_http_msg,
                       ToBinaryHTTP(*raw_request, /*to_json=*/false));

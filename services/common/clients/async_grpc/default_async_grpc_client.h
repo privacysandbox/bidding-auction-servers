@@ -78,7 +78,7 @@ class DefaultAsyncGrpcClient
                               ResponseMetadata) &&>
           on_done,
       absl::Duration timeout = kMaxClientTimeout,
-      RequestConfig request_config = {}) const override {
+      RequestConfig request_config = {}) override {
     PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     PS_VLOG(5) << "Encrypting request ...";
 
@@ -95,7 +95,7 @@ class DefaultAsyncGrpcClient
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout, RequestConfig request_config = {}) const {
+      absl::Duration timeout, RequestConfig request_config = {}) {
     auto secret_request = EncryptRequestWithHpke<Request>(
         plaintext, *crypto_client_, *key_fetcher_manager_, cloud_platform_);
     if (!secret_request.ok()) {

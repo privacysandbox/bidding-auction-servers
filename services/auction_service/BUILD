@@ -77,6 +77,7 @@ cc_library(
         "//services/auction_service/data:runtime_config",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/reporting/seller:seller_reporting_manager",
         "//services/auction_service/utils:proto_utils",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",

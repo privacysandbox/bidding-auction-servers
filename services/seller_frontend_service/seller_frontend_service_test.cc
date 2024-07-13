@@ -48,6 +48,7 @@ namespace {
 
 constexpr absl::string_view kSampleInterestGroupName = "interest_group";
 constexpr absl::string_view kSampleBuyer = "ad_tech_A.com";
+constexpr char kSampleComponentSeller[] = "caveatEmptor.ads";
 constexpr absl::string_view kSampleGenerationId =
     "a8098c1a-f86e-11da-bd1a-00112444be1e";
 constexpr absl::string_view kSamplePublisherName = "https://publisher.com";
@@ -58,6 +59,10 @@ constexpr absl::string_view kSampleAdRenderUrl =
     "https://adtechads.com/relevant_ad";
 constexpr absl::string_view kErrorIntendedForAdServer =
     "Error intended for ad server";
+constexpr char kValidBuyerSignals[] = R"JSON({"someKey":["some","value"]})JSON";
+// Currency codes are required to be three uppercase letters (e.g. "USD",
+// "YEN").
+constexpr char kInvalidSellerCurrencyCode[] = "dollars";
 
 using ::testing::_;
 using ::testing::HasSubstr;
@@ -299,8 +304,15 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
       GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
   request.mutable_auction_config()->clear_buyer_list();
-  // This is a valid seller currency and should cause no issues.
-  request.mutable_auction_config()->set_seller_currency("USD");
+
+  request.mutable_auction_config()->set_seller_currency(kUsdIsoCode);
+
+  SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config;
+  per_buyer_config.set_buyer_signals(kValidBuyerSignals);
+  per_buyer_config.set_buyer_currency(kUsdIsoCode);
+  request.mutable_auction_config()->mutable_per_buyer_config()->insert(
+      {std::string(kSampleBuyer), per_buyer_config});
+
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -339,8 +351,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   auto [protected_auction_input, request, encryption_context] =
       GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
-  // This is not a valid currency code and should fail validation.
-  request.mutable_auction_config()->set_seller_currency("dollars");
+  request.mutable_auction_config()->set_seller_currency(
+      kInvalidSellerCurrencyCode);
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -381,8 +393,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                           kSampleSellerDomain);
   SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config;
   per_buyer_config.set_buyer_signals(R"JSON({"someKey":["some","value"]})JSON");
-  // This is not a valid currency code and should fail validation.
-  per_buyer_config.set_buyer_currency("dollars");
+  per_buyer_config.set_buyer_currency(kInvalidSellerCurrencyCode);
   request.mutable_auction_config()->mutable_per_buyer_config()->insert(
       {std::string(kSampleBuyer), per_buyer_config});
   SelectAdResponse response;
@@ -390,6 +401,76 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   EXPECT_EQ(status.error_message(), kInvalidBuyerCurrency);
+}
+
+template <typename T>
+std::vector<AuctionResult> SetupComponentAuctionResults(
+    const T& protected_auction_input, SelectAdRequest& request, int num) {
+  std::vector<AuctionResult> component_auction_results;
+  // The key that will be returned by mock key fetcher.
+  auto key_id = std::to_string(HpkeKeyset{}.key_id);
+  for (int i = 0; i < num; ++i) {
+    AuctionResult ar = MakeARandomComponentAuctionResult(
+        protected_auction_input.generation_id(), kSellerOriginDomain);
+    auto* car = request.mutable_component_auction_results()->Add();
+    car->set_key_id(key_id);
+    car->set_auction_result_ciphertext(
+        FrameAndCompressProto(ar.SerializeAsString()));
+    component_auction_results.push_back(std::move(ar));
+  }
+  return component_auction_results;
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsInvalidInputOnInvalidExpectedComponentSellerCurrency) {
+  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+
+  server_common::MockKeyFetcherManager key_fetcher_manager;
+  EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  auto async_provider =
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
+  auto scoring = ScoringAsyncClientMock();
+  auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
+  ClientRegistry clients{async_provider,
+                         scoring,
+                         bfe_client,
+                         key_fetcher_manager,
+                         /*crypto_client_ptr = */ nullptr,
+                         std::move(async_reporter)};
+
+  SellerFrontEndService seller_frontend_service(&this->config_,
+                                                std::move(clients));
+  auto start_sfe_result = StartLocalService(&seller_frontend_service);
+  auto stub = CreateServiceStub<SellerFrontEnd>(start_sfe_result.port);
+
+  grpc::ClientContext context;
+  auto [protected_auction_input, request, encryption_context] =
+      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
+                                          kSampleSellerDomain);
+
+  const int num_component_auction_results = 1;
+  SetupComponentAuctionResults<TypeParam>(protected_auction_input, request,
+                                          num_component_auction_results);
+  ASSERT_EQ(request.component_auction_results_size(),
+            num_component_auction_results);
+
+  SelectAdRequest::AuctionConfig::PerComponentSellerConfig
+      per_component_seller_config;
+  per_component_seller_config.set_expected_currency(kInvalidSellerCurrencyCode);
+  request.mutable_auction_config()
+      ->mutable_per_component_seller_config()
+      ->insert(
+          {std::string(kSampleComponentSeller), per_component_seller_config});
+  SelectAdResponse response;
+  grpc::Status status = stub->SelectAd(&context, request, &response);
+
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.error_message(), kInvalidExpectedComponentSellerCurrency);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
@@ -461,8 +542,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   EXPECT_CALL(client_factory_mock, Get)
       .WillOnce([](absl::string_view buyer_ig_owner) { return nullptr; });
   EXPECT_CALL(client_factory_mock, Entries).WillRepeatedly([]() {
-    return std::vector<std::pair<
-        absl::string_view, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
+    return std::vector<std::pair<absl::string_view,
+                                 std::shared_ptr<BuyerFrontEndAsyncClient>>>();
   });
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)

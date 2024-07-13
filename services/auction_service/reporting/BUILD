@@ -53,6 +53,18 @@ cc_library(
 )
 
 cc_library(
+    name = "reporting_test_util",
+    srcs = ["reporting_test_util.cc"],
+    hdrs = ["reporting_test_util.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":reporting_helper",
+        ":reporting_response",
+        "@rapidjson",
+    ],
+)
+
+cc_library(
     name = "noiser_and_bucketer",
     srcs = ["noiser_and_bucketer.cc"],
     hdrs = ["noiser_and_bucketer.h"],

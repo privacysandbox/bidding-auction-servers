@@ -26,7 +26,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
 inline std::vector<std::shared_ptr<std::string>> GetReportResultInput(
     const std::string& seller_device_signals,
     const ReportingDispatchRequestConfig& dispatch_request_config,
@@ -72,6 +71,31 @@ inline DispatchRequest GetReportResultDispatchRequest(
           .handler_name = kReportResultEntryFunction,
           .input = GetReportResultInput(seller_device_signals_json,
                                         dispatch_request_config, request_data)};
+}
+
+// Collects log of the provided type into the output vector.
+inline void HandleUdfLogs(const rapidjson::Document& document,
+                          const std::string& log_type,
+                          RequestLogContext& log_context) {
+  auto LogUdf = [&log_context](absl::string_view adtech_log,
+                               absl::string_view prefix) {
+    if (!server_common::log::PS_VLOG_IS_ON(kUdfLog) &&
+        !log_context.is_debug_response()) {
+      return;
+    }
+    std::string log_str = absl::StrCat(prefix, adtech_log);
+    PS_VLOG(kUdfLog, log_context) << log_str;
+    log_context.SetEventMessageField(log_str);
+  };
+  auto log_it = document.FindMember(log_type.c_str());
+  if (log_it == document.MemberEnd()) {
+    return;
+  }
+  for (const auto& log : log_it->value.GetArray()) {
+    LogUdf(log.GetString(),
+           absl::StrCat(log_type,
+                        " from Seller's reportResult script execution:"));
+  }
 }
 }  // namespace
 rapidjson::Document GenerateSellerDeviceSignals(
@@ -157,4 +181,44 @@ absl::Status PerformReportResult(
                                  std::move(report_result_callback));
 }
 
+absl::StatusOr<ReportResultResponse> ParseReportResultResponse(
+    const ReportingDispatchRequestConfig& dispatch_request_config,
+    absl::string_view response, RequestLogContext& log_context) {
+  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
+  auto it = document.FindMember(kResponse);
+  if (it == document.MemberEnd()) {
+    return absl::Status(absl::StatusCode::kInternal,
+                        "Unexpected response from reportResult execution");
+  }
+  const auto& response_obj = it->value.GetObject();
+
+  ReportResultResponse report_result_response;
+  rapidjson::Value signals_for_winner;
+  PS_ASSIGN_IF_PRESENT(report_result_response.signals_for_winner, response_obj,
+                       kSignalsForWinner, GetString);
+  PS_ASSIGN_IF_PRESENT(report_result_response.report_result_url, response_obj,
+                       kReportResultUrl, GetString);
+  rapidjson::Value interaction_reporting_urls_map;
+  PS_ASSIGN_IF_PRESENT(interaction_reporting_urls_map, response_obj,
+                       kInteractionReportingUrlsWrapperResponse, GetObject);
+  for (rapidjson::Value::MemberIterator it =
+           interaction_reporting_urls_map.MemberBegin();
+       it != interaction_reporting_urls_map.MemberEnd(); ++it) {
+    const auto& [key, value] = *it;
+    auto [iterator, inserted] =
+        report_result_response.interaction_reporting_urls.try_emplace(
+            key.GetString(), value.GetString());
+    if (!inserted) {
+      PS_VLOG(kDispatch, log_context)
+          << "Error inserting interaction reporting url." << iterator->first
+          << " event already found with url:" << iterator->second;
+    }
+  }
+  if (dispatch_request_config.enable_adtech_code_logging) {
+    HandleUdfLogs(document, kReportingUdfLogs, log_context);
+    HandleUdfLogs(document, kReportingUdfErrors, log_context);
+    HandleUdfLogs(document, kReportingUdfWarnings, log_context);
+  }
+  return report_result_response;
+}
 }  // namespace privacy_sandbox::bidding_auction_servers

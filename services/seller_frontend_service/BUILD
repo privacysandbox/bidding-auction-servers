@@ -78,6 +78,7 @@ cc_library(
         "//services/seller_frontend_service/util:key_fetcher_utils",
         "//services/seller_frontend_service/util:proto_mapping_util",
         "//services/seller_frontend_service/util:startup_param_parser",
+        "//services/seller_frontend_service/util:validation_utils",
         "//services/seller_frontend_service/util:web_utils",
         "@aws_sdk_cpp//:core",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",

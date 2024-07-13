@@ -26,8 +26,23 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr char kTestSeller[] = "sample-seller";
+constexpr absl::string_view kSampleComponentSellerName =
+    "lincolnAdExchange.com";
 
 using ::testing::Contains;
+
+::google::protobuf::Map<
+    std::string, SelectAdRequest::AuctionConfig::PerComponentSellerConfig>
+MakePerComponentSellerConfigs(absl::string_view component_seller_name,
+                              const std::string& expected_currency) {
+  ::google::protobuf::Map<
+      std::string, SelectAdRequest::AuctionConfig::PerComponentSellerConfig>
+      per_component_seller_configs;
+  SelectAdRequest::AuctionConfig::PerComponentSellerConfig per_comp_sell_cfg;
+  per_comp_sell_cfg.set_expected_currency(expected_currency);
+  per_component_seller_configs[component_seller_name] = per_comp_sell_cfg;
+  return per_component_seller_configs;
+}
 
 TEST(ValidateEncryptedSelectAdRequest, ValidatesSingleSellerInput) {
   ErrorAccumulator error_accumulator;
@@ -232,18 +247,39 @@ TEST(ValidateComponentAuctionResultTest, ValidatesAuctionResult) {
   EXPECT_EQ(errors_map.find(ErrorCode::CLIENT_SIDE), errors_map.end());
 }
 
+TEST(ValidateComponentAuctionResultTest,
+     ValidatesAuctionResultWithMatchingCurrency) {
+  ErrorAccumulator error_accumulator;
+  std::string generation_id = MakeARandomString();
+  AuctionResult component_auction_result =
+      MakeARandomComponentAuctionResult(generation_id, kTestSeller);
+  component_auction_result.set_bid_currency(kUsdIsoCode);
+  component_auction_result.mutable_auction_params()->set_component_seller(
+      kSampleComponentSellerName);
+  bool output = ValidateComponentAuctionResult(
+      component_auction_result, generation_id, kTestSeller, error_accumulator,
+      MakePerComponentSellerConfigs(kSampleComponentSellerName, kUsdIsoCode));
+  ASSERT_TRUE(output);
+  const auto& errors_map =
+      error_accumulator.GetErrors(ErrorVisibility::AD_SERVER_VISIBLE);
+  EXPECT_EQ(errors_map.find(ErrorCode::CLIENT_SIDE), errors_map.end());
+}
+
 TEST(ValidateComponentAuctionResultTest, ReportsErrors) {
   ErrorAccumulator error_accumulator;
   std::string generation_id = MakeARandomString();
-  AuctionResult input = MakeARandomComponentAuctionResult(MakeARandomString(),
-                                                          MakeARandomString());
-  input.mutable_auction_params()->clear_component_seller();
-  input.set_ad_type(AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
-  input.mutable_win_reporting_urls()
+  AuctionResult component_auction_result = MakeARandomComponentAuctionResult(
+      MakeARandomString(), MakeARandomString());
+  component_auction_result.set_ad_type(
+      AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
+  component_auction_result.mutable_win_reporting_urls()
       ->mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(MakeARandomString());
-  bool output = ValidateComponentAuctionResult(input, generation_id,
-                                               kTestSeller, error_accumulator);
+  component_auction_result.set_bid_currency(kUsdIsoCode);
+  component_auction_result.mutable_auction_params()->clear_component_seller();
+  bool output = ValidateComponentAuctionResult(
+      component_auction_result, generation_id, kTestSeller, error_accumulator,
+      MakePerComponentSellerConfigs(kSampleComponentSellerName, kYenIsoCode));
   ASSERT_FALSE(output);
   const auto& errors =
       error_accumulator.GetErrors(ErrorVisibility::AD_SERVER_VISIBLE)
@@ -263,7 +299,71 @@ TEST(ValidateComponentAuctionResultTest, ReportsErrors) {
   EXPECT_THAT(errors, Contains(absl::StrFormat(
                           kErrorInAuctionResult,
                           kTopLevelWinReportingUrlsInAuctionResultError)));
+  // Despite a currency mismatch between what the top level seller expects and
+  // what the component seller expects, this error will not appear, because the
+  // top-level seller's expectations cannot be looked up without the component
+  // seller name in the auction results, which was cleared above.
+  EXPECT_THAT(
+      errors,
+      testing::Not(Contains(absl::StrFormat(
+          kErrorInAuctionResult, kMismatchedCurrencyInAuctionResultError))));
 }
 
+TEST(ValidateComponentAuctionResultTest,
+     ReportsErrorForMismatchedExpectedBidCurrency) {
+  ErrorAccumulator error_accumulator;
+  std::string generation_id = MakeARandomString();
+  AuctionResult component_auction_result =
+      MakeARandomComponentAuctionResult(generation_id, kTestSeller);
+  component_auction_result.set_bid_currency(kUsdIsoCode);
+  component_auction_result.mutable_auction_params()->set_component_seller(
+      kSampleComponentSellerName);
+  bool output = ValidateComponentAuctionResult(
+      component_auction_result, generation_id, kTestSeller, error_accumulator,
+      MakePerComponentSellerConfigs(kSampleComponentSellerName, kYenIsoCode));
+  ASSERT_FALSE(output);
+  const auto& errors =
+      error_accumulator.GetErrors(ErrorVisibility::AD_SERVER_VISIBLE)
+          .at(ErrorCode::CLIENT_SIDE);
+  EXPECT_THAT(errors, Contains(absl::StrFormat(
+                          kErrorInAuctionResult,
+                          kMismatchedCurrencyInAuctionResultError)));
+}
+
+TEST(ValidateComponentAuctionResultTest,
+     ReportsNoErrorForBidCurrencyEmptyInComponentAuctionResult) {
+  ErrorAccumulator error_accumulator;
+  std::string generation_id = MakeARandomString();
+  AuctionResult component_auction_result =
+      MakeARandomComponentAuctionResult(generation_id, kTestSeller);
+  component_auction_result.set_bid_currency("");
+  component_auction_result.mutable_auction_params()->set_component_seller(
+      kSampleComponentSellerName);
+  bool output = ValidateComponentAuctionResult(
+      component_auction_result, generation_id, kTestSeller, error_accumulator,
+      MakePerComponentSellerConfigs(kSampleComponentSellerName, kYenIsoCode));
+  ASSERT_TRUE(output);
+  const auto& errors_map =
+      error_accumulator.GetErrors(ErrorVisibility::AD_SERVER_VISIBLE);
+  EXPECT_EQ(errors_map.find(ErrorCode::CLIENT_SIDE), errors_map.end());
+}
+
+TEST(ValidateComponentAuctionResultTest,
+     ReportsNoErrorForNoExpectedBidCurrencyForComponentAuctionResult) {
+  ErrorAccumulator error_accumulator;
+  std::string generation_id = MakeARandomString();
+  AuctionResult component_auction_result =
+      MakeARandomComponentAuctionResult(generation_id, kTestSeller);
+  component_auction_result.set_bid_currency(kYenIsoCode);
+  component_auction_result.mutable_auction_params()->set_component_seller(
+      kSampleComponentSellerName);
+  bool output = ValidateComponentAuctionResult(
+      component_auction_result, generation_id, kTestSeller, error_accumulator,
+      MakePerComponentSellerConfigs(kSampleComponentSellerName, ""));
+  ASSERT_TRUE(output);
+  const auto& errors_map =
+      error_accumulator.GetErrors(ErrorVisibility::AD_SERVER_VISIBLE);
+  EXPECT_EQ(errors_map.find(ErrorCode::CLIENT_SIDE), errors_map.end());
+}
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

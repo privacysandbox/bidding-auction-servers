@@ -80,6 +80,7 @@ cc_library(
     ],
     deps = [
         "//services/common/loggers:request_log_context",
+        "//services/common/metric:server_definition",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/status:statusor",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",

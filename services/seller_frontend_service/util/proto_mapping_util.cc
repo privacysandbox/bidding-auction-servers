@@ -394,10 +394,13 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
         << auction_result->auction_params().component_seller();
     PS_VLOG(kNoisyInfo, log_context)
         << "Bidding group size: " << auction_result->bidding_groups().size();
+
     // Add errors from AuctionResult to error_accumulator in
     // ValidateComponentAuctionResult.
-    if (!ValidateComponentAuctionResult(*auction_result, request_generation_id,
-                                        seller_domain, error_accumulator)) {
+    if (!ValidateComponentAuctionResult(
+            *auction_result, request_generation_id, seller_domain,
+            error_accumulator,
+            request->auction_config().per_component_seller_config())) {
       PS_LOG(ERROR, log_context)
           << "Auction result skipped with failed validation for: "
           << auction_result->auction_params().component_seller();

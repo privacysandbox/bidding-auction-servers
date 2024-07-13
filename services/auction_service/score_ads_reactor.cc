@@ -30,6 +30,7 @@
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/auction_service/reporting/seller/seller_reporting_manager.h"
 #include "services/auction_service/utils/proto_utils.h"
 #include "services/common/util/auction_scope_util.h"
 #include "services/common/util/json_util.h"
@@ -256,7 +257,9 @@ ScoreAdsReactor::ScoreAdsReactor(
       enable_report_win_url_generation_(
           runtime_config.enable_report_win_url_generation &&
           auction_scope_ !=
-              AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
+              AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER),
+      enable_seller_and_buyer_code_isolation_(
+          runtime_config.enable_seller_and_buyer_udf_isolation) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
@@ -547,47 +550,60 @@ void ScoreAdsReactor::Execute() {
 void ScoreAdsReactor::PerformReporting(
     const ScoreAdsResponse::AdScore& winning_ad_score, absl::string_view id) {
   if (auto ad_it = ad_data_.find(id); ad_it != ad_data_.end()) {
-    const auto& ad = ad_it->second;
-    BuyerReportingMetadata buyer_reporting_metadata;
-    if (enable_report_win_url_generation_) {
-      buyer_reporting_metadata = {
-          .buyer_signals = raw_request_.per_buyer_signals().at(
-              winning_ad_score.interest_group_owner()),
-          .join_count = ad->join_count(),
-          .recency = ad->recency(),
-          .modeling_signals = ad->modeling_signals(),
-          .seller = raw_request_.seller(),
-          .interest_group_name = winning_ad_score.interest_group_name(),
-          .ad_cost = ad->ad_cost()};
-      if (!ad->buyer_reporting_id().empty()) {
-        raw_response_.mutable_ad_score()->set_buyer_reporting_id(
-            ad->buyer_reporting_id());
-        buyer_reporting_metadata.buyer_reporting_id = ad->buyer_reporting_id();
+    if (enable_seller_and_buyer_code_isolation_) {
+      DispatchReportResultRequest(winning_ad_score,
+                                  BuildAuctionConfig(raw_request_));
+    } else {
+      const auto& ad = ad_it->second;
+      BuyerReportingMetadata buyer_reporting_metadata;
+      if (enable_report_win_url_generation_) {
+        buyer_reporting_metadata = {
+            .buyer_signals = raw_request_.per_buyer_signals().at(
+                winning_ad_score.interest_group_owner()),
+            .join_count = ad->join_count(),
+            .recency = ad->recency(),
+            .modeling_signals = ad->modeling_signals(),
+            .seller = raw_request_.seller(),
+            .interest_group_name = winning_ad_score.interest_group_name(),
+            .ad_cost = ad->ad_cost()};
+        if (!ad->buyer_reporting_id().empty()) {
+          raw_response_.mutable_ad_score()->set_buyer_reporting_id(
+              ad->buyer_reporting_id());
+          buyer_reporting_metadata.buyer_reporting_id =
+              ad->buyer_reporting_id();
+        }
       }
+      DispatchReportingRequestForPA(id, winning_ad_score,
+                                    BuildAuctionConfig(raw_request_),
+                                    buyer_reporting_metadata);
     }
-    DispatchReportingRequestForPA(id, winning_ad_score,
-                                  BuildAuctionConfig(raw_request_),
-                                  buyer_reporting_metadata);
 
   } else if (auto protected_app_signals_ad_it =
                  protected_app_signals_ad_data_.find(id);
              protected_app_signals_ad_it !=
              protected_app_signals_ad_data_.end()) {
-    const auto& ad = protected_app_signals_ad_it->second;
-    BuyerReportingMetadata buyer_reporting_metadata;
-    if (enable_report_win_url_generation_) {
-      buyer_reporting_metadata = {
-          .buyer_signals = raw_request_.per_buyer_signals().at(
-              winning_ad_score.interest_group_owner()),
-          .modeling_signals = ad->modeling_signals(),
-          .seller = raw_request_.seller(),
-          .interest_group_name = winning_ad_score.interest_group_name(),
-          .ad_cost = ad->ad_cost()};
+    if (!enable_seller_and_buyer_code_isolation_) {
+      const auto& ad = protected_app_signals_ad_it->second;
+      BuyerReportingMetadata buyer_reporting_metadata;
+      if (enable_report_win_url_generation_) {
+        buyer_reporting_metadata = {
+            .buyer_signals = raw_request_.per_buyer_signals().at(
+                winning_ad_score.interest_group_owner()),
+            .modeling_signals = ad->modeling_signals(),
+            .seller = raw_request_.seller(),
+            .interest_group_name = winning_ad_score.interest_group_name(),
+            .ad_cost = ad->ad_cost()};
+      }
+      DispatchReportingRequestForPAS(
+          winning_ad_score, BuildAuctionConfig(raw_request_),
+          buyer_reporting_metadata, ad->egress_payload(),
+          ad->temporary_unlimited_egress_payload());
+    } else {
+      PS_LOG(ERROR, log_context_) << "Reporting with seller and buyer udf "
+                                     "isolation is unavailable for PAS";
+      FinishWithStatus(
+          grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     }
-    DispatchReportingRequestForPAS(
-        winning_ad_score, BuildAuctionConfig(raw_request_),
-        buyer_reporting_metadata, ad->egress_payload(),
-        ad->temporary_unlimited_egress_payload());
   } else {
     PS_LOG(ERROR, log_context_)
         << "Following id didn't map to any ProtectedAudience or "
@@ -1097,6 +1113,55 @@ void ScoreAdsReactor::ReportingCallback(
   EncryptAndFinishOK();
 }
 
+void ScoreAdsReactor::ReportResultCallback(
+    const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
+  if (PS_VLOG_IS_ON(2)) {
+    for (const auto& dispatch_response : responses) {
+      PS_VLOG(kDispatch, log_context_)
+          << "Reporting V8 Response: " << dispatch_response.status();
+      if (dispatch_response.ok()) {
+        PS_VLOG(kDispatch, log_context_) << dispatch_response.value().resp;
+      }
+    }
+  }
+  for (const auto& response : responses) {
+    if (response.ok()) {
+      absl::StatusOr<ReportResultResponse> report_result_response =
+          ParseReportResultResponse(reporting_dispatch_request_config_,
+                                    response.value().resp, log_context_);
+      if (!report_result_response.ok()) {
+        PS_LOG(ERROR, log_context_)
+            << "Failed to parse report result response from Roma ",
+            report_result_response.status().ToString(
+                absl::StatusToStringMode::kWithEverything);
+        continue;
+      }
+      raw_response_.mutable_ad_score()
+          ->mutable_win_reporting_urls()
+          ->mutable_top_level_seller_reporting_urls()
+          ->set_reporting_url(report_result_response->report_result_url);
+      for (const auto& [event, interactionReportingUrl] :
+           report_result_response->interaction_reporting_urls) {
+        raw_response_.mutable_ad_score()
+            ->mutable_win_reporting_urls()
+            ->mutable_top_level_seller_reporting_urls()
+            ->mutable_interaction_reporting_urls()
+            ->try_emplace(event, interactionReportingUrl);
+      }
+    } else {
+      LogIfError(metric_context_
+                     ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
+                         1, metric::kAuctionScoreAdsDispatchResponseError));
+      PS_LOG(WARNING, log_context_)
+          << "Invalid execution (possibly invalid input): "
+          << response.status().ToString(
+                 absl::StatusToStringMode::kWithEverything);
+    }
+  }
+  // Todo(b/299987356): Execute reportWin()
+  EncryptAndFinishOK();
+}
+
 void ScoreAdsReactor::PerformDebugReporting(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
   if (auction_scope_ == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
@@ -1220,6 +1285,45 @@ void ScoreAdsReactor::DispatchReportingRequestForPA(
   dispatch_request_data.component_reporting_metadata.modified_bid_currency =
       winning_ad_score.bid_currency();
   DispatchReportingRequest(dispatch_request_data);
+}
+
+void ScoreAdsReactor::DispatchReportResultRequest(
+    const ScoreAdsResponse::AdScore& winning_ad_score,
+    const std::shared_ptr<std::string>& auction_config) {
+  reporting_dispatch_request_config_ = {
+      .enable_report_win_url_generation = enable_report_win_url_generation_,
+      .enable_protected_app_signals = enable_protected_app_signals_,
+      .enable_report_win_input_noising = enable_report_win_input_noising_,
+      .enable_adtech_code_logging = enable_adtech_code_logging_};
+
+  post_auction_signals_ = GeneratePostAuctionSignals(
+      winning_ad_score, raw_request_.seller_currency());
+  SellerReportingDispatchRequestData dispatch_request_data = {
+      .auction_config = auction_config,
+      .post_auction_signals = post_auction_signals_,
+      .publisher_hostname = raw_request_.publisher_hostname(),
+      .log_context = log_context_};
+  dispatch_request_data.component_reporting_metadata.modified_bid_currency =
+      winning_ad_score.bid_currency();
+  rapidjson::Document seller_device_signals =
+      GenerateSellerDeviceSignals(dispatch_request_data);
+  absl::Status dispatched = PerformReportResult(
+      reporting_dispatch_request_config_, seller_device_signals,
+      dispatch_request_data,
+      [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+        ReportResultCallback(result);
+      },
+      dispatcher_);
+  if (!dispatched.ok()) {
+    PS_VLOG(kDispatch, log_context_)
+        << "Performed report result for failed" << dispatched.message();
+    EncryptAndFinishOK();
+  }
+  if (PS_VLOG_IS_ON(kNoisyInfo)) {
+    PS_VLOG(kNoisyInfo, log_context_)
+        << "Performed report result for seller. Winning ad:"
+        << post_auction_signals_.winning_ad_render_url;
+  }
 }
 
 void ScoreAdsReactor::DispatchReportingRequestForPAS(

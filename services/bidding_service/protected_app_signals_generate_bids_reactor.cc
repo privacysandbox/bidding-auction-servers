@@ -119,20 +119,14 @@ ProtectedAppSignalsGenerateBidsReactor::CreateAdsRetrievalRequest(
     ad_render_ids_list =
         std::vector<std::string>(ad_render_ids->begin(), ad_render_ids->end());
   }
-  auto ads_retrieval_request =
-      std::make_unique<kv_server::v2::GetValuesRequest>(
-          kv_server::application_pas::BuildRetrievalRequest(
-              prepare_data_for_ads_retrieval_response,
-              {{kClientIp, metadata_[kClientIpKey]},
-               {kAcceptLanguage, metadata_[kAcceptLanguageKey]},
-               {kUserAgent, metadata_[kUserAgentKey]}},
-              raw_request_.buyer_signals(), std::move(ad_render_ids_list)));
-  // Set consented debug config.
-  if (raw_request_.has_consented_debug_config()) {
-    *ads_retrieval_request->mutable_consented_debug_config() =
-        raw_request_.consented_debug_config();
-  }
-  return ads_retrieval_request;
+  return std::make_unique<kv_server::v2::GetValuesRequest>(
+      kv_server::application_pas::BuildRetrievalRequest(
+          raw_request_.log_context(), raw_request_.consented_debug_config(),
+          prepare_data_for_ads_retrieval_response,
+          {{kClientIp, metadata_[kClientIpKey]},
+           {kAcceptLanguage, metadata_[kAcceptLanguageKey]},
+           {kUserAgent, metadata_[kUserAgentKey]}},
+          raw_request_.buyer_signals(), std::move(ad_render_ids_list)));
 }
 
 std::unique_ptr<kv_server::v2::GetValuesRequest>
@@ -142,12 +136,8 @@ ProtectedAppSignalsGenerateBidsReactor::CreateKVLookupRequest(
       std::vector<std::string>(ad_render_ids.begin(), ad_render_ids.end());
   auto request = std::make_unique<kv_server::v2::GetValuesRequest>(
       kv_server::application_pas::BuildLookupRequest(
+          raw_request_.log_context(), raw_request_.consented_debug_config(),
           std::move(ad_render_ids_list)));
-  // Set consented debug config.
-  if (raw_request_.has_consented_debug_config()) {
-    *request->mutable_consented_debug_config() =
-        raw_request_.consented_debug_config();
-  }
   PS_VLOG(8) << __func__
              << " Created KV lookup request: " << request->DebugString();
   return request;

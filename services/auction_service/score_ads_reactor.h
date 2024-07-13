@@ -167,7 +167,11 @@ class ScoreAdsReactor
       const ReportingDispatchRequestData& dispatch_request_data);
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
-
+  // Dispatches request to reportResult() udf with seller and buyer udf
+  // isolation.
+  void DispatchReportResultRequest(
+      const ScoreAdsResponse::AdScore& winning_ad_score,
+      const std::shared_ptr<std::string>& auction_config);
   // Publishes metrics and Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);
 
@@ -175,6 +179,10 @@ class ScoreAdsReactor
   void EncryptAndFinishOK();
 
   void ReportingCallback(
+      const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+
+  // Function called after reportResult udf execution.
+  void ReportResultCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
   // Creates and populates dispatch requests using AdWithBidMetadata objects
@@ -267,6 +275,9 @@ class ScoreAdsReactor
   // Specifies which verison of scoreAd to use for this request.
   absl::string_view code_version_;
   bool enable_report_win_url_generation_;
+  bool enable_seller_and_buyer_code_isolation_;
+  ReportingDispatchRequestConfig reporting_dispatch_request_config_;
+  PostAuctionSignals post_auction_signals_;
   google::protobuf::RepeatedPtrField<std::string>
   GetEmptyAdComponentRenderUrls() {
     static google::protobuf::RepeatedPtrField<std::string>

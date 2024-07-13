@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
 
 package(default_visibility = [
     "//services/common/clients/buyer_frontend_server:__pkg__",
@@ -156,8 +157,10 @@ cc_library(
     name = "key_fetcher_utils",
     srcs = ["key_fetcher_utils.cc"],
     hdrs = ["key_fetcher_utils.h"],
+    local_defines = IS_PROD_BUILD_DEFINES,
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common:public_key_url_allowlist",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/util:json_util",
@@ -173,9 +176,15 @@ cc_test(
     name = "key_fetcher_utils_test",
     srcs = [
         "key_fetcher_utils_test.cc",
-    ],
+    ] + select({
+        "//:non_prod_build": ["key_fetcher_utils_non_prod_test.cc"],
+        "//conditions:default": ["key_fetcher_utils_prod_test.cc"],
+    }),
+    local_defines = IS_PROD_BUILD_DEFINES,
     deps = [
         ":key_fetcher_utils",
+        "//services/common:public_key_url_allowlist",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

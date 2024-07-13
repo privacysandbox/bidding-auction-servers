@@ -41,11 +41,12 @@ export SERVER_START_CMD=$(cat << END
       "enableSellerDebugUrlGeneration": true,
       "enableReportResultUrlGeneration": true,
       "enableReportWinUrlGeneration": true,
+      "enablePrivateAggregateReporting": false,
       "buyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"${BUYER_REPORT_WIN_SCRIPT}"},
       "protectedAppSignalsBuyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js"}
     }' \
---enable_otel_based_logging="true"\
---consented_debug_token="test_token"\
+--enable_otel_based_logging="true" \
+--consented_debug_token="test_token" \
 --ps_verbosity=2 \
 --enable_protected_audience="true" \
 --auction_tcmalloc_background_release_rate_bytes_per_second=4096 \

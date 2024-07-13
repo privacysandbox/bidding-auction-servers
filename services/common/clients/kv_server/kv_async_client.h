@@ -78,7 +78,7 @@ class KVAsyncGrpcClient
                ResponseMetadata) &&>
           on_done,
       absl::Duration timeout = kMaxTimeout,
-      RequestConfig request_config = {}) const override;
+      RequestConfig request_config = {}) override;
 
  protected:
   void SendRpc(ObliviousHttpRequestUptr oblivious_http_context,

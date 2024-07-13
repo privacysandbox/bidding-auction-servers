@@ -76,7 +76,7 @@ class BuyerFrontEndAsyncClientStub : public BuyerFrontEndAsyncClient {
                                   GetBidsResponse::GetBidsRawResponse>>,
                               ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout, RequestConfig request_config) const override;
+      absl::Duration timeout, RequestConfig request_config) override;
 
  private:
   const std::string ad_render_url_;
@@ -103,7 +103,7 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
                                 GetBidsResponse::GetBidsRawResponse>>,
                             ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout, RequestConfig request_config) const {
+    absl::Duration timeout, RequestConfig request_config) {
   auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   switch (buyer_mock_type_) {
     case BuyerMockType::DEBUG_REPORTING: {
@@ -154,7 +154,7 @@ class ScoringClientStub
                                   ScoreAdsResponse::ScoreAdsRawResponse>>,
                               ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout, RequestConfig request_config) const override;
+      absl::Duration timeout, RequestConfig request_config) override;
 };
 
 absl::Status ScoringClientStub::Execute(
@@ -173,7 +173,7 @@ absl::Status ScoringClientStub::ExecuteInternal(
                                 ScoreAdsResponse::ScoreAdsRawResponse>>,
                             ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout, RequestConfig request_config) const {
+    absl::Duration timeout, RequestConfig request_config) {
   ScoreAdsResponse::ScoreAdsRawResponse response;
   float i = 1;
   // Last bid wins.
@@ -206,11 +206,11 @@ class BuyerFrontEndAsyncClientFactoryStub
       const ProtectedAuctionInput& protected_auction_input,
       const BuyerMockType buyer_mock_type);
 
-  std::shared_ptr<const BuyerFrontEndAsyncClient> Get(
+  std::shared_ptr<BuyerFrontEndAsyncClient> Get(
       absl::string_view client_key) const override;
 
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
   Entries() const override;
 
  private:
@@ -236,16 +236,16 @@ BuyerFrontEndAsyncClientFactoryStub::BuyerFrontEndAsyncClientFactoryStub(
   }
 }
 
-std::shared_ptr<const BuyerFrontEndAsyncClient>
+std::shared_ptr<BuyerFrontEndAsyncClient>
 BuyerFrontEndAsyncClientFactoryStub::Get(absl::string_view client_key) const {
   return buyer_clients_.at(client_key);
 }
 
-std::vector<std::pair<absl::string_view,
-                      std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+std::vector<
+    std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
 BuyerFrontEndAsyncClientFactoryStub::Entries() const {
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& [key, value] : buyer_clients_) {
     entries.emplace_back(key, value);

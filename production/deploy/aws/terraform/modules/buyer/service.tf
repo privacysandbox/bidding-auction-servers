@@ -123,28 +123,30 @@ module "bidding_mesh_service" {
   # Only create if using service mesh
   count = var.use_service_mesh ? 1 : 0
 
-  source                               = "../../services/backend_mesh_service"
-  operator                             = var.operator
-  environment                          = var.environment
-  service                              = "bidding"
-  app_mesh_id                          = module.buyer_app_mesh[0].app_mesh_id
-  app_mesh_name                        = module.buyer_app_mesh[0].app_mesh_name
-  root_domain                          = var.root_domain
-  cloud_map_private_dns_namespace_id   = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_id
-  cloud_map_private_dns_namespace_name = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_name
-  server_instance_role_name            = module.iam_roles.instance_role_name
-  business_org_for_cert_auth           = var.business_org_for_cert_auth
-  country_for_cert_auth                = var.country_for_cert_auth
-  state_for_cert_auth                  = var.state_for_cert_auth
-  locality_for_cert_auth               = var.locality_for_cert_auth
-  org_unit_for_cert_auth               = var.org_unit_for_cert_auth
-  service_port                         = var.server_port
-  root_domain_zone_id                  = var.root_domain_zone_id
-  healthcheck_interval_sec             = var.healthcheck_interval_sec
-  healthcheck_timeout_sec              = var.healthcheck_timeout_sec
-  healthcheck_healthy_threshold        = var.healthcheck_healthy_threshold
-  healthcheck_unhealthy_threshold      = var.healthcheck_unhealthy_threshold
-  use_tls_with_mesh                    = var.use_tls_with_mesh
+  source                                      = "../../services/backend_mesh_service"
+  operator                                    = var.operator
+  environment                                 = var.environment
+  service                                     = "bidding"
+  app_mesh_id                                 = module.buyer_app_mesh[0].app_mesh_id
+  app_mesh_name                               = module.buyer_app_mesh[0].app_mesh_name
+  root_domain                                 = var.root_domain
+  cloud_map_private_dns_namespace_id          = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_id
+  cloud_map_private_dns_namespace_name        = module.buyer_app_mesh[0].cloud_map_private_dns_namespace_name
+  server_instance_role_name                   = module.iam_roles.instance_role_name
+  business_org_for_cert_auth                  = var.business_org_for_cert_auth
+  country_for_cert_auth                       = var.country_for_cert_auth
+  state_for_cert_auth                         = var.state_for_cert_auth
+  locality_for_cert_auth                      = var.locality_for_cert_auth
+  org_unit_for_cert_auth                      = var.org_unit_for_cert_auth
+  service_port                                = var.server_port
+  root_domain_zone_id                         = var.root_domain_zone_id
+  healthcheck_interval_sec                    = var.healthcheck_interval_sec
+  healthcheck_timeout_sec                     = var.healthcheck_timeout_sec
+  healthcheck_healthy_threshold               = var.healthcheck_healthy_threshold
+  healthcheck_unhealthy_threshold             = var.healthcheck_unhealthy_threshold
+  use_tls_with_mesh                           = var.use_tls_with_mesh
+  kv_server_virtual_service_name              = var.kv_server_virtual_service_name
+  ad_retrieval_kv_server_virtual_service_name = var.ad_retrieval_kv_server_virtual_service_name
 }
 
 module "load_balancing_bidding" {

@@ -57,6 +57,8 @@ struct AuctionServiceRuntimeConfig {
   std::string default_code_version = kScoreAdBlobVersion;
   // Temporary flag to enable seller and buyer udf isolation.
   bool enable_seller_and_buyer_udf_isolation = false;
+  // Enables private aggregate reporting.
+  bool enable_private_aggregate_reporting = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

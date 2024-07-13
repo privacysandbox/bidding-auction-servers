@@ -327,7 +327,7 @@ GetSelectAdRequestAndClientRegistryForTest(
     ClientType client_type, std::optional<float> buyer_bid,
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
         scoring_signals_provider,
-    const ScoringAsyncClientMock& scoring_client,
+    ScoringAsyncClientMock& scoring_client,
     const BuyerFrontEndAsyncClientFactoryMock&
         buyer_front_end_async_client_factory_mock,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,

@@ -22,6 +22,7 @@
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
+#include "services/common/chaffing/transcoding_utils.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -289,6 +290,46 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
   get_bids_unary_reactor.Execute();
 }
 
+TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
+  absl::SetFlag(&FLAGS_enable_chaffing, true);
+
+  EXPECT_CALL(bidding_client_mock_, ExecuteInternal).Times(0);
+
+  GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_is_chaff(true);
+  raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
+  GetBidsRequest request;
+  request.set_request_ciphertext(EncodeGetBidsPayload(raw_request, 999));
+  request.set_key_id(MakeARandomString());
+
+  server_common::telemetry::TelemetryConfig config_proto;
+  config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+  metric::MetricContextMap<GetBidsRequest>(
+      server_common::telemetry::BuildDependentConfig(config_proto))
+      ->Get(&request);
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+
+  ASSERT_FALSE(response_.response_ciphertext().empty());
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+
+  ASSERT_TRUE(decoded_payload.ok());
+  // For now, we don't support any version/compression bytes besides 0.
+  EXPECT_EQ(decoded_payload->version_and_compression_num, 0);
+  // Empty proto is sent back; the payload should be all padding.
+  EXPECT_EQ(decoded_payload->get_bids_proto.ByteSizeLong(), 0);
+  // Verify the response has the expected padding.
+  EXPECT_GT(response_.response_ciphertext().length(),
+            kMinChaffResponseSizeBytes);
+}
+
 class GetProtectedAppSignalsTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -304,7 +345,8 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     key_fetcher_manager_ =
-        CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
+        CreateKeyFetcherManager(config_client,
+                                /*public_key_fetcher=*/nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
 
     server_common::log::PS_VLOG_IS_ON(0, 10);

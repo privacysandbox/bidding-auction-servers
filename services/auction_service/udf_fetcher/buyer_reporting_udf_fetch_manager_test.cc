@@ -33,8 +33,8 @@ namespace {
 struct BuyerConfig {
   std::string pa_buyer_origin = "http://PABuyerOrigin.com";
   std::string pas_buyer_origin = "http://PASBuyerOrigin.com";
-  std::string pa_buyer_udf_url = "foo.com";
-  std::string pas_buyer_udf_url = "bar.com";
+  std::string pa_buyer_udf_url = "foo.com/";
+  std::string pas_buyer_udf_url = "bar.com/";
   bool enable_report_win_url_generation = true;
 };
 
@@ -63,24 +63,41 @@ GetTestSellerUdfConfigWithNoUrlsConfigured(const BuyerConfig& buyer_config) {
   return udf_config;
 }
 
+absl::flat_hash_map<std::string, absl::StatusOr<std::string>>
+GetValidResponseHeaders() {
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>> output;
+  output.try_emplace(kUdfRequiredResponseHeader,
+                     absl::StatusOr<std::string>("true"));
+  return output;
+}
+
+absl::StatusOr<HTTPResponse> GetValidUdfResponse(std::string body,
+                                                 std::string url) {
+  return absl::StatusOr<HTTPResponse>(HTTPResponse{
+      .body = std::move(body),
+      .headers = GetValidResponseHeaders(),
+      .final_url = std::move(url),
+  });
+}
+
 TEST(BuyerReportingUdfFetchManagerTest,
      LoadsHttpFetcherResultIntoV8Dispatcher) {
-  std::string expected_pa_version = "pa_http://PABuyerOrigin.com";
-  std::string expected_pas_version = "pas_http://PASBuyerOrigin.com";
-  std::vector<absl::StatusOr<std::string>> url_response = {
+  BuyerConfig buyer_config;
+  std::string expected_pa_version = "pa_foo.com";
+  std::string expected_pas_version = "pas_bar.com";
+  absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
       R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals){
-})JS_CODE",
+                              directFromSellerSignals){})JS_CODE",
+      buyer_config.pa_buyer_udf_url);
+  absl::StatusOr<HTTPResponse> expected_pas_response = GetValidUdfResponse(
       R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals){
-})JS_CODE"};
+                              directFromSellerSignals){})JS_CODE",
+      buyer_config.pas_buyer_udf_url);
 
   std::string expected_wrapped_code =
       R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals){
-})JS_CODE";
+                              directFromSellerSignals){})JS_CODE";
 
-  BuyerConfig buyer_config;
   auction_service::SellerCodeFetchConfig udf_config =
       GetTestSellerUdfConfig(buyer_config);
   MockV8Dispatcher dispatcher;
@@ -91,16 +108,24 @@ TEST(BuyerReportingUdfFetchManagerTest,
         return expected_wrapped_code;
       };
   absl::BlockingCounter done(2);
-  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
-      .WillOnce([&buyer_config, &url_response](
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&buyer_config, &expected_pa_response, &expected_pas_response](
                     const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout,
                     absl::AnyInvocable<void(
-                        std::vector<absl::StatusOr<std::string>>)&&>
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
                         done_callback) {
         EXPECT_EQ(buyer_config.pa_buyer_udf_url, requests[0].url);
         EXPECT_EQ(buyer_config.pas_buyer_udf_url, requests[1].url);
-        std::move(done_callback)(url_response);
+        EXPECT_TRUE(requests[0].redirect_config.strict_http);
+        EXPECT_TRUE(requests[1].redirect_config.strict_http);
+        EXPECT_TRUE(requests[0].redirect_config.get_redirect_url);
+        EXPECT_TRUE(requests[1].redirect_config.get_redirect_url);
+        ASSERT_EQ(requests[0].include_headers.size(), 1);
+        EXPECT_EQ(requests[0].include_headers[0], kUdfRequiredResponseHeader);
+        ASSERT_EQ(requests[1].include_headers.size(), 1);
+        EXPECT_EQ(requests[1].include_headers[0], kUdfRequiredResponseHeader);
+        std::move(done_callback)({expected_pa_response, expected_pas_response});
       });
 
   EXPECT_CALL(dispatcher, LoadSync)
@@ -139,7 +164,47 @@ TEST(BuyerReportingUdfFetchManagerTest,
   EXPECT_EQ(protected_app_signals_code_blob_per_origin.at(
                 buyer_config.pas_buyer_origin),
             expected_wrapped_code);
-  code_fetcher_manager.End();
+}
+
+TEST(BuyerReportingUdfFetchManagerTest, StripsUrlBeforeFetching) {
+  BuyerConfig buyer_config;
+  std::string expected_pa_url = "foo.com/foo.js";
+  buyer_config.pa_buyer_udf_url = "foo.com/foo.js?foo=bar#reportPA";
+  buyer_config.pas_buyer_udf_url = "";
+  absl::StatusOr<HTTPResponse> expected_pa_response =
+      GetValidUdfResponse("{}", buyer_config.pa_buyer_udf_url);
+
+  auction_service::SellerCodeFetchConfig udf_config =
+      GetTestSellerUdfConfig(buyer_config);
+  MockV8Dispatcher dispatcher;
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  auto executor = std::make_unique<MockExecutor>();
+  WrapSingleCodeBlobForDispatch buyer_code_wrapper =
+      [](const std::string& adtech_code_blob) { return adtech_code_blob; };
+  absl::BlockingCounter done(1);
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&expected_pa_url, &expected_pa_response](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                        done_callback) {
+        EXPECT_EQ(expected_pa_url, requests[0].url);
+        std::move(done_callback)({expected_pa_response});
+      });
+
+  EXPECT_CALL(dispatcher, LoadSync)
+      .WillOnce([&done](std::string_view version, absl::string_view js) {
+        done.DecrementCount();
+        return absl::OkStatus();
+      });
+
+  BuyerReportingUdfFetchManager code_fetcher_manager(
+      &udf_config, curl_http_fetcher.get(), executor.get(),
+      std::move(buyer_code_wrapper), &dispatcher);
+  auto status = code_fetcher_manager.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
 }
 
 TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenFlagsTurnedOff) {
@@ -173,7 +238,6 @@ TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenFlagsTurnedOff) {
               .GetProtectedAppSignalsReportingByOriginForTesting();
   EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
   EXPECT_EQ(protected_app_signals_code_blob_per_origin.size(), 0);
-  code_fetcher_manager.End();
 }
 
 TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenNoFetchUrlConfigured) {
@@ -208,24 +272,20 @@ TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenNoFetchUrlConfigured) {
               .GetProtectedAppSignalsReportingByOriginForTesting();
   EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
   EXPECT_EQ(protected_app_signals_code_blob_per_origin.size(), 0);
-  code_fetcher_manager.End();
 }
 
 TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
-  std::string expected_pa_version = "pa_http://PABuyerOrigin.com";
-  std::string expected_pas_version = "pas_http://PASBuyerOrigin.com";
-  std::vector<absl::StatusOr<std::string>> url_response = {
-      R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals){
-})JS_CODE",
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
+  std::vector<absl::StatusOr<HTTPResponse>> url_response = {
+      absl::StatusOr<HTTPResponse>(
+          HTTPResponse{.body = R"JS_CODE(function reportWin(){})JS_CODE",
+                       .headers = GetValidResponseHeaders(),
+                       .final_url = "http://PABuyerOrigin.com"}),
       absl::Status(
           absl::StatusCode::kInternal,
           "Error fetching and loading one or more buyer's reportWin() udf.")};
-
-  std::string expected_wrapped_code =
-      R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals){
-})JS_CODE";
+  std::string expected_wrapped_code = R"JS_CODE(function reportWin(){})JS_CODE";
 
   BuyerConfig buyer_config;
   auction_service::SellerCodeFetchConfig udf_config =
@@ -238,17 +298,13 @@ TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
         return expected_wrapped_code;
       };
   absl::Notification fetch_done;
-  EXPECT_CALL(*curl_http_fetcher, FetchUrls)
-      .WillOnce([&buyer_config, &url_response](
-                    const std::vector<HTTPRequest>& requests,
-                    absl::Duration timeout,
-                    absl::AnyInvocable<void(
-                        std::vector<absl::StatusOr<std::string>>)&&>
-                        done_callback) {
-        EXPECT_EQ(buyer_config.pa_buyer_udf_url, requests[0].url);
-        EXPECT_EQ(buyer_config.pas_buyer_udf_url, requests[1].url);
-        std::move(done_callback)(url_response);
-      });
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce(
+          [&url_response](
+              const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+              absl::AnyInvocable<void(
+                  std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                  done_callback) { std::move(done_callback)(url_response); });
 
   EXPECT_CALL(dispatcher, LoadSync)
       .WillOnce([&fetch_done, &expected_wrapped_code, &expected_pa_version,
@@ -282,7 +338,122 @@ TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
   EXPECT_EQ(
       protected_audience_code_blob_per_origin.at(buyer_config.pa_buyer_origin),
       expected_wrapped_code);
-  code_fetcher_manager.End();
 }
+
+TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeForEmptyResponse) {
+  BuyerConfig buyer_config;
+  absl::StatusOr<HTTPResponse> expected_pa_response =
+      GetValidUdfResponse("", buyer_config.pa_buyer_origin);
+  auction_service::SellerCodeFetchConfig udf_config =
+      GetTestSellerUdfConfig(buyer_config);
+  MockV8Dispatcher dispatcher;
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  auto executor = std::make_unique<MockExecutor>();
+  absl::Notification fetch_done;
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&expected_pa_response, &fetch_done](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                        done_callback) {
+        std::move(done_callback)({expected_pa_response});
+        fetch_done.Notify();
+      });
+
+  EXPECT_CALL(dispatcher, LoadSync).Times(0);
+
+  BuyerReportingUdfFetchManager code_fetcher_manager(
+      &udf_config, curl_http_fetcher.get(), executor.get(),
+      [](const std::string& adtech_code_blob) { return adtech_code_blob; },
+      &dispatcher);
+  auto status = code_fetcher_manager.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  fetch_done.WaitForNotification();
+  absl::flat_hash_map<std::string, std::string>
+      protected_audience_code_blob_per_origin =
+          code_fetcher_manager
+              .GetProtectedAudienceReportingByOriginForTesting();
+  EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
+}
+
+TEST(BuyerReportingUdfFetchManagerTest,
+     SkipsBuyerCodeForMissingResponseHeader) {
+  BuyerConfig buyer_config;
+  absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
+      "function reportWin(){}", buyer_config.pa_buyer_origin);
+  expected_pa_response->headers.erase(kUdfRequiredResponseHeader);
+  auction_service::SellerCodeFetchConfig udf_config =
+      GetTestSellerUdfConfig(buyer_config);
+  MockV8Dispatcher dispatcher;
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  auto executor = std::make_unique<MockExecutor>();
+  absl::Notification fetch_done;
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&expected_pa_response, &fetch_done](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                        done_callback) {
+        std::move(done_callback)({expected_pa_response});
+        fetch_done.Notify();
+      });
+
+  EXPECT_CALL(dispatcher, LoadSync).Times(0);
+
+  BuyerReportingUdfFetchManager code_fetcher_manager(
+      &udf_config, curl_http_fetcher.get(), executor.get(),
+      [](const std::string& adtech_code_blob) { return adtech_code_blob; },
+      &dispatcher);
+  auto status = code_fetcher_manager.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  fetch_done.WaitForNotification();
+  absl::flat_hash_map<std::string, std::string>
+      protected_audience_code_blob_per_origin =
+          code_fetcher_manager
+              .GetProtectedAudienceReportingByOriginForTesting();
+  EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
+}
+
+TEST(BuyerReportingUdfFetchManagerTest,
+     SkipsBuyerCodeForIncorrectResponseHeader) {
+  BuyerConfig buyer_config;
+  absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
+      "function reportWin(){}", buyer_config.pa_buyer_origin);
+  expected_pa_response->headers[kUdfRequiredResponseHeader] = "false";
+  auction_service::SellerCodeFetchConfig udf_config =
+      GetTestSellerUdfConfig(buyer_config);
+  MockV8Dispatcher dispatcher;
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  auto executor = std::make_unique<MockExecutor>();
+  absl::Notification fetch_done;
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&expected_pa_response, &fetch_done](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                        done_callback) {
+        std::move(done_callback)({expected_pa_response});
+        fetch_done.Notify();
+      });
+
+  EXPECT_CALL(dispatcher, LoadSync).Times(0);
+
+  BuyerReportingUdfFetchManager code_fetcher_manager(
+      &udf_config, curl_http_fetcher.get(), executor.get(),
+      [](const std::string& adtech_code_blob) { return adtech_code_blob; },
+      &dispatcher);
+  auto status = code_fetcher_manager.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  fetch_done.WaitForNotification();
+  absl::flat_hash_map<std::string, std::string>
+      protected_audience_code_blob_per_origin =
+          code_fetcher_manager
+              .GetProtectedAudienceReportingByOriginForTesting();
+  EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

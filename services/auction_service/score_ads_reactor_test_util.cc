@@ -14,6 +14,7 @@
 
 #include "services/auction_service/score_ads_reactor_test_util.h"
 
+#include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/test/random.h"
 
@@ -123,7 +124,9 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
 
   for (const auto& request : batch) {
     if (std::strcmp(request.handler_name.c_str(),
-                    kReportingDispatchHandlerFunctionName) != 0) {
+                    kReportingDispatchHandlerFunctionName) != 0 &&
+        std::strcmp(request.handler_name.c_str(), kReportResultEntryFunction) !=
+            0) {
       EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
     }
     DispatchResponse dispatch_response = {};

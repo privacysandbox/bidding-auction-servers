@@ -47,9 +47,9 @@ export SERVER_START_CMD=$(cat << END
       "prepareDataForAdsRetrievalJsUrl": "",
       "prepareDataForAdsRetrievalWasmHelperUrl": ""
     }' \
---enable_otel_based_logging="true"\
---consented_debug_token="test_token"\
 --enable_protected_app_signals="false" \
+--enable_otel_based_logging="true" \
+--consented_debug_token="test_token" \
 --enable_protected_audience="true" \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \
 --ps_verbosity=2 \

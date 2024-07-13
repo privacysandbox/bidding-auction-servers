@@ -29,6 +29,7 @@ cc_library(
         ":inference_flags",
         "//services/common/blob_fetch:blob_fetcher",
         "//services/common/clients/code_dispatcher:request_context",
+        "//services/common/metric:server_definition",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/base:core_headers",

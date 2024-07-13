@@ -28,3 +28,15 @@ cc_library(
         "@com_google_absl//absl/flags:flag",
     ],
 )
+
+cc_library(
+    name = "public_key_url_allowlist",
+    hdrs = [
+        "public_key_url_allowlist.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings",
+    ],
+)

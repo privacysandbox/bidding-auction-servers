@@ -29,11 +29,10 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BuyerServiceClientConfig& client_config) {
-  absl::flat_hash_map<std::string,
-                      std::shared_ptr<const BuyerFrontEndAsyncClient>>
+  absl::flat_hash_map<std::string, std::shared_ptr<BuyerFrontEndAsyncClient>>
       bfe_addr_client_map;
   auto static_client_map = std::make_unique<absl::flat_hash_map<
-      std::string, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
+      std::string, std::shared_ptr<BuyerFrontEndAsyncClient>>>();
   for (const auto& [ig_owner, bfe_endpoint] : buyer_ig_owner_to_bfe_addr_map) {
     // Can perform additional validations here.
     if (ig_owner.empty() || bfe_endpoint.endpoint.empty()) {
@@ -47,10 +46,8 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
       BuyerServiceClientConfig client_config_copy = client_config;
       client_config_copy.server_addr = bfe_endpoint.endpoint;
       client_config_copy.cloud_platform = bfe_endpoint.cloud_platform;
-      auto bfe_client_ptr =
-          std::make_shared<const BuyerFrontEndAsyncGrpcClient>(
-              key_fetcher_manager, crypto_client,
-              std::move(client_config_copy));
+      auto bfe_client_ptr = std::make_shared<BuyerFrontEndAsyncGrpcClient>(
+          key_fetcher_manager, crypto_client, std::move(client_config_copy));
       bfe_addr_client_map.insert({bfe_endpoint.endpoint, bfe_client_ptr});
       static_client_map->try_emplace(ig_owner, bfe_client_ptr);
     }
@@ -62,8 +59,8 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
   }
 }
 
-std::shared_ptr<const BuyerFrontEndAsyncClient>
-BuyerFrontEndAsyncClientFactory::Get(absl::string_view ig_owner) const {
+std::shared_ptr<BuyerFrontEndAsyncClient> BuyerFrontEndAsyncClientFactory::Get(
+    absl::string_view ig_owner) const {
   std::string ig_owner_str = absl::StrCat(ig_owner);
   if (auto it = client_cache_->find(ig_owner_str); it != client_cache_->end()) {
     return it->second;
@@ -72,8 +69,8 @@ BuyerFrontEndAsyncClientFactory::Get(absl::string_view ig_owner) const {
   return nullptr;
 }
 
-std::vector<std::pair<absl::string_view,
-                      std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+std::vector<
+    std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
 BuyerFrontEndAsyncClientFactory::Entries() const {
   return entries_;
 }

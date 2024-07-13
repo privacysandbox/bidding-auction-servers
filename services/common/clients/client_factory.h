@@ -33,11 +33,11 @@ class ClientFactory {
   // This function is used to get an instance of a client object
   // client_key: This is a value for the key based on which the different
   // client objects are differentiated.
-  virtual std::shared_ptr<const Client> Get(ClientKey client_key) const = 0;
+  virtual std::shared_ptr<Client> Get(ClientKey client_key) const = 0;
 
   // Returns a <Key, Value> pair of all entries contained by the factory.
-  virtual std::vector<std::pair<ClientKey, std::shared_ptr<const Client>>>
-  Entries() const = 0;
+  virtual std::vector<std::pair<ClientKey, std::shared_ptr<Client>>> Entries()
+      const = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

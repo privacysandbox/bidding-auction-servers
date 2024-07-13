@@ -37,6 +37,9 @@ inline constexpr server_common::metrics::PrivacyBudget kServerTotalBudget{
 inline constexpr double kPercentHistogram[] = {
     0.0078125, 0.015625, 0.03125, 0.0625, 0.125, 0.25, 0.5, 1};
 
+inline constexpr double kCountHistogram[] = {2,  5,   10,  20,  40,
+                                             80, 160, 320, 640, 1'280};
+
 inline constexpr absl::string_view kAs = "AS";
 inline constexpr absl::string_view kBs = "BS";
 inline constexpr absl::string_view kKv = "KV";
@@ -180,6 +183,14 @@ inline constexpr server_common::metrics::Definition<
         "bidding.business_logic.zero_bid_percent",
         "Percentage of times bidding service returns a zero bid",
         kPercentHistogram, 1, 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kBiddingInferenceRequestDuration(
+        "bidding.inference.request.duration_ms",
+        "Time taken by Roma callback to execute inference",
+        server_common::metrics::kTimeHistogram, 300, 10);
 
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
@@ -447,6 +458,43 @@ inline constexpr server_common::metrics::Definition<
         /*upper_bound*/ 1,
         /*lower_bound*/ 0);
 
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kDeviceSignalsSize("device_signals.size_bytes",
+                       "Cumulative size of device_signals in Bytes",
+                       server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kAdRenderIDsSize("ad_render_ids.size_bytes",
+                     "Cumulative size of ad_render_ids in Bytes",
+                     server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kBiddingSignalKeysSize("bidding_signal_keys.size_bytes",
+                           "Cumulative size of bidding_signal_keys in Bytes",
+                           server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kUserBiddingSignalsSize("user_bidding_signals.size_bytes",
+                            "Cumulative size of user_bidding_signals in Bytes",
+                            server_common::metrics::kSizeHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kComponentAdsSize("component_ads.size_bytes",
+                      "Cumulative size of component_ads in Bytes",
+                      server_common::metrics::kSizeHistogram);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kIGCount("interest_groups_count", "Total number of interest groups",
+             kCountHistogram);
+
 template <typename RequestT>
 struct RequestMetric;
 
@@ -476,6 +524,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kJSExecutionDuration,
         &kJSExecutionErrorCount,
         &kBiddingErrorCountByErrorCode,
+        &kBiddingInferenceRequestDuration,
 };
 
 template <>
@@ -549,6 +598,12 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kProtectedCiphertextSize,
         &kAuctionConfigSize,
         &kAuctionBidRejectedCount,
+        &kDeviceSignalsSize,
+        &kAdRenderIDsSize,
+        &kBiddingSignalKeysSize,
+        &kUserBiddingSignalsSize,
+        &kComponentAdsSize,
+        &kIGCount,
 };
 
 template <>

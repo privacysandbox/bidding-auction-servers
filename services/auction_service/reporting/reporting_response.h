@@ -26,6 +26,7 @@ struct ReportResultResponse {
   absl::flat_hash_map<std::string, std::string> interaction_reporting_urls;
   bool send_report_to_invoked;
   bool register_ad_beacon_invoked;
+  std::string signals_for_winner;
 };
 
 struct ReportWinResponse {
@@ -33,6 +34,12 @@ struct ReportWinResponse {
   absl::flat_hash_map<std::string, std::string> interaction_reporting_urls;
   bool send_report_to_invoked;
   bool register_ad_beacon_invoked;
+};
+
+struct ReportingResponseLogs {
+  std::vector<std::string> logs;
+  std::vector<std::string> errors;
+  std::vector<std::string> warnings;
 };
 
 // Response received from execution of reportingEntryFunction() in Roma.

@@ -19,27 +19,35 @@
 
 #include <include/gmock/gmock-actions.h>
 
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
+#include "services/common/public_key_url_allowlist.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 using ::testing::Return;
 
 TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
-  absl::string_view per_platform_public_key_endpoints = R"json(
+  constexpr absl::string_view platform_format = R"json(
 {
-  "GCP": "https://publickeyservice.foo/v1alpha/publicKeys",
-  "AWS": "https://publickeyservice.cloudfront.net/v1alpha/publicKeys"
+  "GCP": "%s",
+  "AWS": "%s"
 }
 )json";
+
+  std::string per_platform_public_key_endpoints = absl::StrFormat(
+      platform_format, kGCPProdPublicKeyEndpoint, kAWSProdPublicKeyEndpoint);
 
   auto map = ParseCloudPlatformPublicKeysMap(per_platform_public_key_endpoints);
   ASSERT_TRUE(map.ok());
   EXPECT_EQ(map->size(), 2);
 
   EXPECT_EQ((*map)[server_common::CloudPlatform::kGcp][0],
-            "https://publickeyservice.foo/v1alpha/publicKeys");
+            kGCPProdPublicKeyEndpoint);
   EXPECT_EQ((*map)[server_common::CloudPlatform::kAws][0],
-            "https://publickeyservice.cloudfront.net/v1alpha/publicKeys");
+            kAWSProdPublicKeyEndpoint);
 }
 
 TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_InvalidJson) {

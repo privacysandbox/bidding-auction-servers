@@ -22,6 +22,7 @@
 
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/public_key_url_allowlist.h"
 #include "services/common/util/json_util.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
@@ -67,6 +68,10 @@ ParseCloudPlatformPublicKeysMap(
     const std::string& public_key_service_endpoint = itr->value.GetString();
     if (public_key_service_endpoint.empty()) {
       return absl::InvalidArgumentError(kEmptyEndpointError);
+    } else if (!IsAllowedPublicKeyUrl(public_key_service_endpoint,
+                                      PS_IS_PROD_BUILD)) {
+      return absl::InvalidArgumentError(
+          absl::StrCat(kEndpointNotAllowlisted, public_key_service_endpoint));
     }
 
     per_platform_endpoints.try_emplace(

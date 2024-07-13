@@ -26,6 +26,7 @@
 
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/public_key_url_allowlist.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -63,8 +64,13 @@ CreatePublicKeyFetcher(TrustedServersConfigClient& config_client) {
 
   absl::string_view public_key_endpoint =
       config_client.GetStringParameter(PUBLIC_KEY_ENDPOINT);
-  std::vector<std::string> endpoints = {public_key_endpoint.data()};
 
+  if (!IsAllowedPublicKeyUrl(public_key_endpoint, PS_IS_PROD_BUILD)) {
+    PS_LOG(ERROR) << kEndpointNotAllowlisted << public_key_endpoint;
+    return nullptr;
+  }
+
+  std::vector<std::string> endpoints = {public_key_endpoint.data()};
   server_common::CloudPlatform cloud_platform =
       server_common::CloudPlatform::kLocal;
 #if defined(CLOUD_PLATFORM_AWS)

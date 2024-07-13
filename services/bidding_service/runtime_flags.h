@@ -35,7 +35,12 @@ inline constexpr absl::string_view JS_NUM_WORKERS = "JS_NUM_WORKERS";
 inline constexpr absl::string_view JS_WORKER_QUEUE_LEN = "JS_WORKER_QUEUE_LEN";
 inline constexpr absl::string_view TEE_AD_RETRIEVAL_KV_SERVER_ADDR =
     "TEE_AD_RETRIEVAL_KV_SERVER_ADDR";
+inline constexpr absl::string_view
+    TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY =
+        "TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY";
 inline constexpr absl::string_view TEE_KV_SERVER_ADDR = "TEE_KV_SERVER_ADDR";
+inline constexpr absl::string_view TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY =
+    "TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY";
 inline constexpr absl::string_view AD_RETRIEVAL_TIMEOUT_MS =
     "AD_RETRIEVAL_TIMEOUT_MS";
 inline constexpr absl::string_view AD_RETRIEVAL_KV_SERVER_EGRESS_TLS =
@@ -49,7 +54,7 @@ inline constexpr absl::string_view
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
         "BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr int kNumRuntimeFlags = 13;
+inline constexpr int kNumRuntimeFlags = 15;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -58,7 +63,9 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     JS_NUM_WORKERS,
     JS_WORKER_QUEUE_LEN,
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR,
+    TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY,
     TEE_KV_SERVER_ADDR,
+    TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY,
     AD_RETRIEVAL_KV_SERVER_EGRESS_TLS,
     KV_SERVER_EGRESS_TLS,
     AD_RETRIEVAL_TIMEOUT_MS,

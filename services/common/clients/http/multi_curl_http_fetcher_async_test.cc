@@ -20,6 +20,7 @@
 #include <include/gmock/gmock-matchers.h>
 
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
 #include "grpc/event_engine/event_engine.h"
@@ -37,6 +38,8 @@ using ::testing::HasSubstr;
 constexpr absl::string_view kUrlA = "https://example.com";
 constexpr absl::string_view kUrlB = "https://google.com";
 constexpr absl::string_view kUrlC = "https://wikipedia.org";
+constexpr absl::string_view kRedirectUrl = "https://wikipedia.com/";
+constexpr absl::string_view kFinalUrl = "https://www.wikipedia.org/";
 constexpr int kNormalTimeoutMs = 5000;
 
 class MultiCurlHttpFetcherAsyncTest : public ::testing::Test {
@@ -216,6 +219,115 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
   fetcher_->PutUrl({"http://httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
 
   notification.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest, FetchUrlsWithMetadataWorks) {
+  absl::Notification done;
+  std::vector<HTTPRequest> test_requests = {
+      {kUrlA.begin(), {}}, {kUrlB.begin(), {}}, {kUrlC.begin(), {}}};
+  auto done_cb = [&done, &test_requests](
+                     const std::vector<absl::StatusOr<HTTPResponse>>& results) {
+    EXPECT_EQ(results.size(), test_requests.size());
+    for (const auto& result : results) {
+      EXPECT_TRUE(result.ok()) << result.status();
+    }
+    done.Notify();
+  };
+
+  fetcher_->FetchUrlsWithMetadata(
+      test_requests, absl::Milliseconds(kNormalTimeoutMs), std::move(done_cb));
+  done.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest,
+       FetchUrlsWithMetadataReturnsResponseHeaders) {
+  absl::Notification done;
+  HTTPRequest request;
+  request.url = "httpbin.org/gzip";
+  // request.headers = {{"Accept-Encoding", "gzip"}, {"abc", "def"}};
+  request.include_headers = {"Content-Encoding"};
+  auto done_cb =
+      [&done](const std::vector<absl::StatusOr<HTTPResponse>>& results) {
+        EXPECT_EQ(results.size(), 1);
+        for (const auto& result : results) {
+          EXPECT_TRUE(result.ok());
+          // Response has a 'headers' field of the headers sent in the request.
+          EXPECT_EQ(result.value().headers.size(), 1);
+          const auto& it = result.value().headers.find("Content-Encoding");
+          EXPECT_NE(it, result.value().headers.end());
+          EXPECT_TRUE(it->second.ok()) << it->second.status();
+          EXPECT_EQ(it->second.value(), "gzip");
+        }
+        done.Notify();
+      };
+
+  fetcher_->FetchUrlsWithMetadata(
+      {request}, absl::Milliseconds(kNormalTimeoutMs), std::move(done_cb));
+  done.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest,
+       FetchUrlsWithMetadataReturnsFinalUrlForRedirectEnabled) {
+  absl::Notification done;
+  HTTPRequest request;
+  request.url = kUrlA;
+  request.redirect_config.get_redirect_url = true;
+  auto done_cb =
+      [&done](const std::vector<absl::StatusOr<HTTPResponse>>& results) {
+        EXPECT_EQ(results.size(), 1);
+        for (const auto& result : results) {
+          EXPECT_TRUE(absl::StartsWith(result->final_url, kUrlA))
+              << result->final_url;
+        }
+        done.Notify();
+      };
+
+  fetcher_->FetchUrlsWithMetadata(
+      {request}, absl::Milliseconds(kNormalTimeoutMs), std::move(done_cb));
+  done.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest,
+       FetchUrlsWithMetadataDoesNotReturnFinalUrlIfDisabled) {
+  absl::Notification done;
+  HTTPRequest request;
+  request.url = kUrlA;
+  request.redirect_config.get_redirect_url = false;
+  auto done_cb =
+      [&done](const std::vector<absl::StatusOr<HTTPResponse>>& results) {
+        EXPECT_EQ(results.size(), 1);
+        for (const auto& result : results) {
+          EXPECT_TRUE(result.ok()) << result.status();
+          EXPECT_TRUE(result->final_url.empty()) << result->final_url;
+        }
+        done.Notify();
+      };
+
+  fetcher_->FetchUrlsWithMetadata(
+      {request}, absl::Milliseconds(kNormalTimeoutMs), std::move(done_cb));
+  done.WaitForNotification();
+}
+
+TEST_F(MultiCurlHttpFetcherAsyncTest, FetchesUrlAllowsRedirectToNonHttpLinks) {
+  absl::Notification done;
+  HTTPRequest request;
+  request.url = kRedirectUrl;
+  request.redirect_config.get_redirect_url = true;
+  request.redirect_config.strict_http = true;
+  auto done_cb =
+      [&done](const std::vector<absl::StatusOr<HTTPResponse>>& results) {
+        EXPECT_EQ(results.size(), 1);
+        for (const auto& result : results) {
+          EXPECT_TRUE(result.ok()) << result.status();
+          EXPECT_TRUE(absl::StartsWith(result->final_url, kFinalUrl))
+              << result.value().final_url;
+        }
+        done.Notify();
+      };
+
+  fetcher_->FetchUrlsWithMetadata(
+      {request}, absl::Milliseconds(kNormalTimeoutMs), std::move(done_cb));
+  done.WaitForNotification();
 }
 
 }  // namespace

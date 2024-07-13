@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # Example usage:
 # bash ./hc.bash -p /usr/local/google/home/akundla/bidding-auction-server/production/packaging/aws/common/ami -n health.proto -a localhost:50051 -i 10 -t 5 -h 2 -u 10 -e i-08756c3a64a78711a -g 2 -r us-west-1 -s srv-ajxdkksp7d5wpmou

@@ -136,7 +136,7 @@ class AsyncClientMock
               (std::unique_ptr<RawRequest> raw_request,
                const RequestMetadata& metadata, OnDoneCallbackType on_done,
                absl::Duration timeout, RequestConfig request_config),
-              (const, override));
+              (override));
 };
 
 using BuyerFrontEndAsyncClientMock =
@@ -177,6 +177,10 @@ class MockHttpFetcherAsync : public HttpFetcherAsync {
   MOCK_METHOD(void, FetchUrls,
               (const std::vector<HTTPRequest>& requests, absl::Duration timeout,
                OnDoneFetchUrls done_callback),
+              (override));
+  MOCK_METHOD(void, FetchUrlsWithMetadata,
+              (const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+               OnDoneFetchUrlsWithMetadata done_callback),
               (override));
 };
 
@@ -305,12 +309,12 @@ class BuyerFrontEndServiceMock : public BuyerFrontEnd::CallbackService {
 class BuyerFrontEndAsyncClientFactoryMock
     : public ClientFactory<BuyerFrontEndAsyncClient, absl::string_view> {
  public:
-  MOCK_METHOD(std::shared_ptr<const BuyerFrontEndAsyncClient>, Get,
+  MOCK_METHOD(std::shared_ptr<BuyerFrontEndAsyncClient>, Get,
               (absl::string_view), (const, override));
 
   MOCK_METHOD(
       (std::vector<std::pair<absl::string_view,
-                             std::shared_ptr<const BuyerFrontEndAsyncClient>>>),
+                             std::shared_ptr<BuyerFrontEndAsyncClient>>>),
       Entries, (), (const, override));
 };
 

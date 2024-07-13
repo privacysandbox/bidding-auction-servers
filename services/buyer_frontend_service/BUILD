@@ -39,6 +39,8 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/buyer_frontend_service/providers:bidding_signals_providers",
         "//services/buyer_frontend_service/util:buyer_frontend_utils",
+        "//services/common:feature_flags",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:benchmarking_logger",
@@ -92,6 +94,7 @@ cc_test(
     deps = [
         ":buyer_frontend_service",
         "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
@@ -149,6 +152,7 @@ cc_test(
     deps = [
         ":buyer_frontend_service",
         "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

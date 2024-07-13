@@ -60,14 +60,14 @@ constexpr char kTestReportWinUrlWithSignals[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=true&joinCount=5&"
-    "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined";
 
 constexpr char kTestReportWinUrlWithBuyerReportingId[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&adCost=2&"
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=true&joinCount=5&"
-    "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined&buyerReportingId="
     "testBuyerReportingId";
 
@@ -75,7 +75,7 @@ constexpr char kTestReportWinUrlWithNoising[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "madeHighestScoringOtherBid=true&"
-    "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined";
 
 constexpr char kTestComponentWinReportingUrl[] =

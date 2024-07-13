@@ -72,4 +72,7 @@ message SellerCodeFetchConfig {
    // Temporary flag to enable seller's udf and buyer's reportWin()
    // udf isolation.
    bool enable_seller_and_buyer_udf_isolation = 14;
+
+   // Enables private aggregate reporting.
+   bool enable_private_aggregate_reporting = 15;
 }
