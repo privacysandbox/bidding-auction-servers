@@ -23,10 +23,24 @@ set -x
 #########################################################################
 
 # Start envoy.
-export original_dir=$(pwd)
-cd /etc/envoy
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 3650 -nodes -subj "/C=XX/ST=StateName/L=CityName/O=CompanyName/OU=CompanySectionName/CN=www.testenvoy.com"
-cd "$original_dir"
+
+# Get credentials (to be used for fetching secrets)
+ACCESS_TOKEN=$(wget -q --header "Metadata:true"  --output-document -  \
+"${AZURE_BA_PARAM_GET_TOKEN_URL}?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net%2F" \
+| /server/bin/jq -r '.access_token')
+
+# Get our secrets, parse, decode, and write the secret strings to files that the Envoy config will read.
+## TLS Key
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
+${AZURE_BA_PARAM_KEY_VAULT_URL}/secrets/${AZURE_BA_METADATA_OPERATOR}-${AZURE_BA_METADATA_ENVIRONMENT}-SfeTlsKey?api-version=7.4 \
+| /server/bin/jq -r ".value" \
+| base64 -d > /etc/envoy/key.pem
+
+## TLS Cert
+wget -q --header "Authorization: Bearer ${ACCESS_TOKEN}" --output-document - \
+${AZURE_BA_PARAM_KEY_VAULT_URL}/secrets/${AZURE_BA_METADATA_OPERATOR}-${AZURE_BA_METADATA_ENVIRONMENT}-SfeTlsCert?api-version=7.4 \
+| /server/bin/jq -r ".value" \
+| base64 -d > /etc/envoy/cert.pem
 
 /usr/local/bin/envoy --config-path /etc/envoy/envoy.yaml -l warn &
 sleep 2
