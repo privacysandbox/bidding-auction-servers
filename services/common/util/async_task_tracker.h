@@ -31,6 +31,7 @@ enum class TaskStatus {
   UNKNOWN,
   SKIPPED,         // Task skipped.
   EMPTY_RESPONSE,  // Task received an empty response.
+  CANCELLED,       // Task cancelled.
   ERROR,
   SUCCESS,
 };
@@ -85,6 +86,7 @@ class AsyncTaskTracker {
   int empty_tasks_count_ ABSL_GUARDED_BY(mu_);
   int skipped_tasks_count_ ABSL_GUARDED_BY(mu_);
   int error_tasks_count_ ABSL_GUARDED_BY(mu_);
+  int cancelled_tasks_count_ ABSL_GUARDED_BY(mu_);
   absl::AnyInvocable<void(bool) &&> on_all_tasks_done_;
   RequestLogContext& log_context_;
 };

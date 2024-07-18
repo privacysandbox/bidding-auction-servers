@@ -482,6 +482,13 @@ void GenerateBidsReactor::Execute() {
           << generate_bid_request.status().ToString(
                  absl::StatusToStringMode::kWithEverything);
     } else {
+      // Create new metric context for Inference metrics.
+      metric::MetricContextMap<GenerateBidsRequest>()->Get(request_);
+      // Make metric_context a unique_ptr by releasing the ownership of the
+      // context from ContextMap.
+      absl::StatusOr<std::unique_ptr<metric::BiddingContext>> metric_context =
+          metric::MetricContextMap<GenerateBidsRequest>()->Remove(request_);
+      CHECK_OK(metric_context);
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
       RomaRequestSharedContext shared_context =
@@ -491,6 +498,8 @@ void GenerateBidsReactor::Execute() {
         std::shared_ptr<RomaRequestContext> roma_request_context =
             roma_shared_context.value();
         roma_request_context->SetIsProtectedAudienceRequest(true);
+        roma_request_context->SetMetricContext(
+            std::move(metric_context.value()));
       } else {
         PS_LOG(ERROR, log_context_) << "Failed to retrieve RomaRequestContext: "
                                     << roma_shared_context.status();

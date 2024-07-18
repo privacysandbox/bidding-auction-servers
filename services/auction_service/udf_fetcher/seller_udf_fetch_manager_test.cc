@@ -53,8 +53,8 @@ struct TestSellerUdfConfig {
   std::string pa_buyer_origin = "http://PABuyerOrigin.com";
   std::string pas_buyer_origin = "http://PASBuyerOrigin.com";
   std::string seller_udf_url = "seller.com";
-  std::string pa_buyer_udf_url = "foo.com";
-  std::string pas_buyer_udf_url = "bar.com";
+  std::string pa_buyer_udf_url = "foo.com/";
+  std::string pas_buyer_udf_url = "bar.com/";
   bool enable_report_win_url_generation = true;
   FetchMode fetch_mode = blob_fetch::FETCH_MODE_URL;
   bool enable_seller_and_buyer_udf_isolation = false;
@@ -238,8 +238,12 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                               directFromSellerSignals){
 }
 )JS_CODE";
-  std::string expected_pa_version = "pa_http://PABuyerOrigin.com";
-  std::string expected_pas_version = "pas_http://PASBuyerOrigin.com";
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>>
+      valid_response_headers;
+  valid_response_headers.try_emplace(kUdfRequiredResponseHeader,
+                                     absl::StatusOr<std::string>("true"));
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
   bool enable_protected_app_signals = true;
   TestSellerUdfConfig test_udf_config = {
       .fetch_mode = blob_fetch::FETCH_MODE_BUCKET,
@@ -251,16 +255,23 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
   EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*executor_, RunAfter).Times(2);
-  EXPECT_CALL(*http_fetcher_, FetchUrls)
+  EXPECT_CALL(*http_fetcher_, FetchUrlsWithMetadata)
       .Times(1)
-      .WillOnce([&test_udf_config, &expected_buyer_udf](
-                    const std::vector<HTTPRequest>& requests,
-                    absl::Duration timeout, OnDoneFetchUrls done_callback) {
-        EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
-        EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
-
-        std::move(done_callback)({expected_buyer_udf, expected_buyer_udf});
-      });
+      .WillOnce(
+          [&test_udf_config, &expected_buyer_udf, &valid_response_headers](
+              const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+              OnDoneFetchUrlsWithMetadata done_callback) {
+            EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
+            EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
+            std::move(done_callback)({absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PABuyerOrigin.com"}),
+                                      absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PASBuyerOrigin.com"})});
+          });
 
   EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
       .WillOnce(
@@ -347,8 +358,12 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                               directFromSellerSignals){
 }
 )JS_CODE";
-  std::string expected_pa_version = "pa_http://PABuyerOrigin.com";
-  std::string expected_pas_version = "pas_http://PASBuyerOrigin.com";
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>>
+      valid_response_headers;
+  valid_response_headers.try_emplace(kUdfRequiredResponseHeader,
+                                     absl::StatusOr<std::string>("true"));
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
   bool enable_protected_app_signals = true;
   TestSellerUdfConfig test_udf_config = {
       .enable_seller_and_buyer_udf_isolation = true};
@@ -356,16 +371,25 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
   EXPECT_CALL(*blob_storage_client_, Init).Times(0);
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
   EXPECT_CALL(*executor_, RunAfter).Times(2);
-  EXPECT_CALL(*http_fetcher_, FetchUrls)
-      .Times(2)
-      .WillOnce([&test_udf_config, &expected_buyer_udf](
-                    const std::vector<HTTPRequest>& requests,
-                    absl::Duration timeout, OnDoneFetchUrls done_callback) {
-        EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
-        EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
+  EXPECT_CALL(*http_fetcher_, FetchUrlsWithMetadata)
+      .WillOnce(
+          [&test_udf_config, &expected_buyer_udf, &valid_response_headers](
+              const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+              OnDoneFetchUrlsWithMetadata done_callback) {
+            EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
+            EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
 
-        std::move(done_callback)({expected_buyer_udf, expected_buyer_udf});
-      })
+            std::move(done_callback)({absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PABuyerOrigin.com"}),
+                                      absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PASBuyerOrigin.com"})});
+          });
+
+  EXPECT_CALL(*http_fetcher_, FetchUrls)
       .WillOnce([&udf_config, &expected_seller_udf](
                     const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout, OnDoneFetchUrls done_callback) {
@@ -420,9 +444,9 @@ TEST_F(SellerUdfFetchManagerTest, FetchModeUrlSucceedsLoadingWrappedUrlBlobs) {
   udf_config.set_enable_report_win_url_generation(true);
   udf_config.set_enable_report_result_url_generation(true);
   udf_config.mutable_buyer_report_win_js_urls()->try_emplace(pa_buyer_origin,
-                                                             "foo.com");
+                                                             "foo.com/");
   udf_config.mutable_protected_app_signals_buyer_report_win_js_urls()
-      ->try_emplace(pas_buyer_origin, "bar.com");
+      ->try_emplace(pas_buyer_origin, "bar.com/");
   udf_config.set_auction_js_url("auction.com");
   udf_config.set_url_fetch_timeout_ms(70000000);
   udf_config.set_url_fetch_period_ms(70000001);

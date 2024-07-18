@@ -31,6 +31,9 @@ inline constexpr char kInternalServerError[] = "Internal server error.";
 inline constexpr char kSellerDomainEmpty[] =
     "Seller domain in server must be configured.";
 
+inline constexpr char kUnsupportedMetadataValues[] =
+    "Unsupported version and compression combination";
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_CONSTANTS_USER_ERROR_STRINGS_H_

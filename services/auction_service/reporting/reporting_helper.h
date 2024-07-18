@@ -32,6 +32,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr char kReportResultResponse[] = "reportResultResponse";
+inline constexpr char kResponse[] = "response";
+inline constexpr char kSignalsForWinner[] = "signalsForWinner";
 inline constexpr char kReportResultUrl[] = "reportResultUrl";
 inline constexpr char kSendReportToInvoked[] = "sendReportToInvoked";
 inline constexpr char kRegisterAdBeaconInvoked[] = "registerAdBeaconInvoked";

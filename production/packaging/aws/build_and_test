@@ -170,19 +170,20 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   regions="$(arr_to_string_list AMI_REGIONS)"
   build_version="$(git -C ${WORKSPACE} describe --tags --always || echo no-git-version)"
   for service in "${SERVICE_LIST[@]}"; do
-    builder::cbuild_al2 "
-set -o errexit
-packer build \
-  -var=regions='${regions}' \
-  -var=service=${service} \
-  -var=git_commit=$(git rev-parse HEAD) \
-  -var=build_flavor=${BUILD_FLAVOR} \
-  -var=build_version=${build_version} \
-  -var=build_env=${AWS_IMAGE_TAG} \
-  -var=distribution_dir=dist/aws \
-  -var=workspace=/src/workspace \
-  production/packaging/aws/common/ami/image.pkr.hcl
-" &
+      log_file="${WORKSPACE}/dist/${service}_aws_build_log.txt"
+      (builder::cbuild_al2 "
+      set -o errexit
+      packer build \
+        -var=regions='${regions}' \
+        -var=service=${service} \
+        -var=git_commit=$(git rev-parse HEAD) \
+        -var=build_flavor=${BUILD_FLAVOR} \
+        -var=build_version=${build_version} \
+        -var=build_env=${AWS_IMAGE_TAG} \
+        -var=distribution_dir=dist/aws \
+        -var=workspace=/src/workspace \
+        production/packaging/aws/common/ami/image.pkr.hcl
+      " 2>&1 >> "$log_file") &
   done
   wait
 fi

@@ -22,6 +22,7 @@ constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
 constexpr char kTestReportWinUrlWithBuyerReportingId[] =
     "http://reportWinUrl.com&buyerReportingId=testId";
 constexpr char kTestLog[] = "testLog";
+constexpr char kTestSignalsForWinner[] = "{\"testKey\":\"publisherName\"}";
 constexpr bool kSendReportToInvokedTrue = true;
 constexpr bool kRegisterAdBeaconInvokedTrue = true;
 constexpr char kTestInteractionEvent[] = "click";

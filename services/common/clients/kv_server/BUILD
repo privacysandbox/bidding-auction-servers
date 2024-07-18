@@ -46,6 +46,7 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
         "@service_value_key_fledge_privacysandbox//public:constants",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_request_builder",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_response_parser",

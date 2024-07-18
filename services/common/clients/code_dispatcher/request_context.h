@@ -24,6 +24,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "services/common/loggers/request_log_context.h"
+#include "services/common/metric/server_definition.h"
 #include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -49,12 +50,26 @@ class RomaRequestContext {
   bool IsProtectedAudienceRequest() const {
     return is_protected_audience_request_;
   }
+  // Set the unique bidding metric context
+  void SetMetricContext(std::unique_ptr<metric::BiddingContext> context) {
+    bidding_metric_context_ = std::move(context);
+  }
+
+  // Get the shared bidding metric context
+  absl::StatusOr<metric::BiddingContext*> GetMetricContext() const {
+    if (!bidding_metric_context_) {
+      return absl::NotFoundError("Metric context not initialized.");
+    }
+    return bidding_metric_context_.get();
+  }
 
   bool IsConsented() { return request_logging_context_.is_consented(); }
 
  private:
   RequestLogContext request_logging_context_;
   bool is_protected_audience_request_ = false;
+  // Metric context for bidding
+  std::unique_ptr<metric::BiddingContext> bidding_metric_context_;
 };
 
 class RomaRequestContextFactory;

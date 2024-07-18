@@ -26,6 +26,15 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+class CancellableAsyncClient {
+ public:
+  // Polymorphic class => virtual destructor
+  virtual ~CancellableAsyncClient() = default;
+
+  // Cancel the GRPC request
+  virtual void Cancel() const {}
+};
+
 // This provides access to the Metadata Object type
 using RequestMetadata = absl::flat_hash_map<std::string, std::string>;
 
@@ -58,7 +67,7 @@ class AsyncClient {
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout, RequestConfig request_config = {}) const {
+      absl::Duration timeout, RequestConfig request_config = {}) {
     return absl::NotFoundError("Method not implemented.");
   }
 };

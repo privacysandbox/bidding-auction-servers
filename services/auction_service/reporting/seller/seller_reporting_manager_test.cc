@@ -27,6 +27,7 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/auction_service/reporting/reporting_test_util.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/test/mocks.h"
@@ -109,6 +110,62 @@ void VerifyDispatchRequest(const TestData& test_data,
             test_data.expected_direct_from_seller_signals);
   EXPECT_EQ(*(response_vector[test_data.indexes.kAdTechCodeLoggingIdx]),
             test_data.enable_adtech_code_logging ? "true" : "false");
+}
+
+rapidjson::Document GetReportResultJsonObj(
+    const ReportResultResponse& report_result_response) {
+  rapidjson::Document document(rapidjson::kObjectType);
+  rapidjson::Value signals_for_winner_val(
+      report_result_response.signals_for_winner.c_str(),
+      document.GetAllocator());
+  document.AddMember(kSignalsForWinner, signals_for_winner_val,
+                     document.GetAllocator());
+  rapidjson::Value report_result_url(
+      report_result_response.report_result_url.c_str(),
+      document.GetAllocator());
+
+  document.AddMember(kReportResultUrl, report_result_url.Move(),
+                     document.GetAllocator());
+  document.AddMember(kSendReportToInvoked,
+                     report_result_response.send_report_to_invoked,
+                     document.GetAllocator());
+  document.AddMember(kRegisterAdBeaconInvoked,
+                     report_result_response.register_ad_beacon_invoked,
+                     document.GetAllocator());
+  rapidjson::Value map_value(rapidjson::kObjectType);
+  for (const auto& [event, url] :
+       report_result_response.interaction_reporting_urls) {
+    rapidjson::Value interaction_event(event.c_str(), document.GetAllocator());
+    rapidjson::Value interaction_url(url.c_str(), document.GetAllocator());
+    map_value.AddMember(interaction_event.Move(), interaction_url.Move(),
+                        document.GetAllocator());
+  }
+  document.AddMember(kInteractionReportingUrlsWrapperResponse, map_value,
+                     document.GetAllocator());
+  return document;
+}
+
+void TestResponse(const ReportResultResponse& report_result_response,
+                  const ReportResultResponse& expected_response) {
+  EXPECT_EQ(report_result_response.report_result_url,
+            expected_response.report_result_url);
+  EXPECT_EQ(report_result_response.interaction_reporting_urls.size(),
+            expected_response.interaction_reporting_urls.size());
+  EXPECT_EQ(report_result_response.signals_for_winner,
+            expected_response.signals_for_winner);
+}
+
+absl::StatusOr<std::string> BuildJsonObject(
+    const ReportResultResponse& response,
+    const ReportingResponseLogs& console_logs,
+    const ReportingDispatchRequestConfig& config) {
+  rapidjson::Document outerDoc(rapidjson::kObjectType);
+  rapidjson::Document report_result_obj = GetReportResultJsonObj(response);
+  if (config.enable_adtech_code_logging) {
+    SetAdTechLogs(console_logs, outerDoc);
+  }
+  outerDoc.AddMember(kResponse, report_result_obj, outerDoc.GetAllocator());
+  return SerializeJsonDoc(outerDoc);
 }
 
 TEST(TestSellerReportingManager, ReturnsRapidJsonDocOfSellerDeviceSignals) {
@@ -195,5 +252,40 @@ TEST(PerformReportResult, DispatchRequestFailsAndStatusNotOkReturned) {
   notification.WaitForNotification();
   ASSERT_FALSE(status.ok());
 }
+
+TEST(ParseReportResultResponse, ParsesReportResultResponseSuccessfully) {
+  server_common::log::PS_VLOG_IS_ON(0, 10);
+
+  ReportResultResponse expected_response{
+      .report_result_url = kTestReportResultUrl,
+      .send_report_to_invoked = kSendReportToInvokedTrue,
+      .register_ad_beacon_invoked = kRegisterAdBeaconInvokedTrue,
+      .signals_for_winner = kTestSignalsForWinner};
+  expected_response.interaction_reporting_urls.try_emplace(
+      kTestInteractionEvent, kTestInteractionUrl);
+  ReportingDispatchRequestConfig config = {.enable_adtech_code_logging = true};
+  ReportingResponseLogs console_logs;
+  console_logs.logs.emplace_back(kTestLog);
+  console_logs.warnings.emplace_back(kTestLog);
+  console_logs.errors.emplace_back(kTestLog);
+  absl::StatusOr<std::string> json_string =
+      BuildJsonObject(expected_response, console_logs, config);
+  ASSERT_TRUE(json_string.ok()) << json_string.status();
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
+  absl::StatusOr<ReportResultResponse> response =
+      ParseReportResultResponse(config, json_string.value(), log_context);
+  TestResponse(response.value(), expected_response);
+}
+
+TEST(ParseReportResultResponse, ParsingFailureReturnsNoOkStatus) {
+  std::string bad_json = "{abc:def hij:klm";
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
+  absl::StatusOr<ReportResultResponse> response =
+      ParseReportResultResponse({}, bad_json, log_context);
+  EXPECT_FALSE(response.ok());
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

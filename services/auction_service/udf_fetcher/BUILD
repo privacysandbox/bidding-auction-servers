@@ -98,9 +98,22 @@ cc_library(
         "//services/auction_service:auction_constants",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
+        "@curl",
         "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
+    ],
+)
+
+cc_test(
+    name = "adtech_code_version_util_test",
+    srcs = [
+        "adtech_code_version_util_test.cc",
+    ],
+    deps = [
+        ":adtech_code_version_util",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

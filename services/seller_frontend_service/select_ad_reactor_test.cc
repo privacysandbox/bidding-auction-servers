@@ -226,8 +226,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
     return buyer;
   };
   ErrorAccumulator error_accumulator;
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
@@ -339,8 +339,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   };
   int num_buyers_solicited = 0;
   ErrorAccumulator error_accumulator;
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
@@ -432,8 +432,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
   };
   int num_buyers_solicited = 0;
   ErrorAccumulator error_accumulator;
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
@@ -519,8 +519,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   };
 
   ErrorAccumulator error_accumulator;
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
@@ -1781,8 +1781,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
 
   // Have the Entries() call on the buyer factory return the 'real' and chaff
   // buyer.
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& [buyer, unused] :
        request_with_context.protected_auction_input.buyer_input()) {

@@ -227,3 +227,13 @@ variable "locality_for_cert_auth" {
   description = "Locality where your business organization is located, for the private certificate authority"
   type        = string
 }
+
+variable "kv_server_virtual_service_name" {
+  description = "Full name of the virtual service for the KV server."
+  type        = string
+}
+
+variable "ad_retrieval_kv_server_virtual_service_name" {
+  description = "Full name of the virtual service for the Ad Retrieval KV server."
+  type        = string
+}

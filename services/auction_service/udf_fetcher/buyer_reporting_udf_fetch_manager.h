@@ -32,6 +32,11 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// This should be lower case since CURL defaults to HTTP2 which
+// makes all headers lower case.
+inline constexpr absl::string_view kUdfRequiredResponseHeader =
+    "x-allow-fledge";
+
 // This class manages:
 // -Periodic fetch of the reportWin() udf for all buyers
 // -Loading of the fetched blobs into Roma.
@@ -100,9 +105,9 @@ class BuyerReportingUdfFetchManager : public CodeFetcherInterface {
   void LoadBuyerCode(const std::string& version,
                      const std::string& fetched_blob);
   void OnProtectedAudienceUdfFetch(const std::string& buyer_origin,
-                                   std::string& udf);
+                                   HTTPResponse& udf);
   void OnProtectedAppSignalUdfFetch(const std::string& buyer_origin,
-                                    std::string& udf);
+                                    HTTPResponse& udf);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

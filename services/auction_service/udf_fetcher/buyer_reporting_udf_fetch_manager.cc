@@ -33,6 +33,50 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+namespace {
+// This method validates the response from the buyer reportWin UDF endpoint
+// as per security recommendations.
+// 1. Response from UDF must contain response header X-Allow-Fledge:true
+absl::Status ValidateUdfFetchResponse(const HTTPResponse& response) {
+  if (response.body.empty()) {
+    return absl::Status(absl::StatusCode::kInvalidArgument,
+                        "Empty response body");
+  }
+  const auto& required_header_it =
+      response.headers.find(kUdfRequiredResponseHeader);
+  if (required_header_it == response.headers.end()) {
+    return absl::Status(
+        absl::StatusCode::kInvalidArgument,
+        "Protected Audience Allowed header not set in response");
+  }
+  if (!required_header_it->second.ok()) {
+    return required_header_it->second.status();
+  }
+  if (*required_header_it->second != "true") {
+    return absl::Status(
+        absl::StatusCode::kInvalidArgument,
+        "Protected Audience Allowed header value must be true in response");
+  }
+  return absl::OkStatus();
+}
+
+// This method adds a requirement for the buyer reportWin UDF endpoint
+// as per security recommendations -
+// 1. Strips query and fragments from UDF URL.
+// 2. Redirects will be supported to HTTPS/HTTP URLs only.
+// 3. The final URL from the redirect chain will be used to create the code
+// version for buyer domain validation.
+absl::StatusOr<HTTPRequest> CreateUdfFetchRequest(
+    absl::string_view report_win_endpoint) {
+  PS_ASSIGN_OR_RETURN(std::string stripped_url,
+                      StripQueryAndFragmentsFromUrl(report_win_endpoint));
+  return absl::StatusOr<HTTPRequest>(
+      {.url = std::move(stripped_url),
+       .include_headers = {absl::StrCat(kUdfRequiredResponseHeader)},
+       .redirect_config = {.strict_http = true, .get_redirect_url = true}});
+}
+}  // namespace
+
 absl::Status BuyerReportingUdfFetchManager::Start() {
   if (config_.enable_report_win_url_generation()) {
     return PeriodicBuyerReportingFetchAndLoadSync();
@@ -75,14 +119,18 @@ void BuyerReportingUdfFetchManager::LoadBuyerCode(
 }
 
 void BuyerReportingUdfFetchManager::OnProtectedAudienceUdfFetch(
-    const std::string& buyer_origin, std::string& udf) {
+    const std::string& buyer_origin, HTTPResponse& udf_response) {
+  std::string& udf = udf_response.body;
   absl::MutexLock lock(&code_blob_per_origin_mu_);
   if (protected_auction_code_blob_per_origin_[buyer_origin] != udf) {
     absl::StatusOr<std::string> code_version =
-        GetBuyerReportWinVersion(buyer_origin, AuctionType::kProtectedAudience);
+        // Pass the final URL to create the code version using the actual
+        // UDF URL.
+        GetBuyerReportWinVersion(udf_response.final_url,
+                                 AuctionType::kProtectedAudience);
     if (!code_version.ok()) {
       PS_LOG(ERROR) << "Error getting code version for buyer:" << buyer_origin
-                    << ";Error:" << code_version.status().message();
+                    << "; Error:" << code_version.status().message();
       return;
     }
     LoadBuyerCode(*code_version, udf);
@@ -91,14 +139,17 @@ void BuyerReportingUdfFetchManager::OnProtectedAudienceUdfFetch(
 }
 
 void BuyerReportingUdfFetchManager::OnProtectedAppSignalUdfFetch(
-    const std::string& buyer_origin, std::string& udf) {
+    const std::string& buyer_origin, HTTPResponse& udf_response) {
+  std::string& udf = udf_response.body;
   absl::MutexLock lock(&code_blob_per_origin_mu_);
   if (protected_app_signals_code_blob_per_origin_[buyer_origin] != udf) {
     absl::StatusOr<std::string> code_version = GetBuyerReportWinVersion(
-        buyer_origin, AuctionType::kProtectedAppSignals);
+        // Pass the final URL to create the code version using the actual
+        // UDF URL.
+        udf_response.final_url, AuctionType::kProtectedAppSignals);
     if (!code_version.ok()) {
       PS_LOG(ERROR) << "Error getting code version for buyer:" << buyer_origin
-                    << ";Error:" << code_version.status().message();
+                    << "; Error:" << code_version.status().message();
     }
     LoadBuyerCode(code_version.value(), udf);
     protected_app_signals_code_blob_per_origin_[buyer_origin] = std::move(udf);
@@ -114,13 +165,25 @@ BuyerReportingUdfFetchManager::PeriodicBuyerReportingFetchAndLoadSync() {
   std::vector<std::string> buyer_origins;
   for (const auto& [buyer_origin, report_win_endpoint] :
        config_.buyer_report_win_js_urls()) {
-    requests.push_back({.url = report_win_endpoint});
+    auto request = CreateUdfFetchRequest(report_win_endpoint);
+    if (!request.ok()) {
+      PS_LOG(ERROR) << "Failed to create request for buyer:" << buyer_origin
+                    << "; Error:" << request.status();
+      continue;
+    }
+    requests.emplace_back(*std::move(request));
     buyer_origins.push_back(buyer_origin);
   }
 
   for (const auto& [buyer_origin, report_win_endpoint] :
        config_.protected_app_signals_buyer_report_win_js_urls()) {
-    requests.push_back({.url = report_win_endpoint});
+    auto request = CreateUdfFetchRequest(report_win_endpoint);
+    if (!request.ok()) {
+      PS_LOG(ERROR) << "Failed to create request for buyer:" << buyer_origin
+                    << "; Error:" << request.status();
+      continue;
+    }
+    requests.emplace_back(*std::move(request));
     buyer_origins.push_back(buyer_origin);
   }
 
@@ -132,13 +195,18 @@ BuyerReportingUdfFetchManager::PeriodicBuyerReportingFetchAndLoadSync() {
   absl::Notification fetched_and_loaded;
   auto done_callback =
       [&fetched_and_loaded, &requests, &buyer_origins,
-       this](std::vector<absl::StatusOr<std::string>> results) mutable {
+       this](std::vector<absl::StatusOr<HTTPResponse>> results) mutable {
         for (int i = 0; i < results.size(); i++) {
           auto& result = results[i];
           if (!result.ok()) {
             PS_LOG(ERROR) << "Failed origin " << buyer_origins[i]
                           << " fetch at " << requests[i].url
                           << " with status: " << result.status();
+            continue;
+          }
+          if (auto status = ValidateUdfFetchResponse(*result); !status.ok()) {
+            PS_LOG(ERROR) << "UDF response failed validation for buyer:"
+                          << buyer_origins[i] << "; Error:" << status;
             continue;
           }
           if (i < config_.buyer_report_win_js_urls().size()) {
@@ -150,9 +218,9 @@ BuyerReportingUdfFetchManager::PeriodicBuyerReportingFetchAndLoadSync() {
         fetched_and_loaded.Notify();
       };
 
-  http_fetcher_.FetchUrls(requests,
-                          absl::Milliseconds(config_.url_fetch_timeout_ms()),
-                          std::move(done_callback));
+  http_fetcher_.FetchUrlsWithMetadata(
+      requests, absl::Milliseconds(config_.url_fetch_timeout_ms()),
+      std::move(done_callback));
   PS_VLOG(kPlain)
       << "Waiting for reporting udf fetch and load done notification.";
   fetched_and_loaded.WaitForNotification();

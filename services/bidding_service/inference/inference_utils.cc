@@ -39,6 +39,7 @@
 #include "rapidjson/writer.h"
 #include "services/bidding_service/inference/inference_flags.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
+#include "services/common/metric/server_definition.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/logger/request_context_logger.h"
 #include "src/roma/interface/roma.h"
@@ -138,6 +139,7 @@ absl::Status RegisterModelsFromBucket(
 void RunInference(
     google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
         wrapper) {
+  absl::Time start_inference_execution_time = absl::Now();
   const std::string& payload = wrapper.io_proto.input_string();
 
   SandboxExecutor& executor = Executor();
@@ -150,6 +152,8 @@ void RunInference(
 
   absl::StatusOr<std::shared_ptr<RomaRequestContext>> roma_request_context =
       wrapper.metadata.GetRomaRequestContext();
+  metric::BiddingContext* metric_context = nullptr;
+
   if (roma_request_context.ok()) {
     // Check if it is a Protected Audience request and the build flavor is prod
     if ((*roma_request_context)->IsProtectedAudienceRequest() &&
@@ -159,6 +163,9 @@ void RunInference(
              "production build.";
       return;
     }
+    // Retrieve the metric context from the RomaRequestContext
+    CHECK_OK((*roma_request_context)->GetMetricContext());
+    metric_context = (*roma_request_context)->GetMetricContext().value();
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
   }
 
@@ -174,6 +181,14 @@ void RunInference(
       PS_VLOG(kNoisyInfo, (*roma_request_context)->GetLogContext())
           << "Inference sidecar consented debugging log: "
           << predict_response.debug_info();
+    }
+    if (metric_context) {
+      int inference_execution_time_ms =
+          (absl::Now() - start_inference_execution_time) /
+          absl::Milliseconds(1);
+      LogIfError(metric_context
+                     ->LogHistogram<metric::kBiddingInferenceRequestDuration>(
+                         inference_execution_time_ms));
     }
     return;
   }

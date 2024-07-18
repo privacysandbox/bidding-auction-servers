@@ -82,12 +82,12 @@ inline constexpr absl::string_view kReportResultWrapperFunction =
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportResultEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging) {
-    ps_signalsForWinner = ""
+    ps_sendReportTo_invoked = false
+    ps_registerAdBeacon_invoked = false
     const ps_report_result_response = {
+        signalsForWinner : "null",
         reportResultUrl : "",
         interactionReportingUrls : {},
-        sendReportToInvoked : false,
-        registerAdBeaconInvoked : false,
       }
       const ps_logs = [];
       const ps_errors = [];
@@ -100,28 +100,27 @@ inline constexpr absl::string_view kReportResultWrapperFunction =
       console.log = console.warn = console.error = function() {};
     }
       globalThis.sendReportTo = function sendReportTo(url){
-        if(ps_report_result_response.sendReportToInvoked) {
+        if(ps_sendReportTo_invoked) {
           throw new Error("sendReportTo function invoked more than once");
         }
         ps_report_result_response.reportResultUrl = url;
-        ps_report_result_response.sendReportToInvoked = true;
+        ps_sendReportTo_invoked = true;
       }
       globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
-        if(ps_report_result_response.registerAdBeaconInvoked) {
+        if(ps_registerAdBeacon_invoked) {
           throw new Error("registerAdBeaconInvoked function invoked more than once");
         }
         ps_report_result_response.interactionReportingUrls=eventUrlMap;
-        ps_report_result_response.registerAdBeaconInvoked = true;
+        ps_registerAdBeacon_invoked = true;
       }
       try{
-        ps_signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+        signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
+        ps_report_result_response.signalsForWinner = JSON.stringify(signalsForWinner)
       } catch(ex){
         console.error(ex.message)
       }
       return {
-        signalsForWinner: ps_signalsForWinner,
-        interactionReportingUrls: ps_report_result_response.interactionReportingUrls,
-        reportResultUrl: ps_report_result_response.reportResultUrl,
+        response: ps_report_result_response,
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns

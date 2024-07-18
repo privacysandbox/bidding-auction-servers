@@ -84,8 +84,13 @@ ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
 ABSL_FLAG(std::optional<std::string>, tee_ad_retrieval_kv_server_addr, "",
           "Ad Retrieval KV Server Address");
+ABSL_FLAG(std::optional<std::string>,
+          tee_ad_retrieval_kv_server_grpc_arg_default_authority, "",
+          "Domain for Ad Retrieval KV Server, or other domain for Authority");
 ABSL_FLAG(std::optional<std::string>, tee_kv_server_addr, "",
           "KV Server Address to use for ads metadata lookup");
+ABSL_FLAG(std::optional<std::string>, tee_kv_server_grpc_arg_default_authority,
+          "", "Domain for KV Server, or other domain for Authority");
 ABSL_FLAG(std::optional<int>, ad_retrieval_timeout_ms, std::nullopt,
           "The time in milliseconds to wait for the ads retrieval to complete");
 ABSL_FLAG(std::optional<bool>, ad_retrieval_kv_server_egress_tls, std::nullopt,
@@ -161,7 +166,12 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_tee_ad_retrieval_kv_server_addr,
                         TEE_AD_RETRIEVAL_KV_SERVER_ADDR);
+  config_client.SetFlag(
+      FLAGS_tee_ad_retrieval_kv_server_grpc_arg_default_authority,
+      TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY);
   config_client.SetFlag(FLAGS_tee_kv_server_addr, TEE_KV_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_tee_kv_server_grpc_arg_default_authority,
+                        TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY);
   config_client.SetFlag(FLAGS_ad_retrieval_timeout_ms, AD_RETRIEVAL_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
   config_client.SetFlag(FLAGS_max_allowed_size_debug_url_bytes,
@@ -389,8 +399,14 @@ absl::Status RunServer() {
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   std::string tee_ad_retrieval_kv_server_addr = std::string(
       config_client.GetStringParameter(TEE_AD_RETRIEVAL_KV_SERVER_ADDR));
+  std::string tee_ad_retrieval_kv_server_grpc_arg_default_authority =
+      std::string(config_client.GetStringParameter(
+          TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY));
   std::string tee_kv_server_addr =
       std::string(config_client.GetStringParameter(TEE_KV_SERVER_ADDR));
+  std::string tee_kv_server_grpc_arg_default_authority =
+      std::string(config_client.GetStringParameter(
+          TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY));
   if (is_protected_app_signals_enabled &&
       tee_ad_retrieval_kv_server_addr.empty() && tee_kv_server_addr.empty()) {
     return absl::InvalidArgumentError(
@@ -402,7 +418,11 @@ absl::Status RunServer() {
   BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
+      .tee_ad_retrieval_kv_server_grpc_arg_default_authority =
+          std::move(tee_ad_retrieval_kv_server_grpc_arg_default_authority),
       .tee_kv_server_addr = std::move(tee_kv_server_addr),
+      .tee_kv_server_grpc_arg_default_authority =
+          std::move(tee_kv_server_grpc_arg_default_authority),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),

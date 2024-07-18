@@ -138,6 +138,7 @@ cc_test(
 cc_library(
     name = "error_categories",
     hdrs = ["error_categories.h"],
+    deps = ["@com_google_absl//absl/strings"],
 )
 
 cc_library(
@@ -478,6 +479,34 @@ cc_test(
     deps = [
         ":data_util",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "cancellation_wrapper",
+    hdrs = ["cancellation_wrapper.h"],
+    deps = [
+        "//services/common:feature_flags",
+        "@com_github_grpc_grpc//:grpc++",
+    ],
+)
+
+cc_library(
+    name = "thread_safe_set",
+    hdrs = ["thread_safe_set.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "thread_safe_set_test",
+    size = "small",
+    srcs = ["thread_safe_set_test.cc"],
+    deps = [
+        ":thread_safe_set",
         "@com_google_googletest//:gtest_main",
     ],
 )

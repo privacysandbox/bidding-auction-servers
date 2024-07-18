@@ -26,6 +26,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/flag.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
@@ -34,6 +35,7 @@
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/feature_flags.h"
 #include "services/common/loggers/benchmarking_logger.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
@@ -52,6 +54,11 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
                          {"x-user-agent", "x-user-agent"},
                          {"x-bna-client-ip", "x-bna-client-ip"}}};
 
+inline constexpr int kMinChaffRequestDurationMs = 25;
+inline constexpr int kMaxChaffRequestDurationMs = 380;
+inline constexpr int kMinChaffResponseSizeBytes = 1000;
+inline constexpr int kMaxChaffResponseSizeBytes = 10500;
+
 // This is a gRPC server reactor that serves a single GetBidsRequest.
 // It stores state relevant to the request and after the
 // response is finished being served, it cleans up all
@@ -62,9 +69,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       grpc::CallbackServerContext& context,
       const GetBidsRequest& get_bids_request,
       GetBidsResponse& get_bids_response,
-      const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
-      const BiddingAsyncClient& bidding_async_client,
-      const GetBidsConfig& config,
+      BiddingSignalsAsyncProvider& bidding_signals_async_provider,
+      BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       bool enable_benchmarking = false);
@@ -74,9 +80,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       const GetBidsRequest& get_bids_request,
       GetBidsResponse& get_bids_response,
       const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
-      const BiddingAsyncClient& bidding_async_client,
-      const GetBidsConfig& config,
-      const ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
+      BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
+      ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       bool enable_benchmarking = false);
@@ -87,6 +92,10 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Starts the execution the request.
   void Execute();
+
+  // Handles the execution of chaff requests.
+  void ExecuteChaffRequest();
+
   // Runs once the request has finished execution and deletes current instance.
   void OnDone() override;
   // Runs if the request is cancelled in the middle of execution.
@@ -138,10 +147,10 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Helper classes for performing preload actions.
   // These are not owned by this class.
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
-  const BiddingAsyncClient* bidding_async_client_;
+  BiddingAsyncClient* bidding_async_client_;
   // PAS bidding client should only be set by the caller if the feature is
   // enabled.
-  const ProtectedAppSignalsBiddingAsyncClient*
+  ProtectedAppSignalsBiddingAsyncClient*
       protected_app_signals_bidding_async_client_;
   const GetBidsConfig& config_;
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
@@ -150,6 +159,12 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   std::string hpke_secret_;
 
   grpc::Status decrypt_status_;
+
+  // Whether chaffing is enabled on the server.
+  const bool chaffing_enabled_;
+  // Whether the GetBids request follows the new SFE <> BFE request format.
+  bool use_new_payload_encoding_ = false;
+
   RequestLogContext log_context_;
 
   // Used to log metric, same life time as reactor.
@@ -179,6 +194,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // server
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
                                        const absl::Status& status);
+
+  // Pseudo random number generator for use in chaffing.
+  std::optional<std::mt19937> generator_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

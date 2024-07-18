@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
 
 package(
     default_visibility = [
@@ -44,8 +45,10 @@ cc_library(
             },
             no_match_error = "Please build for GCP, AWS, or local.",
         ),
+    local_defines = IS_PROD_BUILD_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
+        "//services/common:public_key_url_allowlist",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/util:request_response_constants",

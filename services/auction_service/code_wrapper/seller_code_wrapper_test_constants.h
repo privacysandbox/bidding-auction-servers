@@ -74,7 +74,7 @@ constexpr absl::string_view kBuyerBaseCode =
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
@@ -108,7 +108,7 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&signalsForWinner="+signalsForWinner+
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
         }
         console.log("Logging from ReportWin");
@@ -137,7 +137,7 @@ constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
       console.log("Testing Protected App Signals");
       sendReportTo("http://test.com");
       registerAdBeacon({"clickEvent":"http://click.com"});
-      return "testSignalsForWinner";
+      return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
@@ -160,7 +160,7 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&modifiedBid="+sellerReportingSignals.modifiedBid+"&modifiedBidCurrency="+sellerReportingSignals.modifiedBidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 
 )JS_CODE";
@@ -182,7 +182,7 @@ constexpr absl::string_view kTopLevelSellerCode = R"JS_CODE(
           sendReportTo("http://test.com&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&desirability="+sellerReportingSignals.desirability)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 
 )JS_CODE";
@@ -203,7 +203,7 @@ constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 
 )JS_CODE";
@@ -427,7 +427,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
@@ -478,7 +478,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
@@ -657,7 +657,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
       console.log("Testing Protected App Signals");
       sendReportTo("http://test.com");
       registerAdBeacon({"clickEvent":"http://click.com"});
-      return "testSignalsForWinner";
+      return {"testSignal":"testValue"}
     }
 
       }
@@ -839,7 +839,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
@@ -1002,7 +1002,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 

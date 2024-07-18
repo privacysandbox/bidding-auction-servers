@@ -46,7 +46,7 @@ absl::Status BuyerFrontEndAsyncGrpcClient::ExecuteInternal(
                                 GetBidsResponse::GetBidsRawResponse>>,
                             ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout, RequestConfig request_config) const {
+    absl::Duration timeout, RequestConfig request_config) {
   if (!chaffing_enabled_) {
     return DefaultAsyncGrpcClient::ExecuteInternal(std::move(raw_request),
                                                    metadata, std::move(on_done),

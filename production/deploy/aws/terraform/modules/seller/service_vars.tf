@@ -242,3 +242,8 @@ variable "use_tls_with_mesh" {
   type        = bool
   description = "Whether to use TLS-encrypted communication between service mesh envoy sidecars."
 }
+
+variable "kv_server_virtual_service_name" {
+  description = "Full name of the virtual service for the KV server."
+  type        = string
+}

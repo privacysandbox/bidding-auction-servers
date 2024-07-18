@@ -150,5 +150,7 @@ TEST_F(KVAsyncGrpcTest, PassesStatusToCallback) {
   EXPECT_TRUE(status.ok()) << status;
 }
 
+// TODO(b/350747239): Add a test for response unpadding
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

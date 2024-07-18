@@ -82,6 +82,7 @@ module "seller" {
     #     "enableSellerDebugUrlGeneration": true,
     #     "enableReportResultUrlGeneration": true,
     #     "enableReportWinUrlGeneration": true,
+    #     "enablePrivateAggregateReporting": false,
     #     "buyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js",
     #                              "https://buyerB_origin.com":"https://buyerB.com/generateBid.js",
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},

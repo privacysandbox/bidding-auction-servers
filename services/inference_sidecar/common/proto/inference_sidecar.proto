@@ -41,6 +41,17 @@ message PredictResponse {
   bytes output = 1;
   // Consented debugging log.
   InferenceDebugInfo debug_info = 2;
+  // Map of metric names to their values and optional partition.
+  map<string, MetricValue> metrics = 3;
+}
+
+// Metric value of the metric we want to log
+message MetricValue {
+  // Value of the metric.
+  // TODO(b/349053046) :  Add support for other data types like double, etc.
+  int64 value = 1;
+  // Partition specifies a subgroup for the metric to facilitate segmented analysis.
+  string partition = 2;
 }
 
 message ModelSpec {

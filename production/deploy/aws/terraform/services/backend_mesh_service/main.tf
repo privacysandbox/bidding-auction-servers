@@ -29,6 +29,9 @@ resource "aws_service_discovery_service" "cloud_map_service" {
   health_check_custom_config {
     failure_threshold = 1
   }
+
+  # Ensure all cloud map entries are deleted.
+  force_destroy = true
 }
 
 data "aws_partition" "current" {
@@ -120,6 +123,17 @@ resource "aws_appmesh_virtual_node" "appmesh_virtual_node_with_tls" {
   name      = "${var.service}-${var.operator}-${var.environment}-appmesh-virtual-node"
   mesh_name = var.app_mesh_id
   spec {
+    backend {
+      virtual_service {
+        virtual_service_name = var.kv_server_virtual_service_name
+      }
+    }
+    backend {
+      virtual_service {
+        virtual_service_name = var.ad_retrieval_kv_server_virtual_service_name
+      }
+    }
+
     listener {
       port_mapping {
         port     = var.service_port
@@ -160,6 +174,17 @@ resource "aws_appmesh_virtual_node" "appmesh_virtual_node_sans_tls" {
   name      = "${var.service}-${var.operator}-${var.environment}-appmesh-virtual-node"
   mesh_name = var.app_mesh_id
   spec {
+    backend {
+      virtual_service {
+        virtual_service_name = var.kv_server_virtual_service_name
+      }
+    }
+    backend {
+      virtual_service {
+        virtual_service_name = var.ad_retrieval_kv_server_virtual_service_name
+      }
+    }
+
     listener {
       port_mapping {
         port     = var.service_port

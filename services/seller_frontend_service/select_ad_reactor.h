@@ -43,6 +43,7 @@
 #include "services/seller_frontend_service/data/scoring_signals.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/encryption_util.h"
+#include "services/seller_frontend_service/util/validation_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
@@ -60,9 +61,6 @@ inline constexpr char kAllBidsRejectedBuyerCurrencyMismatch[] =
     "All bids rejected for failure to match buyer currency.";
 
 inline constexpr absl::string_view kWinningAd = "winning_ad";
-
-inline constexpr char kValidCurrencyCodePattern[] = "^[A-Z]{3}$";
-const std::regex kValidCurrencyCodeRegex(kValidCurrencyCodePattern);
 
 inline constexpr int kMinChaffRequestSizeBytes = 9000;
 inline constexpr int kMaxChaffRequestSizeBytes = 95000;

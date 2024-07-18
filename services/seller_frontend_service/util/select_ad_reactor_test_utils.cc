@@ -490,8 +490,8 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
 void MockEntriesCallOnBuyerFactory(
     const google::protobuf::Map<std::string, std::string>& buyer_input,
     const BuyerFrontEndAsyncClientFactoryMock& factory) {
-  std::vector<std::pair<absl::string_view,
-                        std::shared_ptr<const BuyerFrontEndAsyncClient>>>
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
   for (const auto& [buyer, unused] : buyer_input) {
     entries.emplace_back(buyer,

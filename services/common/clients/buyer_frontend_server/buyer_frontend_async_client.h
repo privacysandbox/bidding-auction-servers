@@ -69,7 +69,7 @@ class BuyerFrontEndAsyncGrpcClient
                               ResponseMetadata) &&>
           on_done,
       absl::Duration timeout = kMaxClientTimeout,
-      RequestConfig request_config = {}) const override;
+      RequestConfig request_config = {}) override;
 
  protected:
   // Sends an asynchronous request via grpc to the Buyer FrontEnd Service.

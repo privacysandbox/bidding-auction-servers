@@ -40,6 +40,13 @@ inline constexpr int ReportResultArgIndex(ReportResultArgs arg) {
   return static_cast<std::underlying_type_t<ReportResultArgs>>(arg);
 }
 
+// Parses the json response from reportResult execution to ReportResultResponse
+// If adTech code logging is enabled, the parsed console.logs,
+// console.errors and console.warnings will be logged.
+absl::StatusOr<ReportResultResponse> ParseReportResultResponse(
+    const ReportingDispatchRequestConfig& dispatch_request_config,
+    absl::string_view response, RequestLogContext& log_context);
+
 // Generates device signals for reportResult input
 rapidjson::Document GenerateSellerDeviceSignals(
     const SellerReportingDispatchRequestData& request_data);

@@ -17,6 +17,11 @@
 locals {
   region      = "" # Example: ["us-central1", "us-west1"]
   environment = "" # Must be <= 3 characters. Example: "abc"
+
+  # Set to true for service mesh, false for Load balancers
+  use_service_mesh = false
+  # Whether to use TLS-encrypted communication between service mesh envoy sidecars. Defaults to false, as comms take place within a VPC and the critical payload is HPKE-encrypted, and said encryption is terminated inside a TEE.
+  use_tls_with_mesh = false
 }
 
 provider "aws" {
@@ -27,7 +32,7 @@ module "buyer" {
   source                               = "../../../modules/buyer"
   environment                          = local.environment
   region                               = local.region
-  enclave_debug_mode                   = false # Example: false
+  enclave_debug_mode                   = false # Example: false, set to true for extended logs
   root_domain                          = ""    # Example: "bidding1.com"
   root_domain_zone_id                  = ""    # Example: "Z1011487GET92S4MN4CM"
   certificate_arn                      = ""    # Example: "arn:aws:acm:us-west-1:57473821111:certificate/59ebdcbe-2475-4b70-9079-7a360f5c1111"
@@ -46,21 +51,30 @@ module "buyer" {
   bidding_autoscaling_desired_capacity = 3     # Example: 3
   bidding_autoscaling_max_size         = 5     # Example: 5
   bidding_autoscaling_min_size         = 1     # Example: 1
+  country_for_cert_auth                = ""    # Example: "US"
+  business_org_for_cert_auth           = ""    # Example: "Privacy Sandbox"
+  state_for_cert_auth                  = ""    # Example: "California"
+  org_unit_for_cert_auth               = ""    # Example: "Bidding and Auction Servers"
+  locality_for_cert_auth               = ""    # Example: "Mountain View"
+  kv_server_virtual_service_name       = ""
+  use_service_mesh                     = local.use_service_mesh
+  use_tls_with_mesh                    = local.use_tls_with_mesh
 
   runtime_flags = {
-    BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_PORT               = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS                   = "false"          # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_EGRESS_TLS                = "true"           # Do not change unless you are modifying the default GCP architecture.
-    COLLECTOR_ENDPOINT                = "127.0.0.1:4317" # Do not change unless you are modifying the default GCP architecture.
-    AD_RETRIEVAL_KV_SERVER_EGRESS_TLS = "true"           # Do not change unless you are modifying the default GCP architecture.
-    KV_SERVER_EGRESS_TLS              = "true"           # Do not change unless you are modifying the default GCP architecture.
+    BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default AWS architecture.
+    BUYER_FRONTEND_PORT               = "50051"          # Do not change unless you are modifying the default AWS architecture.
+    BFE_INGRESS_TLS                   = "false"          # Do not change unless you are modifying the default AWS architecture.
+    BIDDING_EGRESS_TLS                = "true"           # Do not change unless you are modifying the default AWS architecture.
+    COLLECTOR_ENDPOINT                = "127.0.0.1:4317" # Do not change unless you are modifying the default AWS architecture.
+    AD_RETRIEVAL_KV_SERVER_EGRESS_TLS = "true"           # Do not change unless you are modifying the default AWS architecture.
+    KV_SERVER_EGRESS_TLS              = "true"           # Do not change unless you are modifying the default AWS architecture.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-    BIDDING_SERVER_ADDR                           = "" # Example: "dns:///bidding1.com:443"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
-    TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
-    TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
+    BIDDING_SERVER_ADDR                           = local.use_service_mesh ? "" /* Example for Mesh: "dns:///bidding-buyer1-prod-appmesh-virtual-service.bidding1.com:50051" */ : "" /* Example for internal Load Balancers: "dns:///bidding-buyer1-prod.bidding1.com:443" */
+    GRPC_ARG_DEFAULT_AUTHORITY                    = local.use_service_mesh ? "" /* Example for Mesh: "bidding-buyer1-${local.environment}-appmesh-virtual-service.bidding1.com" */ : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
+    BUYER_KV_SERVER_ADDR                          = ""                                                                                                                                             # Example: "https://kvserver.com/trusted-signals"
+    TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = ""                                                                                                                                             # Example: "xds:///ad-retrieval-host"
+    TEE_KV_SERVER_ADDR                            = ""                                                                                                                                             # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "60000"
     GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
@@ -89,7 +103,7 @@ module "buyer" {
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
-    JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count.
+    JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count, and should be equal for best performance.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
     ROMA_TIMEOUT_MS     = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.

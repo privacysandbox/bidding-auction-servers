@@ -155,6 +155,21 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
                  absl::Duration timeout, OnDoneFetchUrls done_callback) override
       ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
+  // Fetches provided urls and response metadata with libcurl.
+  //
+  // requests: The URL and headers for the HTTP GET requests.
+  // timeout: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error. Guaranteed to be invoked
+  // with results in the same order as the corresponding requests.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrlsWithMetadata(const std::vector<HTTPRequest>& requests,
+                             absl::Duration timeout,
+                             OnDoneFetchUrlsWithMetadata done_callback) override
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
  private:
   // This struct maintains the data related to a Curl request, some of which
   // has to stay valid throughout the life of the request. The code maintains a
@@ -169,19 +184,52 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
     struct curl_slist* headers_list_ptr = nullptr;
 
     // The callback function for this request from FetchUrl.
-    OnDoneFetchUrl done_callback;
+    OnDoneFetchUrlWithMetadata done_callback;
 
     // Pointer to the body of request. Relevant only for HTTP methods that
     // upload data to server.
     std::unique_ptr<DataToUpload> body;
 
-    // The pointer that is used by the req_handle to write the request output.
-    std::unique_ptr<std::string> output;
+    // Set response headers in the output.
+    std::vector<std::string> response_headers;
+
+    // Set the final redirect URL in the output.
+    bool include_redirect_url;
+
+    HTTPResponse response_with_metadata;
 
     CurlRequestData(const std::vector<std::string>& headers,
-                    OnDoneFetchUrl on_done);
+                    OnDoneFetchUrlWithMetadata on_done,
+                    std::vector<std::string> response_header_keys,
+                    bool include_redirect_url);
     ~CurlRequestData();
   };
+
+  // FetchUrlsLifetime manages a single FetchUrls request and encapsulates
+  // all of the data each individual FetchUrl callback will need.
+  struct FetchUrlsWithMetadataLifetime {
+    OnDoneFetchUrlsWithMetadata all_done_callback;
+    // Results will be passed into all_done_callback.
+    std::vector<absl::StatusOr<HTTPResponse>> results;
+    // This is used to guard pending_results
+    // to keep the count accurate when updated by
+    // different threads.
+    absl::Mutex results_mu;
+    int pending_results;
+  };
+
+  // Fetches provided url with libcurl and metadata.
+  //
+  // http_request: The URL and headers for the HTTP GET request.
+  // timeout_ms: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrl(const HTTPRequest& request, int timeout_ms,
+                OnDoneFetchUrlWithMetadata done_callback)
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // This method adds the curl handle to a set to keep track of pending handles.
   // Must be called after the handle has been initialized.
@@ -218,7 +266,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(
       const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,
-      int64_t keepalive_interval_sec, OnDoneFetchUrl done_callback);
+      int64_t keepalive_interval_sec, OnDoneFetchUrlWithMetadata done_callback);
 
   // Adds the request to curl multi request manager. If the addition fails, the
   // executes the callback else stores the request handle in curl data map.
