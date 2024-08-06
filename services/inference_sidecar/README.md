@@ -42,18 +42,52 @@ variable with `--//:inference_runtime=pytorch`.
 ## Start the B&A servers in GCP
 
 -   Create a GCS bucket and store ML models into it.
+<<<<<<< HEAD
 -   Set runtime flags: `INFERENCE_SIDECAR_BINARY_PATH`, `INFERENCE_MODEL_BUCKET_NAME`, and
     `INFERENCE_MODEL_BUCKET_PATHS`.
     -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar`.
 -   Refer to
     [README.md](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
+=======
+-   The GCS bucket needs to give the service account associated with the GCE instance both storage
+    legacy bucket reader and storage legacy object reader permissions:
+    [guide on setting bucket permissions](https://cloud.google.com/storage/docs/access-control/using-iam-permissions#bucket-add).
+-   Now you need to deploy a B&A server stack:
+    [deployment guide](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
+-   In the B&A deployment terraform configuration, set runtime flags:
+
+    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar`.
+    -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the GCS bucket that you have created. Note
+        that this _not_ a url. For example, the bucket name can be "test_models".
+    -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
+        bucket. For example, within the "test_models" bucket there are saved models
+        "tensorflow/model1" and "tensorflow/model1". To load these two models, this flag should be
+        set to "tensorflow/model1,tensorflow/model2".
+    -   Set `INFERENCE_SIDECAR_RUNTIME_CONFIG` which has the following format:
+
+        ```javascript
+        {
+            "num_interop_threads": <integer_value>,
+            "num_intraop_threads": <integer_value>,
+            "module_name": <string_value>,
+            "cpuset": <an array of integer values>
+        }
+        ```
+
+        `module_name` flag is required and should be one of "test", "tensorflow_v2_14_0", or
+        "pytorch_v2_1_1". All other flags are optional.
+>>>>>>> upstream-v3.10.0
 
 ## Start the B&A servers locally for testing/debugging
 
 The servers run locally and the ML models are directly read from the local disk.
 
 -   Use the command-line flags: `--inference_sidecar_binary_path` and
+<<<<<<< HEAD
     `--inference_model_local_paths`.
+=======
+    `--inference_model_local_paths`, `--inference_sidecar_runtime_config`.
+>>>>>>> upstream-v3.10.0
 -   Utilize services/inference_sidecar/common/tools/debug/start_inference script.
 
 ## Trigger ML Inference
@@ -133,6 +167,7 @@ See an example of a Batch Inference Request in a JSON format with 2 models:
 
 ```json
 {
+<<<<<<< HEAD
   "request" : [
     {
       "model_path" : "my_bucket/models/pcvr/1/",
@@ -163,6 +198,38 @@ See an example of a Batch Inference Request in a JSON format with 2 models:
       ]
     }
   ]
+=======
+    "request": [
+        {
+            "model_path": "my_bucket/models/pcvr/1/",
+            "tensors": [
+                {
+                    "tensor_name": "feature1",
+                    "data_type": "DOUBLE",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": ["0.454920", "-0.25752"]
+                }
+            ]
+        },
+        {
+            "model_path": "my_bucket/models/pctr/2/",
+            "tensors": [
+                {
+                    "tensor_name": "feature1",
+                    "data_type": "INT32",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": ["5", "6"]
+                },
+                {
+                    "tensor_name": "feature2",
+                    "data_type": "FLOAT",
+                    "tensor_shape": [2, 3],
+                    "tensor_content": ["0.5", "0.6", "0.7", "0.8", "0.21", "-0.99"]
+                }
+            ]
+        }
+    ]
+>>>>>>> upstream-v3.10.0
 }
 ```
 

@@ -1,0 +1,15 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+
+exports_files(
+    [
+        "cddl.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+copy_file(
+    name = "cddl_h",
+    src = ":cddl.h",
+    out = "include/cddl.h",
+    visibility = ["//visibility:public"],
+)

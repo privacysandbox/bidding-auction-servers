@@ -16,11 +16,29 @@
 #define SERVICES_INFERENCE_SIDECAR_COMMON_GRPC_SIDECAR_H_
 
 #include "absl/status/status.h"
+<<<<<<< HEAD
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 // Runs a simple gRPC server. It is thread safe.
 absl::Status Run();
+=======
+#include "proto/inference_sidecar.pb.h"
+
+namespace privacy_sandbox::bidding_auction_servers::inference {
+
+// ML models are reset at the probability of 0.1%.
+constexpr double kMinResetProbability = 0.001;
+
+absl::Status SetCpuAffinity(const InferenceSidecarRuntimeConfig& config);
+
+// Makes sure model_reset_probability must be set to kMinResetProbability.
+absl::Status EnforceModelResetProbability(
+    InferenceSidecarRuntimeConfig& config);
+
+// Runs a simple gRPC server. It is thread safe.
+absl::Status Run(const InferenceSidecarRuntimeConfig& config);
+>>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

@@ -136,8 +136,9 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
   bidding_signals->trusted_signals =
       std::make_unique<std::string>(expected_raw_output.bidding_signals());
 
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   std::string difference;
   MessageDifferencer differencer;
@@ -195,8 +196,9 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
   input.set_seller(expected_raw_output.seller());
   input.set_publisher_name(expected_raw_output.publisher_name());
 
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
   ASSERT_GT(raw_output->interest_group_for_bidding().size(), 0);
@@ -228,7 +230,7 @@ TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::make_unique<BiddingSignals>(),
-      LogContext{});
+      server_common::LogContext{});
 
   EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
 }
@@ -251,7 +253,7 @@ TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForBrowserIG) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, input.buyer_input(), std::make_unique<BiddingSignals>(),
-      LogContext{});
+      server_common::LogContext{});
 
   ASSERT_EQ(raw_output->interest_group_for_bidding().size(), 1);
   // Expect no bidding signal keys in output.
@@ -281,7 +283,7 @@ TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForAndroidIG) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       get_bids_raw_request, get_bids_raw_request.buyer_input(),
-      std::make_unique<BiddingSignals>(), LogContext{});
+      std::make_unique<BiddingSignals>(), server_common::LogContext{});
 
   ASSERT_EQ(raw_output->interest_group_for_bidding().size(), 1);
   // Expect no bidding signal keys in output.
@@ -361,8 +363,9 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   input.set_seller(expected_raw_output.seller());
   input.set_publisher_name(expected_raw_output.publisher_name());
 
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
 
@@ -396,9 +399,10 @@ TEST(CreateGenerateBidsRequestTest,
   auto bidding_signals = std::make_unique<BiddingSignals>();
 
   GetBidsRequest::GetBidsRawRequest input;
-  LogContext log_context;
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  server_common::LogContext log_context;
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   EXPECT_TRUE(raw_output->bidding_signals().empty());
 }
@@ -408,8 +412,9 @@ TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
 
   GetBidsRequest::GetBidsRawRequest input;
   input.set_enable_debug_reporting(true);
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   EXPECT_TRUE(raw_output->enable_debug_reporting());
 }
@@ -418,7 +423,7 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
   auto bidding_signals = std::make_unique<BiddingSignals>();
 
   GetBidsRequest::GetBidsRawRequest input;
-  LogContext log_context;
+  server_common::LogContext log_context;
   log_context.set_generation_id(kSampleGenerationId);
   log_context.set_adtech_debug_id(kSampleAdtechDebugId);
   auto raw_output = CreateGenerateBidsRawRequest(
@@ -438,8 +443,9 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
   consented_debug_config->set_is_consented(kIsConsentedDebug);
   consented_debug_config->set_token(kConsentedDebugToken);
 
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), LogContext{});
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 server_common::LogContext{});
 
   EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
             kIsConsentedDebug);
@@ -460,10 +466,11 @@ TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
             kTestProtectedAppSignals);
   EXPECT_EQ(request->seller(), kTestSeller);
   EXPECT_EQ(request->publisher_name(), kTestPublisherName);
-  EXPECT_EQ(request->enable_debug_reporting(), true);
+  EXPECT_TRUE(request->enable_debug_reporting());
+  EXPECT_TRUE(request->enable_unlimited_egress());
   EXPECT_EQ(request->log_context().generation_id(), kTestGenerationId);
   EXPECT_EQ(request->log_context().adtech_debug_id(), kTestAdTechDebugId);
-  EXPECT_EQ(request->consented_debug_config().is_consented(), true);
+  EXPECT_TRUE(request->consented_debug_config().is_consented());
   EXPECT_EQ(request->consented_debug_config().token(),
             kTestConsentedDebuggingToken);
   ASSERT_TRUE(request->has_contextual_protected_app_signals_data());

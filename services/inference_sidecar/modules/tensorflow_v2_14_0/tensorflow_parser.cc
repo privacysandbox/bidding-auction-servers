@@ -163,10 +163,20 @@ absl::StatusOr<std::string> SerializeJsonDoc(const rapidjson::Value& document) {
 
 // Converts a single tensor to json.
 absl::StatusOr<rapidjson::Value> TensorToJsonValue(
+<<<<<<< HEAD
     const tensorflow::Tensor& tensor,
     rapidjson::MemoryPoolAllocator<>& allocator) {
   rapidjson::Value json_tensor(rapidjson::kObjectType);
 
+=======
+    const std::string& tensor_name, const tensorflow::Tensor& tensor,
+    rapidjson::MemoryPoolAllocator<>& allocator) {
+  rapidjson::Value json_tensor(rapidjson::kObjectType);
+
+  rapidjson::Value tensor_name_value;
+  tensor_name_value.SetString(tensor_name.c_str(), allocator);
+  json_tensor.AddMember("tensor_name", tensor_name_value, allocator);
+>>>>>>> upstream-v3.10.0
   tensorflow::TensorShape tensor_shape = tensor.shape();
   rapidjson::Value tensor_shape_json(rapidjson::kArrayType);
   for (int i = 0; i < tensor_shape.dims(); ++i) {
@@ -236,26 +246,40 @@ absl::StatusOr<rapidjson::Value> TensorToJsonValue(
 }
 
 absl::StatusOr<std::string> ConvertTensorsToJson(
+<<<<<<< HEAD
     const std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>&
+=======
+    const std::vector<std::pair<std::string, std::vector<TensorWithName>>>&
+>>>>>>> upstream-v3.10.0
         batch_outputs) {
   rapidjson::Document document;
   document.SetObject();
   rapidjson::MemoryPoolAllocator<>& allocator = document.GetAllocator();
 
   rapidjson::Value batch(rapidjson::kArrayType);
+<<<<<<< HEAD
   for (const auto& pair : batch_outputs) {
     const std::string model_path = pair.first;
     const std::vector<tensorflow::Tensor> tensors = pair.second;
 
+=======
+  for (const auto& [model_path, tensors] : batch_outputs) {
+>>>>>>> upstream-v3.10.0
     rapidjson::Value nested_object(rapidjson::kObjectType);
     rapidjson::Value model_path_value;
     model_path_value.SetString(model_path.c_str(), allocator);
     nested_object.AddMember("model_path", model_path_value, allocator);
 
     rapidjson::Value tensors_value(rapidjson::kArrayType);
+<<<<<<< HEAD
     for (const auto& tensor : tensors) {
       absl::StatusOr<rapidjson::Value> json =
           TensorToJsonValue(tensor, allocator);
+=======
+    for (const auto& [tensor_name, tensor] : tensors) {
+      absl::StatusOr<rapidjson::Value> json =
+          TensorToJsonValue(tensor_name, tensor, allocator);
+>>>>>>> upstream-v3.10.0
       if (json.ok()) {
         tensors_value.PushBack(json.value(), allocator);
       } else {

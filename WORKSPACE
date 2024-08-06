@@ -11,13 +11,31 @@ http_archive(
 
 python_deps("//builders/bazel")
 
+# TODO: Remove bazel_clang_tidy once we sync to the common repo commit 9edb0c3 (4/3/2024) or later
+http_archive(
+    name = "bazel_clang_tidy",
+    sha256 = "352aeb57ad7ed53ff6e02344885de426421fb6fd7a3890b04d14768d759eb598",
+    strip_prefix = "bazel_clang_tidy-4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39",
+    urls = [
+        "https://github.com/erenon/bazel_clang_tidy/archive/4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39.zip",
+    ],
+)
+
 http_archive(
     name = "google_privacysandbox_servers_common",
+<<<<<<< HEAD
     # 2024-04-01
     sha256 = "e36cc26c917ec4b1066a32777b48ac8728ba13c276cdda2e91c36ad2037d9bcd",
     strip_prefix = "data-plane-shared-libraries-1fbac466b6b88e00a4ca037f7359ee1942ade13e",
     urls = [
         "https://github.com/privacysandbox/data-plane-shared-libraries/archive/1fbac466b6b88e00a4ca037f7359ee1942ade13e.zip",
+=======
+    # 2024-05-28
+    sha256 = "a241ad3d8d897599a6acff89fc759d0e858f8466988f7c56c57b0a83b8cdab5d",
+    strip_prefix = "data-plane-shared-libraries-3e92e75fceb18694f1ce7177e7433824769a89a0",
+    urls = [
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/3e92e75fceb18694f1ce7177e7433824769a89a0.zip",
+>>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -75,6 +93,7 @@ http_archive(
 
 http_archive(
     name = "service_value_key_fledge_privacysandbox",
+<<<<<<< HEAD
     # commit af184d649be5d9f0a62738db41ed1496de427bcd 2024-03-15
     sha256 = "",
     strip_prefix = "protected-auction-key-value-service-af184d649be5d9f0a62738db41ed1496de427bcd",
@@ -127,5 +146,83 @@ http_archive(
     strip_prefix = "bazel_clang_tidy-4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39",
     urls = [
         "https://github.com/erenon/bazel_clang_tidy/archive/4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39.zip",
+=======
+    # commit d186bcf8d643888fac81784f9c91ffb2fb48791c 2024-04-19
+    sha256 = "53521403ffbe18a306417b8e7b41c2a13127ba0892ad921229861a451ad2045e",
+    strip_prefix = "protected-auction-key-value-service-d186bcf8d643888fac81784f9c91ffb2fb48791c",
+    urls = [
+        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/d186bcf8d643888fac81784f9c91ffb2fb48791c.zip",
+>>>>>>> upstream-v3.10.0
     ],
+)
+
+### Initialize Python headers
+
+http_archive(
+    name = "pybind11_bazel",
+    sha256 = "b72c5b44135b90d1ffaba51e08240be0b91707ac60bea08bb4d84b47316211bb",
+    strip_prefix = "pybind11_bazel-b162c7c88a253e3f6b673df0c621aca27596ce6b",
+    urls = ["https://github.com/pybind/pybind11_bazel/archive/b162c7c88a253e3f6b673df0c621aca27596ce6b.zip"],
+)
+
+load("@pybind11_bazel//:python_configure.bzl", "python_configure")
+
+python_configure(
+    name = "local_config_python",
+)
+
+### Initialize inference common (for bidding server inference utils)
+local_repository(
+    name = "inference_common",
+    path = "services/inference_sidecar/common",
+)
+
+### Initialize PyTorch sidecar local repository (for PyTorch sidecar binary)
+local_repository(
+    name = "pytorch_v2_1_1",
+    path = "services/inference_sidecar/modules/pytorch_v2_1_1",
+)
+
+### Initialize Tensorflow sidecar local respository
+
+local_repository(
+    name = "tensorflow_v2_14_0",
+    path = "services/inference_sidecar/modules/tensorflow_v2_14_0",
+)
+
+http_archive(
+    name = "libevent",
+    build_file = "//third_party:libevent.BUILD",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party:libevent.patch",
+    ],
+    sha256 = "8836ad722ab211de41cb82fe098911986604f6286f67d10dfb2b6787bf418f49",
+    strip_prefix = "libevent-release-2.1.12-stable",
+    urls = ["https://github.com/libevent/libevent/archive/refs/tags/release-2.1.12-stable.zip"],
+)
+
+load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
+
+crate_universe_dependencies()
+
+load("//third_party:deps.bzl", cddl_deps = "deps")
+
+cddl_deps()
+
+load("@cddl_crate_index//:defs.bzl", cddl_crate_repositories = "crate_repositories")
+
+cddl_crate_repositories()
+
+http_archive(
+    name = "cddl_lib",
+    build_file = "//third_party/cddl:cddl.BUILD",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party:cddl/cddl.patch",
+    ],
+    sha256 = "01e04989c6482e851dc22f376f1c2e1cc493e1ae7b808ae78180d539e6939acb",
+    strip_prefix = "cddl-0.9.4",
+    urls = ["https://github.com/anweiss/cddl/archive/refs/tags/0.9.4.zip"],
+    workspace_file = "//third_party/cddl:WORKSPACE",
 )

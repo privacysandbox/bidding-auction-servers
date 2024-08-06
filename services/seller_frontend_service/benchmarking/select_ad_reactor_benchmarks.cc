@@ -50,8 +50,9 @@ void AsyncReporterStub::DoReport(
     const HTTPRequest& reporting_request,
     absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
         done_callback) const {
-  PS_VLOG(1) << "Mocking success for reporting to URL: "
-             << reporting_request.url << ", body: " << reporting_request.body;
+  PS_VLOG(kNoisyInfo) << "Mocking success for reporting to URL: "
+                      << reporting_request.url
+                      << ", body: " << reporting_request.body;
   std::move(done_callback)("success");
 }
 
@@ -72,9 +73,10 @@ class BuyerFrontEndAsyncClientStub : public BuyerFrontEndAsyncClient {
       std::unique_ptr<GetBidsRequest::GetBidsRawRequest> request,
       const RequestMetadata& metadata,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                  GetBidsResponse::GetBidsRawResponse>>) &&>
+                                  GetBidsResponse::GetBidsRawResponse>>,
+                              ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout, RequestConfig request_config) override;
 
  private:
   const std::string ad_render_url_;
@@ -98,9 +100,14 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
     std::unique_ptr<GetBidsRequest::GetBidsRawRequest> request,
     const RequestMetadata& metadata,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                GetBidsResponse::GetBidsRawResponse>>) &&>
+                                GetBidsResponse::GetBidsRawResponse>>,
+                            ResponseMetadata) &&>
         on_done,
+<<<<<<< HEAD
     absl::Duration timeout) const {
+=======
+    absl::Duration timeout, RequestConfig request_config) {
+>>>>>>> upstream-v3.10.0
   auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   switch (buyer_mock_type_) {
     case BuyerMockType::DEBUG_REPORTING: {
@@ -128,7 +135,11 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
       break;
     }
   }
+<<<<<<< HEAD
   std::move(on_done)(std::move(response));
+=======
+  std::move(on_done)(std::move(response), /* response_metadata= */ {});
+>>>>>>> upstream-v3.10.0
   return absl::OkStatus();
 }
 
@@ -148,9 +159,10 @@ class ScoringClientStub
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
       const RequestMetadata& metadata,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                  ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
+                                  ScoreAdsResponse::ScoreAdsRawResponse>>,
+                              ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout, RequestConfig request_config) override;
 };
 
 absl::Status ScoringClientStub::Execute(
@@ -166,9 +178,10 @@ absl::Status ScoringClientStub::ExecuteInternal(
     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
     const RequestMetadata& metadata,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
+                                ScoreAdsResponse::ScoreAdsRawResponse>>,
+                            ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestConfig request_config) {
   ScoreAdsResponse::ScoreAdsRawResponse response;
   float i = 1;
   // Last bid wins.
@@ -188,7 +201,8 @@ absl::Status ScoringClientStub::ExecuteInternal(
         std::string(kDebugUrlLength, 'B');
   }
   std::move(on_done)(
-      std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response));
+      std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(response),
+      /* response_metadata= */ {});
   return absl::OkStatus();
 }
 
@@ -199,8 +213,17 @@ class BuyerFrontEndAsyncClientFactoryStub
       const SelectAdRequest& request,
       const ProtectedAuctionInput& protected_auction_input,
       const BuyerMockType buyer_mock_type);
+<<<<<<< HEAD
   std::shared_ptr<const BuyerFrontEndAsyncClient> Get(
+=======
+
+  std::shared_ptr<BuyerFrontEndAsyncClient> Get(
+>>>>>>> upstream-v3.10.0
       absl::string_view client_key) const override;
+
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+  Entries() const override;
 
  private:
   const SelectAdRequest& request_;
@@ -225,9 +248,22 @@ BuyerFrontEndAsyncClientFactoryStub::BuyerFrontEndAsyncClientFactoryStub(
   }
 }
 
-std::shared_ptr<const BuyerFrontEndAsyncClient>
+std::shared_ptr<BuyerFrontEndAsyncClient>
 BuyerFrontEndAsyncClientFactoryStub::Get(absl::string_view client_key) const {
   return buyer_clients_.at(client_key);
+}
+
+std::vector<
+    std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+BuyerFrontEndAsyncClientFactoryStub::Entries() const {
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+      entries;
+  for (const auto& [key, value] : buyer_clients_) {
+    entries.emplace_back(key, value);
+  }
+
+  return entries;
 }
 
 class KeyFetcherManagerStub : public server_common::KeyFetcherManagerInterface {

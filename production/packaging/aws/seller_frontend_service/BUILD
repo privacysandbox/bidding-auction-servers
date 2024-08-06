@@ -22,10 +22,10 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
+    "pkg_mklink",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
@@ -36,6 +36,7 @@ pkg_files(
     prefix = "/",
 )
 
+<<<<<<< HEAD
 pkg_files(
     name = "kmstool_enclave_executable",
     srcs = [
@@ -43,10 +44,18 @@ pkg_files(
     ],
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/",
+=======
+# Create a symlink between where kmstool_enclave_cli expects shell to be
+# (/bin/sh) and where it actually is on our image (/busybox/sh).
+pkg_mklink(
+    name = "busybox_sh_symlink",
+    link_name = "/bin/sh",
+    target = "/busybox/sh",
+>>>>>>> upstream-v3.10.0
 )
 
 server_binaries = [
-    ":kmstool_enclave_executable",
+    ":busybox_sh_symlink",
     ":server_executables",
 ]
 
@@ -60,6 +69,7 @@ pkg_tar(
     srcs = server_binaries,
 )
 
+<<<<<<< HEAD
 # Ensure libnsm ends up in the load path.
 pkg_tar(
     name = "libnsm-tar",
@@ -84,6 +94,8 @@ container_layer(
     ],
 )
 
+=======
+>>>>>>> upstream-v3.10.0
 container_layer(
     name = "server_binary_layer",
     directory = "/",
@@ -114,10 +126,20 @@ container_image(
     entrypoint = [
         "/busybox/sh",
     ],
+<<<<<<< HEAD
     env = LOG_ENV_VARS,
+=======
+>>>>>>> upstream-v3.10.0
     layers = [
         ":server_binary_layer",
-        ":kmstool_enclave_cli_layer",
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
+    tars = [
+        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
     ],
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",

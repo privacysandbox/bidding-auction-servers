@@ -17,13 +17,16 @@
 #include <utility>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "rapidjson/document.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/feature_flags.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/post_auction_signals.h"
 #include "services/common/util/reporting_util.h"
@@ -107,6 +110,7 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   return reporting_response;
 }
 
+<<<<<<< HEAD
 // Stochastically rounds floating point value to 8 bit mantissa and 8
 // bit exponent. If there is an error while generating the rounded
 // number, -1 will be returned.
@@ -114,6 +118,9 @@ double GetEightBitRoundedValue(bool enable_noising, double value) {
   if (!enable_noising) {
     return value;
   }
+=======
+double GetEightBitRoundedValue(double value) {
+>>>>>>> upstream-v3.10.0
   absl::StatusOr<double> rounded_value =
       RoundStochasticallyToKBits(value, kStochasticalRoundingBits);
   if (rounded_value.ok()) {
@@ -122,6 +129,20 @@ double GetEightBitRoundedValue(bool enable_noising, double value) {
   return -1;
 }
 
+<<<<<<< HEAD
+=======
+// Stochastically rounds floating point value to 8 bit mantissa and 8
+// bit exponent. If there is an error while generating the rounded
+// number, -1 will be returned. Returns the value as it is if enable_noising
+// is false
+double GetEightBitRoundedValue(bool enable_noising, double value) {
+  if (!enable_noising) {
+    return value;
+  }
+  return GetEightBitRoundedValue(value);
+}
+
+>>>>>>> upstream-v3.10.0
 absl::StatusOr<std::string> GetSellerReportingSignals(
     const ReportingDispatchRequestData& dispatch_request_data,
     const ReportingDispatchRequestConfig& dispatch_request_config) {
@@ -145,26 +166,61 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
       dispatch_request_data.post_auction_signals.winning_ig_owner.c_str(),
       document.GetAllocator());
 
-  document.AddMember(kTopWindowHostname, hostname_value,
+  document.AddMember(kTopWindowHostnameTag, hostname_value,
                      document.GetAllocator());
   document.AddMember(kInterestGroupOwner, interest_group_owner,
                      document.GetAllocator());
+<<<<<<< HEAD
   document.AddMember(kRenderURL, render_URL_value, document.GetAllocator());
   document.AddMember(kRenderUrl, render_url_value, document.GetAllocator());
+=======
+  document.AddMember(kRenderURLTag, render_URL_value, document.GetAllocator());
+  document.AddMember(kRenderUrlTag, render_url_value, document.GetAllocator());
+>>>>>>> upstream-v3.10.0
   double bid = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.post_auction_signals.winning_bid);
   if (bid > -1) {
     document.AddMember(kBid, bid, document.GetAllocator());
   }
+<<<<<<< HEAD
+=======
+  if (!dispatch_request_data.post_auction_signals.winning_bid_currency
+           .empty()) {
+    rapidjson::Value winning_bid_currency_value;
+    winning_bid_currency_value.SetString(
+        dispatch_request_data.post_auction_signals.winning_bid_currency.c_str(),
+        document.GetAllocator());
+    document.AddMember(kWinningBidCurrencyTag, winning_bid_currency_value,
+                       document.GetAllocator());
+  }
+  if (!dispatch_request_data.post_auction_signals
+           .highest_scoring_other_bid_currency.empty()) {
+    rapidjson::Value highest_scoring_other_bid_currency_value;
+    highest_scoring_other_bid_currency_value.SetString(
+        dispatch_request_data.post_auction_signals
+            .highest_scoring_other_bid_currency.c_str(),
+        document.GetAllocator());
+    document.AddMember(kHighestScoringOtherBidCurrencyTag,
+                       highest_scoring_other_bid_currency_value,
+                       document.GetAllocator());
+  }
+>>>>>>> upstream-v3.10.0
   double desirability = GetEightBitRoundedValue(
       dispatch_request_config.enable_report_win_input_noising,
       dispatch_request_data.post_auction_signals.winning_score);
   if (desirability > -1) {
+<<<<<<< HEAD
     document.AddMember(kDesirability, desirability, document.GetAllocator());
   }
   document.AddMember(
       kHighestScoringOtherBid,
+=======
+    document.AddMember(kDesirabilityTag, desirability, document.GetAllocator());
+  }
+  document.AddMember(
+      kHighestScoringOtherBidTag,
+>>>>>>> upstream-v3.10.0
       dispatch_request_data.post_auction_signals.highest_scoring_other_bid,
       document.GetAllocator());
 
@@ -174,11 +230,14 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
     top_level_seller.SetString(
         dispatch_request_data.component_reporting_metadata.top_level_seller
             .c_str(),
+<<<<<<< HEAD
         document.GetAllocator());
     rapidjson::Value component_seller;
     component_seller.SetString(
         dispatch_request_data.component_reporting_metadata.component_seller
             .c_str(),
+=======
+>>>>>>> upstream-v3.10.0
         document.GetAllocator());
     document.AddMember(kTopLevelSellerTag, top_level_seller,
                        document.GetAllocator());
@@ -188,6 +247,27 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
     if (modified_bid > -1) {
       document.AddMember(kModifiedBid, modified_bid, document.GetAllocator());
     }
+<<<<<<< HEAD
+=======
+    if (!dispatch_request_data.component_reporting_metadata
+             .modified_bid_currency.empty()) {
+      rapidjson::Value modified_bid_currency;
+      modified_bid_currency.SetString(
+          dispatch_request_data.component_reporting_metadata
+              .modified_bid_currency.c_str(),
+          document.GetAllocator());
+      document.AddMember(kModifiedBidCurrencyTag, modified_bid_currency,
+                         document.GetAllocator());
+    }
+  }
+  if (!dispatch_request_data.component_reporting_metadata.component_seller
+           .empty()) {
+    rapidjson::Value component_seller;
+    component_seller.SetString(
+        dispatch_request_data.component_reporting_metadata.component_seller
+            .c_str(),
+        document.GetAllocator());
+>>>>>>> upstream-v3.10.0
     document.AddMember(kComponentSeller, component_seller,
                        document.GetAllocator());
   }
@@ -216,7 +296,11 @@ std::string GetBuyerMetadataJson(
     buyer_signals_obj = ParseJsonString(
         dispatch_request_data.buyer_reporting_metadata.buyer_signals);
     if (!buyer_signals_obj.ok()) {
+<<<<<<< HEAD
       PS_VLOG(1, dispatch_request_data.log_context)
+=======
+      PS_LOG(ERROR, dispatch_request_data.log_context)
+>>>>>>> upstream-v3.10.0
           << "Error parsing buyer signals to Json object";
     } else {
       buyer_reporting_signals_obj.AddMember(
@@ -249,7 +333,11 @@ std::string GetBuyerMetadataJson(
         kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
   if (dispatch_request_data.buyer_reporting_metadata.recency.has_value()) {
+<<<<<<< HEAD
     PS_VLOG(1, dispatch_request_data.log_context)
+=======
+    PS_VLOG(kNoisyInfo, dispatch_request_data.log_context)
+>>>>>>> upstream-v3.10.0
         << "BuyerReportingMetadata: Recency:"
         << dispatch_request_data.buyer_reporting_metadata.recency.value();
     long recency =
@@ -291,7 +379,17 @@ std::string GetBuyerMetadataJson(
         kSellerTag, std::move(seller),
         buyer_reporting_signals_obj.GetAllocator());
   }
+  double ad_cost = GetEightBitRoundedValue(
+      dispatch_request_config.enable_report_win_input_noising,
+      dispatch_request_data.buyer_reporting_metadata.ad_cost);
+  if (ad_cost > -1) {
+    buyer_reporting_signals_obj.AddMember(
+        kAdCostTag, ad_cost, buyer_reporting_signals_obj.GetAllocator());
+  }
+  // if buyer_reporting_id is present, interestGroupName will not be set.
+  rapidjson::Value buyer_reporting_id;
   rapidjson::Value interest_group_name;
+<<<<<<< HEAD
   interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
                                     .interest_group_name.c_str(),
                                 buyer_reporting_signals_obj.GetAllocator());
@@ -304,11 +402,32 @@ std::string GetBuyerMetadataJson(
   if (ad_cost > -1) {
     buyer_reporting_signals_obj.AddMember(
         kAdCostTag, ad_cost, buyer_reporting_signals_obj.GetAllocator());
+=======
+  if (!dispatch_request_data.buyer_reporting_metadata.buyer_reporting_id
+           .empty()) {
+    buyer_reporting_id.SetString(dispatch_request_data.buyer_reporting_metadata
+                                     .buyer_reporting_id.c_str(),
+                                 buyer_reporting_signals_obj.GetAllocator());
+    buyer_reporting_signals_obj.AddMember(
+        kBuyerReportingIdTag, std::move(buyer_reporting_id),
+        buyer_reporting_signals_obj.GetAllocator());
+  } else {
+    interest_group_name.SetString(dispatch_request_data.buyer_reporting_metadata
+                                      .interest_group_name.c_str(),
+                                  buyer_reporting_signals_obj.GetAllocator());
+    buyer_reporting_signals_obj.AddMember(
+        kInterestGroupName, std::move(interest_group_name),
+        buyer_reporting_signals_obj.GetAllocator());
+>>>>>>> upstream-v3.10.0
   }
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {
+<<<<<<< HEAD
     PS_VLOG(2, dispatch_request_data.log_context)
+=======
+    PS_VLOG(kNoisyWarn, dispatch_request_data.log_context)
+>>>>>>> upstream-v3.10.0
         << "Error constructing buyer_reporting_metadata_input for "
            "reportingEntryFunction";
     return kDefaultBuyerReportingMetadata;
@@ -322,7 +441,11 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   absl::StatusOr<std::string> seller_reporting_signals =
       GetSellerReportingSignals(dispatch_request_data, dispatch_request_config);
   if (!seller_reporting_signals.ok()) {
+<<<<<<< HEAD
     PS_VLOG(2, dispatch_request_data.log_context)
+=======
+    PS_VLOG(kNoisyWarn, dispatch_request_data.log_context)
+>>>>>>> upstream-v3.10.0
         << "Error generating Seller Reporting Signals for Reporting input";
     return {};
   }
@@ -347,6 +470,7 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)] =
       std::make_shared<std::string>(buyer_reporting_metadata_json);
   if (dispatch_request_config.enable_protected_app_signals) {
+<<<<<<< HEAD
     input[ReportingArgIndex(ReportingArgs::kEgressFeatures)] =
         std::make_shared<std::string>(dispatch_request_data.egress_features);
   }
@@ -354,6 +478,22 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
   PS_VLOG(2, dispatch_request_data.log_context)
       << "\n\nReporting Input Args:"
       << "\nAuction Config:\n"
+=======
+    input[ReportingArgIndex(ReportingArgs::kEgressPayload)] =
+        std::make_shared<std::string>(dispatch_request_data.egress_payload);
+    if (absl::GetFlag(FLAGS_enable_temporary_unlimited_egress)) {
+      input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
+          std::make_shared<std::string>(
+              dispatch_request_data.temporary_egress_payload);
+    } else {
+      input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
+          std::make_shared<std::string>("");
+    }
+  }
+
+  PS_VLOG(kDispatch, dispatch_request_data.log_context)
+      << "\n\nReporting Input Args:" << "\nAuction Config:\n"
+>>>>>>> upstream-v3.10.0
       << *(input[ReportingArgIndex(ReportingArgs::kAuctionConfig)])
       << "\nSeller Reporting Signals:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kSellerReportingSignals)])
@@ -363,6 +503,7 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
       << *(input[ReportingArgIndex(ReportingArgs::kDirectFromSellerSignals)])
       << "\nBuyer Reporting Metadata:\n"
       << *(input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]);
+
   return input;
 }
 
@@ -372,11 +513,14 @@ DispatchRequest GetReportingDispatchRequest(
   // Construct the wrapper struct for our V8 Dispatch Request.
   return {
       .id = dispatch_request_data.post_auction_signals.winning_ad_render_url,
+<<<<<<< HEAD
       .version_string = kDispatchRequestVersion,
+=======
+      .version_string = kReportingBlobVersion,
+>>>>>>> upstream-v3.10.0
       .handler_name = dispatch_request_data.handler_name,
       .input =
           GetReportingInput(dispatch_request_config, dispatch_request_data),
   };
 }
-
 }  // namespace privacy_sandbox::bidding_auction_servers

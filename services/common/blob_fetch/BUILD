@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+=======
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_proto_library", "cc_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+>>>>>>> upstream-v3.10.0
 
 package(default_visibility = ["//:__subpackages__"])
 
@@ -30,6 +35,10 @@ cc_library(
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
         "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+<<<<<<< HEAD
+=======
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+>>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -53,3 +62,19 @@ cc_test(
         "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],
 )
+<<<<<<< HEAD
+=======
+
+proto_library(
+    name = "fetch_mode_proto",
+    srcs = ["fetch_mode.proto"],
+    deps = [
+        "@com_google_googleapis//google/api:annotations_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "fetch_mode_cc_proto",
+    deps = [":fetch_mode_proto"],
+)
+>>>>>>> upstream-v3.10.0

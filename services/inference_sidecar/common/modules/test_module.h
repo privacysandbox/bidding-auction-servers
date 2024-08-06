@@ -34,6 +34,7 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 class TestModule final : public ModuleInterface {
  public:
   // The constructor maps the embedded model file into memory.
+<<<<<<< HEAD
   TestModule() = default;
   ~TestModule() override;
 
@@ -41,6 +42,18 @@ class TestModule final : public ModuleInterface {
       const PredictRequest& request) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) override;
+=======
+  explicit TestModule(const InferenceSidecarRuntimeConfig& config)
+      : config_(config) {}
+  ~TestModule() override;
+
+  absl::StatusOr<PredictResponse> Predict(
+      const PredictRequest& request,
+      const RequestContext& request_context) override;
+  absl::StatusOr<RegisterModelResponse> RegisterModel(
+      const RegisterModelRequest& request) override;
+  void ResetModels() override;
+>>>>>>> upstream-v3.10.0
 
   void set_model_path(absl::string_view path) { model_path_ = path; }
 
@@ -55,6 +68,10 @@ class TestModule final : public ModuleInterface {
   void* model_ptr_ = nullptr;
   // The model path.
   std::string model_path_ = "";
+<<<<<<< HEAD
+=======
+  const InferenceSidecarRuntimeConfig config_;
+>>>>>>> upstream-v3.10.0
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

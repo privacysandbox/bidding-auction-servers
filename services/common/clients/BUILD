@@ -26,6 +26,7 @@ cc_library(
     linkstatic = True,
     deps = [
         ":client_params_template",
+        "//services/common/clients/async_grpc:request_config",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
@@ -38,6 +39,10 @@ cc_library(
     # header only library for interface
     linkstatic = True,
     deps = [
+<<<<<<< HEAD
+=======
+        "//services/common/clients/async_grpc:request_config",
+>>>>>>> upstream-v3.10.0
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
 
 package(default_visibility = [
     "//services/common/clients/buyer_frontend_server:__pkg__",
@@ -71,6 +72,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/compression:gzip",
+        "//services/common/util:data_util",
         "//services/common/util:error_accumulator",
         "//services/common/util:request_response_constants",
         "//services/common/util:scoped_cbor",
@@ -155,8 +157,13 @@ cc_library(
     name = "key_fetcher_utils",
     srcs = ["key_fetcher_utils.cc"],
     hdrs = ["key_fetcher_utils.h"],
+    local_defines = IS_PROD_BUILD_DEFINES,
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+<<<<<<< HEAD
+=======
+        "//services/common:public_key_url_allowlist",
+>>>>>>> upstream-v3.10.0
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/util:json_util",
@@ -172,9 +179,15 @@ cc_test(
     name = "key_fetcher_utils_test",
     srcs = [
         "key_fetcher_utils_test.cc",
-    ],
+    ] + select({
+        "//:non_prod_build": ["key_fetcher_utils_non_prod_test.cc"],
+        "//conditions:default": ["key_fetcher_utils_prod_test.cc"],
+    }),
+    local_defines = IS_PROD_BUILD_DEFINES,
     deps = [
         ":key_fetcher_utils",
+        "//services/common:public_key_url_allowlist",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
@@ -190,6 +203,10 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/util:oblivious_http_utils",
+<<<<<<< HEAD
+=======
+        "//services/common/util:request_response_constants",
+>>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
@@ -257,13 +274,20 @@ cc_library(
         ":validation_utils",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/compression:gzip",
+<<<<<<< HEAD
+=======
+        "//services/common/loggers:request_log_context",
+>>>>>>> upstream-v3.10.0
         "//services/common/util:error_categories",
         "//services/common/util:hpke_utils",
         "//services/seller_frontend_service/data:seller_frontend_data",
         "//services/seller_frontend_service/util:framing_utils",
         "//services/seller_frontend_service/util:web_utils",
         "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+<<<<<<< HEAD
         "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+=======
+>>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )

@@ -16,11 +16,19 @@
 #define SERVICES_INFERENCE_SIDECAR_COMMON_IPC_SIDECAR_H_
 
 #include "absl/status/status.h"
+<<<<<<< HEAD
+=======
+#include "proto/inference_sidecar.pb.h"
+>>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 // Runs a simple IPC single-threaded processor.
+<<<<<<< HEAD
 absl::Status Run();
+=======
+absl::Status Run(const InferenceSidecarRuntimeConfig& config);
+>>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

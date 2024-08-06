@@ -26,9 +26,12 @@ cc_library(
                 "@google_privacysandbox_servers_common//:aws_instance": [
                     "-DCLOUD_PLATFORM_AWS=1",
                 ],
+<<<<<<< HEAD
                 "@google_privacysandbox_servers_common//:azure_instance": [
                     "-DCLOUD_PLATFORM_AZURE=1",
                 ],
+=======
+>>>>>>> upstream-v3.10.0
                 "@google_privacysandbox_servers_common//:gcp_instance": [
                     "-DCLOUD_PLATFORM_GCP=1",
                 ],
@@ -49,6 +52,10 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
+<<<<<<< HEAD
+=======
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
+>>>>>>> upstream-v3.10.0
         "@service_value_key_fledge_privacysandbox//public:constants",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_request_builder",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_response_parser",

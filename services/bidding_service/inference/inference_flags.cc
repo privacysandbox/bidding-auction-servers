@@ -23,8 +23,11 @@ ABSL_FLAG(std::optional<std::string>, inference_sidecar_binary_path,
           std::nullopt, "The binary path of the inference sidecar.");
 // Used to load local models for debugging purposes. In the prod setting, this
 // flag is not used, and we fetch models from cloud buckets.
+<<<<<<< HEAD
 // TODO(b/330817239): Bidding server should throw an error if this flag is set
 // in the prod mode.
+=======
+>>>>>>> upstream-v3.10.0
 ABSL_FLAG(std::optional<std::string>, inference_model_local_paths, std::nullopt,
           "Comma separated list of inference model paths to read from the "
           "local disk. It's mainly used for testing.");
@@ -35,3 +38,20 @@ ABSL_FLAG(std::optional<std::string>, inference_model_bucket_paths,
           std::nullopt,
           "Comma separated list of bucket paths. Used to specify a list of "
           "directories to fetch the blobs from.");
+<<<<<<< HEAD
+=======
+// The JSON string should adhere to the following format:
+// {
+//    "num_interop_threads": <integer_value>,
+//    "num_intraop_threads": <integer_value>,
+//    "module_name": <string_value>,
+//    "cpuset": <an array of integer values>,
+//    ...
+// }
+// where each property corresponds to a field of the
+// InferenceSidecarRuntimeConfig proto in
+// services/inference_sidecar/common/proto/inference_sidecar.proto.
+ABSL_FLAG(std::optional<std::string>, inference_sidecar_runtime_config,
+          std::nullopt,
+          "JSON string configurations for the inference sidecar runtime.");
+>>>>>>> upstream-v3.10.0

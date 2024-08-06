@@ -48,29 +48,29 @@ class CryptoClientWrapper : public CryptoClientWrapperInterface {
   CryptoClientWrapper(
       std::unique_ptr<google::scp::cpio::CryptoClientInterface> crypto_client);
 
-  virtual ~CryptoClientWrapper();
+  ~CryptoClientWrapper() override;
 
   // Encrypts a plaintext payload using HPKE.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::HpkeEncryptResponse>
   HpkeEncrypt(const google::cmrt::sdk::public_key_service::v1::PublicKey& key,
-              const std::string& plaintext_payload) noexcept;
+              const std::string& plaintext_payload) noexcept override;
 
   // Decrypts a ciphertext using HPKE.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse>
   HpkeDecrypt(const server_common::PrivateKey& private_key,
-              const std::string& ciphertext) noexcept;
+              const std::string& ciphertext) noexcept override;
 
   // Encrypts plaintext payload using AEAD and a secret derived from the HPKE
   // decrypt operation.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
   AeadEncrypt(const std::string& plaintext_payload,
-              const std::string& secret) noexcept;
+              const std::string& secret) noexcept override;
 
   // Decrypts a ciphertext using AEAD and a secret derived from the HPKE
   // encrypt operation.
   absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadDecryptResponse>
   AeadDecrypt(const std::string& ciphertext,
-              const std::string& secret) noexcept;
+              const std::string& secret) noexcept override;
 
  private:
   std::unique_ptr<google::scp::cpio::CryptoClientInterface> crypto_client_;

@@ -26,6 +26,10 @@ cc_library(
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+<<<<<<< HEAD
+=======
+        "@com_google_absl//absl/synchronization",
+>>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -67,3 +71,51 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+<<<<<<< HEAD
+=======
+
+cc_library(
+    name = "cpu",
+    srcs = ["cpu.cc"],
+    hdrs = ["cpu.h"],
+    deps = [
+        "@com_google_absl//absl/base:log_severity",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+cc_test(
+    name = "cpu_test",
+    size = "small",
+    srcs = ["cpu_test.cc"],
+    deps = [
+        ":cpu",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "log",
+    hdrs = ["log.h"],
+    deps = [
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "log_test",
+    size = "small",
+    srcs = ["log_test.cc"],
+    deps = [
+        ":log",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+>>>>>>> upstream-v3.10.0

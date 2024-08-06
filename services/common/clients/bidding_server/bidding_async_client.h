@@ -46,6 +46,7 @@ struct BiddingServiceClientConfig {
   bool compression = false;
   bool secure_client = true;
   bool is_pas_enabled = false;
+  std::string grpc_arg_default_authority = "";
 };
 
 // This class is an async grpc client for the Fledge Bidding Service.

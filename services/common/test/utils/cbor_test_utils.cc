@@ -140,9 +140,16 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
   PS_RETURN_IF_ERROR(CborSerializeKeyValue(kBidCount, &cbor_build_uint64,
                                            **browser_signals_map,
                                            browser_signals.bid_count()));
-  PS_RETURN_IF_ERROR(CborSerializeKeyValue(kRecency, &cbor_build_uint64,
-                                           **browser_signals_map,
-                                           browser_signals.recency()));
+  if (browser_signals.recency()) {
+    PS_RETURN_IF_ERROR(CborSerializeKeyValue(kRecency, &cbor_build_uint64,
+                                             **browser_signals_map,
+                                             browser_signals.recency()));
+  }
+  if (browser_signals.recency_ms()) {
+    PS_RETURN_IF_ERROR(CborSerializeKeyValue(kRecencyMs, &cbor_build_uint64,
+                                             **browser_signals_map,
+                                             browser_signals.recency_ms()));
+  }
   std::vector<PrevWin> prev_wins_to_encode;
   if (!browser_signals.prev_wins().empty()) {
     PS_ASSIGN_OR_RETURN(prev_wins_to_encode,

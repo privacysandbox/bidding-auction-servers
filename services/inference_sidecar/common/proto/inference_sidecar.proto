@@ -23,17 +23,44 @@ service InferenceService {
   // Registers model.
   rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse) {
   }
+<<<<<<< HEAD
+=======
+  // Gets model paths for successfully registered models.
+  rpc GetModelPaths(GetModelPathsRequest) returns (GetModelPathsResponse) {
+  }
+>>>>>>> upstream-v3.10.0
 }
 
 message PredictRequest {
   // Input data.
   bytes input = 1;
+<<<<<<< HEAD
+=======
+  // Should consented logs be collected for the given predict request.
+  bool is_consented = 2;
+>>>>>>> upstream-v3.10.0
 }
 
 // Response for PredictRequest on a successful run.
 message PredictResponse {
   // Output data.
   bytes output = 1;
+<<<<<<< HEAD
+=======
+  // Consented debugging log.
+  InferenceDebugInfo debug_info = 2;
+  // Map of metric names to their values and optional partition.
+  map<string, MetricValue> metrics = 3;
+}
+
+// Metric value of the metric we want to log
+message MetricValue {
+  // Value of the metric.
+  // TODO(b/349053046) :  Add support for other data types like double, etc.
+  int64 value = 1;
+  // Partition specifies a subgroup for the metric to facilitate segmented analysis.
+  string partition = 2;
+>>>>>>> upstream-v3.10.0
 }
 
 message ModelSpec {
@@ -52,3 +79,53 @@ message RegisterModelRequest {
 
 message RegisterModelResponse {
 }
+<<<<<<< HEAD
+=======
+
+message GetModelPathsRequest {
+}
+
+message GetModelPathsResponse {
+  repeated ModelSpec model_specs = 1;
+}
+
+message InferenceSidecarRuntimeConfig {
+  // The following two parameters control the threading behavior of the
+  // inference backend.
+  // For Tensorflow, they are configured at the session level.
+  // For PyTorch, they are configured the process level.
+
+  // Specifies the number of threads for parallelizing individual operations.
+  int32 num_interop_threads = 1;
+  // Specifies the number of threads for parallelizing the execution within a
+  // single operation.
+  int32 num_intraop_threads = 2;
+
+  // Specifies the inference backend module required.
+  // Currently supports "test", "tensorflow_v2_14_0", "pytorch_v2_1_1"
+  string module_name = 3;
+
+  // Specifies a list of CPU IDs to set the CPU affinity for the sidecar.
+  // The sidecar process will run only on the specified CPUs.
+  // If `cpuset` is empty, the CPU affinity is not used.
+  repeated int32 cpuset = 4;
+
+  // Internal use only. Please note that it is outside the scope of Adtech's control.
+  //
+  // Represents the probability of resetting ML models in the inference sidecar.
+  // It's the privacy preserving feature to prevent data leak between users.
+  // Range: 0.0 (never reset) to 1.0 (always reset per inference); and
+  // 0.5 means the reset probability of 50%. Applied to each model independently.
+  //
+  // TODO(b/330362159): Support different reset probability for consented
+  // traffic.
+  // TODO(b/348985774): Remove this field.
+  double model_reset_probability = 5;
+}
+
+// Proto to store consented debugging logs. It's passed back with
+// PredictResponse to the caller of the Predict RPC.
+message InferenceDebugInfo {
+  repeated string logs = 1;
+}
+>>>>>>> upstream-v3.10.0

@@ -28,6 +28,12 @@ namespace privacy_sandbox::bidding_auction_servers {
 using WrapCodeForDispatch =
     absl::AnyInvocable<std::string(const std::vector<std::string>&)>;
 
+<<<<<<< HEAD
+=======
+using WrapSingleCodeBlobForDispatch =
+    absl::AnyInvocable<std::string(const std::string&)>;
+
+>>>>>>> upstream-v3.10.0
 // Interface for different versions of code fetchers.
 class CodeFetcherInterface {
  public:

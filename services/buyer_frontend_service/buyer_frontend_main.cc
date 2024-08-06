@@ -40,6 +40,10 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+<<<<<<< HEAD
+=======
+#include "services/common/util/tcmalloc_utils.h"
+>>>>>>> upstream-v3.10.0
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
@@ -54,6 +58,8 @@ ABSL_FLAG(std::optional<uint16_t>, healthcheck_port, std::nullopt,
 
 ABSL_FLAG(std::optional<std::string>, bidding_server_addr, std::nullopt,
           "Bidding Server Address");
+ABSL_FLAG(std::optional<std::string>, grpc_arg_default_authority, std::nullopt,
+          "Domain for bidding server, or other domain for TLS Authority");
 ABSL_FLAG(std::optional<std::string>, buyer_kv_server_addr, std::nullopt,
           "Buyer KV Server Address");
 // Added for performance/benchmark testing of both types of http clients.
@@ -84,6 +90,15 @@ ABSL_FLAG(
     bool, init_config_client, false,
     "Initialize config client to fetch any runtime flags not supplied from"
     " command line from cloud metadata store. False by default.");
+ABSL_FLAG(std::optional<int64_t>,
+          bfe_tcmalloc_background_release_rate_bytes_per_second, std::nullopt,
+          "Amount of cached memory in bytes that is returned back to the "
+          "system per second");
+ABSL_FLAG(std::optional<int64_t>, bfe_tcmalloc_max_total_thread_cache_bytes,
+          std::nullopt,
+          "Maximum amount of cached memory in bytes across all threads (or "
+          "logical CPUs)");
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 using ::google::scp::cpio::Cpio;
@@ -98,6 +113,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_port, PORT);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_bidding_server_addr, BIDDING_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_grpc_arg_default_authority,
+                        GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config_client.SetFlag(FLAGS_buyer_kv_server_addr, BUYER_KV_SERVER_ADDR);
   config_client.SetFlag(FLAGS_generate_bid_timeout_ms, GENERATE_BID_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_protected_app_signals_generate_bid_timeout_ms,
@@ -148,6 +165,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_enable_protected_audience,
                         ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
+  config_client.SetFlag(
+      FLAGS_bfe_tcmalloc_background_release_rate_bytes_per_second,
+      BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
+  config_client.SetFlag(FLAGS_bfe_tcmalloc_max_total_thread_cache_bytes,
+                        BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -156,6 +178,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   // Set verbosity
   server_common::log::PS_VLOG_IS_ON(
       0, config_client.GetIntParameter(PS_VERBOSITY));
+<<<<<<< HEAD
 
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -171,6 +194,23 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   PS_VLOG(1) << "Protected Audience support enabled on the service: "
              << enable_protected_audience;
   PS_VLOG(1) << "Successfully constructed the config client.\n";
+=======
+
+  const bool enable_protected_app_signals =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  const bool enable_protected_audience =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
+  if (!enable_protected_audience && !enable_protected_app_signals) {
+    ABSL_LOG(WARNING) << "Neither Protected Audience nor Protected App Signals "
+                         "support enabled";
+  }
+
+  PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
+               << enable_protected_app_signals;
+  PS_LOG(INFO) << "Protected Audience support enabled on the service: "
+               << enable_protected_audience;
+  PS_LOG(INFO) << "Successfully constructed the config client.\n";
+>>>>>>> upstream-v3.10.0
   return config_client;
 }
 
@@ -180,9 +220,16 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
+  MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
+      BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
+  MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
+      BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
+
   int port = config_client.GetIntParameter(PORT);
   std::string bidding_server_addr =
       std::string(config_client.GetStringParameter(BIDDING_SERVER_ADDR));
+  std::string grpc_arg_default_authority = std::string(
+      config_client.GetStringParameter(GRPC_ARG_DEFAULT_AUTHORITY_VAL));
   std::string buyer_kv_server_addr =
       std::string(config_client.GetStringParameter(BUYER_KV_SERVER_ADDR));
   bool enable_buyer_frontend_benchmarking =
@@ -225,7 +272,8 @@ absl::Status RunServer() {
           .secure_client =
               config_client.GetBooleanParameter(BIDDING_EGRESS_TLS),
           .is_pas_enabled =
-              config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS)},
+              config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
+          .grpc_arg_default_authority = grpc_arg_default_authority},
       CreateKeyFetcherManager(config_client,
                               CreatePublicKeyFetcher(config_client)),
       CreateCryptoClient(),
@@ -284,7 +332,7 @@ absl::Status RunServer() {
   if (server == nullptr) {
     return absl::UnavailableError("Error starting Server.");
   }
-  PS_VLOG(1) << "Server listening on " << server_address;
+  PS_LOG(INFO) << "Server listening on " << server_address;
 
   // Wait for the server to shut down. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.

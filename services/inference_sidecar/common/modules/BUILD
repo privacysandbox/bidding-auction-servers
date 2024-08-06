@@ -27,6 +27,10 @@ cc_library(
     hdrs = ["test_module.h"],
     deps = [
         ":module_interface",
+<<<<<<< HEAD
+=======
+        "//:test_constants",
+>>>>>>> upstream-v3.10.0
         "//proto:inference_sidecar_cc_proto",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/log:check",
@@ -59,6 +63,10 @@ cc_library(
     ],
     deps = [
         "//proto:inference_sidecar_cc_proto",
+<<<<<<< HEAD
+=======
+        "//utils:log",
+>>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/status:statusor",
     ],
 )
@@ -74,6 +82,10 @@ cc_test(
     ],
     deps = [
         ":test_module",
+<<<<<<< HEAD
+=======
+        "//benchmark:request_utils",
+>>>>>>> upstream-v3.10.0
         "//proto:inference_sidecar_cc_proto",
         "//utils:file_util",
         "@com_google_absl//absl/status",

@@ -44,8 +44,7 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
-    function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, featureFlags){
-      device_signals.wasmHelper = globalWasmHelper;
+    async function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, featureFlags){
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -60,7 +59,7 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
           ps_warns.push(JSON.stringify(args))
         }
       }
-
+      device_signals.wasmHelper = globalWasmHelper;
       var forDebuggingOnly_auction_loss_url = undefined;
       var forDebuggingOnly_auction_win_url = undefined;
       const forDebuggingOnly = {};
@@ -74,7 +73,11 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
 
       var generateBidResponse = {};
       try {
+<<<<<<< HEAD
         generateBidResponse = generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
+=======
+        generateBidResponse = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
+>>>>>>> upstream-v3.10.0
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
@@ -88,12 +91,16 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      return {
-        response: generateBidResponse !== undefined ? generateBidResponse : {},
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
+      var result = generateBidResponse !== undefined ? generateBidResponse : {};
+      if (featureFlags.enable_logging) {
+        return {
+          response: result,
+          logs: ps_logs,
+          errors: ps_errors,
+          warnings: ps_warns
+        };
       }
+      return result;
     }
 
     function fibonacci(num) {
@@ -118,8 +125,12 @@ constexpr absl::string_view
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
+<<<<<<< HEAD
     function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion, featureFlags){
       // No additional setup.
+=======
+    async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, featureFlags){
+>>>>>>> upstream-v3.10.0
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -134,7 +145,15 @@ constexpr absl::string_view
           ps_warns.push(JSON.stringify(args))
         }
       }
-
+      if (encodedOnDeviceSignals) {
+        const convertToUint8Array =
+          (encodedOnDeviceSignalsIn) =>
+            Uint8Array.from(encodedOnDeviceSignalsIn.match(/.{1,2}/g).map((byte) =>
+              parseInt(byte, 16)));
+        console.log("PAS hex string: " + encodedOnDeviceSignals);
+        encodedOnDeviceSignals = convertToUint8Array(encodedOnDeviceSignals);
+        console.log("Uint8 PAS bytes: " + Array.apply([], encodedOnDeviceSignals).join(","));
+      }
       var forDebuggingOnly_auction_loss_url = undefined;
       var forDebuggingOnly_auction_win_url = undefined;
       const forDebuggingOnly = {};
@@ -148,7 +167,11 @@ constexpr absl::string_view
 
       var generateBidResponse = {};
       try {
+<<<<<<< HEAD
         generateBidResponse = generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion);
+=======
+        generateBidResponse = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion);
+>>>>>>> upstream-v3.10.0
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
@@ -162,12 +185,16 @@ constexpr absl::string_view
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      return {
-        response: generateBidResponse !== undefined ? generateBidResponse : {},
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
+      var result = generateBidResponse !== undefined ? generateBidResponse : {};
+      if (featureFlags.enable_logging) {
+        return {
+          response: result,
+          logs: ps_logs,
+          errors: ps_errors,
+          warnings: ps_warns
+        };
       }
+      return result;
     }
 
     function fibonacci(num) {
@@ -192,7 +219,7 @@ constexpr absl::string_view kExpectedPrepareDataForAdRetrievalTemplate =
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
-    function prepareDataForAdRetrievalEntryFunction(onDeviceEncodedSignalsHexString, testArg, featureFlags){
+    async function prepareDataForAdRetrievalEntryFunction(onDeviceEncodedSignalsHexString, testArg, featureFlags){
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -212,7 +239,7 @@ constexpr absl::string_view kExpectedPrepareDataForAdRetrievalTemplate =
           Uint8Array.from(encodedOnDeviceSignalsIn.match(/.{1,2}/g).map((byte) =>
             parseInt(byte, 16)));
       return {
-        response: prepareDataForAdRetrieval(convertToUint8Array(onDeviceEncodedSignalsHexString), testArg),
+        response: await prepareDataForAdRetrieval(convertToUint8Array(onDeviceEncodedSignalsHexString), testArg),
         logs: ps_logs,
         errors: ps_errors,
         warnings: ps_warns

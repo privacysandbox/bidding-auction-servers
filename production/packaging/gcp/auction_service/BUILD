@@ -25,7 +25,6 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
@@ -75,7 +74,10 @@ container_image(
     entrypoint = [
         "/server/bin/server",
     ],
+<<<<<<< HEAD
     env = LOG_ENV_VARS,
+=======
+>>>>>>> upstream-v3.10.0
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",

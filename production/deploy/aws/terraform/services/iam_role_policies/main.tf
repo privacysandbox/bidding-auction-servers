@@ -82,6 +82,62 @@ data "aws_iam_policy_document" "instance_policy_doc" {
     effect    = "Allow"
     resources = ["*"]
   }
+  statement {
+    sid = "AllowInstancesToRegisterInstance"
+    actions = [
+      "servicediscovery:RegisterInstance",
+      "route53:CreateHealthCheck",
+      "route53:GetHealthCheck",
+      "route53:UpdateHealthCheck",
+      "route53:ChangeResourceRecordSets",
+      "ec2:DescribeInstances",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetObject",
+    ]
+    effect    = "Allow"
+    resources = ["*"]
+  }
+  statement {
+    sid = "AllowInstancesToSetInstanceHealthForASGandCloudMap"
+    actions = [
+      "autoscaling:SetInstanceHealth",
+      "servicediscovery:UpdateInstanceCustomHealthStatus",
+      "servicediscovery:DeregisterInstance",
+    ]
+    effect    = "Allow"
+    resources = ["*"]
+  }
+  statement {
+    sid = "AllowTLSAuth"
+    actions = [
+      "acm:DescribeCertificate",
+      "acm-pca:DescribeCertificateAuthority",
+      "acm:ExportCertificate",
+      "acm-pca:GetCertificateAuthorityCertificate"
+    ]
+    effect    = "Allow"
+    resources = ["*"]
+  }
+  statement {
+    sid    = "RunCloudUnMap"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances",
+      "servicediscovery:ListInstances",
+      "servicediscovery:DeregisterInstance",
+      "route53:GetHealthCheck",
+      "route53:DeleteHealthCheck",
+      "route53:UpdateHealthCheck",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "UpdateDnsWhileDeregisteringServiceInstancesForCloudUnMap"
+    effect    = "Allow"
+    actions   = ["route53:ChangeResourceRecordSets"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "instance_policy" {
@@ -92,6 +148,16 @@ resource "aws_iam_policy" "instance_policy" {
 resource "aws_iam_role_policy_attachment" "instance_role_policy_attachment" {
   policy_arn = aws_iam_policy.instance_policy.arn
   role       = var.server_instance_role_name
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_instance_role_attachment" {
+  role       = var.server_instance_role_name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_instance_role_attachment" {
+  role       = var.server_instance_role_name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 # Set up policies for using EC2 instance connect.

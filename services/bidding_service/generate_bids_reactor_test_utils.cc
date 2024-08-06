@@ -82,7 +82,12 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& auction_signals, const std::string& buyer_signals,
     const ProtectedAppSignals& protected_app_signals, const std::string& seller,
     const std::string& publisher_name,
+<<<<<<< HEAD
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data) {
+=======
+    absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data,
+    bool enable_unlimited_egress) {
+>>>>>>> upstream-v3.10.0
   GenerateProtectedAppSignalsBidsRawRequest raw_request;
   raw_request.set_auction_signals(auction_signals);
   raw_request.set_buyer_signals(buyer_signals);
@@ -93,7 +98,12 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     *raw_request.mutable_contextual_protected_app_signals_data() =
         *std::move(contextual_pas_data);
   }
+<<<<<<< HEAD
   PS_VLOG(1) << "Created request:\n" << raw_request.DebugString();
+=======
+  raw_request.set_enable_unlimited_egress(enable_unlimited_egress);
+  PS_LOG(INFO) << "Created request:\n" << raw_request.DebugString();
+>>>>>>> upstream-v3.10.0
   return raw_request;
 }
 
@@ -147,24 +157,45 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render, double bid,
-    absl::string_view egress_features_hex_string,
-    absl::string_view debug_reporting_urls) {
+    absl::string_view egress_payload_hex_string,
+    absl::string_view debug_reporting_urls,
+    absl::string_view temporary_egress_payload_hex_string) {
   std::string base64_encoded_features_bytes;
-  absl::Base64Escape(absl::HexStringToBytes(egress_features_hex_string),
+  absl::Base64Escape(absl::HexStringToBytes(egress_payload_hex_string),
                      &base64_encoded_features_bytes);
+  std::string base64_encoded_temporary_features_bytes;
+  absl::Base64Escape(
+      absl::HexStringToBytes(temporary_egress_payload_hex_string),
+      &base64_encoded_temporary_features_bytes);
   return absl::Substitute(R"JSON(
     {
-      "response": {
-        "render": "$0",
-        "bid": $1,
-        "egressFeatures": "$2",
-        "debugReportUrls": $3
-      },
-      "logs": []
+      "render": "$0",
+      "bid": $1,
+      "egressPayload": "$2",
+      "debugReportUrls": $3,
+      "temporaryUnlimitedEgressPayload": "$4"
     }
   )JSON",
                           render, bid, base64_encoded_features_bytes,
-                          debug_reporting_urls);
+                          debug_reporting_urls,
+                          base64_encoded_temporary_features_bytes);
+}
+
+void SetupContextualProtectedAppSignalsRomaExpectations(
+    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    absl::optional<std::string> generate_bid_udf_response) {
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([&num_roma_dispatches, &generate_bid_udf_response](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback batch_callback) {
+        ++num_roma_dispatches;
+        return MockRomaExecution(batch, std::move(batch_callback),
+                                 kGenerateBidEntryFunction,
+                                 kProtectedAppSignalsGenerateBidBlobVersion,
+                                 generate_bid_udf_response.has_value()
+                                     ? *generate_bid_udf_response
+                                     : CreateGenerateBidsUdfResponse());
+      });
 }
 
 void SetupContextualProtectedAppSignalsRomaExpectations(
@@ -236,6 +267,7 @@ void SetupAdRetrievalClientExpectations(
     KVAsyncClientMock& ad_retrieval_client,
     absl::optional<absl::StatusOr<GetValuesResponse>> ads_retrieval_response) {
   EXPECT_CALL(ad_retrieval_client, ExecuteInternal)
+<<<<<<< HEAD
       .WillOnce(
           [&ads_retrieval_response](
               std::unique_ptr<GetValuesRequest> raw_request,
@@ -252,6 +284,25 @@ void SetupAdRetrievalClientExpectations(
                 std::make_unique<GetValuesResponse>(*std::move(response)));
             return absl::OkStatus();
           });
+=======
+      .WillOnce([&ads_retrieval_response](
+                    std::unique_ptr<GetValuesRequest> raw_request,
+                    const RequestMetadata& metadata,
+                    absl::AnyInvocable<void(
+                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                        ResponseMetadata)&&>
+                        on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        auto response = ads_retrieval_response.has_value()
+                            ? *ads_retrieval_response
+                            : CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+>>>>>>> upstream-v3.10.0
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

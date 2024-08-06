@@ -29,18 +29,17 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // A reactor to finish the client's RPC call with an error when an invalid
 // client type is specified in the request.
-class SelectAdReactorInvalidClient : public SelectAdReactor {
+class SelectAdReactorInvalid : public SelectAdReactor {
  public:
-  explicit SelectAdReactorInvalidClient(
+  explicit SelectAdReactorInvalid(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client);
-  virtual ~SelectAdReactorInvalidClient() = default;
+  virtual ~SelectAdReactorInvalid() = default;
 
-  // SelectAdReactorInvalidClient is neither copyable nor movable.
-  SelectAdReactorInvalidClient(const SelectAdReactorInvalidClient&) = delete;
-  SelectAdReactorInvalidClient& operator=(const SelectAdReactorInvalidClient&) =
-      delete;
+  // SelectAdReactorInvalid is neither copyable nor movable.
+  SelectAdReactorInvalid(const SelectAdReactorInvalid&) = delete;
+  SelectAdReactorInvalid& operator=(const SelectAdReactorInvalid&) = delete;
 
   void Execute() override;
 

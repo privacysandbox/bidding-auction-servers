@@ -13,8 +13,12 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+<<<<<<< HEAD
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_proto_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+=======
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+>>>>>>> upstream-v3.10.0
 load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
 
 cc_library(
@@ -33,6 +37,7 @@ cc_library(
     hdrs = [
         "auction_constants.h",
     ],
+<<<<<<< HEAD
     visibility = [
         "//services/auction_service:__pkg__",
         "//services/auction_service/utils:__pkg__",
@@ -47,6 +52,9 @@ cc_library(
     deps = [
         "@com_google_absl//absl/strings",
     ],
+=======
+    visibility = ["//visibility:public"],
+>>>>>>> upstream-v3.10.0
 )
 
 cc_library(
@@ -91,11 +99,19 @@ cc_library(
         "//services/auction_service/data:runtime_config",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
+<<<<<<< HEAD
+=======
+        "//services/auction_service/reporting/seller:seller_reporting_manager",
+>>>>>>> upstream-v3.10.0
         "//services/auction_service/utils:proto_utils",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",
+<<<<<<< HEAD
+=======
+        "//services/common/loggers:request_log_context",
+>>>>>>> upstream-v3.10.0
         "//services/common/metric:server_definition",
         "//services/common/reporters:async_reporter",
         "//services/common/util:auction_scope_util",
@@ -106,7 +122,10 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
+<<<<<<< HEAD
         "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+=======
+>>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@rapidjson",
@@ -137,6 +156,10 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+<<<<<<< HEAD
+=======
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+>>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -148,6 +171,10 @@ cc_test(
         ":auction_constants",
         ":score_ads_reactor",
         ":score_ads_reactor_test_util",
+<<<<<<< HEAD
+=======
+        "//services/auction_service/reporting:reporting_helper_test",
+>>>>>>> upstream-v3.10.0
         "//services/common/test:random",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
@@ -189,6 +216,8 @@ cc_test(
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
         "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/code_wrapper:seller_code_wrapper_test",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper_test",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
@@ -204,19 +233,47 @@ cc_test(
     ],
 )
 
-proto_library(
-    name = "auction_code_fetch_config_proto",
-    srcs = ["auction_code_fetch_config.proto"],
-    deps = [
-        "@com_google_googleapis//google/api:annotations_proto",
-        "@com_google_protobuf//:struct_proto",
+cc_test(
+    name = "auction_service_reporting_integration_test",
+    size = "large",
+    srcs = [
+        "auction_service_integration_test_util.cc",
+        "auction_service_integration_test_util.h",
+        "auction_service_reporting_integration_test.cc",
     ],
+    deps = [
+        ":auction_service",
+        "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
+        "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/auction_service/code_wrapper:buyer_reporting_udf_wrapper",
+        "//services/auction_service/code_wrapper:seller_code_wrapper",
+        "//services/auction_service/code_wrapper:seller_code_wrapper_test",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper_test",
+        "//services/auction_service/udf_fetcher:adtech_code_version_util",
+        "//services/common/constants:common_service_flags",
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:mocks",
+        "//services/common/test:random",
+        "//services/common/util:request_response_constants",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+<<<<<<< HEAD
 )
 
 cc_proto_library(
     name = "auction_code_fetch_config_cc_proto",
     visibility = ["//services/auction_service:__subpackages__"],
     deps = [":auction_code_fetch_config_proto"],
+=======
+>>>>>>> upstream-v3.10.0
 )
 
 cc_library(
@@ -281,22 +338,27 @@ cc_binary(
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     local_defines = ENABLE_CORE_DUMPS_DEFINES,
+<<<<<<< HEAD
+=======
+    malloc = "@com_google_tcmalloc//tcmalloc",
+>>>>>>> upstream-v3.10.0
     visibility = ["//visibility:public"],
     deps = [
-        ":auction_code_fetch_config_cc_proto",
+        ":auction_constants",
         ":auction_service",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
-        "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/data:runtime_config",
+        "//services/auction_service/udf_fetcher:auction_code_fetch_config_cc_proto",
+        "//services/auction_service/udf_fetcher:seller_udf_fetch_manager",
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
-        "//services/common/code_fetch:periodic_code_fetcher",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:tcmalloc_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli
         "@com_google_absl//absl/debugging:failure_signal_handler",
@@ -306,6 +368,10 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
+<<<<<<< HEAD
+=======
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+>>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util:rlimit_core_config",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
@@ -350,6 +416,7 @@ cc_library(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/util:proto_util",
         "@com_google_absl//absl/strings",
     ],
 )

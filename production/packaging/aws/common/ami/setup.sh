@@ -18,7 +18,9 @@ set -o pipefail
 
 # Install necessary dependencies
 sudo yum update -y
-sudo yum install -y docker
+sudo yum install -y \
+  amazon-cloudwatch-agent \
+  docker
 wget -O /tmp/aws-otel-collector.rpm https://aws-otel-collector.s3.amazonaws.com/amazon_linux/amd64/latest/aws-otel-collector.rpm
 sudo yum localinstall -y /tmp/aws-otel-collector.rpm
 sudo amazon-linux-extras install -y aws-nitro-enclaves-cli

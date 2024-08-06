@@ -27,6 +27,11 @@
 
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
+<<<<<<< HEAD
+=======
+#include "services/common/public_key_url_allowlist.h"
+#include "services/common/util/request_response_constants.h"
+>>>>>>> upstream-v3.10.0
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
@@ -63,8 +68,13 @@ CreatePublicKeyFetcher(TrustedServersConfigClient& config_client) {
 
   absl::string_view public_key_endpoint =
       config_client.GetStringParameter(PUBLIC_KEY_ENDPOINT);
-  std::vector<std::string> endpoints = {public_key_endpoint.data()};
 
+  if (!IsAllowedPublicKeyUrl(public_key_endpoint, PS_IS_PROD_BUILD)) {
+    PS_LOG(ERROR) << kEndpointNotAllowlisted << public_key_endpoint;
+    return nullptr;
+  }
+
+  std::vector<std::string> endpoints = {public_key_endpoint.data()};
   server_common::CloudPlatform cloud_platform =
       server_common::CloudPlatform::kLocal;
 #if defined(CLOUD_PLATFORM_AWS)
@@ -98,7 +108,8 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
       config_client.GetStringParameter(PRIMARY_COORDINATOR_REGION);
 
   if (config_client.HasParameter(GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER)) {
-    PS_VLOG(3) << "Found GCP Workload Identity Pool Provider, proceeding...";
+    PS_VLOG(kNoisyInfo)
+        << "Found GCP Workload Identity Pool Provider, proceeding...";
     primary.gcp_private_key_vending_service_cloudfunction_url =
         config_client.GetStringParameter(
             GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL);

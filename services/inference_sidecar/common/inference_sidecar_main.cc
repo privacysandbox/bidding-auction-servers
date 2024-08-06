@@ -14,12 +14,44 @@
 
 // Inference sidecar binary.
 
+<<<<<<< HEAD
 #include "absl/log/check.h"
+=======
+#include <google/protobuf/util/json_util.h>
+
+#include "absl/log/absl_log.h"
+#include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "proto/inference_sidecar.pb.h"
+>>>>>>> upstream-v3.10.0
 
 #include "grpc_sidecar.h"
 
 int main(int argc, char** argv) {
+<<<<<<< HEAD
   CHECK(!privacy_sandbox::bidding_auction_servers::inference::Run().ok())
       << "Unsuccessful run of the inference sidecar.";
+=======
+  privacy_sandbox::bidding_auction_servers::inference::
+      InferenceSidecarRuntimeConfig config;
+  CHECK(google::protobuf::util::JsonStringToMessage(argv[0], &config).ok())
+      << "Could not parse inference sidecar runtime config JsonString to a "
+         "proto message.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::SetCpuAffinity(
+            config)
+            .ok())
+      << "Could not set CPU affinity.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::
+            EnforceModelResetProbability(config)
+                .ok())
+      << "Could not set the model reset probability";
+
+  if (absl::Status run_status =
+          privacy_sandbox::bidding_auction_servers::inference::Run(config);
+      !run_status.ok()) {
+    ABSL_LOG(FATAL) << "Unsuccessful run of the inference sidecar due to "
+                    << run_status;
+  }
+>>>>>>> upstream-v3.10.0
   return 0;
 }

@@ -21,6 +21,11 @@ load(
 )
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 
+<<<<<<< HEAD
+=======
+package(default_visibility = ["//visibility:public"])
+
+>>>>>>> upstream-v3.10.0
 cc_binary(
     name = "inference_sidecar_bin",
     srcs = ["@inference_common//:inference_sidecar_main.cc"],
@@ -71,6 +76,10 @@ cc_test(
     ],
     flaky = True,
     deps = [
+<<<<<<< HEAD
+=======
+        ":test_constants",
+>>>>>>> upstream-v3.10.0
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:reflection",
@@ -87,6 +96,18 @@ cc_test(
 )
 
 cc_library(
+<<<<<<< HEAD
+=======
+    name = "test_constants",
+    testonly = True,
+    hdrs = ["test_constants.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+>>>>>>> upstream-v3.10.0
     name = "tensorflow_parser",
     srcs = ["tensorflow_parser.cc"],
     hdrs = [
@@ -124,11 +145,20 @@ cc_library(
         ":tensorflow_parser",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
+<<<<<<< HEAD
+=======
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/random",
+>>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+<<<<<<< HEAD
+=======
+        "@inference_common//model:model_store",
+>>>>>>> upstream-v3.10.0
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:request_parser",
@@ -157,12 +187,20 @@ cc_test(
         "//benchmark_models/embedding:embedding_model",
         "//benchmark_models/pctr:pctr_model",
         "//benchmark_models/pcvr:pcvr_model",
+<<<<<<< HEAD
+=======
+        "//benchmark_models/stateful:stateful_model",
+>>>>>>> upstream-v3.10.0
     ],
     deps = [
         ":tensorflow",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+<<<<<<< HEAD
+=======
+        "@com_google_absl//absl/time",
+>>>>>>> upstream-v3.10.0
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@inference_common//proto:inference_sidecar_cc_proto",
@@ -208,6 +246,10 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+<<<<<<< HEAD
+=======
+        "@inference_common//benchmark:request_utils",
+>>>>>>> upstream-v3.10.0
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
     ],
@@ -221,7 +263,11 @@ genrule(
     outs = ["inference_sidecar_binary"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p artifacts
+<<<<<<< HEAD
 cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar
+=======
+cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar_tensorflow_v2_14_0
+>>>>>>> upstream-v3.10.0
 EOF""",
     executable = True,
     local = True,
@@ -231,7 +277,11 @@ EOF""",
 # Exports TensorFlow inference sidecar binary to be packaged in the B&A workspace.
 exports_files(
     [
+<<<<<<< HEAD
         "artifacts/inference_sidecar",
+=======
+        "artifacts/inference_sidecar_tensorflow_v2_14_0",
+>>>>>>> upstream-v3.10.0
     ],
 )
 

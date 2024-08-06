@@ -51,9 +51,8 @@ void AddListItemsAsQueryParamsToUrl(std::string* url, absl::string_view key,
 /**
  * Clears the string when creating a new url, adds the host domain, and adds
  * the ? to signify the start of the query parameters section.
- * @param kv_server_host_domain The full URL you want before the '?'
- *    Could be as simple as "example.com", or as much as
- * "https://googleads.g.doubleclick.net/td/bts"
+ * @param kv_server_host_domain The full URL you want before the '?' for example
+ * "https://kvserver.com/trusted-signals"".
  * @param url Output variable, url will be stored in this string. Note the
  * string will be cleared.
  */

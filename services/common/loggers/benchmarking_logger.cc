@@ -19,6 +19,10 @@
 #include <iostream>
 
 #include "absl/strings/str_cat.h"
+<<<<<<< HEAD
+=======
+#include "services/common/util/request_response_constants.h"
+>>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -39,9 +43,9 @@ void BenchmarkingLogger::End() {
 
 BenchmarkingLogger::~BenchmarkingLogger() {
   for (const std::string& log_record : log_store_) {
-    PS_VLOG(1) << absl::StrCat("\nBenchmarking for request ID [", request_id_,
-                               "]: ", log_record);
+    PS_VLOG(kNoisyInfo) << absl::StrCat("\nBenchmarking for request ID [",
+                                        request_id_, "]: ", log_record);
   }
-  PS_VLOG(1) << "\n\n";
+  PS_VLOG(kNoisyInfo) << "\n\n";
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

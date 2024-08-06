@@ -15,6 +15,29 @@
 #include "services/seller_frontend_service/util/validation_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+<<<<<<< HEAD
+=======
+namespace {
+
+bool IsAuctionResultBidCurrencyAsExpected(
+    absl::string_view expected_component_seller_currency,
+    const AuctionResult& auction_result) {
+  if (expected_component_seller_currency.empty()) {
+    return true;
+  }
+  if (auction_result.bid_currency().empty()) {
+    return true;
+  }
+  return expected_component_seller_currency == auction_result.bid_currency();
+}
+
+}  // namespace
+
+std::regex GetValidCurrencyCodeRegex() {
+  static const std::regex kValidCurrencyCodeRegexVal(kValidCurrencyCodePattern);
+  return kValidCurrencyCodeRegexVal;
+}
+>>>>>>> upstream-v3.10.0
 
 bool ValidateEncryptedSelectAdRequest(const SelectAdRequest& request,
                                       AuctionScope auction_scope,
@@ -43,7 +66,11 @@ bool ValidateEncryptedSelectAdRequest(const SelectAdRequest& request,
   report_error_lambda(seller_domain != auction_config.seller(),
                       kWrongSellerDomain);
   report_error_lambda(request.client_type() == CLIENT_TYPE_UNKNOWN,
+<<<<<<< HEAD
                       kUnknownClientType);
+=======
+                      kUnsupportedClientType);
+>>>>>>> upstream-v3.10.0
 
   if (auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     report_error_lambda(request.component_auction_results_size() == 0,
@@ -59,14 +86,39 @@ bool ValidateEncryptedSelectAdRequest(const SelectAdRequest& request,
     report_error_lambda(
         valid_results == 0 && request.component_auction_results_size() != 0,
         kEmptyComponentAuctionResults);
+<<<<<<< HEAD
+=======
+
+    for (const auto& [seller_identifier, per_component_seller_config] :
+         auction_config.per_component_seller_config()) {
+      report_error_lambda(seller_identifier.empty(),
+                          kEmptySellerInPerComponentSellerConfig);
+      if (!per_component_seller_config.expected_currency().empty()) {
+        report_error_lambda(
+            !std::regex_match(per_component_seller_config.expected_currency(),
+                              GetValidCurrencyCodeRegex()),
+            kInvalidExpectedComponentSellerCurrency);
+      }
+    }
+>>>>>>> upstream-v3.10.0
   }
   return valid;
 }
 
+<<<<<<< HEAD
 bool ValidateComponentAuctionResult(const AuctionResult& auction_result,
                                     absl::string_view request_generation_id,
                                     absl::string_view seller_domain,
                                     ErrorAccumulator& error_accumulator) {
+=======
+bool ValidateComponentAuctionResult(
+    const AuctionResult& auction_result,
+    absl::string_view request_generation_id, absl::string_view seller_domain,
+    ErrorAccumulator& error_accumulator,
+    const ::google::protobuf::Map<
+        std::string, SelectAdRequest::AuctionConfig::PerComponentSellerConfig>&
+        per_component_seller_configs) {
+>>>>>>> upstream-v3.10.0
   // If chaff result or erroneous request, don't do any more validations and
   // pass as is to auction server to make sure auction server is called.
   if (auction_result.is_chaff() || !auction_result.error().message().empty()) {
@@ -98,6 +150,29 @@ bool ValidateComponentAuctionResult(const AuctionResult& auction_result,
       absl::StrFormat(kErrorInAuctionResult,
                       kEmptyComponentSellerInAuctionResultError));
 
+<<<<<<< HEAD
+=======
+  // Retrieve per-component-seller configuration values.
+  absl::string_view expected_component_seller_currency;
+  // First check that the per seller config map is non-empty, and that there
+  // is a component seller identifier to use for the lookup.
+  if (per_component_seller_configs.size() > 0) {
+    // Try to find the configuration information for this particular component
+    // seller.
+    auto per_component_seller_config_itr = per_component_seller_configs.find(
+        auction_result.auction_params().component_seller());
+    // The PerComponentSellerConfig is optional.
+    if (per_component_seller_config_itr != per_component_seller_configs.end()) {
+      auto component_seller_config = per_component_seller_config_itr->second;
+      // Check if a particular currency is expected.
+      if (!component_seller_config.expected_currency().empty()) {
+        expected_component_seller_currency =
+            component_seller_config.expected_currency();
+      }
+    }
+  }
+
+>>>>>>> upstream-v3.10.0
   report_error_lambda(
       auction_result.ad_type() != AdType::AD_TYPE_PROTECTED_AUDIENCE_AD,
       absl::StrFormat(kErrorInAuctionResult,
@@ -110,6 +185,13 @@ bool ValidateComponentAuctionResult(const AuctionResult& auction_result,
            .empty(),
       absl::StrFormat(kErrorInAuctionResult,
                       kTopLevelWinReportingUrlsInAuctionResultError));
+<<<<<<< HEAD
+=======
+  report_error_lambda(!IsAuctionResultBidCurrencyAsExpected(
+                          expected_component_seller_currency, auction_result),
+                      absl::StrFormat(kErrorInAuctionResult,
+                                      kMismatchedCurrencyInAuctionResultError));
+>>>>>>> upstream-v3.10.0
   return valid;
 }
 

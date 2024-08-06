@@ -15,6 +15,10 @@
 #ifndef SERVICES_BIDDING_SERVICE_INFERENCE_INFERENCE_UTILS_H_
 #define SERVICES_BIDDING_SERVICE_INFERENCE_INFERENCE_UTILS_H_
 
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> upstream-v3.10.0
 #include <string>
 #include <vector>
 
@@ -22,11 +26,19 @@
 #include "proto/inference_sidecar.pb.h"
 #include "sandbox/sandbox_executor.h"
 #include "services/common/blob_fetch/blob_fetcher.h"
+<<<<<<< HEAD
+=======
+#include "services/common/clients/code_dispatcher/request_context.h"
+>>>>>>> upstream-v3.10.0
 #include "src/roma/interface/roma.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 constexpr absl::string_view kInferenceFunctionName = "runInference";
+<<<<<<< HEAD
+=======
+constexpr absl::string_view kGetModelPathsFunctionName = "getModelPaths";
+>>>>>>> upstream-v3.10.0
 
 // Accesses a sandbox exectuor that uses static storage.
 SandboxExecutor& Executor();
@@ -42,7 +54,22 @@ absl::Status RegisterModelsFromBucket(
 // single inference request to the inference sidecar.
 //
 // wrapper: Inference request backed by JS string.
+<<<<<<< HEAD
 void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper);
+=======
+void RunInference(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper);
+
+// Registered with Roma to provide an API to query the currently available
+// models from JS code.
+void GetModelPaths(
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+        wrapper);
+
+// Converts a GetModelPaths response to Json string
+std::string GetModelResponseToJson(const GetModelPathsResponse& response);
+>>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

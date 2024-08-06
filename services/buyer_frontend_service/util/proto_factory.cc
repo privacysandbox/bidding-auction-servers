@@ -78,7 +78,7 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRawRequest& get_bids_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const LogContext& log_context) {
+    const server_common::LogContext& log_context) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
 
   // 1. Set Interest Group for bidding
@@ -186,6 +186,9 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   generate_bids_raw_request->set_enable_debug_reporting(
       raw_request.enable_debug_reporting());
+
+  generate_bids_raw_request->set_enable_unlimited_egress(
+      raw_request.enable_unlimited_egress());
 
   return generate_bids_raw_request;
 }

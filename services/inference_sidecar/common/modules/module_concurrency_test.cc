@@ -21,6 +21,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+<<<<<<< HEAD
+=======
+#include "benchmark/request_utils.h"
+>>>>>>> upstream-v3.10.0
 #include "gtest/gtest.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
@@ -49,6 +53,7 @@ constexpr char kJsonString[] = R"json({
 }]
     })json";
 
+<<<<<<< HEAD
 // Create a new request with model files in the new model path
 RegisterModelRequest CreateNewRegisterRequest(
     const RegisterModelRequest& register_request,
@@ -75,6 +80,11 @@ RegisterModelRequest CreateNewRegisterRequest(
 
 TEST(ModuleConcurrencyTest, RegisterModel_Success) {
   std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+=======
+TEST(ModuleConcurrencyTest, RegisterModel_Success) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
+>>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -87,7 +97,11 @@ TEST(ModuleConcurrencyTest, RegisterModel_Success) {
       std::string new_model_path =
           absl::StrCat(register_request.model_spec().model_path(), i);
       RegisterModelRequest new_register_request =
+<<<<<<< HEAD
           CreateNewRegisterRequest(register_request, new_model_path);
+=======
+          CreateRegisterModelRequest(register_request, new_model_path);
+>>>>>>> upstream-v3.10.0
 
       EXPECT_TRUE(module->RegisterModel(new_register_request).ok());
     }));
@@ -99,7 +113,12 @@ TEST(ModuleConcurrencyTest, RegisterModel_Success) {
 }
 
 TEST(ModuleConcurrencyTest, Predict_Success) {
+<<<<<<< HEAD
   std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+=======
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
+>>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -121,7 +140,12 @@ TEST(ModuleConcurrencyTest, Predict_Success) {
 }
 
 TEST(ModuleConcurrencyTest, RegisterModel_Predict_Success) {
+<<<<<<< HEAD
   std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+=======
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
+>>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -134,7 +158,11 @@ TEST(ModuleConcurrencyTest, RegisterModel_Predict_Success) {
       std::string new_model_path =
           absl::StrCat(register_request.model_spec().model_path(), i);
       RegisterModelRequest new_register_request =
+<<<<<<< HEAD
           CreateNewRegisterRequest(register_request, new_model_path);
+=======
+          CreateRegisterModelRequest(register_request, new_model_path);
+>>>>>>> upstream-v3.10.0
 
       EXPECT_TRUE(module->RegisterModel(new_register_request).ok());
     }));

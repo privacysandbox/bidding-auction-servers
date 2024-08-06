@@ -15,6 +15,11 @@
 #ifndef SERVICES_SELLER_FRONTEND_SERVICE_UTIL_VALIDATION_UTILS_H_
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_VALIDATION_UTILS_H_
 
+<<<<<<< HEAD
+=======
+#include <string>
+
+>>>>>>> upstream-v3.10.0
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/util/error_accumulator.h"
@@ -22,12 +27,28 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+<<<<<<< HEAD
 // Validates a single Auction Result and adds errors to error accumulator.
 // Returns false if AuctionResult is invalid.
 bool ValidateComponentAuctionResult(const AuctionResult& auction_result,
                                     absl::string_view request_generation_id,
                                     absl::string_view seller_domain,
                                     ErrorAccumulator& error_accumulator);
+=======
+inline constexpr char kValidCurrencyCodePattern[] = "^[A-Z]{3}$";
+
+std::regex GetValidCurrencyCodeRegex();
+
+// Validates a single Auction Result and adds errors to error accumulator.
+// Returns false if AuctionResult is invalid.
+bool ValidateComponentAuctionResult(
+    const AuctionResult& auction_result,
+    absl::string_view request_generation_id, absl::string_view seller_domain,
+    ErrorAccumulator& error_accumulator,
+    const ::google::protobuf::Map<
+        std::string, SelectAdRequest::AuctionConfig::PerComponentSellerConfig>&
+        per_conponent_seller_configs = {});
+>>>>>>> upstream-v3.10.0
 
 // Validates an encrypted SelectAdRequest and adds all errors to error
 // accumulator.

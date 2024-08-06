@@ -227,6 +227,16 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
         }
         break;
       }
+      case 4: {  // RecencyMs.
+        bool is_recency_valid_type =
+            IsTypeValid(&cbor_is_int, signal.value, kBrowserSignalsRecencyMs,
+                        kInt, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, signals);
+        if (is_recency_valid_type) {
+          signals.set_recency_ms(cbor_get_int(signal.value));
+        }
+        break;
+      }
     }
   }
 
@@ -319,6 +329,10 @@ absl::Status CborSerializeScoreAdResponse(
                                          error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
+  if (!ad_score.buyer_reporting_id().empty()) {
+    PS_RETURN_IF_ERROR(CborSerializeString(
+        kBuyerReportingId, ad_score.buyer_reporting_id(), error_handler, root));
+  }
   PS_RETURN_IF_ERROR(CborSerializeWinReportingUrls(
       ad_score.win_reporting_urls(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(
@@ -735,8 +749,8 @@ bool IsTypeValid(absl::AnyInvocable<bool(const cbor_item_t*)> is_valid_type,
     absl::string_view actual_type = kCborDataTypesLookup[item->type];
     std::string error = absl::StrFormat(kInvalidTypeError, field_name,
                                         expected_type, actual_type);
-    PS_VLOG(3) << "CBOR type validation failure at: " << location.file_name()
-               << ":" << location.line();
+    PS_VLOG(kNoisyWarn) << "CBOR type validation failure at: "
+                        << location.file_name() << ":" << location.line();
     error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
                                   ErrorCode::CLIENT_SIDE);
     return false;
@@ -1316,6 +1330,16 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         }
         auction_result.set_bid_currency(CborDecodeString(kv.value));
       } break;
+<<<<<<< HEAD
+=======
+      case 13: {  // kBuyerReportingId
+        if (!cbor_isa_string(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected buyer reporting id to be a string");
+        }
+        auction_result.set_buyer_reporting_id(CborDecodeString(kv.value));
+      } break;
+>>>>>>> upstream-v3.10.0
       default:
         // Unexpected key in the auction result CBOR
         return absl::Status(

@@ -18,6 +18,10 @@
 #include <fstream>
 
 #include "absl/strings/match.h"
+<<<<<<< HEAD
+=======
+#include "services/common/util/request_response_constants.h"
+>>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -52,7 +56,8 @@ absl::Status FakeBuyerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout) const {
   HTTPRequest request = BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
       kv_server_base_address_, metadata, std::move(keys));
-  PS_VLOG(2) << "FakeBuyerKeyValueAsyncHttpClient Request: " << request.url;
+  PS_VLOG(kKVLog) << "FakeBuyerKeyValueAsyncHttpClient Request: "
+                  << request.url;
 
   // Below was faked
 
@@ -67,7 +72,11 @@ absl::Status FakeBuyerKeyValueAsyncHttpClient::Execute(
           GetBuyerValuesOutput{std::move(kv_response), 0, 0});
   std::move(on_done)(std::move(resultUPtr));
 
+<<<<<<< HEAD
   PS_VLOG(2) << "E2E testing received hard coded buyer kv request";
+=======
+  PS_VLOG(kKVLog) << "E2E testing received hard coded buyer kv request";
+>>>>>>> upstream-v3.10.0
   return absl::OkStatus();
 }
 

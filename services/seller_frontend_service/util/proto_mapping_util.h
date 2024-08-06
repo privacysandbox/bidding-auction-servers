@@ -23,6 +23,10 @@
 #include "absl/status/status.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/compression/gzip.h"
+<<<<<<< HEAD
+=======
+#include "services/common/loggers/request_log_context.h"
+>>>>>>> upstream-v3.10.0
 #include "services/common/util/error_categories.h"
 #include "services/common/util/hpke_utils.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
@@ -31,7 +35,10 @@
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/communication/encoding_utils.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
+<<<<<<< HEAD
 #include "src/logger/request_context_impl.h"
+=======
+>>>>>>> upstream-v3.10.0
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -66,20 +73,32 @@ absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
     const ScoreAdsResponse::AdScore& high_score,
     const std::optional<IgsWithBidsMap>& bidding_group_maps,
     ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+<<<<<<< HEAD
     server_common::log::ContextImpl& log_context);
+=======
+    RequestLogContext& log_context);
+>>>>>>> upstream-v3.10.0
 
 // Encodes, compresses and encrypts client error
 // as auction_result_ciphertext.
 absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
     const AuctionResult::Error& auction_error, ClientType client_type,
     OhttpHpkeDecryptedMessage& decrypted_request,
+<<<<<<< HEAD
     server_common::log::ContextImpl& log_context);
+=======
+    RequestLogContext& log_context);
+>>>>>>> upstream-v3.10.0
 
 // Encodes, compresses and encrypts chaff response
 // as auction_result_ciphertext.
 absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
     ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+<<<<<<< HEAD
     server_common::log::ContextImpl& log_context);
+=======
+    RequestLogContext& log_context);
+>>>>>>> upstream-v3.10.0
 
 // Collate all Igs that received bids from all server component auction results.
 IgsWithBidsMap GetBuyerIgsWithBidsMap(
@@ -99,8 +118,12 @@ std::vector<AuctionResult> DecryptAndValidateComponentAuctionResults(
     absl::string_view request_generation_id,
     CryptoClientWrapperInterface& crypto_client,
     server_common::KeyFetcherManagerInterface& key_fetcher_manager,
+<<<<<<< HEAD
     ErrorAccumulator& error_accumulator,
     server_common::log::ContextImpl& log_context);
+=======
+    ErrorAccumulator& error_accumulator, RequestLogContext& log_context);
+>>>>>>> upstream-v3.10.0
 
 template <typename T>
 T AppProtectedAuctionInputDecodeHelper(absl::string_view encoded_data,

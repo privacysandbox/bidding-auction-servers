@@ -56,6 +56,10 @@
               { "$ref": "#/$defs/adRenderId" }
             ]
           }
+        },
+        "recencyMs": {
+          "type": "number",
+          "description": "The most recent join time for this group expressed in milli seconds before the containing auctionBlob was requested. This field will be used by newer client versions. For older devices, the precison will be in seconds. If recencyMs is present, this value will be used to offer higher precision. If not, recency will be used. Only one of the recency or recencyMs is expected to present in the request."
         }
       }
     }

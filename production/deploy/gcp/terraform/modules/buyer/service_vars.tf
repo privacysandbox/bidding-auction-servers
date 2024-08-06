@@ -139,3 +139,12 @@ variable "fast_nat" {
   type        = bool
   default     = false
 }
+<<<<<<< HEAD
+=======
+
+variable "enable_tee_container_log_redirect" {
+  description = "If true, redirect the TEE container logs to the VM's serial port."
+  type        = bool
+  default     = true
+}
+>>>>>>> upstream-v3.10.0

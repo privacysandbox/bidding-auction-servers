@@ -273,6 +273,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
                                  CreatePrepareDataForAdsRetrievalResponse());
       });
   EXPECT_CALL(*ad_retrieval_client_, ExecuteInternal)
+<<<<<<< HEAD
       .WillOnce(
           [](std::unique_ptr<GetValuesRequest> raw_request,
              const RequestMetadata& metadata,
@@ -282,6 +283,17 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
              absl::Duration timeout) {
             return absl::InternalError(kInternalServerError);
           });
+=======
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   const RequestMetadata& metadata,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
+                       on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        return absl::InternalError(kInternalServerError);
+      });
+>>>>>>> upstream-v3.10.0
   auto bidding_service = CreateBiddingService();
   LocalServiceStartResult start_service_result =
       StartLocalService(&bidding_service);

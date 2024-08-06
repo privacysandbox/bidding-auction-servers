@@ -48,17 +48,29 @@ using ::google::scp::core::errors::GetErrorMessage;
 
 BuyerCodeFetchManager::~BuyerCodeFetchManager() {
   if (absl::Status shutdown = End(); !shutdown.ok()) {
+<<<<<<< HEAD
     PS_VLOG(1) << "BuyerCodeFetchManager shutdown failed. " << shutdown;
+=======
+    PS_LOG(ERROR) << "BuyerCodeFetchManager shutdown failed. " << shutdown;
+>>>>>>> upstream-v3.10.0
   }
 }
 
 absl::Status BuyerCodeFetchManager::Init() {
   switch (udf_config_.fetch_mode()) {
+<<<<<<< HEAD
     case bidding_service::FETCH_MODE_LOCAL:
       return InitializeLocalCodeFetch();
     case bidding_service::FETCH_MODE_BUCKET:
       return InitializeBucketCodeFetch();
     case bidding_service::FETCH_MODE_URL:
+=======
+    case blob_fetch::FETCH_MODE_LOCAL:
+      return InitializeLocalCodeFetch();
+    case blob_fetch::FETCH_MODE_BUCKET:
+      return InitializeBucketCodeFetch();
+    case blob_fetch::FETCH_MODE_URL:
+>>>>>>> upstream-v3.10.0
       return InitializeUrlCodeFetch();
     default:
       return absl::InvalidArgumentError(kFetchModeInvalid);
@@ -132,7 +144,11 @@ absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetchForPAS() {
         return GetBuyerWrappedCode(
             ad_tech_code_blobs[kJsBlobIndex], kUnusedWasmBlob,
             AuctionType::kProtectedAppSignals,
+<<<<<<< HEAD
             /*auction_specific_setup=*/"// No additional setup");
+=======
+            /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler);
+>>>>>>> upstream-v3.10.0
       };
 
   auto wrap_ads_retrieval_code =
@@ -205,7 +221,11 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPAS() {
                 ? ad_tech_code_blobs[kWasmBlobIndex]
                 : kUnusedWasmBlob,
             AuctionType::kProtectedAppSignals,
+<<<<<<< HEAD
             /*auction_specific_setup=*/"// No additional setup");
+=======
+            /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler);
+>>>>>>> upstream-v3.10.0
       };
 
   auto wrap_ads_retrieval_code =
@@ -294,6 +314,7 @@ BuyerCodeFetchManager::StartBucketFetch(
 }
 
 absl::Status BuyerCodeFetchManager::InitBucketClient() {
+<<<<<<< HEAD
   auto result = blob_storage_client_->Init();
   if (!result.Successful()) {
     return absl::UnavailableError(
@@ -307,6 +328,12 @@ absl::Status BuyerCodeFetchManager::InitBucketClient() {
         absl::StrFormat("Failed to run BlobStorageClient (status_code: %s)\n",
                         GetErrorMessage(result.status_code)));
   }
+=======
+  PS_RETURN_IF_ERROR(blob_storage_client_->Init()).SetPrepend()
+      << "Failed to init BlobStorageClient: ";
+  PS_RETURN_IF_ERROR(blob_storage_client_->Run()).SetPrepend()
+      << "Failed to run BlobStorageClient: ";
+>>>>>>> upstream-v3.10.0
   return absl::OkStatus();
 }
 

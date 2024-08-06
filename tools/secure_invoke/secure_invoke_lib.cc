@@ -22,6 +22,7 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/json_util.h>
 
+#include "absl/container/btree_map.h"
 #include "absl/flags/flag.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
@@ -30,6 +31,10 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+<<<<<<< HEAD
+=======
+#include "services/common/util/json_util.h"
+>>>>>>> upstream-v3.10.0
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
@@ -40,6 +45,36 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr char kJsonFormat[] = "JSON";
+
+absl::StatusOr<std::string> SortAuctionResultBiddingGroups(
+    absl::string_view auction_result_json) {
+  std::string key_name = "biddingGroups";
+  auto document = ParseJsonString(auction_result_json);
+  if (!document.ok()) {
+    return document.status();
+  }
+  auto& d = *document;
+  absl::btree_map<std::string, rapidjson::Value> sorted_map;
+  if (d.HasMember(key_name.c_str())) {
+    for (auto& m : d[key_name.c_str()].GetObject()) {
+      sorted_map[m.name.GetString()] = m.value.GetObject();
+    }
+  }
+
+  d.RemoveMember(key_name.c_str());  // remove old unsorted map
+
+  rapidjson::Value sorted_val(rapidjson::kObjectType);
+
+  for (auto& m : sorted_map) {
+    rapidjson::Value key(m.first.c_str(), d.GetAllocator());
+    sorted_val.AddMember(key, m.second, d.GetAllocator());
+  }
+
+  d.AddMember(rapidjson::Value().SetString(key_name.c_str(), d.GetAllocator()),
+              sorted_val, d.GetAllocator());  // add new sorted map
+
+  return SerializeJsonDoc(d);
+}
 
 absl::StatusOr<std::string> ParseSelectAdResponse(
     std::unique_ptr<SelectAdResponse> resp, ClientType client_type,
@@ -63,7 +98,16 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
   if (!auction_result_json_status.ok()) {
     return auction_result_json_status;
   }
-  return auction_result_json;
+  // Sort bidding groups for easy comparison.
+  auto sorted_auction_result_json_status =
+      SortAuctionResultBiddingGroups(auction_result_json);
+  std::string debug_info_json = resp->debug_info().DebugString();
+  if (!debug_info_json.empty() && sorted_auction_result_json_status.ok()) {
+    return absl::StrCat(R"JSON({"debug_info":")JSON", debug_info_json,
+                        R"JSON(", "auction_result":")JSON",
+                        *sorted_auction_result_json_status, R"JSON("})JSON");
+  }
+  return sorted_auction_result_json_status;
 }
 
 }  // namespace
@@ -72,6 +116,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
     const HpkeKeyset& keyset, bool enable_debug_reporting,
+    bool enable_unlimited_egress,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -95,7 +140,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
           raw_select_ad_request_json, client_type, keyset,
-          enable_debug_reporting, absl::GetFlag(FLAGS_pas_buyer_input_json));
+          enable_debug_reporting, absl::GetFlag(FLAGS_pas_buyer_input_json),
+          enable_unlimited_egress);
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -172,7 +218,12 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       request_metadata,
       [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
+<<<<<<< HEAD
               raw_response) mutable {
+=======
+              raw_response,
+          ResponseMetadata response_metadata) mutable {
+>>>>>>> upstream-v3.10.0
         ABSL_VLOG(0) << "Received bid response from BFE in "
                      << ((absl::Now() - start) / absl::Milliseconds(1))
                      << " ms.";
@@ -204,7 +255,8 @@ std::string LoadFile(absl::string_view file_path) {
 }
 
 absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
-                              bool enable_debug_reporting) {
+                              bool enable_debug_reporting,
+                              bool enable_unlimited_egress) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -219,7 +271,7 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
           raw_select_ad_request_json, options, client_type, keyset,
-          enable_debug_reporting,
+          enable_debug_reporting, enable_unlimited_egress,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response
@@ -236,12 +288,13 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
 }
 
 GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
-    bool enable_debug_reporting) {
+    bool enable_debug_reporting, bool enable_unlimited_egress) {
   std::string raw_get_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
   const bool is_json = (!raw_get_bids_request_str.empty() ||
                         absl::GetFlag(FLAGS_input_format) == kJsonFormat);
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request;
   get_bids_raw_request.set_enable_debug_reporting(enable_debug_reporting);
+  get_bids_raw_request.set_enable_unlimited_egress(enable_unlimited_egress);
   if (is_json) {
     if (raw_get_bids_request_str.empty()) {
       raw_get_bids_request_str = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -263,19 +316,18 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
 }
 
 std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
-                                                 bool enable_debug_reporting) {
+                                                 bool enable_debug_reporting,
+                                                 bool enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
-      GetBidsRawRequestFromInput(enable_debug_reporting);
+      GetBidsRawRequestFromInput(enable_debug_reporting,
+                                 enable_unlimited_egress);
   auto key_fetcher_manager =
       std::make_unique<server_common::FakeKeyFetcherManager>(
           keyset.public_key, "unused", std::to_string(keyset.key_id));
   auto crypto_client = CreateCryptoClient();
-  auto secret_request =
-      EncryptRequestWithHpke<GetBidsRequest::GetBidsRawRequest, GetBidsRequest>(
-          std::make_unique<GetBidsRequest::GetBidsRawRequest>(
-              get_bids_raw_request),
-          *crypto_client, *key_fetcher_manager,
-          server_common::CloudPlatform::kGcp);
+  auto secret_request = EncryptRequestWithHpke<GetBidsRequest>(
+      get_bids_raw_request.SerializeAsString(), *crypto_client,
+      *key_fetcher_manager, server_common::CloudPlatform::kGcp);
   CHECK(secret_request.ok()) << secret_request.status();
   std::string get_bids_request_json;
   auto get_bids_request_json_status =
@@ -287,9 +339,11 @@ std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
 
 absl::Status SendRequestToBfe(
     const HpkeKeyset& keyset, bool enable_debug_reporting,
-    std::unique_ptr<BuyerFrontEnd::StubInterface> stub) {
+    std::unique_ptr<BuyerFrontEnd::StubInterface> stub,
+    bool enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
-      GetBidsRawRequestFromInput(enable_debug_reporting);
+      GetBidsRawRequestFromInput(enable_debug_reporting,
+                                 enable_unlimited_egress);
   privacy_sandbox::bidding_auction_servers::RequestOptions request_options;
   request_options.host_addr = absl::GetFlag(FLAGS_host_addr);
   request_options.client_ip = absl::GetFlag(FLAGS_client_ip);

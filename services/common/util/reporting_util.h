@@ -23,15 +23,23 @@
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
+<<<<<<< HEAD
+=======
+#include "services/common/loggers/request_log_context.h"
+>>>>>>> upstream-v3.10.0
 #include "services/common/util/post_auction_signals.h"
 #include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr absl::string_view kWinningBidPlaceholder = "${winningBid}";
+constexpr absl::string_view kWinningBidCurrencyPlaceholder =
+    "${winningBidCurrency}";
 constexpr absl::string_view kMadeWinningBidPlaceholder = "${madeWinningBid}";
 constexpr absl::string_view kHighestScoringOtherBidPlaceholder =
     "${highestScoringOtherBid}";
+constexpr absl::string_view kHighestScoringOtherBidCurrencyPlaceholder =
+    "${highestScoringOtherBidCurrency}";
 constexpr absl::string_view kMadeHighestScoringOtherBidPlaceholder =
     "${madeHighestScoringOtherBid}";
 constexpr absl::string_view kRejectReasonPlaceholder = "${rejectReason}";
@@ -58,6 +66,7 @@ constexpr absl::string_view kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
     "bid-from-score-ad-failed-currency-check";
 
 constexpr float kDefaultWinningBid = 0.0;
+constexpr char kUnknownBidCurrencyCode[] = "???";
 constexpr float kDefaultWinningScore = 0.0;
 inline constexpr char kDefaultWinningAdRenderUrl[] = "";
 inline constexpr char kDefaultWinningInterestGroupName[] = "";
@@ -65,15 +74,22 @@ inline constexpr char kDefaultWinningInterestGroupOwner[] = "";
 inline constexpr char kDefaultHighestScoringOtherBidInterestGroupOwner[] = "";
 inline constexpr char kDefaultHighestScoringOtherBid[] = "0.00";
 inline constexpr char kDefaultHasHighestScoringOtherBid[] = "false";
+inline constexpr char kFeatureLogging[] = "enable_logging";
+inline constexpr char kFeatureDebugUrlGeneration[] =
+    "enable_debug_url_generation";
 
 // Captures placeholder data for debug reporting.
 struct DebugReportingPlaceholder {
   // The winning bid from the auction.
   float winning_bid;
+  // Currency for said bid.
+  std::string winning_bid_currency;
   // If the interest group made the winning bid.
   bool made_winning_bid;
   // The bid which was scored second highest in the auction.
   float highest_scoring_other_bid;
+  // Currency for said second-highest-scoring bid in the auction.
+  std::string highest_scoring_other_bid_currency;
   // If the interest group made the highest scoring other bid.
   bool made_highest_scoring_other_bid;
   // Reason provided by the seller if rejected.
@@ -84,6 +100,12 @@ struct DebugReportingPlaceholder {
 // Returns post auction signals from winning ad score.
 // If there is no winning ad, default values are returned.
 PostAuctionSignals GeneratePostAuctionSignals(
+    const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
+    std::string seller_currency);
+
+// Returns post auction signals from winning ad score for the
+// top level seller.
+PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
 // Returns a http request object for debug reporting after replacing placeholder
@@ -113,13 +135,25 @@ absl::string_view ToSellerRejectionReasonString(
 // `enable_ad_tech_code_logging` is enabled.
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
+<<<<<<< HEAD
                            server_common::log::ContextImpl& log_context);
+=======
+                           RequestLogContext& log_context);
+>>>>>>> upstream-v3.10.0
 
 // Parses the JSON string, conditionally prints the logs from the response and
 // returns a serialized response string retrieved from the underlying UDF.
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
+<<<<<<< HEAD
     server_common::log::ContextImpl& log_context);
+=======
+    RequestLogContext& log_context);
+
+// Returns a JSON string for feature flags to be used by the wrapper script.
+std::string GetFeatureFlagJson(bool enable_logging,
+                               bool enable_debug_url_generation);
+>>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

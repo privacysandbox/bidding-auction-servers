@@ -20,7 +20,6 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
-#include "services/common/concurrent/static_local_cache.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -30,11 +29,10 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BuyerServiceClientConfig& client_config) {
-  absl::flat_hash_map<std::string,
-                      std::shared_ptr<const BuyerFrontEndAsyncClient>>
+  absl::flat_hash_map<std::string, std::shared_ptr<BuyerFrontEndAsyncClient>>
       bfe_addr_client_map;
   auto static_client_map = std::make_unique<absl::flat_hash_map<
-      std::string, std::shared_ptr<const BuyerFrontEndAsyncClient>>>();
+      std::string, std::shared_ptr<BuyerFrontEndAsyncClient>>>();
   for (const auto& [ig_owner, bfe_endpoint] : buyer_ig_owner_to_bfe_addr_map) {
     // Can perform additional validations here.
     if (ig_owner.empty() || bfe_endpoint.endpoint.empty()) {
@@ -48,23 +46,33 @@ BuyerFrontEndAsyncClientFactory::BuyerFrontEndAsyncClientFactory(
       BuyerServiceClientConfig client_config_copy = client_config;
       client_config_copy.server_addr = bfe_endpoint.endpoint;
       client_config_copy.cloud_platform = bfe_endpoint.cloud_platform;
-      auto bfe_client_ptr =
-          std::make_shared<const BuyerFrontEndAsyncGrpcClient>(
-              key_fetcher_manager, crypto_client,
-              std::move(client_config_copy));
+      auto bfe_client_ptr = std::make_shared<BuyerFrontEndAsyncGrpcClient>(
+          key_fetcher_manager, crypto_client, std::move(client_config_copy));
       bfe_addr_client_map.insert({bfe_endpoint.endpoint, bfe_client_ptr});
       static_client_map->try_emplace(ig_owner, bfe_client_ptr);
     }
   }
-  client_cache_ = std::make_unique<
-      StaticLocalCache<std::string, const BuyerFrontEndAsyncClient>>(
-      std::move(static_client_map));
+  client_cache_ = std::move(static_client_map);
+
+  for (const auto& [ig_owner, client] : *client_cache_) {
+    entries_.push_back({ig_owner, client});
+  }
 }
 
-std::shared_ptr<const BuyerFrontEndAsyncClient>
-BuyerFrontEndAsyncClientFactory::Get(absl::string_view ig_owner) const {
+std::shared_ptr<BuyerFrontEndAsyncClient> BuyerFrontEndAsyncClientFactory::Get(
+    absl::string_view ig_owner) const {
   std::string ig_owner_str = absl::StrCat(ig_owner);
-  return client_cache_->LookUp(ig_owner_str);
+  if (auto it = client_cache_->find(ig_owner_str); it != client_cache_->end()) {
+    return it->second;
+  }
+
+  return nullptr;
+}
+
+std::vector<
+    std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+BuyerFrontEndAsyncClientFactory::Entries() const {
+  return entries_;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

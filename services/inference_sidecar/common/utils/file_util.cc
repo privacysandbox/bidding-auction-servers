@@ -22,11 +22,21 @@
 #include "absl/base/log_severity.h"
 #include "absl/log/absl_log.h"
 #include "absl/strings/str_cat.h"
+<<<<<<< HEAD
+=======
+#include "absl/synchronization/mutex.h"
+>>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
 absl::StatusOr<std::string> ReadFile(absl::string_view path) {
+<<<<<<< HEAD
+=======
+  static absl::Mutex mutex;
+  absl::MutexLock lock(&mutex);
+
+>>>>>>> upstream-v3.10.0
   std::ifstream ifs(path.data(), std::ios::in | std::ios::binary);
   if (!ifs.good()) {
     return absl::InvalidArgumentError(

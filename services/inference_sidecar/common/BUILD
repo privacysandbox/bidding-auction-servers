@@ -33,6 +33,10 @@ cc_library(
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_worker",
         "@com_google_absl//absl/log",
+<<<<<<< HEAD
+=======
+        "@com_google_absl//absl/strings",
+>>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -46,10 +50,19 @@ cc_library(
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_worker",
+<<<<<<< HEAD
+=======
+        "//utils:cpu",
+        "//utils:log",
+>>>>>>> upstream-v3.10.0
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",
+<<<<<<< HEAD
+=======
+        "@com_google_absl//absl/strings",
+>>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )
@@ -94,6 +107,10 @@ cc_test(
     ],
     flaky = True,
     deps = [
+<<<<<<< HEAD
+=======
+        ":test_constants",
+>>>>>>> upstream-v3.10.0
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_executor",
@@ -109,6 +126,43 @@ cc_test(
     ],
 )
 
+<<<<<<< HEAD
+=======
+cc_test(
+    name = "consented_logging_test",
+    srcs = ["consented_logging_test.cc"],
+    data = [
+        ":gen_test_model",
+        ":inference_sidecar_test_target",
+    ],
+    deps = [
+        ":test_constants",
+        "//proto:inference_sidecar_cc_grpc_proto",
+        "//proto:inference_sidecar_cc_proto",
+        "//sandbox:sandbox_executor",
+        "//utils:file_util",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:reflection",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# Used to faciliate setting common constants in both inside the (test module)
+# inference sidecar and the test that invokes the sidecar. As a result, this
+# library cannot be marked as testonly.
+cc_library(
+    name = "test_constants",
+    hdrs = ["test_constants.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+>>>>>>> upstream-v3.10.0
 genrule(
     name = "collect-logs",
     outs = ["collect_logs.bin"],

@@ -18,6 +18,7 @@ syntax = "proto3";
 
 package privacy_sandbox.bidding_auction_servers.auction_service;
 
+<<<<<<< HEAD:services/auction_service/auction_code_fetch_config.proto
 // Specify how to fetch the code blob.
 enum FetchMode {
    // Fetch a single blob from an arbitrary url.
@@ -28,6 +29,9 @@ enum FetchMode {
    // Fetch a blob from a local path. Dev-only.
    FETCH_MODE_LOCAL = 2;
 }
+=======
+import "services/common/blob_fetch/fetch_mode.proto";
+>>>>>>> upstream-v3.10.0:services/auction_service/udf_fetcher/auction_code_fetch_config.proto
 
 message SellerCodeFetchConfig {
 
@@ -57,7 +61,11 @@ message SellerCodeFetchConfig {
 
    // Required.
    // Specifies which mode to use when fetching UDF blobs.
+<<<<<<< HEAD:services/auction_service/auction_code_fetch_config.proto
    FetchMode fetch_mode = 13;
+=======
+   blob_fetch.FetchMode fetch_mode = 13;
+>>>>>>> upstream-v3.10.0:services/auction_service/udf_fetcher/auction_code_fetch_config.proto
 
    // Allow seller debug URL generation.
    bool enable_seller_debug_url_generation = 5;
@@ -77,4 +85,11 @@ message SellerCodeFetchConfig {
    // Map of buyer origin to URL endpoint for reportWin js file for protected
    // app signals.
    map<string, string> protected_app_signals_buyer_report_win_js_urls = 10;
+
+   // Temporary flag to enable seller's udf and buyer's reportWin()
+   // udf isolation.
+   bool enable_seller_and_buyer_udf_isolation = 14;
+
+   // Enables private aggregate reporting.
+   bool enable_private_aggregate_reporting = 15;
 }

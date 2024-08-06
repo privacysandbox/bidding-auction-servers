@@ -21,7 +21,9 @@
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
+#include "services/bidding_service/constants.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/reporting_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -47,11 +49,11 @@ TEST(GetBuyerWrappedCode, GeneratesCompleteFinalJavascriptWithWasm) {
 }
 
 TEST(GetBuyerWrappedCode, GeneratesCompleteProtectedAppSignalsFinalJavaScript) {
-  EXPECT_EQ(
-      GetBuyerWrappedCode(kBuyerBaseCode_template, /*ad_tech_wasm=*/"",
-                          AuctionType::kProtectedAppSignals,
-                          /*auction_specific_setup=*/"// No additional setup."),
-      kExpectedProtectedAppSignalsGenerateBidCodeTemplate);
+  EXPECT_EQ(GetBuyerWrappedCode(
+                kBuyerBaseCode_template, /*ad_tech_wasm=*/"",
+                AuctionType::kProtectedAppSignals,
+                /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler),
+            kExpectedProtectedAppSignalsGenerateBidCodeTemplate);
 }
 
 void GenerateFeatureFlagsTestHelper(bool is_logging_enabled,

@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
@@ -30,11 +31,42 @@ struct HTTPRequest {
   std::vector<std::string> headers = {};
   // Optional
   std::string body = "";
+
+  // Will include response headers in the response with the specified
+  // case insensitive name.
+  // Defaults to empty.
+  std::vector<std::string> include_headers = {};
+
+  struct RedirectConfig {
+    // Limits redirects to HTTP/HTTPS only.
+    // Defaults to false.
+    bool strict_http = false;
+
+    // Get redirect URL in response metadata.
+    // Defaults to false.
+    bool get_redirect_url = false;
+  } redirect_config;
+};
+
+struct HTTPResponse {
+  // The pointer to this is used to write the request output.
+  std::string body;
+
+  // Optional. Included if include_headers has values.
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+
+  // Optional. Included if get_redirect_url is true.
+  std::string final_url;
 };
 
 using OnDoneFetchUrl = absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>;
 using OnDoneFetchUrls =
     absl::AnyInvocable<void(std::vector<absl::StatusOr<std::string>>) &&>;
+
+using OnDoneFetchUrlWithMetadata =
+    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>) &&>;
+using OnDoneFetchUrlsWithMetadata =
+    absl::AnyInvocable<void(std::vector<absl::StatusOr<HTTPResponse>>) &&>;
 
 class HttpFetcherAsync {
  public:
@@ -78,6 +110,20 @@ class HttpFetcherAsync {
   virtual void FetchUrls(const std::vector<HTTPRequest>& requests,
                          absl::Duration timeout,
                          OnDoneFetchUrls done_callback) = 0;
+
+  // Fetches the specified urls with response metadata.
+  //
+  // requests: The URL and headers for the HTTP GET request.
+  // timeout: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. Please note that done_callback may run in a
+  // threadpool and is not guaranteed to be the FetchUrl client's thread.
+  // Clients can expect done_callback to be called exactly once and are
+  // guaranteed that the order of the reuslts exactly corresponds with the order
+  // of requests.
+  virtual void FetchUrlsWithMetadata(
+      const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+      OnDoneFetchUrlsWithMetadata done_callback) = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

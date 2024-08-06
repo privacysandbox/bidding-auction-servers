@@ -61,9 +61,12 @@ class BlobFetcher {
   // Performs bucket fetching with BlobStorageClient.
   // It's not thread-safe.
   absl::Status InternalFetch();
+<<<<<<< HEAD
   // Initializes BlobStorageClient.
   // Prerequisite: Caller must call google::scp::cpio::Cpio::InitCpio() ahead.
   void InitAndRunConfigClient();
+=======
+>>>>>>> upstream-v3.10.0
 
   const std::string bucket_name_;
   server_common::Executor* executor_;  // not owned

@@ -20,6 +20,10 @@
 
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
+<<<<<<< HEAD
+=======
+#include "absl/strings/str_cat.h"
+>>>>>>> upstream-v3.10.0
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "modules/module_interface.h"
@@ -38,11 +42,26 @@ constexpr int kRecvNumTrials = 10;
 
 }  // namespace
 
+<<<<<<< HEAD
 absl::Status Run() {
   SandboxWorker worker;
   sandbox2::Comms comms(worker.FileDescriptor());
 
   std::unique_ptr<ModuleInterface> inference_module = ModuleInterface::Create();
+=======
+absl::Status Run(const InferenceSidecarRuntimeConfig& config) {
+  SandboxWorker worker;
+  sandbox2::Comms comms(worker.FileDescriptor());
+
+  if (!config.module_name().empty() &&
+      config.module_name() != ModuleInterface::GetModuleVersion()) {
+    return absl::FailedPreconditionError(
+        absl::StrCat("Expected inference module: ", config.module_name(),
+                     ", but got : ", ModuleInterface::GetModuleVersion()));
+  }
+  std::unique_ptr<ModuleInterface> inference_module =
+      ModuleInterface::Create(config);
+>>>>>>> upstream-v3.10.0
 
   // TODO(b/322109220): Handles arbitrary request proto simultaneously.
   // TODO(b/325123788): Remove retry logic with gRPC over IPC.

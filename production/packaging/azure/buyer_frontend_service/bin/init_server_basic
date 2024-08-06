@@ -1,5 +1,9 @@
+<<<<<<<< HEAD:production/packaging/azure/buyer_frontend_service/bin/init_server_basic
 #!/busybox/sh
 # Portions Copyright (c) Microsoft Corporation
+========
+# Copyright 2022 Google LLC
+>>>>>>>> upstream-v3.10.0:services/inference_sidecar/common/builders/etc/.markdownlint-cli2.yaml
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +17,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<<< HEAD:production/packaging/azure/buyer_frontend_service/bin/init_server_basic
 #########################################################################
 #                                                                       #
 #                             BFE Startup                               #
 #                                                                       #
 #########################################################################
+========
+config:
+  line-length:
+    line_length: 120
+    #stern: true
+    code_blocks: false
 
+  # these are apparently in conflict with prettier's markdown formatting
+  list-marker-space: false
+  list-indent: false
+  ul-indent: false
 
-export GLOG_logtostderr=1
-export GLOG_stderrthreshold=0
-export GRPC_DNS_RESOLVER=native
+  headings: false
+>>>>>>>> upstream-v3.10.0:services/inference_sidecar/common/builders/etc/.markdownlint-cli2.yaml
 
+  proper-names:
+    code_blocks: false
+    names:
+    - CommonMark
+    - JavaScript
+    - Markdown
+    - markdown-it
+    - markdownlint
+    - markdownlint-cli2
+    - Node.js
+
+fix: true
+
+<<<<<<<< HEAD:production/packaging/azure/buyer_frontend_service/bin/init_server_basic
 # Start the server.
 /server/bin/server  --init_config_client=true
+========
+ignores:
+- CHANGELOG.md
+- google_internal/LATEST_RELEASE.md
+>>>>>>>> upstream-v3.10.0:services/inference_sidecar/common/builders/etc/.markdownlint-cli2.yaml

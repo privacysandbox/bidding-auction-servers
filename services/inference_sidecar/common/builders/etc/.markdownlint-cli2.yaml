@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<<< HEAD:services/inference_sidecar/common/builders/etc/.markdownlint-cli2.yaml
 config:
   line-length:
     line_length: 120
@@ -41,3 +42,30 @@ fix: true
 ignores:
 - CHANGELOG.md
 - google_internal/LATEST_RELEASE.md
+========
+# refer to docs at https://github.com/GoogleContainerTools/container-structure-test
+
+schemaVersion: 2.0.0
+
+# command tests require the docker toolchain
+commandTests:
+  - name: "curl version"
+    command: "curl"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "clang version"
+    command: "clang"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "bazel version"
+    command: "bazelisk"
+    args: ["version"]
+    exitCode: 0
+
+  - name: "docker image help"
+    command: "docker"
+    args: ["help", "image"]
+    exitCode: 0
+>>>>>>>> upstream-v3.10.0:services/inference_sidecar/common/builders/images/build-debian/test/commands.yaml

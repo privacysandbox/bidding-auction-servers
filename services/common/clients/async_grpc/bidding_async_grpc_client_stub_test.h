@@ -158,9 +158,14 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
+<<<<<<< HEAD
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
+=======
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) { notification.Notify(); });
+>>>>>>> upstream-v3.10.0
   CHECK_OK(status);
   notification.WaitForNotification();
   EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
@@ -214,9 +219,14 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   auto status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(), sent_metadata,
       [&notification](
+<<<<<<< HEAD
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
         notification.Notify();
       });
+=======
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) { notification.Notify(); });
+>>>>>>> upstream-v3.10.0
   CHECK_OK(status);
   notification.WaitForNotification();
 
@@ -267,7 +277,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) {
         EXPECT_EQ(get_values_response.status().code(),
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();
@@ -325,9 +336,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
-        notification.Notify();
-      },
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) { notification.Notify(); },
       timeout);
   CHECK_OK(status);
   notification.WaitForNotification();
@@ -377,7 +387,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification, &expected_output](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             **get_values_response, expected_output));
         notification.Notify();
@@ -426,7 +437,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) {
         EXPECT_FALSE(get_values_response.ok());
         notification.Notify();
       },
@@ -476,7 +488,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
+          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
+          ResponseMetadata response_metadata) {
         EXPECT_FALSE(get_values_response.ok());
         notification.Notify();
       },

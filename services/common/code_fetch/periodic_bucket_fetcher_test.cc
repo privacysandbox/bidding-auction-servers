@@ -53,7 +53,10 @@ using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse;
 using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataRequest;
 using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse;
 using ::google::scp::core::AsyncContext;
+<<<<<<< HEAD
 using ::google::scp::core::ExecutionResult;
+=======
+>>>>>>> upstream-v3.10.0
 using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;
 using ::google::scp::core::errors::GetErrorMessage;
@@ -89,7 +92,11 @@ TEST(PeriodicBucketFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
                 std::move(md));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
+<<<<<<< HEAD
             return SuccessExecutionResult();
+=======
+            return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -115,7 +122,7 @@ TEST(PeriodicBucketFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(dispatcher, LoadSync)
@@ -164,7 +171,11 @@ TEST(PeriodicBucketFetcherTest, LoadsAllBlobsInBucket) {
                 std::move(md2));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
+<<<<<<< HEAD
             return SuccessExecutionResult();
+=======
+            return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
           });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
@@ -185,7 +196,7 @@ TEST(PeriodicBucketFetcherTest, LoadsAllBlobsInBucket) {
             async_context.Finish();
 
             done_get_blob.DecrementCount();
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -245,13 +256,21 @@ TEST(PeriodicBucketFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
         async_context.response->mutable_blob_metadatas()->Add(std::move(md3));
         async_context.result = SuccessExecutionResult();
         async_context.Finish();
+<<<<<<< HEAD
         return SuccessExecutionResult();
+=======
+        return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
       });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
       .WillRepeatedly(
+<<<<<<< HEAD
           [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context)
               -> ExecutionResult {
+=======
+          [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
+>>>>>>> upstream-v3.10.0
             async_context.response = std::make_shared<GetBlobResponse>();
             if (async_context.request->blob_metadata().blob_name() ==
                 kSampleBlobName) {
@@ -262,11 +281,19 @@ TEST(PeriodicBucketFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
                   std::string(kSampleData2));
               async_context.result = SuccessExecutionResult();
             } else {
+<<<<<<< HEAD
               return FailureExecutionResult(SC_UNKNOWN);
             }
             async_context.Finish();
 
             return SuccessExecutionResult();
+=======
+              return absl::UnknownError("");
+            }
+            async_context.Finish();
+
+            return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -318,7 +345,11 @@ TEST(PeriodicBucketFetcherTest, FailsStartupIfNoBlobLoadedSuccessfully) {
                 std::move(md));
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
+<<<<<<< HEAD
             return SuccessExecutionResult();
+=======
+            return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
           });
 
   EXPECT_CALL(*executor, RunAfter)
@@ -344,7 +375,11 @@ TEST(PeriodicBucketFetcherTest, FailsStartupIfNoBlobLoadedSuccessfully) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
+<<<<<<< HEAD
             return SuccessExecutionResult();
+=======
+            return absl::OkStatus();
+>>>>>>> upstream-v3.10.0
           });
 
   EXPECT_CALL(dispatcher, LoadSync)
