@@ -16,7 +16,6 @@
 
 #include "services/seller_frontend_service/util/config_param_parser.h"
 
-#include <array>
 #include <memory>
 #include <string>
 

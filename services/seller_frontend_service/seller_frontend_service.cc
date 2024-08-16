@@ -29,10 +29,7 @@
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
 #include "services/seller_frontend_service/select_ad_reactor_invalid.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
-<<<<<<< HEAD
-=======
 #include "services/seller_frontend_service/select_auction_result_reactor.h"
->>>>>>> upstream-v3.10.0
 #include "src/telemetry/telemetry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

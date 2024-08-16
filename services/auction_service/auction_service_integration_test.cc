@@ -59,18 +59,6 @@ constexpr char kDefaultBarInterestGroupOwner[] = "barStandardAds.com";
 constexpr char kTestReportWinUrlWithSignals[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
-<<<<<<< HEAD
-    "modelingSignals=4&recency=3&madeHighestScoringOtherBid=false&joinCount=5&"
-    "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined";
-
-constexpr char kTestReportWinUrlWithNoising[] =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
-    "madeHighestScoringOtherBid=false&"
-    "signalsForWinner=testSignalsForWinner&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined";
-=======
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=true&joinCount=5&"
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined";
@@ -96,7 +84,6 @@ constexpr char kTestComponentEvent[] = "click";
 constexpr char kTestComponentInteractionReportingUrl[] =
     "http://componentInteraction.com";
 constexpr char kTestComponentSeller[] = "http://componentSeller.com";
->>>>>>> upstream-v3.10.0
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -398,13 +385,6 @@ void BuildScoreAdsRequestForReporting(
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
-<<<<<<< HEAD
-  for (int i = 0; i < desired_ad_count; i++) {
-    auto ad = MakeARandomAdWithBidMetadata(1, 1);  // fix bid value to 1
-    ad.set_ad_cost(test_buyer_reporting_signals.ad_cost);
-    ad.set_modeling_signals(test_buyer_reporting_signals.modeling_signals);
-    ad.set_join_count(test_buyer_reporting_signals.join_count);
-=======
   for (int i = 0; i < test_score_ads_request_config.desired_ad_count; i++) {
     auto ad = MakeARandomAdWithBidMetadata(/*min_bid=*/1, /*max_bid=*/1);
     if (test_score_ads_request_config.buyer_reporting_id.has_value()) {
@@ -418,7 +398,6 @@ void BuildScoreAdsRequestForReporting(
                                 .test_buyer_reporting_signals.modeling_signals);
     ad.set_join_count(
         test_score_ads_request_config.test_buyer_reporting_signals.join_count);
->>>>>>> upstream-v3.10.0
     ad.set_interest_group_name(
         test_score_ads_request_config.test_buyer_reporting_signals
             .interest_group_name);
@@ -545,10 +524,7 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-<<<<<<< HEAD
-=======
   auction_service_runtime_config.default_code_version = kScoreAdBlobVersion;
->>>>>>> upstream-v3.10.0
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -827,10 +803,6 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
-<<<<<<< HEAD
-  int desired_ad_count = 90;
-=======
->>>>>>> upstream-v3.10.0
   bool enable_report_win_input_noising = false;
   TestBuyerReportingSignals test_buyer_reporting_signals;
   ScoreAdsRequest request;
@@ -862,50 +834,6 @@ TEST_F(AuctionServiceIntegrationTest,
   EXPECT_EQ(
       scoredAd.win_reporting_urls().buyer_reporting_urls().reporting_url(),
       kTestReportWinUrlWithSignals);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .buyer_reporting_urls()
-                .interaction_reporting_urls()
-                .at(kTestInteractionEvent),
-            kTestInteractionReportingUrl);
-}
-
-TEST_F(AuctionServiceIntegrationTest, ReportingSuccessfulWithNoising) {
-  bool enable_seller_debug_url_generation = false;
-  bool enable_debug_reporting = false;
-  bool enable_adtech_code_logging = true;
-  bool enable_report_result_url_generation = true;
-  bool enable_report_win_url_generation = true;
-  int desired_ad_count = 90;
-  bool enable_report_win_input_noising = true;
-  bool enable_protected_app_signals = false;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequestForReporting(
-      &request, &interest_group_to_ad, test_buyer_reporting_signals,
-      enable_debug_reporting, desired_ad_count, "");
-  ScoreAdsResponse response;
-  SellerCodeWrappingTestHelper(
-      &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
-      enable_debug_reporting, enable_adtech_code_logging,
-      enable_report_result_url_generation, enable_report_win_url_generation,
-      enable_protected_app_signals, enable_report_win_input_noising);
-  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-  raw_response.ParseFromString(response.response_ciphertext());
-  const auto& scoredAd = raw_response.ad_score();
-  EXPECT_GT(scoredAd.desirability(), 0);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .top_level_seller_reporting_urls()
-                .reporting_url(),
-            kTestReportResultUrl);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .top_level_seller_reporting_urls()
-                .interaction_reporting_urls()
-                .at(kTestInteractionEvent),
-            kTestInteractionReportingUrl);
-  EXPECT_EQ(
-      scoredAd.win_reporting_urls().buyer_reporting_urls().reporting_url(),
-      kTestReportWinUrlWithNoising);
   EXPECT_EQ(scoredAd.win_reporting_urls()
                 .buyer_reporting_urls()
                 .interaction_reporting_urls()
@@ -1200,49 +1128,6 @@ TEST_F(AuctionServiceIntegrationTest,
 }
 
 TEST_F(AuctionServiceIntegrationTest,
-       ModifiedBidSetToBuyerBidInComponentAuctionsReportUrlIfNotPresent) {
-  bool enable_seller_debug_url_generation = false;
-  bool enable_debug_reporting = false;
-  bool enable_adtech_code_logging = true;
-  bool enable_report_result_url_generation = true;
-  bool enable_report_win_url_generation = true;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_buyer_reporting_signals, false, 90,
-                                   kTestTopLevelSeller);
-  ScoreAdsResponse response;
-  SellerCodeWrappingTestHelper(
-      &request, &response, kComponentAuctionCodeWithNoModifiedBid,
-      enable_seller_debug_url_generation, enable_debug_reporting,
-      enable_adtech_code_logging, enable_report_result_url_generation,
-      enable_report_win_url_generation);
-  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-  raw_response.ParseFromString(response.response_ciphertext());
-  const auto& scoredAd = raw_response.ad_score();
-  EXPECT_GT(scoredAd.desirability(), 0);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
-                .reporting_url(),
-            kTestComponentReportResultUrlWithNoModifiedBid);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .component_seller_reporting_urls()
-                .interaction_reporting_urls()
-                .at(kTestInteractionEvent),
-            kTestInteractionReportingUrl);
-  EXPECT_EQ(
-      scoredAd.win_reporting_urls().buyer_reporting_urls().reporting_url(),
-      kTestReportWinUrlWithSignals);
-  EXPECT_EQ(scoredAd.win_reporting_urls()
-                .buyer_reporting_urls()
-                .interaction_reporting_urls()
-                .at(kTestInteractionEvent),
-            kTestInteractionReportingUrl);
-}
-
-TEST_F(AuctionServiceIntegrationTest,
        ReportingUrlsForBuyerEmptyWhenSellerInputIsMissing) {
   bool enable_seller_debug_url_generation = false;
   bool enable_debug_reporting = false;
@@ -1403,27 +1288,6 @@ TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
   EXPECT_FALSE(raw_response.has_ad_score());
 }
 
-<<<<<<< HEAD
-void BuildTopLevelAuctionScoreAdsRequest(
-    ScoreAdsRequest* request, bool enable_debug_reporting = false,
-    int desired_ad_count = 20, absl::string_view seller = kTestSeller) {
-  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
-  std::string generation_id = MakeARandomString();
-  for (int i = 0; i < desired_ad_count; i++) {
-    auto auction_result =
-        MakeARandomComponentAuctionResult(generation_id, absl::StrCat(seller));
-    *raw_request.mutable_component_auction_results()->Add() = auction_result;
-  }
-  if (enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(enable_debug_reporting);
-  }
-  raw_request.set_seller(seller);
-  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request->set_key_id(kKeyId);
-}
-
-=======
->>>>>>> upstream-v3.10.0
 TEST_F(AuctionServiceIntegrationTest,
        ProcessTopLevelAuctionInputAndReturnWinner) {
   ScoreAdsRequest request;

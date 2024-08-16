@@ -214,13 +214,8 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 bool enable_unlimited_egress) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   auto select_ad_request = std::make_unique<SelectAdRequest>();
-<<<<<<< HEAD
-  ProtectedAuctionInput protected_auction_input =
-      GetProtectedAuctionInput(&input_json, enable_debug_reporting);
-=======
   ProtectedAuctionInput protected_auction_input = GetProtectedAuctionInput(
       &input_json, enable_debug_reporting, enable_unlimited_egress);
->>>>>>> upstream-v3.10.0
   if (input_json.HasMember(kComponentAuctionsField)) {
     for (auto& component_auction_json :
          input_json[kComponentAuctionsField].GetArray()) {

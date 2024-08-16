@@ -35,10 +35,7 @@ cc_library(
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "//tools/secure_invoke/payload_generator:payload_packaging_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
-<<<<<<< HEAD
-=======
         "@com_google_absl//absl/container:btree",
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
     ],
 )

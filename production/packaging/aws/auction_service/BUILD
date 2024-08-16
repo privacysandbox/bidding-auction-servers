@@ -36,22 +36,12 @@ pkg_files(
     prefix = "/",
 )
 
-<<<<<<< HEAD
-pkg_files(
-    name = "kmstool_enclave_executable",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_cli",
-    ],
-    attributes = pkg_attributes(mode = "0555"),
-    prefix = "/",
-=======
 # Create a symlink between where kmstool_enclave_cli expects shell to be
 # (/bin/sh) and where it actually is on our image (/busybox/sh).
 pkg_mklink(
     name = "busybox_sh_symlink",
     link_name = "/bin/sh",
     target = "/busybox/sh",
->>>>>>> upstream-v3.10.0
 )
 
 server_binaries = [
@@ -77,38 +67,6 @@ container_layer(
     ],
 )
 
-<<<<<<< HEAD
-# Ensure libnsm ends up in the load path.
-pkg_tar(
-    name = "libnsm-tar",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:libnsm_so",
-    ],
-    mode = "0644",
-    # TODO(b/294113069): Remove arch-specific path.
-    package_dir = "/lib/x86_64-linux-gnu/",
-    visibility = ["//visibility:public"],
-)
-
-# Create a symlink between where kmstool_enclave_cli expects shell to be
-# (/bin/sh) and where it actually is on our image (/busybox/sh).
-container_layer(
-    name = "kmstool_enclave_cli_layer",
-    env = {
-        "GLOG_logtostderr": "1",
-        "GLOG_stderrthreshold": "0",
-        "GRPC_DNS_RESOLVER": "native",
-    },
-    symlinks = {
-        "/bin/sh": "/busybox/sh",
-    },
-    tars = [
-        ":libnsm-tar",
-    ],
-)
-
-=======
->>>>>>> upstream-v3.10.0
 # This image target is meant for testing running the server in an enclave using
 # aws proxy to abstract vsock communication.
 container_image(
@@ -126,10 +84,6 @@ container_image(
     entrypoint = [
         "/busybox/sh",
     ],
-<<<<<<< HEAD
-    env = LOG_ENV_VARS,
-=======
->>>>>>> upstream-v3.10.0
     layers = [
         ":server_binary_layer",
     ] + select({
@@ -140,9 +94,6 @@ container_image(
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
         "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
-    ],
-    tars = [
-        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
     ],
 )
 

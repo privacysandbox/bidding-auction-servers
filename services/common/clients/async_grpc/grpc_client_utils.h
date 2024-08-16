@@ -36,10 +36,6 @@ EncryptRequestWithHpke(
     const std::string& plaintext, CryptoClientWrapperInterface& crypto_client,
     server_common::KeyFetcherManagerInterface& key_fetcher_manager,
     server_common::CloudPlatform cloud_platform) {
-<<<<<<< HEAD
-  std::string plaintext = raw_request->SerializeAsString();
-=======
->>>>>>> upstream-v3.10.0
   PS_ASSIGN_OR_RETURN(HpkeMessage encrypted_request,
                       HpkeEncrypt(plaintext, crypto_client, key_fetcher_manager,
                                   cloud_platform));

@@ -74,10 +74,6 @@ container_image(
     entrypoint = [
         "/server/bin/server",
     ],
-<<<<<<< HEAD
-    env = LOG_ENV_VARS,
-=======
->>>>>>> upstream-v3.10.0
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",

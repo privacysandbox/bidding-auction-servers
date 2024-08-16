@@ -115,11 +115,7 @@ constexpr char kJsonStringValueStart[] = R"JSON(":")JSON";
 constexpr char kJsonValueStart[] = R"JSON(":)JSON";
 constexpr char kJsonValueEnd[] = R"JSON(,")JSON";
 constexpr char kJsonEmptyString[] = R"JSON("")JSON";
-<<<<<<< HEAD
-constexpr char kEmptyDeviceSignals[] = R"JSON("{}")JSON";
-=======
 constexpr char kEmptyDeviceSignals[] = R"JSON({})JSON";
->>>>>>> upstream-v3.10.0
 
 std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
                                         absl::string_view seller,
@@ -224,11 +220,7 @@ absl::StatusOr<std::string> SerializeIG(const IGForBidding& ig) {
 // in a loop for all Interest Groups.
 absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
-<<<<<<< HEAD
-    server_common::log::ContextImpl& log_context) {
-=======
     RequestLogContext& log_context) {
->>>>>>> upstream-v3.10.0
   // Parse into JSON.
   auto start_parse_time = absl::Now();
   PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
@@ -293,13 +285,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation,
-<<<<<<< HEAD
-    server_common::log::ContextImpl& log_context,
-    const bool enable_adtech_code_logging, const std::string& version) {
-=======
     RequestLogContext& log_context, const bool enable_adtech_code_logging,
     const std::string& version) {
->>>>>>> upstream-v3.10.0
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
@@ -470,16 +457,10 @@ void GenerateBidsReactor::Execute() {
   absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
       SerializeTrustedBiddingSignalsPerIG(raw_request_, log_context_);
   if (!ig_trusted_signals_map.ok()) {
-<<<<<<< HEAD
-    PS_VLOG(0, log_context_) << "Request failed while parsing bidding signals: "
-                             << ig_trusted_signals_map.status().ToString(
-                                    absl::StatusToStringMode::kWithEverything);
-=======
     PS_LOG(ERROR, log_context_)
         << "Request failed while parsing bidding signals: "
         << ig_trusted_signals_map.status().ToString(
                absl::StatusToStringMode::kWithEverything);
->>>>>>> upstream-v3.10.0
     EncryptResponseAndFinish(
         server_common::FromAbslStatus(ig_trusted_signals_map.status()));
     return;
@@ -496,11 +477,7 @@ void GenerateBidsReactor::Execute() {
                                 log_context_, enable_adtech_code_logging_,
                                 protected_auction_generate_bid_version_);
     if (!generate_bid_request.ok()) {
-<<<<<<< HEAD
-      PS_VLOG(3, log_context_)
-=======
       PS_VLOG(kNoisyWarn, log_context_)
->>>>>>> upstream-v3.10.0
           << "Unable to build GenerateBidRequest: "
           << generate_bid_request.status().ToString(
                  absl::StatusToStringMode::kWithEverything);

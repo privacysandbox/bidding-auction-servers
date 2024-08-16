@@ -68,11 +68,7 @@ void HttpBiddingSignalsAsyncProvider::Get(
       },
       timeout);
   if (!status.ok()) {
-<<<<<<< HEAD
-    PS_VLOG(1) << "Unable to fetch bidding signals";
-=======
     PS_LOG(ERROR) << "Unable to fetch bidding signals";
->>>>>>> upstream-v3.10.0
   }
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

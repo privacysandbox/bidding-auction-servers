@@ -61,21 +61,6 @@ module "buyer" {
   use_tls_with_mesh                    = local.use_tls_with_mesh
 
   runtime_flags = {
-<<<<<<< HEAD
-    BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BUYER_FRONTEND_PORT               = "50051"          # Do not change unless you are modifying the default GCP architecture.
-    BFE_INGRESS_TLS                   = "false"          # Do not change unless you are modifying the default GCP architecture.
-    BIDDING_EGRESS_TLS                = "true"           # Do not change unless you are modifying the default GCP architecture.
-    COLLECTOR_ENDPOINT                = "127.0.0.1:4317" # Do not change unless you are modifying the default GCP architecture.
-    AD_RETRIEVAL_KV_SERVER_EGRESS_TLS = "true"           # Do not change unless you are modifying the default GCP architecture.
-    KV_SERVER_EGRESS_TLS              = "true"           # Do not change unless you are modifying the default GCP architecture.
-
-    ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-    BIDDING_SERVER_ADDR                           = "" # Example: "dns:///bidding1.com:443"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-    TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
-    TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
-=======
     BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default AWS architecture.
     BUYER_FRONTEND_PORT               = "50051"          # Do not change unless you are modifying the default AWS architecture.
     BFE_INGRESS_TLS                   = "false"          # Do not change unless you are modifying the default AWS architecture.
@@ -90,7 +75,6 @@ module "buyer" {
     BUYER_KV_SERVER_ADDR                          = ""                                                                                                                                             # Example: "https://kvserver.com/trusted-signals"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = ""                                                                                                                                             # Example: "xds:///ad-retrieval-host"
     TEE_KV_SERVER_ADDR                            = ""                                                                                                                                             # Example: "xds:///kv-service-host"
->>>>>>> upstream-v3.10.0
     AD_RETRIEVAL_TIMEOUT_MS                       = "60000"
     GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
@@ -126,22 +110,6 @@ module "buyer" {
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
 
-<<<<<<< HEAD
-    # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
-    # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
-    # Coordinator-based attestation flags:
-    PUBLIC_KEY_ENDPOINT                        = "" # Example: "https://test.cloudfront.net/v1alpha/publicKeys"
-    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT   = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT = "" # Example: "https://test.execute-api.us-east-1.amazonaws.com/stage/v1alpha/encryptionKeys"
-    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY       = "" # Example: "arn:aws:iam::574738241111:role/mp-prim-ba_574738241111_coordinator_assume_role"
-    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY     = "" # Example: "arn:aws:iam::574738241111:role/mp-sec-ba_574738241111_coordinator_assume_role"
-    PRIMARY_COORDINATOR_REGION                 = "" # Example: "us-east-1"
-    SECONDARY_COORDINATOR_REGION               = "" # Example: "us-east-1"
-    PRIVATE_KEY_CACHE_TTL_SECONDS              = "" # Example: "3974400" (46 days)
-    KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "" # Example: "10800"
-    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES           = "" # Example: "65536"
-    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB         = "" # Example: "3000"
-=======
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
     PUBLIC_KEY_ENDPOINT                        = "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
@@ -159,13 +127,10 @@ module "buyer" {
 
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
->>>>>>> upstream-v3.10.0
 
     INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
     INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
     INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
-<<<<<<< HEAD
-=======
 
     # TCMalloc related config parameters.
     # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
@@ -173,6 +138,5 @@ module "buyer" {
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
->>>>>>> upstream-v3.10.0
   }
 }

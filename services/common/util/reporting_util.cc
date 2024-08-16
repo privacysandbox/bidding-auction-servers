@@ -23,10 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "services/common/util/json_util.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/request_response_constants.h"
->>>>>>> upstream-v3.10.0
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -44,11 +41,7 @@ inline constexpr absl::string_view kFeatureEnabled = "true";
 void MayVlogAdTechCodeLogs(const rapidjson::Document& document,
 
                            const std::string& log_type,
-<<<<<<< HEAD
-                           server_common::log::ContextImpl& log_context) {
-=======
                            RequestLogContext& log_context) {
->>>>>>> upstream-v3.10.0
   auto logs_it = document.FindMember(log_type.c_str());
   if (logs_it != document.MemberEnd()) {
     for (const auto& log : logs_it->value.GetArray()) {
@@ -147,15 +140,12 @@ PostAuctionSignals GeneratePostAuctionSignals(
     }
   }
 
-<<<<<<< HEAD
-=======
   std::string bid_currency = (winning_ad_score->buyer_bid_currency().empty())
                                  ? kUnknownBidCurrencyCode
                                  : winning_ad_score->buyer_bid_currency();
   std::string highest_scoring_other_bid_currency =
       (seller_currency.empty()) ? kUnknownBidCurrencyCode : seller_currency;
 
->>>>>>> upstream-v3.10.0
   bool made_highest_scoring_other_bid = false;
   if (winning_ad_score->ig_owner_highest_scoring_other_bids_map().size() == 1 &&
       winning_ad_score->ig_owner_highest_scoring_other_bids_map().contains(
@@ -345,11 +335,7 @@ absl::string_view ToSellerRejectionReasonString(
 
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-<<<<<<< HEAD
-                           server_common::log::ContextImpl& log_context) {
-=======
                            RequestLogContext& log_context) {
->>>>>>> upstream-v3.10.0
   if (!enable_ad_tech_code_logging) {
     return;
   }
@@ -361,11 +347,7 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-<<<<<<< HEAD
-    server_common::log::ContextImpl& log_context) {
-=======
     RequestLogContext& log_context) {
->>>>>>> upstream-v3.10.0
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);

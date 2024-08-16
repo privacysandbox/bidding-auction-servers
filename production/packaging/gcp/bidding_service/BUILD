@@ -33,28 +33,18 @@ pkg_files(
         "//services/bidding_service:server",
         "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
     ] + select({
-<<<<<<< HEAD
-=======
         "//:include_all_inference_binaries": [
             "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
             "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
         ],
->>>>>>> upstream-v3.10.0
         "//:inference_noop": [
             "@inference_common//:inference_sidecar_test_target",
         ],
         "//:inference_pytorch": [
-<<<<<<< HEAD
-            "@pytorch_v2_1_1//:artifacts/inference_sidecar",
-        ],
-        "//:inference_tensorflow": [
-            "@tensorflow_v2_14_0//:artifacts/inference_sidecar",
-=======
             "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
         ],
         "//:inference_tensorflow": [
             "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
->>>>>>> upstream-v3.10.0
         ],
         "//conditions:default": [],
     }),
@@ -123,10 +113,6 @@ container_image(
     entrypoint = [
         "sh",
     ],
-<<<<<<< HEAD
-    env = LOG_ENV_VARS,
-=======
->>>>>>> upstream-v3.10.0
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":cddl_specs_layer",

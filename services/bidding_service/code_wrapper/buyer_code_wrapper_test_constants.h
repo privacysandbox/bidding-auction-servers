@@ -73,11 +73,7 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
 
       var generateBidResponse = {};
       try {
-<<<<<<< HEAD
-        generateBidResponse = generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
-=======
         generateBidResponse = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
->>>>>>> upstream-v3.10.0
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
@@ -125,12 +121,7 @@ constexpr absl::string_view
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
-<<<<<<< HEAD
-    function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion, featureFlags){
-      // No additional setup.
-=======
     async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, featureFlags){
->>>>>>> upstream-v3.10.0
       var ps_logs = [];
       var ps_errors = [];
       var ps_warns = [];
@@ -167,11 +158,7 @@ constexpr absl::string_view
 
       var generateBidResponse = {};
       try {
-<<<<<<< HEAD
-        generateBidResponse = generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, protectedAppSignals, encodingVersion);
-=======
         generateBidResponse = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion);
->>>>>>> upstream-v3.10.0
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {

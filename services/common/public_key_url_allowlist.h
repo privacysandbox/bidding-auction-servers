@@ -32,6 +32,8 @@ inline constexpr absl::string_view kGCPProdPublicKeyEndpoint =
     "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys";  // NOLINT(whitespace/line_length)
 inline constexpr absl::string_view kAWSProdPublicKeyEndpoint =
     "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys";  // NOLINT(whitespace/line_length)
+inline constexpr absl::string_view kAzureProdPublicKeyEndpoint =
+    "https://publickeyservice.pa.azure.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys";  // NOLINT(whitespace/line_length)
 // clang-format on
 
 // Checks if the url is in the public key allowlist.

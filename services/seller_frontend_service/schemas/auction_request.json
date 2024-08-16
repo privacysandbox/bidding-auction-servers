@@ -20,10 +20,6 @@
     },
     "enableDebugReporting": { "type": "boolean" }
   },
-<<<<<<< HEAD
-  "required": ["version", "interestGroups", "publisher", "generationId"]
-=======
   "required": ["version", "interestGroups", "publisher", "generationId"],
   "additionalProperties": false
->>>>>>> upstream-v3.10.0
 }

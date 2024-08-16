@@ -263,9 +263,6 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Parses curl message to result string or an error message for the callback.
   std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
 
-  // Parses curl message to result string or an error message for the callback.
-  std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
-
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(
       const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,

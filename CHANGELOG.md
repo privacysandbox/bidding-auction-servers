@@ -2,8 +2,6 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-<<<<<<< HEAD
-=======
 ## 3.10.0 (2024-07-13)
 
 
@@ -227,7 +225,6 @@ All notable changes to this project will be documented in this file. See [commit
 * RPC is finished properly in top level auction with reporting
 * Temporarily add bazel_clang_tidy repo
 
->>>>>>> upstream-v3.10.0
 ## 3.4.0 (2024-04-02)
 
 

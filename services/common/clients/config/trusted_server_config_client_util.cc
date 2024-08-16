@@ -103,13 +103,8 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   }
 
   std::shared_ptr<InstanceClientInterface> client =
-<<<<<<< HEAD
-      google::scp::cpio::InstanceClientFactory::Create(InstanceClientOptions());
-  client->Init();
-=======
       google::scp::cpio::InstanceClientFactory::Create();
   client->Init().IgnoreError();
->>>>>>> upstream-v3.10.0
   absl::StatusOr<std::string> resource_name = GetResourceName(client);
   CHECK_OK(resource_name) << "Could not fetch host resource name.";
   ComputeZone(resource_name.value());
@@ -117,11 +112,7 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
   GetInstanceDetailsByResourceNameRequest request;
   request.set_instance_resource_name(resource_name.value());
 
-<<<<<<< HEAD
-  const auto result = client->GetInstanceDetailsByResourceName(
-=======
   absl::Status status = client->GetInstanceDetailsByResourceName(
->>>>>>> upstream-v3.10.0
       std::move(request),
       [this, &done](const ExecutionResult& result,
                     const GetInstanceDetailsByResourceNameResponse& response) {
@@ -138,15 +129,9 @@ TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
         }
         done.Notify();
       });
-<<<<<<< HEAD
-  if (!result.Successful()) {
-    ABSL_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
-                                       GetErrorMessage(result.status_code));
-=======
   if (!status.ok()) {
     ABSL_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
                                        status.message());
->>>>>>> upstream-v3.10.0
   } else {
     done.WaitForNotification();
   }

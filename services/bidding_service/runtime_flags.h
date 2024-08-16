@@ -29,20 +29,6 @@ inline constexpr absl::string_view HEALTHCHECK_PORT =
     "BIDDING_HEALTHCHECK_PORT";
 inline constexpr absl::string_view ENABLE_BIDDING_SERVICE_BENCHMARK =
     "ENABLE_BIDDING_SERVICE_BENCHMARK";
-<<<<<<< HEAD
-inline constexpr char BUYER_CODE_FETCH_CONFIG[] = "BUYER_CODE_FETCH_CONFIG";
-inline constexpr char JS_NUM_WORKERS[] = "JS_NUM_WORKERS";
-inline constexpr char JS_WORKER_QUEUE_LEN[] = "JS_WORKER_QUEUE_LEN";
-inline constexpr char TEE_AD_RETRIEVAL_KV_SERVER_ADDR[] =
-    "TEE_AD_RETRIEVAL_KV_SERVER_ADDR";
-inline constexpr char TEE_KV_SERVER_ADDR[] = "TEE_KV_SERVER_ADDR";
-inline constexpr char AD_RETRIEVAL_TIMEOUT_MS[] = "AD_RETRIEVAL_TIMEOUT_MS";
-inline constexpr char AD_RETRIEVAL_KV_SERVER_EGRESS_TLS[] =
-    "AD_RETRIEVAL_KV_SERVER_EGRESS_TLS";
-inline constexpr char KV_SERVER_EGRESS_TLS[] = "KV_SERVER_EGRESS_TLS";
-
-inline constexpr absl::string_view kFlags[] = {
-=======
 inline constexpr absl::string_view BUYER_CODE_FETCH_CONFIG =
     "BUYER_CODE_FETCH_CONFIG";
 inline constexpr absl::string_view JS_NUM_WORKERS = "JS_NUM_WORKERS";
@@ -70,7 +56,6 @@ inline constexpr absl::string_view
 
 inline constexpr int kNumRuntimeFlags = 15;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
->>>>>>> upstream-v3.10.0
     PORT,
     HEALTHCHECK_PORT,
     ENABLE_BIDDING_SERVICE_BENCHMARK,
@@ -78,12 +63,6 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     JS_NUM_WORKERS,
     JS_WORKER_QUEUE_LEN,
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR,
-<<<<<<< HEAD
-    TEE_KV_SERVER_ADDR,
-    AD_RETRIEVAL_KV_SERVER_EGRESS_TLS,
-    KV_SERVER_EGRESS_TLS,
-    AD_RETRIEVAL_TIMEOUT_MS};
-=======
     TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY,
     TEE_KV_SERVER_ADDR,
     TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY,
@@ -93,7 +72,6 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
 };
->>>>>>> upstream-v3.10.0
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   std::vector<absl::string_view> flags(kFlags.begin(),

@@ -91,8 +91,6 @@ message ProtectedAuctionInput {
   // A boolean value which indicates whether temporary unlimited egress should
   // be enabled.
   bool enable_unlimited_egress = 6;
-<<<<<<< HEAD
-=======
 
   // Optional field (note: this will become a required field in 2025).
   // The request timestamp represents when the SSP requests an ad auction to be run.
@@ -100,7 +98,6 @@ message ProtectedAuctionInput {
   // when it requests the browser to run an auction. For Android, the request
   // timestamp will come from the system clock on the device.
   int64 request_timestamp_ms = 7;
->>>>>>> upstream-v3.10.0
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -338,8 +335,6 @@ message AuctionResult {
 
   // This is only populated for component auctions.
   AuctionParams auction_params = 18;
-<<<<<<< HEAD
-=======
 
   // BuyerReportingId of the winning Ad.
   // This will be verified with the buyerReportingId in the Ad properties on
@@ -481,7 +476,6 @@ message AuctionResult {
     optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 5;
   }
   repeated KAnonGhostWinner k_anon_ghost_winners = 23;
->>>>>>> upstream-v3.10.0
 }
 
 message GetComponentAuctionCiphertextsRequest {
@@ -696,8 +690,6 @@ message SelectAdRequest {
     // object in SelectAdResponse will be encrypted with a public key
     // of the specified cloud platform instead of the shared encryption context.
     EncryptionCloudPlatform top_level_cloud_platform = 11;
-<<<<<<< HEAD
-=======
 
     // Optional. For use by the top-level seller in a server-orchestrated
     // multiseller auction only. Specifies configuration information about the
@@ -712,7 +704,6 @@ message SelectAdRequest {
     // multiseller auction only. The key in the map corresponds to the seller
     // identifier in AuctionResult.auction_params.component_seller.
     map<string, PerComponentSellerConfig> per_component_seller_config = 12;
->>>>>>> upstream-v3.10.0
   }
   message ComponentAuctionResult {
     //  AuctionResult from a server component auction.
@@ -755,16 +746,6 @@ message SelectAdResponse {
 
   // Debug logs for sfe and downstream servers (only in non_prod)
   server_common.DebugInfo debug_info = 2;
-<<<<<<< HEAD
-
-  // Optional. Only populated for server orchestrated component auctions.
-  // Version of the public key used for encryption. The service
-  // needs to use private keys corresponding to same key_id to decrypt
-  // 'auction_result_ciphertext'.
-  string key_id = 3;
-}
-=======
->>>>>>> upstream-v3.10.0
 
   // Optional. Only populated for server orchestrated component auctions.
   // Version of the public key used for encryption. The service
@@ -1268,8 +1249,6 @@ message ScoreAdsRequest {
 
       // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
       string bid_currency = 12;
-<<<<<<< HEAD
-=======
 
       // Creator of the IG to which the winning ad belongs (applicable for
       // Protected Audience only).
@@ -1277,7 +1256,6 @@ message ScoreAdsRequest {
 
       // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
       string buyer_reporting_id = 14;
->>>>>>> upstream-v3.10.0
     }
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
@@ -1365,8 +1343,6 @@ message ScoreAdsRequest {
 
       // Indicates the currency used for the bid price.
       string bid_currency = 8;
-<<<<<<< HEAD
-=======
 
       // Features to be sent back to the buyer of winning app install ad to help
       // train their models.
@@ -1375,7 +1351,6 @@ message ScoreAdsRequest {
       // Temporary unlimited size egress features. Meant for experimentation
       // only.
       string temporary_unlimited_egress_payload = 10;
->>>>>>> upstream-v3.10.0
     }
 
     // Ad with bid for protected app signals.
@@ -1532,8 +1507,6 @@ message ScoreAdsResponse {
     // If the seller specified a seller_currency in the AuctionConfig,
     // this value, if specified, must match it. If not, the bid is rejected.
     string bid_currency = 16;
-<<<<<<< HEAD
-=======
 
     // Currency of the of the original buyer bid if present
     // (expressed as ISO 4217 alpha code).
@@ -1552,7 +1525,6 @@ message ScoreAdsResponse {
     // Owner of the IG to which the winning ad belongs (applicable for
     // Protected Audience only).
     string interest_group_origin = 20;
->>>>>>> upstream-v3.10.0
   }
 
   // The response includes the top scored ad along with other related data.
@@ -1605,8 +1577,6 @@ message DebugReportUrls {
   // If undefined or malformed url it will be ignored.
   string auction_debug_loss_url = 2;
 }
-<<<<<<< HEAD
-=======
 
 // message to store the server request/ response
 message EventMessage {
@@ -1639,4 +1609,3 @@ message EventMessage {
   ScoreAdsRequest.ScoreAdsRawRequest score_ad_raw_request = 32;
   ScoreAdsResponse.ScoreAdsRawResponse score_ad_raw_response = 33;
 }
->>>>>>> upstream-v3.10.0

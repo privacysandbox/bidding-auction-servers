@@ -124,22 +124,6 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetSellerValuesOutput>>) &&>>(),
               An<absl::Duration>()))
-<<<<<<< HEAD
-      .WillOnce([&ad_render_urls, &ad_component_render_urls, &notification](
-                    std::unique_ptr<GetSellerValuesInput> input,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                                GetSellerValuesOutput>>) &&>
-                        callback,
-                    absl::Duration timeout) {
-        // All ads from all responses were sent to KV client.
-        EXPECT_EQ(input->render_urls, ad_render_urls);
-        EXPECT_EQ(input->ad_component_render_urls, ad_component_render_urls);
-        EXPECT_EQ(input->seller_kv_experiment_group_id, kSellerEgId);
-        notification.Notify();
-        return absl::OkStatus();
-      });
-=======
       .WillOnce(
           [&ad_render_urls, &ad_component_render_urls, &notification](
               std::unique_ptr<GetSellerValuesInput> input,
@@ -156,7 +140,6 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
             notification.Notify();
             return absl::OkStatus();
           });
->>>>>>> upstream-v3.10.0
 
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 

@@ -40,9 +40,6 @@ constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
     "device_signals";
 constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
     "ads, sellerAuctionSignals, buyerSignals, "
-<<<<<<< HEAD
-    "preprocessedDataForRetrieval, protectedAppSignals, encodingVersion";
-=======
     "preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion";
 
 constexpr absl::string_view kEncodedProtectedAppSignalsHandler =
@@ -55,7 +52,6 @@ constexpr absl::string_view kEncodedProtectedAppSignalsHandler =
         encodedOnDeviceSignals = convertToUint8Array(encodedOnDeviceSignals);
         console.log("Uint8 PAS bytes: " + Array.apply([], encodedOnDeviceSignals).join(","));
       })JS_CODE";
->>>>>>> upstream-v3.10.0
 
 // Params related to the UDF that can be used to retrieve the protected
 // embeddings that can later be used to fetch the top-k ads from ads retrieval

@@ -18,15 +18,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
-<<<<<<< HEAD
-constexpr char kTestReportResultUrl[] = "http://test.com";
-constexpr char kTestComponentReportResultUrl[] =
-    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
-    "seller.com&bid=1&modifiedBid=2";
-constexpr char kTestComponentReportResultUrlWithNoModifiedBid[] =
-    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
-    "seller.com&bid=1&modifiedBid=1";
-=======
 constexpr char kTestReportResultUrl[] =
     "http://test.com&bid=1&bidCurrency=EUR&"
     "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
@@ -44,7 +35,6 @@ constexpr char kTestComponentReportResultUrlWithNoModifiedBid[] =
 constexpr char kTestTopLevelReportResultUrl[] =
     "http://test.com&componentSeller=http://"
     "componentSeller.com&bid=1&desirability=1";
->>>>>>> upstream-v3.10.0
 constexpr char kTestInteractionEvent[] = "clickEvent";
 constexpr char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestReportWinUrl[] =
@@ -84,17 +74,11 @@ constexpr absl::string_view kBuyerBaseCode =
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-<<<<<<< HEAD
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
-
-=======
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
         }
->>>>>>> upstream-v3.10.0
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
@@ -124,11 +108,7 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-<<<<<<< HEAD
-                    "&signalsForWinner="+signalsForWinner+
-=======
                     "&signalsForWinner="+JSON.stringify(signalsForWinner)+
->>>>>>> upstream-v3.10.0
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
         }
         console.log("Logging from ReportWin");
@@ -161,23 +141,8 @@ constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
     }
 )JS_CODE";
 
-<<<<<<< HEAD
-constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-=======
 constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
->>>>>>> upstream-v3.10.0
       return {
         ad: bid_metadata["topLevelSeller"],
         desirability: 1,
@@ -200,19 +165,12 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
 
 )JS_CODE";
 
-<<<<<<< HEAD
-constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-=======
 constexpr absl::string_view kTopLevelSellerCode = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
->>>>>>> upstream-v3.10.0
       return {
-        ad: bid_metadata["topLevelSeller"],
+        ad: device_signals["topLevelSeller"],
         desirability: 1,
         bid: 2,
-        incomingBidInSellerCurrency: 1.868,
-        bidCurrency: "USD",
         allowComponentAuction: true
       }
     }
@@ -242,32 +200,7 @@ constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
           sendReportTo("http://test.com")
         } else {
-<<<<<<< HEAD
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
-        }
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
-    }
-
-)JS_CODE";
-
-constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-      return {
-        ad: bid_metadata["topLevelSeller"],
-        desirability: 1,
-        allowComponentAuction: true
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
-        } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
-=======
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
->>>>>>> upstream-v3.10.0
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return {"testSignal":"testValue"}
@@ -395,13 +328,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-<<<<<<< HEAD
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
-=======
         if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
           buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         }
->>>>>>> upstream-v3.10.0
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -498,17 +427,11 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-<<<<<<< HEAD
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
-
-=======
                     "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
         }
->>>>>>> upstream-v3.10.0
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
@@ -649,13 +572,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-<<<<<<< HEAD
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
-=======
         if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
           buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         }
->>>>>>> upstream-v3.10.0
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -798,13 +717,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-<<<<<<< HEAD
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
-=======
         if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
           buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         }
->>>>>>> upstream-v3.10.0
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -1018,13 +933,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-<<<<<<< HEAD
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
-=======
         if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
           buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         }
->>>>>>> upstream-v3.10.0
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -1095,88 +1006,5 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     }
 )JS_CODE";
 
-<<<<<<< HEAD
-constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
-    function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
-                                browserSignals, directFromSellerSignals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(featureFlags.enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
-
-      var forDebuggingOnly_auction_loss_url = undefined;
-      var forDebuggingOnly_auction_win_url = undefined;
-      const forDebuggingOnly = {};
-      forDebuggingOnly.reportAdAuctionLoss = function(url){
-        forDebuggingOnly_auction_loss_url = url;
-      }
-      forDebuggingOnly.reportAdAuctionWin = function(url){
-        forDebuggingOnly_auction_win_url = url;
-      }
-      globalThis.forDebuggingOnly = forDebuggingOnly;
-
-      var scoreAdResponse = {};
-      try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
-              trustedScoringSignals, browserSignals, directFromSellerSignals);
-      } catch({error, message}) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-      } finally {
-        if( featureFlags.enable_debug_url_generation &&
-              (forDebuggingOnly_auction_loss_url
-                  || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
-            auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
-            auctionDebugWinUrl: forDebuggingOnly_auction_win_url
-          }
-        }
-      }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
-    }
-
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-      return {
-        desirability: score,
-        allow_component_auction: false
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
-        } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
-        }
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
-    }
-)JS_CODE";
-=======
->>>>>>> upstream-v3.10.0
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // FLEDGE_SERVICES_SELLER_CODE_WRAPPER_TEST_CONSTANTS_H_

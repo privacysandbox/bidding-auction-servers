@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-<<<<<<< HEAD
-load("@rules_cc//cc:defs.bzl", "cc_binary")
-=======
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -25,7 +22,6 @@ exports_files([
     "module_benchmark.cc",
     "sandbox_benchmark.cc",
 ])
->>>>>>> upstream-v3.10.0
 
 cc_binary(
     name = "sandbox_benchmark",
@@ -38,10 +34,7 @@ cc_binary(
         "//:inference_sidecar_test_target",
     ],
     deps = [
-<<<<<<< HEAD
-=======
         ":request_utils",
->>>>>>> upstream-v3.10.0
         "//proto:inference_sidecar_cc_grpc_proto",
         "//proto:inference_sidecar_cc_proto",
         "//sandbox:sandbox_executor",
@@ -56,8 +49,6 @@ cc_binary(
     ],
 )
 
-<<<<<<< HEAD
-=======
 cc_binary(
     name = "module_benchmark",
     srcs = [
@@ -121,7 +112,6 @@ cc_test(
     ],
 )
 
->>>>>>> upstream-v3.10.0
 # Builds the IPC inference sidecar for testing.
 cc_binary(
     name = "ipc_inference_sidecar_test_bin",
@@ -129,10 +119,7 @@ cc_binary(
     deps = [
         "//:ipc_sidecar",
         "//modules:test_module",
-<<<<<<< HEAD
-=======
         "//proto:inference_sidecar_cc_proto",
->>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/log:check",
     ],
 )

@@ -28,36 +28,24 @@ constexpr absl::string_view kModelPath =
     "__main__/testdata/models/tensorflow_1_mib_saved_model.pb";
 
 TEST(TestModule, Success_Predict) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   PredictRequest request;
   auto result = module->Predict(request);
   EXPECT_TRUE(result.ok());
 }
 
 TEST(TestModule, Success_RegisterModel) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest request;
   auto result = module->RegisterModel(request);
   EXPECT_TRUE(result.ok());
 }
 
 TEST(TestModule, Success_ReadModel) {
-<<<<<<< HEAD
-  std::unique_ptr<TestModule> module = std::make_unique<TestModule>();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<TestModule> module = std::make_unique<TestModule>(config);
->>>>>>> upstream-v3.10.0
   module->set_model_path(kModelPath);
   RegisterModelRequest request;
   auto result = module->RegisterModel(request);
@@ -65,14 +53,11 @@ TEST(TestModule, Success_ReadModel) {
   EXPECT_GT(module->model_size(), 0);
 }
 
-<<<<<<< HEAD
-=======
 TEST(TestModule, Success_ResetModels) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<TestModule> module = std::make_unique<TestModule>(config);
   module->ResetModels();
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

@@ -31,10 +31,7 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/json_util.h"
->>>>>>> upstream-v3.10.0
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
@@ -218,12 +215,8 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       request_metadata,
       [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
-<<<<<<< HEAD
-              raw_response) mutable {
-=======
               raw_response,
           ResponseMetadata response_metadata) mutable {
->>>>>>> upstream-v3.10.0
         ABSL_VLOG(0) << "Received bid response from BFE in "
                      << ((absl::Now() - start) / absl::Milliseconds(1))
                      << " ms.";

@@ -38,6 +38,8 @@ absl::StatusOr<server_common::CloudPlatform> StringToCloudPlatform(
     return server_common::CloudPlatform::kGcp;
   } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
     return server_common::CloudPlatform::kAws;
+  } else if (absl::EqualsIgnoreCase(cloud_platform, "AZURE")) {
+    return server_common::CloudPlatform::kAzure;
   } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
     return server_common::CloudPlatform::kLocal;
   } else {
@@ -101,23 +103,8 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain) {
     PS_ASSIGN_OR_RETURN(
         std::string cloud_platform,
         GetStringMember(buyer_service_endpoint_value, "cloudPlatform"));
-<<<<<<< HEAD
-    if (absl::EqualsIgnoreCase(cloud_platform, "GCP")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kGcp;
-    } else if (absl::EqualsIgnoreCase(cloud_platform, "AWS")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kAws;
-    } else if (absl::EqualsIgnoreCase(cloud_platform, "AZURE")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kAzure;
-    } else if (absl::EqualsIgnoreCase(cloud_platform, "LOCAL")) {
-      bfe_endpoint.cloud_platform = server_common::CloudPlatform::kLocal;
-    } else {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "Invalid value for BFE endpoint cloud platform: ", cloud_platform));
-    }
-=======
     PS_ASSIGN_OR_RETURN(bfe_endpoint.cloud_platform,
                         StringToCloudPlatform(cloud_platform));
->>>>>>> upstream-v3.10.0
 
     auto [it_2, inserted] =
         ig_owner_to_bfe_endpoint_map.try_emplace(ig_owner, bfe_endpoint);

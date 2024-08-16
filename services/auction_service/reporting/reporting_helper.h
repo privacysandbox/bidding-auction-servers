@@ -25,13 +25,8 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-<<<<<<< HEAD
-#include "services/common/util/post_auction_signals.h"
-#include "src/logger/request_context_impl.h"
-=======
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/post_auction_signals.h"
->>>>>>> upstream-v3.10.0
 #include "src/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -111,10 +106,7 @@ struct BuyerReportingMetadata {
   std::string seller;
   std::string interest_group_name;
   double ad_cost;
-<<<<<<< HEAD
-=======
   std::string buyer_reporting_id;
->>>>>>> upstream-v3.10.0
 };
 
 struct ComponentReportingMetadata {
@@ -131,10 +123,7 @@ struct ReportingDispatchRequestConfig {
   bool enable_protected_app_signals = false;
   bool enable_report_win_input_noising = false;
   bool enable_adtech_code_logging = false;
-<<<<<<< HEAD
-=======
   std::string roma_timeout_ms;
->>>>>>> upstream-v3.10.0
 };
 
 // Data required to build the inputs required to dispatch
@@ -144,18 +133,11 @@ struct ReportingDispatchRequestData {
   std::shared_ptr<std::string> auction_config;
   PostAuctionSignals post_auction_signals;
   std::string_view publisher_hostname;
-<<<<<<< HEAD
-  server_common::log::ContextImpl& log_context;
-  BuyerReportingMetadata buyer_reporting_metadata;
-  ComponentReportingMetadata component_reporting_metadata;
-  absl::string_view egress_features;
-=======
   RequestLogContext& log_context;
   BuyerReportingMetadata buyer_reporting_metadata;
   ComponentReportingMetadata component_reporting_metadata;
   absl::string_view egress_payload;
   absl::string_view temporary_egress_payload;
->>>>>>> upstream-v3.10.0
 };
 
 // Bid metadata passed as input to reportResult and reportWin
@@ -166,11 +148,6 @@ struct SellerReportingMetadata {
   std::string interest_group_owner;
   std::string render_url;
   float bid;
-<<<<<<< HEAD
-  float desirability;
-  float modified_bid;
-  float highest_scoring_other_bid;
-=======
   std::string bid_currency;
   float desirability;
   float modified_bid;
@@ -187,7 +164,6 @@ struct SellerReportingDispatchRequestData {
   std::string_view publisher_hostname;
   ComponentReportingMetadata component_reporting_metadata;
   RequestLogContext& log_context;
->>>>>>> upstream-v3.10.0
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
@@ -221,14 +197,11 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
 DispatchRequest GetReportingDispatchRequest(
     const ReportingDispatchRequestConfig& dispatch_request_config,
     const ReportingDispatchRequestData& dispatch_request_data);
-<<<<<<< HEAD
-=======
 
 // Stochastically rounds floating point value to 8 bit mantissa and 8
 // bit exponent. If there is an error while generating the rounded
 // number, -1 will be returned.
 double GetEightBitRoundedValue(double value);
->>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

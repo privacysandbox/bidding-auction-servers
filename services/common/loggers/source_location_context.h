@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-<<<<<<<< HEAD:services/common/loggers/source_location_context.h
 
 #ifndef SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
 #define SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
@@ -33,17 +32,3 @@ struct ParamWithSourceLoc {
 }  // namespace privacy_sandbox::bidding_auction_servers::log
 
 #endif  // SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
-========
-
-#include "services/common/loggers/request_log_context.h"
-
-#include "gtest/gtest.h"
-
-namespace privacy_sandbox::bidding_auction_servers {
-
-TEST(RequestLogContext, Initialization) {
-  RequestLogContext context({}, server_common::ConsentedDebugConfiguration());
-}
-
-}  // namespace privacy_sandbox::bidding_auction_servers
->>>>>>>> upstream-v3.10.0:services/common/loggers/request_log_context_test.cc

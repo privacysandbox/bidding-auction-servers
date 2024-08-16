@@ -92,20 +92,12 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-<<<<<<< HEAD
-    const absl::optional<std::string>& bid_currency) {
-  AdWithBid bid =
-      BuildNewAdWithBid(ad_url, std::move(interest_group_name), bid_value,
-                        enable_event_level_debug_reporting,
-                        number_ad_component_render_urls, bid_currency);
-=======
     const absl::optional<std::string>& bid_currency,
     absl::string_view buyer_reporting_id) {
   AdWithBid bid = BuildNewAdWithBid(
       ad_url, std::move(interest_group_name), bid_value,
       enable_event_level_debug_reporting, number_ad_component_render_urls,
       bid_currency, buyer_reporting_id);
->>>>>>> upstream-v3.10.0
   GetBidsResponse::GetBidsRawResponse response;
   response.mutable_bids()->Add(std::move(bid));
   return response;
@@ -181,12 +173,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-<<<<<<< HEAD
-    const absl::optional<absl::string_view>& bid_currency) {
-=======
     const absl::optional<absl::string_view>& bid_currency,
     absl::string_view buyer_reporting_id) {
->>>>>>> upstream-v3.10.0
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -499,8 +487,6 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
   return pas_ads_with_bids;
 }
 
-<<<<<<< HEAD
-=======
 void MockEntriesCallOnBuyerFactory(
     const google::protobuf::Map<std::string, std::string>& buyer_input,
     const BuyerFrontEndAsyncClientFactoryMock& factory) {
@@ -515,5 +501,4 @@ void MockEntriesCallOnBuyerFactory(
   EXPECT_CALL(factory, Entries).WillRepeatedly(Return(std::move(entries)));
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace privacy_sandbox::bidding_auction_servers

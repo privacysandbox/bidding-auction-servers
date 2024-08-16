@@ -47,8 +47,6 @@ This method expects a plaintext json with the following fields.
  }
 ```
 
-<<<<<<< HEAD
-=======
 A sample request is as follows:
 
 ```json
@@ -113,7 +111,6 @@ Notes:
 -   When sending requests to a locally running service, a `-insecure` param also needs to be added
     to the secure_invoke CLI.
 
->>>>>>> upstream-v3.10.0
 ### Top Level Auction [SelectAdRequest] to SFE
 
 This method expects a plaintext json with the following fields.

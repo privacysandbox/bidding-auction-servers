@@ -28,14 +28,10 @@ cc_library(
         "//services/bidding_service:runtime_flags",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
         "//services/common/util:reporting_util",
->>>>>>> upstream-v3.10.0
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
     ],
 )
 

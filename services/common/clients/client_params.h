@@ -25,10 +25,7 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
-<<<<<<< HEAD
-=======
 #include "services/common/clients/async_grpc/request_config.h"
->>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

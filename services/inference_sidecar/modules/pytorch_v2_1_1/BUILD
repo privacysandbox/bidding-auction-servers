@@ -14,11 +14,8 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-<<<<<<< HEAD
-=======
 package(default_visibility = ["//visibility:public"])
 
->>>>>>> upstream-v3.10.0
 cc_binary(
     name = "inference_sidecar_bin",
     srcs = ["@inference_common//:inference_sidecar_main.cc"],
@@ -57,10 +54,7 @@ cc_test(
     ],
     flaky = True,
     deps = [
-<<<<<<< HEAD
-=======
         ":test_constants",
->>>>>>> upstream-v3.10.0
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:reflection",
@@ -77,8 +71,6 @@ cc_test(
 )
 
 cc_library(
-<<<<<<< HEAD
-=======
     name = "test_constants",
     testonly = True,
     hdrs = ["test_constants.h"],
@@ -88,30 +80,21 @@ cc_library(
 )
 
 cc_library(
->>>>>>> upstream-v3.10.0
     name = "pytorch",
     srcs = ["pytorch.cc"],
     deps = [
         ":pytorch_parser",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
-<<<<<<< HEAD
-=======
         "@com_google_absl//absl/random",
->>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-<<<<<<< HEAD
-        "@inference_common//modules:module_interface",
-        "@inference_common//proto:inference_sidecar_cc_proto",
-=======
         "@inference_common//model:model_store",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:log",
->>>>>>> upstream-v3.10.0
         "@inference_common//utils:request_parser",
         "@pytorch_v2_1_1//:torch",
     ],
@@ -139,8 +122,6 @@ genrule(
 )
 
 genrule(
-<<<<<<< HEAD
-=======
     name = "test_stateful_model_target",
     srcs = ["@inference_common//testdata:models/pytorch_stateful_model.pt"],
     outs = ["stateful_model"],
@@ -148,7 +129,6 @@ genrule(
 )
 
 genrule(
->>>>>>> upstream-v3.10.0
     name = "test_mixed_inputs_mixed_outputs_target",
     srcs = ["@inference_common//testdata:models/pytorch_mixed_inputs_mixed_outputs_model.pt"],
     outs = ["mixed_inputs_mixed_outputs_model"],
@@ -164,10 +144,7 @@ cc_test(
         ":test_e2e_model2_target",
         ":test_mixed_inputs_mixed_outputs_target",
         ":test_simple_model_target",
-<<<<<<< HEAD
-=======
         ":test_stateful_model_target",
->>>>>>> upstream-v3.10.0
     ],
     deps = [
         ":pytorch",
@@ -175,10 +152,7 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-<<<<<<< HEAD
-=======
         "@com_google_absl//absl/time",
->>>>>>> upstream-v3.10.0
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@inference_common//proto:inference_sidecar_cc_proto",
@@ -231,10 +205,7 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-<<<<<<< HEAD
-=======
         "@inference_common//benchmark:request_utils",
->>>>>>> upstream-v3.10.0
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
     ],
@@ -248,11 +219,7 @@ genrule(
     outs = ["inference_sidecar_binary"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p artifacts
-<<<<<<< HEAD
-cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar
-=======
 cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar_pytorch_v2_1_1
->>>>>>> upstream-v3.10.0
 EOF""",
     executable = True,
     local = True,
@@ -262,11 +229,7 @@ EOF""",
 # Exports PyTorch inference sidecar binary to be packaged in the B&A workspace.
 exports_files(
     [
-<<<<<<< HEAD
-        "artifacts/inference_sidecar",
-=======
         "artifacts/inference_sidecar_pytorch_v2_1_1",
->>>>>>> upstream-v3.10.0
     ],
 )
 

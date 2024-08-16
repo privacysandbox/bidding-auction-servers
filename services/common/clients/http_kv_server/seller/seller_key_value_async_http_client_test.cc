@@ -335,11 +335,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  defining what it shall be)
       .WillOnce([actual_result, expected_urls = &(expected_urls_)](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls->contains(request.url));
         // Pack said string into a statusOr
@@ -395,11 +391,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoClientType) {
       .WillOnce(
           [&expected_url](
               const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
               absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
@@ -427,11 +419,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeBrowser) {
       .WillOnce(
           [&expected_url](
               const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
               absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
@@ -455,11 +443,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithClientTypeAndroid) {
       .WillOnce(
           [&expected_url](
               const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
               absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                   done_callback) { EXPECT_EQ(request.url, expected_url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
@@ -503,11 +487,7 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expectedHeaders](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_EQ(expectedHeaders, request.headers);
       });

@@ -31,15 +31,12 @@ constexpr absl::string_view kInit = "non-empty";
 constexpr absl::string_view kTestModelPath =
     "external/inference_common/testdata/models/tensorflow_1_mib_saved_model.pb";
 constexpr absl::string_view kBucketName = "test_bucket";
-<<<<<<< HEAD
-=======
 constexpr absl::string_view kRuntimeConfig = R"json({
   "num_interop_threads": 4,
   "num_intraop_threads": 5,
   "module_name": "test",
   "cpuset": [0, 1]
 })json";
->>>>>>> upstream-v3.10.0
 
 class InferenceUtilsTest : public ::testing::Test {
  protected:
@@ -47,10 +44,7 @@ class InferenceUtilsTest : public ::testing::Test {
     absl::SetFlag(&FLAGS_testonly_allow_policies_for_bazel, true);
     absl::SetFlag(&FLAGS_inference_sidecar_binary_path,
                   GetFilePath(kSidecarBinary));
-<<<<<<< HEAD
-=======
     absl::SetFlag(&FLAGS_inference_sidecar_runtime_config, kRuntimeConfig);
->>>>>>> upstream-v3.10.0
   }
 
  private:
@@ -60,14 +54,6 @@ class InferenceUtilsTest : public ::testing::Test {
 // TODO(b/322030670): Making static SandboxExecutor compatible with multiple
 // tests.
 
-<<<<<<< HEAD
-TEST_F(InferenceUtilsTest, ReturnValueIsSet) {
-  SandboxExecutor& inference_executor = Executor();
-  CHECK_EQ(inference_executor.StartSandboxee().code(), absl::StatusCode::kOk);
-  ASSERT_TRUE(RegisterModelsFromLocal({std::string(kTestModelPath)}).ok());
-  google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
-  google::scp::roma::FunctionBindingPayload<> wrapper{input_output_proto, {}};
-=======
 TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   SandboxExecutor& inference_executor = Executor();
   CHECK_EQ(inference_executor.StartSandboxee().code(), absl::StatusCode::kOk);
@@ -77,7 +63,6 @@ TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
   google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper{
       input_output_proto, {}};
->>>>>>> upstream-v3.10.0
   wrapper.io_proto.set_input_string(absl::StrCat("1.0"));
   wrapper.io_proto.set_output_string(kInit);
   RunInference(wrapper);
@@ -86,8 +71,6 @@ TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   // populate the output string.
   ASSERT_EQ(wrapper.io_proto.output_string(), "0.57721");
 
-<<<<<<< HEAD
-=======
   // make sure GetModelPaths returns the registered model
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto_1;
   google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper_1{
@@ -96,7 +79,6 @@ TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   ASSERT_EQ(wrapper_1.io_proto.output_string(),
             "[\"" + std::string(kTestModelPath) + "\"]");
 
->>>>>>> upstream-v3.10.0
   absl::StatusOr<sandbox2::Result> result = inference_executor.StopSandboxee();
   ASSERT_TRUE(result.ok());
   ASSERT_EQ(result->final_status(), sandbox2::Result::EXTERNAL_KILL);
@@ -125,8 +107,6 @@ TEST_F(InferenceUtilsTest, RegisterModelsFromBucket_Error) {
             absl::StatusCode::kNotFound);
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(InferenceUtilsTest, GetModelResponseToJsonOuput) {
   GetModelPathsResponse get_model_paths_response;
   EXPECT_EQ("[]", GetModelResponseToJson(get_model_paths_response));
@@ -143,6 +123,5 @@ TEST_F(InferenceUtilsTest, GetModelResponseToJsonOuput) {
   EXPECT_EQ("[\"a\",\"b\"]", GetModelResponseToJson(get_model_paths_response));
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

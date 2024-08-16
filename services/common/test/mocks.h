@@ -342,37 +342,9 @@ class KVServiceMock : public kv_server::v2::KeyValueService::CallbackService {
       server_rpc_;
 };
 
-// Dummy server in lieu of no support for mocking async stubs.
-class KVServiceMock : public kv_server::v2::KeyValueService::CallbackService {
- public:
-  explicit KVServiceMock(std::function<grpc::ServerUnaryReactor*(
-                             grpc::CallbackServerContext*,
-                             const kv_server::v2::ObliviousGetValuesRequest*,
-                             google::api::HttpBody*)>
-                             rpc_method)
-      : server_rpc_(std::move(rpc_method)) {}
-
-  grpc::ServerUnaryReactor* ObliviousGetValues(
-      grpc::CallbackServerContext* context,
-      const kv_server::v2::ObliviousGetValuesRequest* request,
-      google::api::HttpBody* response) override {
-    return server_rpc_(context, request, response);
-  }
-
- private:
-  std::function<grpc::ServerUnaryReactor*(
-      grpc::CallbackServerContext*,
-      const kv_server::v2::ObliviousGetValuesRequest*, google::api::HttpBody*)>
-      server_rpc_;
-};
-
 class MockV8Dispatcher : public V8Dispatcher {
  public:
-<<<<<<< HEAD
-  virtual ~MockV8Dispatcher() = default;
-=======
   ~MockV8Dispatcher() override = default;
->>>>>>> upstream-v3.10.0
   MOCK_METHOD(absl::Status, Init, ());
   MOCK_METHOD(absl::Status, Stop, ());
   MOCK_METHOD(absl::Status, LoadSync,

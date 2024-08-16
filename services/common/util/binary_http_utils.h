@@ -23,10 +23,7 @@
 #include "absl/status/statusor.h"
 #include "google/protobuf/util/json_util.h"
 #include "quiche/binary_http/binary_http_message.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/request_response_constants.h"
->>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -88,13 +85,8 @@ absl::StatusOr<ProtoMessageType> FromBinaryHTTP(
       return absl::InvalidArgumentError(
           "Unable to convert the Binary HTTP response to proto");
     }
-<<<<<<< HEAD
-    PS_VLOG(2) << "Converted the http request to proto: "
-               << response_proto.DebugString();
-=======
     PS_VLOG(kNoisyInfo) << "Converted the http request to proto: "
                         << response_proto.DebugString();
->>>>>>> upstream-v3.10.0
   }
   return response_proto;
 }

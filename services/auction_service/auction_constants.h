@@ -44,12 +44,9 @@ constexpr char kScoreAdBlobVersion[] = "v1";
 constexpr char kIGOwnerPropertyForScoreAd[] = "interestGroupOwner";
 constexpr char kTopWindowHostnamePropertyForScoreAd[] = "topWindowHostname";
 
-<<<<<<< HEAD
-=======
 // TODO(b/306257710): Update to differentiate from kScoreAdBlobVersion.
 constexpr char kReportingBlobVersion[] = "v1";
 
->>>>>>> upstream-v3.10.0
 constexpr int kArgSizeWithWrapper = 7;
 // Acceptable error margin for float currency comparisons.
 // Arbitrarily specified to be one one-hundred-thousandth,

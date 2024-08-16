@@ -71,24 +71,6 @@ module "seller" {
     GET_BID_RPC_TIMEOUT_MS                 = "" # Example: "60000"
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS = "" # Example: "60000"
     SCORE_ADS_RPC_TIMEOUT_MS               = "" # Example: "60000"
-<<<<<<< HEAD
-    SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://securepubads.g.doubleclick.net"
-    AUCTION_SERVER_HOST                    = "" # Example: "dns:///auction.seller-frontend.com:443"
-    KEY_VALUE_SIGNALS_HOST                 = "" # Example: "https://pubads.g.doubleclick.net/td/sts"
-    BUYER_SERVER_HOSTS                     = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
-    ENABLE_SELLER_FRONTEND_BENCHMARKING    = "" # Example: "false"
-    ENABLE_AUCTION_COMPRESSION             = "" # Example: "false"
-    ENABLE_BUYER_COMPRESSION               = "" # Example: "false"
-    ENABLE_PROTECTED_APP_SIGNALS           = "" # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE              = "" # Example: "true"
-    PS_VERBOSITY                           = "" # Example: "10"
-    CREATE_NEW_EVENT_ENGINE                = "" # Example: "false"
-    TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
-    ENABLE_OTEL_BASED_LOGGING              = "" # Example: "true"
-    CONSENTED_DEBUG_TOKEN                  = "" # Example: "123456"
-    TEST_MODE                              = "" # Example: "false"
-    SELLER_CODE_FETCH_CONFIG               = "" # Example:
-=======
     SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://sellerorigin.com"
     AUCTION_SERVER_HOST                    = local.use_service_mesh ? "" /* Example for Mesh: "dns:///auction-seller1-prod-appmesh-virtual-service.seller-frontend.com:50051" */ : "" /* Example for internal Load Balancers: "dns:///auction-seller1-prod.seller-frontend.com:443" */
     GRPC_ARG_DEFAULT_AUTHORITY             = local.use_service_mesh ? "" /* Example for Mesh: "auction-seller1-${local.environment}-appmesh-virtual-service.seller1-frontend.com" */ : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
@@ -107,7 +89,6 @@ module "seller" {
     CONSENTED_DEBUG_TOKEN                  = ""                                                                                                                                                      # Example: "123456"
     TEST_MODE                              = ""                                                                                                                                                      # Example: "false"
     SELLER_CODE_FETCH_CONFIG               = ""                                                                                                                                                      # Example:
->>>>>>> upstream-v3.10.0
     # "{
     #     "fetchMode": 0,
     #     "auctionJsPath": "",
@@ -132,8 +113,6 @@ module "seller" {
     JS_WORKER_QUEUE_LEN             = "" # Example: "100".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
     ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
-<<<<<<< HEAD
-=======
 
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
@@ -150,7 +129,6 @@ module "seller" {
     SECONDARY_COORDINATOR_REGION               = "us-east-1"
     PRIVATE_KEY_CACHE_TTL_SECONDS              = "3974400"
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS     = "20000"
->>>>>>> upstream-v3.10.0
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators and update the following flag values.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     # Coordinator-based attestation flags:

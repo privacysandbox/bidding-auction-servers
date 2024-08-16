@@ -23,12 +23,8 @@
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-<<<<<<< HEAD
-=======
 #include "services/common/loggers/request_log_context.h"
->>>>>>> upstream-v3.10.0
 #include "services/common/util/post_auction_signals.h"
-#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -135,25 +131,17 @@ absl::string_view ToSellerRejectionReasonString(
 // `enable_ad_tech_code_logging` is enabled.
 void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
                            const rapidjson::Document& document,
-<<<<<<< HEAD
-                           server_common::log::ContextImpl& log_context);
-=======
                            RequestLogContext& log_context);
->>>>>>> upstream-v3.10.0
 
 // Parses the JSON string, conditionally prints the logs from the response and
 // returns a serialized response string retrieved from the underlying UDF.
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
-<<<<<<< HEAD
-    server_common::log::ContextImpl& log_context);
-=======
     RequestLogContext& log_context);
 
 // Returns a JSON string for feature flags to be used by the wrapper script.
 std::string GetFeatureFlagJson(bool enable_logging,
                                bool enable_debug_url_generation);
->>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_COMMON_UTIL_REPORTING_UTIL_H

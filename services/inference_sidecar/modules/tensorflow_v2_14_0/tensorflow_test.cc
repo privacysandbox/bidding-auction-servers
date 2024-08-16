@@ -18,12 +18,9 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
-<<<<<<< HEAD
-=======
 #include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
->>>>>>> upstream-v3.10.0
 #include "gtest/gtest.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
@@ -36,19 +33,12 @@ using ::testing::HasSubstr;
 constexpr absl::string_view kModel1Dir = "./benchmark_models/pcvr";
 constexpr absl::string_view kModel2Dir = "./benchmark_models/pctr";
 constexpr absl::string_view kEmbeddingModelDir = "./benchmark_models/embedding";
-<<<<<<< HEAD
-
-TEST(TensorflowModuleTest, Failure_RegisterModelWithEmptyPath) {
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
 constexpr absl::string_view kStatefulModelDir = "./benchmark_models/stateful";
 
 TEST(TensorflowModuleTest, Failure_RegisterModelWithEmptyPath) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   register_request.mutable_model_spec()->set_model_path("");
   absl::StatusOr<RegisterModelResponse> status_or =
@@ -60,14 +50,9 @@ TEST(TensorflowModuleTest, Failure_RegisterModelWithEmptyPath) {
 }
 
 TEST(TensorflowModuleTest, Failure_RegisterModelAlreadyRegistered) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
 
   // First model registration
   RegisterModelRequest register_request_1;
@@ -87,15 +72,6 @@ TEST(TensorflowModuleTest, Failure_RegisterModelAlreadyRegistered) {
 
   ASSERT_FALSE(response_2.ok());
   EXPECT_EQ(response_2.status().code(), absl::StatusCode::kAlreadyExists);
-<<<<<<< HEAD
-  EXPECT_EQ(response_2.status().message(),
-            "Model '" + std::string(kModel1Dir) + "' already registered");
-}
-
-TEST(TensorflowModuleTest, Failure_RegisterModelLoadError) {
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   EXPECT_EQ(response_2.status().message(), "Model " + std::string(kModel1Dir) +
                                                " has already been registered");
 }
@@ -104,7 +80,6 @@ TEST(TensorflowModuleTest, Failure_RegisterModelLoadError) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
 
   // Setting the model path to a non-existent directory
   RegisterModelRequest register_request;
@@ -121,14 +96,9 @@ TEST(TensorflowModuleTest, Failure_RegisterModelLoadError) {
 }
 
 TEST(TensorflowModuleTest, Success_RegisterModel) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
   absl::StatusOr<RegisterModelResponse> status_or =
@@ -137,14 +107,9 @@ TEST(TensorflowModuleTest, Success_RegisterModel) {
 }
 
 TEST(TensorflowModuleTest, Failure_PredictInvalidJson) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   PredictRequest predict_request;
   predict_request.set_input("");
 
@@ -156,11 +121,7 @@ TEST(TensorflowModuleTest, Failure_PredictInvalidJson) {
             absl::StatusCode::kInvalidArgument);
 }
 
-<<<<<<< HEAD
-constexpr char kJsonString[] = R"json({
-=======
 constexpr char kPcvrJsonRequest[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -224,14 +185,6 @@ constexpr char kPcvrJsonRequest[] = R"json({
 }]
     })json";
 
-<<<<<<< HEAD
-TEST(TensorflowModuleTest, Failure_PredictModelNotRegistered) {
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-
-  PredictRequest predict_request;
-  predict_request.set_input(kJsonString);
-=======
 constexpr absl::string_view kPcvrResponse =
     "{\"response\":[{\"model_path\":\"./benchmark_models/"
     "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
@@ -245,7 +198,6 @@ TEST(TensorflowModuleTest, Failure_PredictModelNotRegistered) {
 
   PredictRequest predict_request;
   predict_request.set_input(kPcvrJsonRequest);
->>>>>>> upstream-v3.10.0
 
   absl::StatusOr<PredictResponse> predict_response =
       tensorflow_module->Predict(predict_request);
@@ -255,37 +207,19 @@ TEST(TensorflowModuleTest, Failure_PredictModelNotRegistered) {
 }
 
 TEST(TensorflowModuleTest, Success_Predict) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonString);
-=======
   predict_request.set_input(kPcvrJsonRequest);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_TRUE(predict_status.ok());
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
-<<<<<<< HEAD
-  ASSERT_EQ(response.output(),
-            "{\"response\":[{\"model_path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_shape\":[1,1],\"data_type\":"
-            "\"FLOAT\",\"tensor_content\":[0.019116628915071489]}]}]}");
-}
-
-constexpr char kJsonStringBatchSize2[] = R"json({
-=======
   ASSERT_EQ(response.output(), kPcvrResponse);
 }
 
@@ -336,7 +270,6 @@ TEST(TensorflowModuleTest, Success_ResetModels) {
 }
 
 constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -401,38 +334,19 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
     })json";
 
 TEST(TensorflowModuleTest, Success_PredictBatchSize2) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringBatchSize2);
-=======
   predict_request.set_input(kPcvrJsonRequestBatchSize2);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_TRUE(predict_status.ok());
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
-<<<<<<< HEAD
-  ASSERT_EQ(
-      response.output(),
-      "{\"response\":[{\"model_path\":\"./benchmark_models/"
-      "pcvr\",\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\","
-      "\"tensor_content\":[0.019116630777716638,0.1847093403339386]}]}]}");
-}
-
-constexpr char kJsonStringMissingTensorName[] = R"json({
-=======
   ASSERT_EQ(response.output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
             "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
@@ -441,7 +355,6 @@ constexpr char kJsonStringMissingTensorName[] = R"json({
 }
 
 constexpr char kPcvrJsonRequestMissingTensorName[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -457,24 +370,15 @@ constexpr char kPcvrJsonRequestMissingTensorName[] = R"json({
     })json";
 
 TEST(TensorflowModuleTest, Failure_PredictMissingTensorName) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringMissingTensorName);
-=======
   predict_request.set_input(kPcvrJsonRequestMissingTensorName);
->>>>>>> upstream-v3.10.0
   absl::StatusOr<PredictResponse> predict_status =
       tensorflow_module->Predict(predict_request);
   ASSERT_FALSE(predict_status.ok());
@@ -483,11 +387,7 @@ TEST(TensorflowModuleTest, Failure_PredictMissingTensorName) {
               HasSubstr("Name is required for each TensorFlow tensor input"));
 }
 
-<<<<<<< HEAD
-constexpr char kJsonStringWith2Model[] = R"json({
-=======
 constexpr char kPcvrJsonRequestWith2Model[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -613,14 +513,9 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
     })json";
 
 TEST(TensorflowModuleTest, Success_PredictWith2Models) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request_1;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kModel1Dir, register_request_1).ok());
@@ -632,28 +527,11 @@ TEST(TensorflowModuleTest, Success_PredictWith2Models) {
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringWith2Model);
-=======
   predict_request.set_input(kPcvrJsonRequestWith2Model);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_TRUE(predict_status.ok());
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
-<<<<<<< HEAD
-  EXPECT_EQ(
-      response.output(),
-      "{\"response\":[{\"model_path\":\"./benchmark_models/"
-      "pcvr\",\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\","
-      "\"tensor_content\":[0.019116630777716638,0.1847093403339386]}]},{"
-      "\"model_path\":\"./benchmark_models/"
-      "pctr\",\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\","
-      "\"tensor_content\":[0.14649735391139985,0.2522672712802887]}]}]}");
-}
-
-constexpr char kJsonStringWith1ModelVariedSize[] = R"json({
-=======
   EXPECT_EQ(response.output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
             "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
@@ -666,7 +544,6 @@ constexpr char kJsonStringWith1ModelVariedSize[] = R"json({
 }
 
 constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -793,14 +670,9 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
 
 TEST(TensorflowModuleTest,
      PredictSameModelVariedBatchSizesMultipleRequestsSuccess) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(std::string(kModel1Dir), register_request)
@@ -808,27 +680,13 @@ TEST(TensorflowModuleTest,
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringWith1ModelVariedSize);
-=======
   predict_request.set_input(kPcvrJsonRequestWith1ModelVariedSize);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_TRUE(predict_status.ok());
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
   EXPECT_EQ(response.output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
-<<<<<<< HEAD
-            "pcvr\",\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":"
-            "\"FLOAT\",\"tensor_content\":[0.019116630777716638,0."
-            "1847093403339386]}]},{\"model_path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_shape\":[1,1],\"data_type\":"
-            "\"FLOAT\",\"tensor_content\":[0.010360434651374817]}]}]}");
-}
-
-constexpr char kJsonStringEmbeddingModel[] = R"json({
-=======
             "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
             "content\":[0.019116630777716638,0.1847093403339386]}]},{\"model_"
@@ -839,7 +697,6 @@ constexpr char kJsonStringEmbeddingModel[] = R"json({
 }
 
 constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/embedding",
     "tensors" : [
@@ -904,42 +761,20 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
     })json";
 
 TEST(TensorflowModuleTest, Success_PredictEmbed) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kEmbeddingModelDir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringEmbeddingModel);
-=======
   predict_request.set_input(kPcvrJsonRequestEmbeddingModel);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_TRUE(predict_status.ok());
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
-<<<<<<< HEAD
-  EXPECT_TRUE(absl::StrContains(
-      response.output(),
-      "{\"tensor_shape\":[1,6],\"data_type\":\"FLOAT\",\"tensor_content\":[0."
-      "7276111245155335,0.0728105902671814,0.11053494364023209,0."
-      "6876803636550903,0.3626940846443176,0.13941356539726258]}"));
-  EXPECT_TRUE(absl::StrContains(response.output(),
-                                "{\"tensor_shape\":[1,1],\"data_type\":"
-                                "\"INT32\",\"tensor_content\":[0]}"));
-}
-
-constexpr char kJsonStringWithMultipleInvalidInputs[] = R"json({
-=======
   // The order of output tensors in Tensorflow is not constant so we check ech
   // tensor output separately.
   EXPECT_TRUE(absl::StrContains(
@@ -955,7 +790,6 @@ constexpr char kJsonStringWithMultipleInvalidInputs[] = R"json({
 }
 
 constexpr char kPcvrJsonRequestWithMultipleInvalidInputs[] = R"json({
->>>>>>> upstream-v3.10.0
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -985,14 +819,9 @@ constexpr char kPcvrJsonRequestWithMultipleInvalidInputs[] = R"json({
     })json";
 
 TEST(TensorflowModuleTest, PredictMultipleInvalidInputsReturnsFirstError) {
-<<<<<<< HEAD
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create();
-=======
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
->>>>>>> upstream-v3.10.0
   RegisterModelRequest register_request_1;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(std::string(kModel1Dir), register_request_1)
@@ -1005,11 +834,7 @@ TEST(TensorflowModuleTest, PredictMultipleInvalidInputsReturnsFirstError) {
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
 
   PredictRequest predict_request;
-<<<<<<< HEAD
-  predict_request.set_input(kJsonStringWithMultipleInvalidInputs);
-=======
   predict_request.set_input(kPcvrJsonRequestWithMultipleInvalidInputs);
->>>>>>> upstream-v3.10.0
   absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
   ASSERT_FALSE(predict_status.ok());
   EXPECT_EQ(predict_status.status().code(), absl::StatusCode::kInternal);
@@ -1018,8 +843,6 @@ TEST(TensorflowModuleTest, PredictMultipleInvalidInputsReturnsFirstError) {
       HasSubstr("Error during inference for model './benchmark_models/pcvr'"));
 }
 
-<<<<<<< HEAD
-=======
 constexpr char kJsonRequestStatefulModel[] = R"json({
   "request" : [{
     "model_path" : "./benchmark_models/stateful",
@@ -1095,6 +918,5 @@ TEST(TensorflowModuleTest, Success_Reset_StatefulModel) {
   }
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

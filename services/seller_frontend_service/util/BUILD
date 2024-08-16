@@ -160,10 +160,7 @@ cc_library(
     local_defines = IS_PROD_BUILD_DEFINES,
     deps = [
         "//api:bidding_auction_servers_cc_proto",
-<<<<<<< HEAD
-=======
         "//services/common:public_key_url_allowlist",
->>>>>>> upstream-v3.10.0
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
         "//services/common/util:json_util",
@@ -203,10 +200,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/util:oblivious_http_utils",
-<<<<<<< HEAD
-=======
         "//services/common/util:request_response_constants",
->>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
@@ -274,20 +268,13 @@ cc_library(
         ":validation_utils",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/compression:gzip",
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "//services/common/util:error_categories",
         "//services/common/util:hpke_utils",
         "//services/seller_frontend_service/data:seller_frontend_data",
         "//services/seller_frontend_service/util:framing_utils",
         "//services/seller_frontend_service/util:web_utils",
         "@google_privacysandbox_servers_common//src/communication:encoding_utils",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )

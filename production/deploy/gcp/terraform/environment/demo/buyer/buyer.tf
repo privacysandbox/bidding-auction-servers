@@ -57,11 +57,7 @@ module "buyer" {
     TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-<<<<<<< HEAD
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
-=======
     BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
->>>>>>> upstream-v3.10.0
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
     TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
@@ -117,16 +113,6 @@ module "buyer" {
     PRIVATE_KEY_CACHE_TTL_SECONDS                 = "3974400"
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "20000"
 
-<<<<<<< HEAD
-    BFE_TLS_KEY                        = "" # You can either set this here or via a secrets.auto.tfvars.
-    BFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.
-    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
-    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
-
-    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
-    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
-    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
-=======
     BFE_TLS_KEY                        = module.secrets.tls_key  # You may remove the secrets module and instead either inline or use an auto.tfvars for this variable.
     BFE_TLS_CERT                       = module.secrets.tls_cert # You may remove the secrets module and instead either inline or use an auto.tfvars for this variable.
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = ""                      # Example: "65536"
@@ -148,7 +134,6 @@ module "buyer" {
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240" # Example: 10737418240
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
->>>>>>> upstream-v3.10.0
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.

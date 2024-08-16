@@ -39,10 +39,7 @@ cc_library(
     # header only library for interface
     linkstatic = True,
     deps = [
-<<<<<<< HEAD
-=======
         "//services/common/clients/async_grpc:request_config",
->>>>>>> upstream-v3.10.0
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",

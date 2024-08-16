@@ -628,8 +628,6 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
   return result;
 }
 
-<<<<<<< HEAD
-=======
 AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
     std::string generation_id, std::string top_level_seller,
     std::string test_component_event,
@@ -667,7 +665,6 @@ AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
   return result;
 }
 
->>>>>>> upstream-v3.10.0
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list) {
@@ -684,8 +681,4 @@ AuctionResult MakeARandomComponentAuctionResult(
   result.set_bid_currency(MakeARandomString());
   return result;
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream-v3.10.0
 }  // namespace privacy_sandbox::bidding_auction_servers

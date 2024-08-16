@@ -16,13 +16,6 @@
 #define SERVICES_INFERENCE_SIDECAR_COMMON_GRPC_SIDECAR_H_
 
 #include "absl/status/status.h"
-<<<<<<< HEAD
-
-namespace privacy_sandbox::bidding_auction_servers::inference {
-
-// Runs a simple gRPC server. It is thread safe.
-absl::Status Run();
-=======
 #include "proto/inference_sidecar.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -38,7 +31,6 @@ absl::Status EnforceModelResetProbability(
 
 // Runs a simple gRPC server. It is thread safe.
 absl::Status Run(const InferenceSidecarRuntimeConfig& config);
->>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

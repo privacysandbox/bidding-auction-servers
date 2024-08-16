@@ -27,10 +27,7 @@
 #include "src/public/core/interface/execution_result.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 #include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
-<<<<<<< HEAD
-=======
 #include "src/util/status_macro/status_macros.h"
->>>>>>> upstream-v3.10.0
 
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest;
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse;
@@ -49,14 +46,10 @@ BlobFetcher::BlobFetcher(
     : bucket_name_(bucket_name),
       executor_(executor),
       blob_storage_client_(std::move(blob_storage_client)) {
-<<<<<<< HEAD
-  InitAndRunConfigClient();
-=======
   absl::Status status = blob_storage_client_->Init();
   CHECK(status.ok()) << "Failed to init BlobStorageClient: " << status;
   status = blob_storage_client_->Run();
   CHECK(status.ok()) << "Failed to run BlobStorageClient: " << status;
->>>>>>> upstream-v3.10.0
 }
 
 absl::Status BlobFetcher::FetchSync() {
@@ -70,21 +63,6 @@ absl::Status BlobFetcher::FetchSync() {
   return status;
 }
 
-<<<<<<< HEAD
-void BlobFetcher::InitAndRunConfigClient() {
-  auto result = blob_storage_client_->Init();
-  CHECK(result.Successful())
-      << absl::StrFormat("Failed to init BlobStorageClient (status_code: %s)\n",
-                         GetErrorMessage(result.status_code));
-
-  result = blob_storage_client_->Run();
-  CHECK(result.Successful())
-      << absl::StrFormat("Failed to run BlobStorageClient (status_code: %s)\n",
-                         GetErrorMessage(result.status_code));
-}
-
-=======
->>>>>>> upstream-v3.10.0
 absl::Status BlobFetcher::InternalFetch() {
   absl::Status status;
   std::vector<std::string> blob_names;
@@ -93,21 +71,13 @@ absl::Status BlobFetcher::InternalFetch() {
   auto list_blobs_request = std::make_shared<ListBlobsMetadataRequest>();
   absl::Notification notification;
   list_blobs_request->mutable_blob_metadata()->set_bucket_name(bucket_name_);
-<<<<<<< HEAD
-=======
   list_blobs_request->set_exclude_directories(true);
->>>>>>> upstream-v3.10.0
   AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
       list_blobs_context(list_blobs_request, [&status, &blob_names,
                                               &notification](auto& context) {
         if (!context.result.Successful()) {
-<<<<<<< HEAD
-          PS_VLOG(0) << "Failed to list blobs: "
-                     << GetErrorMessage(context.result.status_code);
-=======
           PS_LOG(ERROR) << "Failed to list blobs: "
                         << GetErrorMessage(context.result.status_code);
->>>>>>> upstream-v3.10.0
           status = absl::InternalError("Failed to list blobs");
         } else {
           PS_VLOG(10) << "BlobStorageClient ListBlobsMetadata() Response: "
@@ -117,10 +87,7 @@ absl::Status BlobFetcher::InternalFetch() {
                 context.response->blob_metadatas(i).blob_name());
           }
         }
-<<<<<<< HEAD
-=======
 
->>>>>>> upstream-v3.10.0
         // The caller waits for the notification.
         // Please note that the callback might not be called by
         // ListBlobsMetadata.
@@ -129,24 +96,6 @@ absl::Status BlobFetcher::InternalFetch() {
         notification.Notify();
       });
 
-<<<<<<< HEAD
-  auto list_blobs_execution =
-      blob_storage_client_->ListBlobsMetadata(list_blobs_context);
-  if (!list_blobs_execution.Successful()) {
-    // If ListBlobsMetadata fails fast, we return the error early without
-    // waiting for `notification`.
-    return absl::InternalError(
-        absl::StrCat("BlobStorageClient -> ListBlobsMetadata() failed: ",
-                     GetErrorMessage(list_blobs_execution.status_code)));
-  }
-  notification.WaitForNotification();
-  // Checks the error from the callback.
-  if (!status.ok()) {
-    return status;
-  }
-
-  std::vector<Blob> new_file_snapshot;
-=======
   // If ListBlobsMetadata fails fast, we return the error early without
   // waiting for `notification`.
   PS_RETURN_IF_ERROR(
@@ -158,7 +107,6 @@ absl::Status BlobFetcher::InternalFetch() {
 
   std::vector<Blob> new_file_snapshot;
 
->>>>>>> upstream-v3.10.0
   // Fetches all the blobs in the bucket.
   // TODO(b/329674737): Fetch blobs in parallel.
   for (const std::string& blob_name : blob_names) {
@@ -171,13 +119,8 @@ absl::Status BlobFetcher::InternalFetch() {
         get_blob_request,
         [&status, &new_file_snapshot, &per_blob_notification](auto& context) {
           if (!context.result.Successful()) {
-<<<<<<< HEAD
-            PS_VLOG(0) << "Failed to fetch blobs: "
-                       << GetErrorMessage(context.result.status_code);
-=======
             PS_LOG(ERROR) << "Failed to fetch blobs: "
                           << GetErrorMessage(context.result.status_code);
->>>>>>> upstream-v3.10.0
             status = absl::InternalError("Failed to fetch blobs");
           } else {
             // Should not log blob().data(), which can be very large bytes.
@@ -193,21 +136,6 @@ absl::Status BlobFetcher::InternalFetch() {
           per_blob_notification.Notify();
         });
 
-<<<<<<< HEAD
-    auto get_blob_execution = blob_storage_client_->GetBlob(get_blob_context);
-    if (!get_blob_execution.Successful()) {
-      // If GetBlob fails fast, we return the error early. We update the file
-      // snapshot only when all the file fetching is successfully done.
-      return absl::InternalError(
-          absl::StrCat("BlobStorageClient -> GetBlob() failed: ",
-                       GetErrorMessage(get_blob_execution.status_code)));
-    }
-    per_blob_notification.WaitForNotification();
-    // Checks the error from the callback.
-    if (!status.ok()) {
-      return status;
-    }
-=======
     // If GetBlob fails fast, we return the error early. We update the file
     // snapshot only when all the file fetching is successfully done.
     PS_RETURN_IF_ERROR(blob_storage_client_->GetBlob(get_blob_context));
@@ -215,7 +143,6 @@ absl::Status BlobFetcher::InternalFetch() {
 
     // Checks the error from the callback.
     PS_RETURN_IF_ERROR(status);
->>>>>>> upstream-v3.10.0
   }
 
   // All the blobs are successfully fetched.

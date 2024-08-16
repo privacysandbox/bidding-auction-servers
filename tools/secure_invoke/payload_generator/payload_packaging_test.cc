@@ -515,8 +515,6 @@ TEST(PaylodPackagingTest,
   EXPECT_EQ(actual.component_auction_results_size(), 0);
 }
 
-<<<<<<< HEAD
-=======
 TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
   auto input = R"JSON(
   {
@@ -595,7 +593,6 @@ TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
   EXPECT_TRUE(protected_auction_input.enable_unlimited_egress());
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace
 
 }  // namespace privacy_sandbox::bidding_auction_servers

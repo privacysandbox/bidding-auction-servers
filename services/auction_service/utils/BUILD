@@ -29,20 +29,13 @@ cc_library(
         "//services/auction_service:auction_constants",
         "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "//services/common/util:json_util",
         "//services/common/util:reporting_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
@@ -55,15 +48,10 @@ cc_test(
     ],
     deps = [
         ":proto_utils",
-<<<<<<< HEAD
-        "//services/auction_service:score_ads_reactor_test_util",
-        "//services/common/test:random",
-=======
         "//services/auction_service:auction_constants",
         "//services/auction_service:score_ads_reactor_test_util",
         "//services/common/test:random",
         "//services/common/util:json_util",
->>>>>>> upstream-v3.10.0
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/core/test/utils",
     ],

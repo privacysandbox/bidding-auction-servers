@@ -85,13 +85,9 @@ inline constexpr absl::string_view kReportingEntryFunction =
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-<<<<<<< HEAD
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
-=======
         if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
           buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
         }
->>>>>>> upstream-v3.10.0
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency

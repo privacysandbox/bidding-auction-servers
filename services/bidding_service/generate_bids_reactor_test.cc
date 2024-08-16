@@ -195,22 +195,12 @@ class GenerateBidsReactorTest : public testing::Test {
 
   void CheckGenerateBids(const RawRequest& raw_request,
                          const Response& expected_response,
-<<<<<<< HEAD
-                         bool enable_buyer_debug_url_generation = false,
-                         bool enable_adtech_code_logging = false) {
-=======
                          bool enable_buyer_debug_url_generation = false) {
->>>>>>> upstream-v3.10.0
     Response response;
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
         std::make_unique<BiddingNoOpLogger>();
     BiddingServiceRuntimeConfig runtime_config = {
-<<<<<<< HEAD
-        .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-        .enable_adtech_code_logging = enable_adtech_code_logging};
-=======
         .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
->>>>>>> upstream-v3.10.0
     request_.set_request_ciphertext(raw_request.SerializeAsString());
     GenerateBidsReactor reactor(
         dispatcher_, &request_, &response, std::move(benchmarkingLogger),
@@ -911,11 +901,7 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         IGForBidding received;
         EXPECT_EQ(*input[3], expected_signals);
         // Check that device signals are an empty JSON object.
-<<<<<<< HEAD
-        EXPECT_EQ(*input[4], R"JSON("{}")JSON");
-=======
         EXPECT_EQ(*input[4], R"JSON({})JSON");
->>>>>>> upstream-v3.10.0
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
   RawRequest raw_request;

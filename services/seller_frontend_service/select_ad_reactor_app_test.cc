@@ -87,10 +87,7 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-<<<<<<< HEAD
-=======
     absl::SetFlag(&FLAGS_enable_chaffing, false);
->>>>>>> upstream-v3.10.0
   }
 
   TrustedServersConfigClient config_ = CreateConfig();
@@ -197,13 +194,10 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
           key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
           expect_all_buyers_solicited, top_level_seller, enable_reporting);
 
-<<<<<<< HEAD
-=======
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
 
->>>>>>> upstream-v3.10.0
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           this->config_, clients, request_with_context.select_ad_request);
@@ -221,7 +215,6 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
   EXPECT_EQ(payload_size, 1 << log_2_payload);
   EXPECT_GE(payload_size, kMinAuctionResultBytes);
 
-  // Unframe the framed response.
   // Unframe the framed response.
   absl::StatusOr<server_common::DecodedRequest> unframed_response =
       server_common::DecodeRequestPayload(*decrypted_response);
@@ -295,13 +288,10 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
           {&crypto_client,
            EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP});
 
-<<<<<<< HEAD
-=======
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
 
->>>>>>> upstream-v3.10.0
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           this->config_, clients, request_with_context.select_ad_request);
@@ -470,10 +460,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-<<<<<<< HEAD
-=======
     absl::SetFlag(&FLAGS_enable_chaffing, false);
->>>>>>> upstream-v3.10.0
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));
@@ -928,14 +915,6 @@ TEST_F(SelectAdReactorPASTest,
       CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/true,
                             /*add_protected_app_signals=*/false);
 
-<<<<<<< HEAD
-  auto mock_get_bids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                              get_bids_raw_request,
-                          const RequestMetadata& metadata,
-                          GetBidDoneCallback on_done, absl::Duration timeout) {
-    // Expect PAS buyer inputs to not be be populated in GetBids.
-    EXPECT_FALSE(get_bids_raw_request->has_protected_app_signals_buyer_input());
-=======
   auto mock_get_bids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
              get_bids_raw_request,
@@ -945,7 +924,6 @@ TEST_F(SelectAdReactorPASTest,
                                           // be populated in GetBids.
         EXPECT_FALSE(
             get_bids_raw_request->has_protected_app_signals_buyer_input());
->>>>>>> upstream-v3.10.0
 
         // Ensure PA buyer inputs doesn't have the PAS data.
         EXPECT_FALSE(
@@ -980,14 +958,6 @@ TEST_F(SelectAdReactorPASTest,
                             /*add_protected_app_signals=*/true,
                             /*app_install_signals=*/"");
 
-<<<<<<< HEAD
-  auto mock_get_bids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                              get_bids_raw_request,
-                          const RequestMetadata& metadata,
-                          GetBidDoneCallback on_done, absl::Duration timeout) {
-    // Expect PAS buyer inputs to not be be populated in GetBids.
-    EXPECT_FALSE(get_bids_raw_request->has_protected_app_signals_buyer_input());
-=======
   auto mock_get_bids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
              get_bids_raw_request,
@@ -1131,7 +1101,6 @@ TEST_F(SelectAdReactorPASTest,
             .protected_app_signals();
     EXPECT_EQ(protected_app_signals.encoding_version(), kTestEncodingVersion);
     EXPECT_EQ(protected_app_signals.app_install_signals(), GetTestAppSignals());
->>>>>>> upstream-v3.10.0
 
     // Ensure PA buyer inputs doesn't have the PAS data.
     EXPECT_FALSE(
@@ -1141,141 +1110,6 @@ TEST_F(SelectAdReactorPASTest,
   auto setup_mock_buyer =
       [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
         EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids);
-        return buyer;
-      };
-  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
-    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
-  };
-  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
-      .WillRepeatedly(MockBuyerFactoryCall);
-
-  SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
-  AuctionResult auction_result;
-  auction_result.ParseFromString(
-      encrypted_response.auction_result_ciphertext());
-  EXPECT_FALSE(auction_result.has_error());
-}
-
-TEST_F(SelectAdReactorPASTest,
-       PASBuyerInputWithContextualAdIsPopulatedForGetBids) {
-  auto request_with_context =
-      CreateSelectAdRequestWithContextualPasAds(kSellerOriginDomain);
-
-  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                                  get_bids_raw_request,
-                              const RequestMetadata& metadata,
-                              GetBidDoneCallback on_done,
-                              absl::Duration timeout) {
-    // Expect PAS buyer inputs to be populated correctly in GetBids.
-    EXPECT_TRUE(get_bids_raw_request->has_protected_app_signals_buyer_input());
-    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
-                    .has_protected_app_signals());
-    auto protected_app_signals =
-        get_bids_raw_request->protected_app_signals_buyer_input()
-            .protected_app_signals();
-    EXPECT_EQ(protected_app_signals.encoding_version(), kTestEncodingVersion);
-    EXPECT_EQ(protected_app_signals.app_install_signals(), GetTestAppSignals());
-
-    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
-                    .has_contextual_protected_app_signals_data());
-    auto contextual_protected_app_signals_data =
-        get_bids_raw_request->protected_app_signals_buyer_input()
-            .contextual_protected_app_signals_data();
-    EXPECT_EQ(contextual_protected_app_signals_data.ad_render_ids_size(), 1);
-    EXPECT_EQ(contextual_protected_app_signals_data.ad_render_ids().at(0),
-              kSampleContextualPasAdId);
-
-    return absl::OkStatus();
-  };
-  auto setup_mock_buyer =
-      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
-            .WillRepeatedly(mock_get_bids);
-        return buyer;
-      };
-  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
-    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
-  };
-  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
-      .WillRepeatedly(MockBuyerFactoryCall);
-
-  SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
-}
-
-TEST_F(SelectAdReactorPASTest,
-       ProtectedAudienceAdWithBidIsNotSentForScoringWhenFeatureDisabled) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
-  auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
-
-  // Setup BFE to return a PA bid and no PAS bid.
-  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                                  get_bids_raw_request,
-                              const RequestMetadata& metadata,
-                              GetBidDoneCallback on_done,
-                              absl::Duration timeout) {
-    auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
-    response->mutable_bids()->Add(GetTestPAAdWithBid());
-    std::move(on_done)(std::move(response));
-    return absl::OkStatus();
-  };
-  auto setup_mock_buyer =
-      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
-            .WillRepeatedly(mock_get_bids);
-        return buyer;
-      };
-  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
-    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
-  };
-  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
-      .WillRepeatedly(MockBuyerFactoryCall);
-
-  // Verify call to scoring client is not made since there are no PAS bids
-  // and though BFE returned PA bids (possibly erroneously), we don't send
-  // them for scoring.
-  EXPECT_CALL(scoring_client_, ExecuteInternal).Times(0);
-  SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
-}
-
-TEST_F(SelectAdReactorPASTest,
-       InterestGroupsRemovedIfProtectedAudienceDisabled) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
-  auto request_with_context =
-      CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/true);
-
-  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-                                  get_bids_raw_request,
-                              const RequestMetadata& metadata,
-                              GetBidDoneCallback on_done,
-                              absl::Duration timeout) {
-    // Expect no interest groups are present.
-    EXPECT_EQ(get_bids_raw_request->buyer_input().interest_groups_size(), 0);
-
-    // Expect PAS buyer inputs to be populated correctly in GetBids.
-    EXPECT_TRUE(get_bids_raw_request->has_protected_app_signals_buyer_input());
-    EXPECT_TRUE(get_bids_raw_request->protected_app_signals_buyer_input()
-                    .has_protected_app_signals());
-    auto protected_app_signals =
-        get_bids_raw_request->protected_app_signals_buyer_input()
-            .protected_app_signals();
-    EXPECT_EQ(protected_app_signals.encoding_version(), kTestEncodingVersion);
-    EXPECT_EQ(protected_app_signals.app_install_signals(), GetTestAppSignals());
-
-    // Ensure PA buyer inputs doesn't have the PAS data.
-    EXPECT_FALSE(
-        get_bids_raw_request->buyer_input().has_protected_app_signals());
-    return absl::OkStatus();
-  };
-  auto setup_mock_buyer =
-      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        EXPECT_CALL(*buyer, ExecuteInternal(_, _, _, _))
-            .WillRepeatedly(mock_get_bids);
         return buyer;
       };
   auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {

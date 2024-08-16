@@ -94,7 +94,6 @@ config_setting(
 )
 
 config_setting(
-<<<<<<< HEAD
     name = "azure_instance",
     flag_values = {
         ":instance": "azure",
@@ -103,8 +102,6 @@ config_setting(
 )
 
 config_setting(
-=======
->>>>>>> upstream-v3.10.0
     name = "aws_instance",
     flag_values = {
         ":instance": "aws",
@@ -245,60 +242,6 @@ config_setting(
     flag_values = {
         ":inference_build": "yes",
         ":inference_runtime": "all",
-    },
-    visibility = ["//visibility:public"],
-)
-
-string_flag(
-    name = "inference_build",
-    build_setting_default = "no",
-    values = [
-        "yes",
-        "no",
-    ],
-)
-
-config_setting(
-    name = "inference",
-    flag_values = {
-        ":inference_build": "yes",
-    },
-    visibility = ["//visibility:public"],
-)
-
-string_flag(
-    name = "inference_runtime",
-    build_setting_default = "noop",
-    values = [
-        "noop",
-        "pytorch",
-        "tensorflow",
-    ],
-)
-
-config_setting(
-    name = "inference_noop",
-    flag_values = {
-        ":inference_build": "yes",
-        ":inference_runtime": "noop",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "inference_pytorch",
-    flag_values = {
-        ":inference_build": "yes",
-        ":inference_runtime": "pytorch",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "inference_tensorflow",
-    flag_values = {
-        ":inference_build": "yes",
-        ":inference_runtime": "tensorflow",
     },
     visibility = ["//visibility:public"],
 )

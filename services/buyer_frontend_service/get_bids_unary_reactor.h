@@ -37,17 +37,10 @@
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/feature_flags.h"
 #include "services/common/loggers/benchmarking_logger.h"
-<<<<<<< HEAD
-#include "services/common/metric/server_definition.h"
-#include "services/common/util/async_task_tracker.h"
-#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/logger/request_context_impl.h"
-=======
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -166,9 +159,6 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   std::string hpke_secret_;
 
   grpc::Status decrypt_status_;
-<<<<<<< HEAD
-  server_common::log::ContextImpl log_context_;
-=======
 
   // Whether chaffing is enabled on the server.
   const bool chaffing_enabled_;
@@ -176,7 +166,6 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   bool use_new_payload_encoding_ = false;
 
   RequestLogContext log_context_;
->>>>>>> upstream-v3.10.0
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BfeContext> metric_context_;

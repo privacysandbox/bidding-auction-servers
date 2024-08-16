@@ -23,11 +23,7 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/synchronization/mutex.h"
-<<<<<<< HEAD
-#include "src/logger/request_context_impl.h"
-=======
 #include "services/common/loggers/request_log_context.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -57,11 +53,7 @@ enum class TaskStatus {
 class AsyncTaskTracker {
  public:
   explicit AsyncTaskTracker(
-<<<<<<< HEAD
-      int num_tasks_to_track, server_common::log::ContextImpl& log_context,
-=======
       int num_tasks_to_track, RequestLogContext& log_context,
->>>>>>> upstream-v3.10.0
       absl::AnyInvocable<void(bool) &&> on_all_tasks_done);
 
   // Updates the stats. If all bids have been completed, then the registered
@@ -94,14 +86,9 @@ class AsyncTaskTracker {
   int empty_tasks_count_ ABSL_GUARDED_BY(mu_);
   int skipped_tasks_count_ ABSL_GUARDED_BY(mu_);
   int error_tasks_count_ ABSL_GUARDED_BY(mu_);
-<<<<<<< HEAD
-  absl::AnyInvocable<void(bool) &&> on_all_tasks_done_;
-  server_common::log::ContextImpl& log_context_;
-=======
   int cancelled_tasks_count_ ABSL_GUARDED_BY(mu_);
   absl::AnyInvocable<void(bool) &&> on_all_tasks_done_;
   RequestLogContext& log_context_;
->>>>>>> upstream-v3.10.0
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

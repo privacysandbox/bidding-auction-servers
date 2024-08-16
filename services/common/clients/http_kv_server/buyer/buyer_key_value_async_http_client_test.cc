@@ -167,11 +167,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  defining what it shall be)
       .WillOnce([actual_result = expected_result, &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
         // Pack said string into a statusOr
@@ -308,11 +304,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       //  defining what it shall be)
       .WillOnce([actualResult, &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url)) << request.url;
         // Pack said string into a statusOr
@@ -338,18 +330,11 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
       absl::StrCat(hostname_, "?hostname=www.usatoday.com&keys=url1");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
-<<<<<<< HEAD
-          [expected_url](
-              const HTTPRequest& request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                  done_callback) { EXPECT_EQ(expected_url, request.url); });
-=======
           [expected_url](const HTTPRequest& request, int timeout_ms,
                          absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                              done_callback) {
             EXPECT_EQ(expected_url, request.url);
           });
->>>>>>> upstream-v3.10.0
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -361,18 +346,11 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
       absl::StrCat(hostname_, "?hostname=www.usatoday.com");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce(
-<<<<<<< HEAD
-          [expected_url](
-              const HTTPRequest& request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-                  done_callback) { EXPECT_EQ(expected_url, request.url); });
-=======
           [expected_url](const HTTPRequest& request, int timeout_ms,
                          absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
                              done_callback) {
             EXPECT_EQ(expected_url, request.url);
           });
->>>>>>> upstream-v3.10.0
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -385,11 +363,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -411,11 +385,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -446,11 +416,7 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
       .WillOnce([&expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
       });
@@ -593,11 +559,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       //  defining what it shall be)
       .WillOnce([actual_result = expected_result, &expectedUrl](
                     const HTTPRequest& request, int timeout_ms,
-<<<<<<< HEAD
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>
-=======
                     absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
->>>>>>> upstream-v3.10.0
                         done_callback) {
         EXPECT_EQ(request.url, expectedUrl);
         // Pack said string into a statusOr

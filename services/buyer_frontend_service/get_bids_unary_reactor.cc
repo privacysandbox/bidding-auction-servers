@@ -105,11 +105,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       chaffing_enabled_(absl::GetFlag(FLAGS_enable_chaffing)),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
-<<<<<<< HEAD
-        return server_common::log::ContextImpl(
-=======
         return RequestLogContext(
->>>>>>> upstream-v3.10.0
             GetLoggingContext(), raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); });
       }()),
@@ -216,10 +212,6 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   if (!decrypt_response.ok()) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
-<<<<<<< HEAD
-  hpke_secret_ = std::move(*decrypt_response->mutable_secret());
-  if (!raw_request_.ParseFromString(decrypt_response->payload())) {
-=======
 
   hpke_secret_ = std::move(*decrypt_response->mutable_secret());
 
@@ -244,7 +236,6 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
     raw_request_ = std::move(decoded_payload->get_bids_proto);
   } else if (!raw_request_.ParseFromString(decrypt_response->payload())) {
     // If not, try to parse the request as before.
->>>>>>> upstream-v3.10.0
     return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
 
@@ -437,11 +428,7 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
   if (!config_.is_protected_audience_enabled) {
-<<<<<<< HEAD
-    PS_VLOG(3, log_context_)
-=======
     PS_VLOG(kNoisyWarn, log_context_)
->>>>>>> upstream-v3.10.0
         << "Protected Audience is not enabled, skipping bids fetching for PA";
     return;
   }

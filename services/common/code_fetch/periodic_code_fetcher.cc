@@ -24,10 +24,7 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/request_response_constants.h"
->>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -100,18 +97,12 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
             absl::Status syncResult =
                 dispatcher_.LoadSync(version_string_, wrapped_code);
             if (syncResult.ok()) {
-<<<<<<< HEAD
-              PS_VLOG(2) << "Current code loaded into Roma:\n" << wrapped_code;
-              absl::MutexLock lock(&some_load_success_mu_);
-              some_load_success_ = true;
-=======
               PS_VLOG(kSuccess) << "Current code loaded into Roma:\n"
                                 << wrapped_code;
               absl::MutexLock lock(&some_load_success_mu_);
               some_load_success_ = true;
             } else {
               PS_LOG(ERROR) << "Roma  LoadSync fail: " << syncResult;
->>>>>>> upstream-v3.10.0
             }
           }
         }
@@ -121,16 +112,9 @@ void PeriodicCodeFetcher::PeriodicCodeFetchSync() {
   // Create a HTTPRequest object from the url_endpoint_
   std::vector<HTTPRequest> requests;
   for (const std::string& endpoint : url_endpoints_) {
-<<<<<<< HEAD
-    HTTPRequest request;
-    PS_VLOG(1) << "Requesting UDF from: " << endpoint;
-    request.url = endpoint;
-    requests.push_back(request);
-=======
     PS_VLOG(5) << "Requesting UDF from: " << endpoint;
     requests.push_back(
         {.url = endpoint, .headers = {"Cache-Control: no-cache"}});
->>>>>>> upstream-v3.10.0
   }
 
   curl_http_fetcher_.FetchUrls(requests, time_out_ms_,

@@ -71,10 +71,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-<<<<<<< HEAD
-=======
     absl::SetFlag(&FLAGS_enable_chaffing, false);
->>>>>>> upstream-v3.10.0
   }
 
   void SetProtectedAuctionCipherText(const T& protected_auction_input,
@@ -294,11 +291,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
         EXPECT_CALL(*buyer,
                     ExecuteInternal(Pointee(EqGetBidsRawRequestWithLogContext(
                                         expected_get_bid_request)),
-<<<<<<< HEAD
-                                    _, _, _))
-=======
                                     _, _, _, _))
->>>>>>> upstream-v3.10.0
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
@@ -643,11 +636,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
             *buyer,
             ExecuteInternal(Pointee(EqGetBidsRawRequestWithConsentedDebugConfig(
                                 expected_get_bid_request)),
-<<<<<<< HEAD
-                            _, _, _))
-=======
                             _, _, _, _))
->>>>>>> upstream-v3.10.0
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
@@ -805,13 +794,10 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/true);
 
-<<<<<<< HEAD
-=======
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
 
->>>>>>> upstream-v3.10.0
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request);
@@ -824,10 +810,7 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       request_with_context.context, kBiddingAuctionOhttpResponseLabel);
   EXPECT_FALSE(decrypted_response.ok()) << decrypted_response.status();
 }
-<<<<<<< HEAD
-=======
 
->>>>>>> upstream-v3.10.0
 TYPED_TEST(SelectAdReactorForWebTest,
            VerifyServerComponentAuctionProtoEncoding) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
@@ -855,13 +838,10 @@ TYPED_TEST(SelectAdReactorForWebTest,
           {&crypto_client,
            EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP});
 
-<<<<<<< HEAD
-=======
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
 
->>>>>>> upstream-v3.10.0
   SelectAdResponse response_with_proto =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request);

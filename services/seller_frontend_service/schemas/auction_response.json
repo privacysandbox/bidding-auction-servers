@@ -181,8 +181,6 @@
       "type": "string",
       "description": "Optional currency of the bid (three uppercase letters, ISO 4217 alpha code suggested)."
     },
-<<<<<<< HEAD
-=======
     "buyerReportingId": {
       "type": "string",
       "description": "Optional BuyerReportingId of the winning Ad."
@@ -191,7 +189,6 @@
       "type": "string",
       "description": "Optional BuyerAndSellerReportingId of the winning Ad."
     },
->>>>>>> upstream-v3.10.0
     "isChaff": {
       "type": "boolean",
       "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."

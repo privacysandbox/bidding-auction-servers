@@ -14,24 +14,16 @@
 
 // Inference sidecar binary.
 
-<<<<<<< HEAD
-#include "absl/log/check.h"
-=======
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "proto/inference_sidecar.pb.h"
->>>>>>> upstream-v3.10.0
 
 #include "grpc_sidecar.h"
 
 int main(int argc, char** argv) {
-<<<<<<< HEAD
-  CHECK(!privacy_sandbox::bidding_auction_servers::inference::Run().ok())
-      << "Unsuccessful run of the inference sidecar.";
-=======
   privacy_sandbox::bidding_auction_servers::inference::
       InferenceSidecarRuntimeConfig config;
   CHECK(google::protobuf::util::JsonStringToMessage(argv[0], &config).ok())
@@ -52,6 +44,5 @@ int main(int argc, char** argv) {
     ABSL_LOG(FATAL) << "Unsuccessful run of the inference sidecar due to "
                     << run_status;
   }
->>>>>>> upstream-v3.10.0
   return 0;
 }

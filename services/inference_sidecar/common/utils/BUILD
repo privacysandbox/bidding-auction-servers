@@ -26,10 +26,7 @@ cc_library(
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-<<<<<<< HEAD
-=======
         "@com_google_absl//absl/synchronization",
->>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -71,8 +68,6 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
-<<<<<<< HEAD
-=======
 
 cc_library(
     name = "cpu",
@@ -118,4 +113,3 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
->>>>>>> upstream-v3.10.0

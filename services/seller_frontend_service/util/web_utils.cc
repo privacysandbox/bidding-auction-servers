@@ -321,6 +321,8 @@ absl::Status CborSerializeScoreAdResponse(
     const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
   PS_RETURN_IF_ERROR(
+      CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
+  PS_RETURN_IF_ERROR(
       CborSerializeFloat(kScore, ad_score.desirability(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeBool(kChaff, false, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeAdComponentUrls(
@@ -1330,8 +1332,6 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         }
         auction_result.set_bid_currency(CborDecodeString(kv.value));
       } break;
-<<<<<<< HEAD
-=======
       case 13: {  // kBuyerReportingId
         if (!cbor_isa_string(kv.value)) {
           return absl::InvalidArgumentError(
@@ -1339,7 +1339,6 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         }
         auction_result.set_buyer_reporting_id(CborDecodeString(kv.value));
       } break;
->>>>>>> upstream-v3.10.0
       default:
         // Unexpected key in the auction result CBOR
         return absl::Status(

@@ -80,12 +80,8 @@ class DefaultAsyncGrpcClient
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,
-<<<<<<< HEAD
-      absl::Duration timeout = max_timeout) const override {
-=======
       absl::Duration timeout = kMaxClientTimeout,
       RequestConfig request_config = {}) override {
->>>>>>> upstream-v3.10.0
     PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     PS_VLOG(5) << "Encrypting request ...";
 
@@ -106,13 +102,8 @@ class DefaultAsyncGrpcClient
     auto secret_request = EncryptRequestWithHpke<Request>(
         plaintext, *crypto_client_, *key_fetcher_manager_, cloud_platform_);
     if (!secret_request.ok()) {
-<<<<<<< HEAD
-      PS_VLOG(1) << "Failed to encrypt the request: "
-                 << secret_request.status();
-=======
       PS_LOG(ERROR) << "Failed to encrypt the request: "
                     << secret_request.status();
->>>>>>> upstream-v3.10.0
       return absl::InternalError(kEncryptionFailed);
     }
     auto& [hpke_secret, request] = *secret_request;
@@ -180,26 +171,8 @@ class DefaultAsyncGrpcClient
 std::shared_ptr<grpc::Channel> CreateChannel(
     // Const string reference to prevent copies. string_view cannot be casted
     // to argument for grpc::CreateChannel.
-<<<<<<< HEAD
-    absl::string_view server_addr, bool compression = false,
-    bool secure = true) {
-  std::shared_ptr<grpc::ChannelCredentials> creds =
-      secure ? grpc::SslCredentials(grpc::SslCredentialsOptions())
-             : grpc::InsecureChannelCredentials();
-  grpc::ChannelArguments args;
-  // Set max message size to 256 MB.
-  args.SetMaxSendMessageSize(256L * 1024L * 1024L);
-  args.SetMaxReceiveMessageSize(256L * 1024L * 1024L);
-  if (compression) {
-    // Set the default compression algorithm for the channel.
-    args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
-  }
-  return grpc::CreateCustomChannel(server_addr.data(), creds, args);
-}
-=======
     absl::string_view server_addr, bool compression = false, bool secure = true,
     absl::string_view grpc_arg_default_authority = "");
->>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

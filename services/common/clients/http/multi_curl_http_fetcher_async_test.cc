@@ -178,35 +178,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, CanFetchMultipleUrlsInParallel) {
   done.Wait();
 }
 
-<<<<<<< HEAD
-TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
-  std::string msg;
-  absl::Notification notification;
-  auto done_cb = [&notification](absl::StatusOr<std::string> result) {
-    EXPECT_TRUE(result.ok()) << result.status();
-    EXPECT_GT(result.value().length(), 0);
-    notification.Notify();
-  };
-  fetcher_->PutUrl({"http://httpbin.org/put", {}, "{}"}, kNormalTimeoutMs,
-                   done_cb);
-
-  notification.WaitForNotification();
-}
-
-TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
-  std::string msg;
-  absl::Notification notification;
-  // NOLINTNEXTLINE
-  auto done_cb = [&notification](absl::StatusOr<std::string> result) {
-    EXPECT_FALSE(result.ok()) << result.status();
-    EXPECT_THAT(result.status().message(),
-                HasSubstr("The method is not allowed"));
-    notification.Notify();
-  };
-  fetcher_->PutUrl({"http://httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
-
-  notification.WaitForNotification();
-=======
 TEST_F(MultiCurlHttpFetcherAsyncTest, InvokesCallbackForEmptyRequestVector) {
   absl::BlockingCounter done(1);
   std::vector<HTTPRequest> test_requests = {};
@@ -219,7 +190,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, InvokesCallbackForEmptyRequestVector) {
   fetcher_->FetchUrls(test_requests, absl::Milliseconds(kNormalTimeoutMs),
                       std::move(done_cb));
   done.Wait();
->>>>>>> upstream-v3.10.0
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {

@@ -33,9 +33,6 @@
 #include "absl/strings/str_split.h"
 #include "absl/synchronization/mutex.h"
 #include "proto/inference_sidecar.grpc.pb.h"
-<<<<<<< HEAD
-#include "services/bidding_service/inference/inference_flags.h"
-=======
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/pointer.h"
@@ -44,7 +41,6 @@
 #include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/request_response_constants.h"
->>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 #include "src/roma/interface/roma.h"
 #include "src/util/status_macro/status_macros.h"
@@ -59,12 +55,8 @@ SandboxExecutor& Executor() {
 
   // TODO(b/317124648): Pass a SandboxExecutor object via Roma's `TMetadata`.
   static SandboxExecutor* executor = new SandboxExecutor(
-<<<<<<< HEAD
-      *absl::GetFlag(FLAGS_inference_sidecar_binary_path), {""});
-=======
       *absl::GetFlag(FLAGS_inference_sidecar_binary_path),
       {*absl::GetFlag(FLAGS_inference_sidecar_runtime_config)});
->>>>>>> upstream-v3.10.0
   return *executor;
 }
 
@@ -144,26 +136,16 @@ absl::Status RegisterModelsFromBucket(
   return absl::OkStatus();
 }
 
-<<<<<<< HEAD
-void RunInference(google::scp::roma::FunctionBindingPayload<>& wrapper) {
-=======
 void RunInference(
     google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
         wrapper) {
   absl::Time start_inference_execution_time = absl::Now();
->>>>>>> upstream-v3.10.0
   const std::string& payload = wrapper.io_proto.input_string();
 
   SandboxExecutor& executor = Executor();
   std::unique_ptr<InferenceService::StubInterface> stub =
       InferenceService::NewStub(InferenceChannel(executor));
 
-<<<<<<< HEAD
-  PS_VLOG(1) << "RunInference input: " << payload;
-  PredictRequest predict_request;
-  predict_request.set_input(payload);
-
-=======
   PS_VLOG(kNoisyInfo) << "RunInference input: " << payload;
   PredictRequest predict_request;
   predict_request.set_input(payload);
@@ -187,7 +169,6 @@ void RunInference(
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
   }
 
->>>>>>> upstream-v3.10.0
   grpc::ClientContext context;
   PredictResponse predict_response;
   grpc::Status rpc_status =
@@ -196,8 +177,6 @@ void RunInference(
     wrapper.io_proto.set_output_string(predict_response.output());
     PS_VLOG(10) << "Inference response received: "
                 << predict_response.DebugString();
-<<<<<<< HEAD
-=======
     if (roma_request_context.ok()) {
       PS_VLOG(kNoisyInfo, (*roma_request_context)->GetLogContext())
           << "Inference sidecar consented debugging log: "
@@ -211,14 +190,10 @@ void RunInference(
                      ->LogHistogram<metric::kBiddingInferenceRequestDuration>(
                          inference_execution_time_ms));
     }
->>>>>>> upstream-v3.10.0
     return;
   }
   absl::Status status = server_common::ToAbslStatus(rpc_status);
   // TODO(b/321284008): Communicate inference failure with JS caller.
-<<<<<<< HEAD
-  PS_VLOG(1) << "Response error: " << status.message();
-=======
   if (roma_request_context.ok()) {
     PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
         << "Response error: " << status.message();
@@ -268,7 +243,6 @@ void GetModelPaths(
 
   absl::Status status = server_common::ToAbslStatus(rpc_status);
   PS_LOG(ERROR) << "GetModelPaths response error: " << status.message();
->>>>>>> upstream-v3.10.0
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

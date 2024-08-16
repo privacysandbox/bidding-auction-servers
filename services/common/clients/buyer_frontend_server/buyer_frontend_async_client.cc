@@ -14,12 +14,9 @@
 
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 
 #include "services/common/chaffing/transcoding_utils.h"
->>>>>>> upstream-v3.10.0
 #include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

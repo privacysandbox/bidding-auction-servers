@@ -20,10 +20,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
-<<<<<<< HEAD
-=======
 #include "services/common/clients/code_dispatcher/request_context.h"
->>>>>>> upstream-v3.10.0
 #include "src/roma/interface/roma.h"
 #include "src/roma/roma_service/roma_service.h"
 
@@ -51,11 +48,7 @@ class V8Dispatcher {
  public:
   explicit V8Dispatcher(DispatchConfig&& config = DispatchConfig());
 
-<<<<<<< HEAD
-  ~V8Dispatcher();
-=======
   virtual ~V8Dispatcher();
->>>>>>> upstream-v3.10.0
 
   // Init the dispatcher. Note that this call may bring up multiple processes,
   // which can be slow and should only happen on server startup.

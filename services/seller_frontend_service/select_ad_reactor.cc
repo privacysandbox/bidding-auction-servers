@@ -113,22 +113,16 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_ad_cost(input.ad_cost());
   result.set_modeling_signals(input.modeling_signals());
   result.set_bid_currency(input.bid_currency());
-<<<<<<< HEAD
-=======
 
   // Then set fields passed in externally.
   result.set_interest_group_owner(interest_group_owner);
 
   // Finally, find the AdWithBid's IG and copy the last fields from there.
->>>>>>> upstream-v3.10.0
   const BuyerInput& buyer_input =
       buyer_inputs_->find(interest_group_owner)->second;
   for (const auto& interest_group : buyer_input.interest_groups()) {
     if (interest_group.name() == result.interest_group_name()) {
-<<<<<<< HEAD
-=======
       result.set_interest_group_origin(interest_group.origin());
->>>>>>> upstream-v3.10.0
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
         result.set_join_count(interest_group.browser_signals().join_count());
         PS_VLOG(kNoisyInfo, log_context_)
@@ -196,16 +190,10 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   auto decrypted_hpke_req = DecryptOHTTPEncapsulatedHpkeCiphertext(
       encapsulated_req, clients_.key_fetcher_manager_);
   if (!decrypted_hpke_req.ok()) {
-<<<<<<< HEAD
-    PS_VLOG(2) << "Error decrypting the protected "
-               << (is_protected_auction_request_ ? "auction" : "audience")
-               << " input ciphertext" << decrypted_hpke_req.status();
-=======
     PS_VLOG(kNoisyWarn) << "Error decrypting the protected "
                         << (is_protected_auction_request_ ? "auction"
                                                           : "audience")
                         << " input ciphertext" << decrypted_hpke_req.status();
->>>>>>> upstream-v3.10.0
     return {grpc::StatusCode::INVALID_ARGUMENT,
             absl::StrFormat(kErrorDecryptingCiphertextError,
                             decrypted_hpke_req.status().message())};
@@ -265,11 +253,7 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
 
   if (!request_->auction_config().seller_currency().empty()) {
     if (!std::regex_match(request_->auction_config().seller_currency(),
-<<<<<<< HEAD
-                          kValidCurrencyCodeRegex)) {
-=======
                           GetValidCurrencyCodeRegex())) {
->>>>>>> upstream-v3.10.0
       ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInvalidSellerCurrency,
                   ErrorCode::CLIENT_SIDE);
     }
@@ -294,23 +278,11 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
     }
     if (!per_buyer_config.buyer_currency().empty()) {
       if (!std::regex_match(per_buyer_config.buyer_currency(),
-<<<<<<< HEAD
-                            kValidCurrencyCodeRegex)) {
-=======
                             GetValidCurrencyCodeRegex())) {
->>>>>>> upstream-v3.10.0
         ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInvalidBuyerCurrency,
                     ErrorCode::CLIENT_SIDE);
       }
     }
-<<<<<<< HEAD
-  }
-
-  if (request_->client_type() == CLIENT_TYPE_UNKNOWN) {
-    ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kUnknownClientType,
-                ErrorCode::CLIENT_SIDE);
-=======
->>>>>>> upstream-v3.10.0
   }
 
   // Device Component Auction not allowed with Android client type.
@@ -338,8 +310,6 @@ void SelectAdReactor::MayLogBuyerInput() {
   }
 }
 
-<<<<<<< HEAD
-=======
 ChaffingConfig SelectAdReactor::GetChaffingConfig(
     const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set) {
   if (!absl::GetFlag(FLAGS_enable_chaffing)) {
@@ -532,7 +502,6 @@ void SelectAdReactor::FetchBids() {
   }
 }
 
->>>>>>> upstream-v3.10.0
 void SelectAdReactor::Execute() {
   grpc::Status decrypt_status = DecryptRequest();
 
@@ -697,31 +666,20 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
 
   if (!is_protected_audience_enabled_ &&
       get_bids_request->mutable_buyer_input()->interest_groups_size() > 0) {
-<<<<<<< HEAD
-    PS_VLOG(3) << "Clearing interest groups in the input since protected "
-                  "audience support is disabled";
-=======
     PS_VLOG(kNoisyWarn)
         << "Clearing interest groups in the input since protected "
            "audience support is disabled";
->>>>>>> upstream-v3.10.0
     get_bids_request->mutable_buyer_input()->clear_interest_groups();
   }
   return get_bids_request;
 }
 
-<<<<<<< HEAD
-void SelectAdReactor::FetchBid(const std::string& buyer_ig_owner,
-                               const BuyerInput& buyer_input) {
-  auto buyer_client = clients_.buyer_factory.Get(buyer_ig_owner);
-=======
 void SelectAdReactor::FetchBid(
     const std::string& buyer_ig_owner,
     std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request) {
   const std::shared_ptr<BuyerFrontEndAsyncClient>& buyer_client =
       clients_.buyer_factory.Get(buyer_ig_owner);
 
->>>>>>> upstream-v3.10.0
   if (buyer_client == nullptr) {
     PS_VLOG(kNoisyWarn, log_context_)
         << "No buyer client found for buyer: " << buyer_ig_owner;
@@ -844,11 +802,7 @@ void SelectAdReactor::OnFetchBidsDone(
             1, metric::kSfeGetBidsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kBfe, response.status(),
                                     buyer_ig_owner);
-<<<<<<< HEAD
-    PS_VLOG(1, log_context_)
-=======
     PS_LOG(ERROR, log_context_)
->>>>>>> upstream-v3.10.0
         << "GetBidsRequest failed for buyer " << buyer_ig_owner
         << "\nresponse status: " << response.status();
 
@@ -888,11 +842,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
   // That each buyer has bids was checked in OnFetchBidsDone().
   // Thus the preconditions of the following method are satisfied.
   if (!FilterBidsWithMismatchingCurrency()) {
-<<<<<<< HEAD
-    PS_VLOG(2, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
-=======
     PS_VLOG(kNoisyWarn, log_context_) << kAllBidsRejectedBuyerCurrencyMismatch;
->>>>>>> upstream-v3.10.0
     FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT,
                                   kAllBidsRejectedBuyerCurrencyMismatch));
   } else {
@@ -901,11 +851,7 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
 }
 
 template <typename T>
-<<<<<<< HEAD
-void FilterBidsWithMismatchingCurrencyHelper(
-=======
 void SelectAdReactor::FilterBidsWithMismatchingCurrencyHelper(
->>>>>>> upstream-v3.10.0
     google::protobuf::RepeatedPtrField<T>* ads_with_bids,
     absl::string_view buyer_currency) {
   int i = 0;
@@ -916,15 +862,11 @@ void SelectAdReactor::FilterBidsWithMismatchingCurrencyHelper(
         buyer_currency != ad_with_bid.bid_currency()) {
       // Swap to last. Mark for removal and make sure we don't check it again
       ads_with_bids->SwapElements(i, --remove_starting_at);
-<<<<<<< HEAD
-      // TODO: Record metric.
-=======
       LogIfError(
           metric_context_->AccumulateMetric<metric::kAuctionBidRejectedCount>(
               1, ToSellerRejectionReasonString(
                      SellerRejectionReason::
                          BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK)));
->>>>>>> upstream-v3.10.0
       // Leave index un-incremented so swapped element is checked.
     } else {
       i++;
@@ -1050,11 +992,7 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeScoringSignalsResponseError));
     LogInitiatedRequestErrorMetrics(metric::kKv, result.status());
-<<<<<<< HEAD
-    PS_VLOG(1, log_context_)
-=======
     PS_LOG(ERROR, log_context_)
->>>>>>> upstream-v3.10.0
         << "Scoring signals fetch from key-value server failed: "
         << result.status();
 
@@ -1279,13 +1217,8 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
                     ProtoCloudPlatformToScpCloudPlatform(
                         request_->auction_config().top_level_cloud_platform()));
     if (!encrypted_request.ok()) {
-<<<<<<< HEAD
-      PS_VLOG(1, log_context_) << "Error while encrypting response: "
-                               << encrypted_request.status().message();
-=======
       PS_LOG(ERROR, log_context_) << "Error while encrypting response: "
                                   << encrypted_request.status().message();
->>>>>>> upstream-v3.10.0
       FinishWithStatus(
           grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
       return false;
@@ -1337,13 +1270,8 @@ void SelectAdReactor::PerformDebugReporting(
     return;
   }
 
-<<<<<<< HEAD
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(high_score);
-=======
   PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
       high_score, request_->auction_config().seller_currency());
->>>>>>> upstream-v3.10.0
   for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       const AdWithBid& ad_with_bid = get_bid_response->bids().at(i);

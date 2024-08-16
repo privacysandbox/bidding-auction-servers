@@ -14,37 +14,22 @@
  * limitations under the License.
  */
 
-<<<<<<< HEAD
-#include <chrono>
-#include <future>
-#include <iomanip>
-#include <iostream>
-#include <istream>
-#include <random>
-=======
 #include <atomic>
 #include <future>
 #include <string>
->>>>>>> upstream-v3.10.0
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
-<<<<<<< HEAD
-=======
 #include "absl/log/absl_log.h"
 #include "absl/random/random.h"
->>>>>>> upstream-v3.10.0
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
-<<<<<<< HEAD
-=======
 #include "absl/synchronization/notification.h"
 #include "model/model_store.h"
->>>>>>> upstream-v3.10.0
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "src/util/status_macro/status_macros.h"
@@ -56,10 +41,7 @@
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/tsl/platform/env.h"
 #include "tensorflow/tsl/platform/file_system.h"
-<<<<<<< HEAD
-=======
 #include "utils/log.h"
->>>>>>> upstream-v3.10.0
 #include "utils/request_parser.h"
 
 #include "tensorflow_parser.h"
@@ -81,13 +63,8 @@ absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
   return absl::OkStatus();
 }
 
-<<<<<<< HEAD
-absl::StatusOr<std::pair<std::string, std::vector<tensorflow::Tensor>>>
-PredictPerModel(const tensorflow::SavedModelBundle* model,
-=======
 absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>
 PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
->>>>>>> upstream-v3.10.0
                 const InferenceRequest& inference_request) {
   std::vector<std::pair<std::string, tensorflow::Tensor>> inputs;
   for (const auto& tensor : inference_request.inputs) {
@@ -123,10 +100,6 @@ PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
     return absl::InternalError(absl::StrCat(
         "Inference failed for model '", model_key, "': ", status.ToString()));
   }
-<<<<<<< HEAD
-
-  return std::make_pair(std::string(model_key), outputs);
-=======
   std::vector<TensorWithName> zipped_vector;
   if (output_names.size() != outputs.size()) {
     return absl::InternalError(
@@ -164,32 +137,10 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
         absl::StrCat("Error loading model: ", model_path));
   }
   return model_bundle;
->>>>>>> upstream-v3.10.0
 }
 
 class TensorflowModule final : public ModuleInterface {
  public:
-<<<<<<< HEAD
-  absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
-  absl::StatusOr<RegisterModelResponse> RegisterModel(
-      const RegisterModelRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
-
- private:
-  // Maps each `model_path` from an inference request to its corresponding
-  // tensorflow::SavedModelBundle instance.
-  absl::flat_hash_map<std::string,
-                      std::unique_ptr<tensorflow::SavedModelBundle>>
-      model_map_ ABSL_GUARDED_BY(mu_);
-  // TODO(b/327907675) : Add a test for concurrency
-  absl::Mutex mu_;
-};
-
-absl::StatusOr<PredictResponse> TensorflowModule::Predict(
-    const PredictRequest& request) {
-  absl::ReaderMutexLock lock(&mu_);
-
-=======
   explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config)
       : runtime_config_(config),
         store_(config, TensorFlowModelConstructor),
@@ -247,7 +198,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     const PredictRequest& request, const RequestContext& request_context) {
->>>>>>> upstream-v3.10.0
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
@@ -255,27 +205,11 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   }
 
   std::vector<std::future<
-<<<<<<< HEAD
-      absl::StatusOr<std::pair<std::string, std::vector<tensorflow::Tensor>>>>>
-=======
       absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>>>
->>>>>>> upstream-v3.10.0
       tasks;
 
   for (const InferenceRequest& inference_request : *parsed_requests) {
     absl::string_view model_key = inference_request.model_path;
-<<<<<<< HEAD
-    auto it = model_map_.find(model_key);
-    if (it == model_map_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Requested model '", model_key, "' is not registered"));
-    }
-    tasks.push_back(std::async(std::launch::async, &PredictPerModel,
-                               it->second.get(), inference_request));
-  }
-
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
-=======
     INFERENCE_LOG(INFO, request_context)
         << "Received inference request to model: " << model_key;
     PS_ASSIGN_OR_RETURN(std::shared_ptr<tensorflow::SavedModelBundle> model,
@@ -285,7 +219,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   }
 
   std::vector<std::pair<std::string, std::vector<TensorWithName>>>
->>>>>>> upstream-v3.10.0
       batch_outputs;
   for (size_t task_id = 0; task_id < tasks.size(); ++task_id) {
     auto result_status_or = tasks[task_id].get();
@@ -305,8 +238,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     return absl::InternalError("Error during output parsing to json");
   }
 
-<<<<<<< HEAD
-=======
   {
     absl::MutexLock lock(&per_model_inference_count_mu_);
     for (const InferenceRequest& inference_request : *parsed_requests) {
@@ -316,7 +247,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   }
   inference_notification_.Notify();
 
->>>>>>> upstream-v3.10.0
   PredictResponse predict_response;
   predict_response.set_output(output_json.value());
   return predict_response;
@@ -324,46 +254,11 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 
 absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     const RegisterModelRequest& request) {
-<<<<<<< HEAD
-  tensorflow::SessionOptions session_options;
-  const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
-
-=======
-  const auto& model_path = request.model_spec().model_path();
->>>>>>> upstream-v3.10.0
   if (model_path.empty()) {
     return absl::InvalidArgumentError("Model path is empty");
   }
 
-<<<<<<< HEAD
-  absl::WriterMutexLock lock(&mu_);
-  auto it = model_map_.find(model_path);
-  if (it != model_map_.end()) {
-    return absl::AlreadyExistsError(
-        absl::StrCat("Model '", model_path, "' already registered"));
-  }
-
-  PS_RETURN_IF_ERROR(SaveToRamFileSystem(request));
-
-  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
-  auto status = tensorflow::LoadSavedModel(
-      session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path), tags,
-      model_bundle.get());
-
-  if (!status.ok()) {
-    return absl::InternalError(
-        absl::StrCat("Error loading model: ", model_path));
-  }
-  model_map_[model_path] = std::move(model_bundle);
-  return RegisterModelResponse();
-}
-
-}  // namespace
-
-std::unique_ptr<ModuleInterface> ModuleInterface::Create() {
-  return std::make_unique<TensorflowModule>();
-=======
   if (store_.GetModel(model_path).ok()) {
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_path, " has already been registered"));
@@ -417,7 +312,6 @@ std::unique_ptr<ModuleInterface> ModuleInterface::Create(
 
 absl::string_view ModuleInterface::GetModuleVersion() {
   return "tensorflow_v2_14_0";
->>>>>>> upstream-v3.10.0
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

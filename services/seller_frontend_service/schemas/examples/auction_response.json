@@ -1,10 +1,6 @@
 {
   "adRenderURL": "http://foo.com/ad",
-<<<<<<< HEAD
-  "componentAds": ["http://foo/com/ad/component1", "http://foo/com/ad/component2"],
-=======
   "components": ["http://foo/com/ad/component1", "http://foo/com/ad/component2"],
->>>>>>> upstream-v3.10.0
   "interestGroupName": "ad_loving_group",
   "interestGroupOwner": "ad_showing_company",
   "biddingGroups": {

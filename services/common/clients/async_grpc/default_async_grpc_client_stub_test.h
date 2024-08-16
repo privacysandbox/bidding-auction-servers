@@ -173,14 +173,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   auto status = class_under_test.ExecuteInternal(
       std::move(input_request_ptr), {},
       [&notification](
-<<<<<<< HEAD
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
-        notification.Notify();
-      });
-=======
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
->>>>>>> upstream-v3.10.0
   CHECK_OK(status);
   notification.WaitForNotification();
   EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
@@ -233,14 +227,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   auto status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(), sent_metadata,
       [&notification](
-<<<<<<< HEAD
-          absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response) {
-        notification.Notify();
-      });
-=======
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
->>>>>>> upstream-v3.10.0
   CHECK_OK(status);
   notification.WaitForNotification();
 

@@ -30,10 +30,7 @@
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/reporting/reporting_response.h"
-<<<<<<< HEAD
-=======
 #include "services/auction_service/reporting/seller/seller_reporting_manager.h"
->>>>>>> upstream-v3.10.0
 #include "services/auction_service/utils/proto_utils.h"
 #include "services/common/util/auction_scope_util.h"
 #include "services/common/util/json_util.h"
@@ -52,21 +49,13 @@ using ProtectedAppSignalsAdWithBidMetadata =
 using ::google::protobuf::RepeatedPtrField;
 using HighestScoringOtherBidsMap =
     ::google::protobuf::Map<std::string, google::protobuf::ListValue>;
-<<<<<<< HEAD
-using server_common::log::ContextImpl;
-=======
->>>>>>> upstream-v3.10.0
 using server_common::log::PS_VLOG_IS_ON;
 
 constexpr int kBytesMultiplyer = 1024;
 
 inline void MayVlogRomaResponses(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses,
-<<<<<<< HEAD
-    ContextImpl& log_context) {
-=======
     RequestLogContext& log_context) {
->>>>>>> upstream-v3.10.0
   if (PS_VLOG_IS_ON(2)) {
     for (const auto& dispatch_response : responses) {
       PS_VLOG(kDispatch, log_context)
@@ -80,14 +69,9 @@ inline void MayVlogRomaResponses(
 
 inline void LogWarningForBadResponse(
     const absl::Status& status, const DispatchResponse& response,
-<<<<<<< HEAD
-    const AdWithBidMetadata* ad_with_bid_metadata, ContextImpl& log_context) {
-  PS_VLOG(0, log_context) << "Failed to parse response from Roma ",
-=======
     const AdWithBidMetadata* ad_with_bid_metadata,
     RequestLogContext& log_context) {
   PS_LOG(ERROR, log_context) << "Failed to parse response from Roma ",
->>>>>>> upstream-v3.10.0
       status.ToString(absl::StatusToStringMode::kWithEverything);
   if (ad_with_bid_metadata) {
     PS_LOG(WARNING, log_context)
@@ -133,8 +117,6 @@ bool IsIncomingBidInSellerCurrencyIllegallyModified(
        kCurrencyFloatComparisonEpsilon);
 }
 
-<<<<<<< HEAD
-=======
 // Generates GetComponentReportingDataInAuctionResult based on auction_result.
 ComponentReportingDataInAuctionResult GetComponentReportingDataInAuctionResult(
     AuctionResult& auction_result) {
@@ -191,7 +173,6 @@ void PopulateComponentReportingUrlsInTopLevelResponse(
   }
 }
 
->>>>>>> upstream-v3.10.0
 // If this is a component auction, and a seller currency is set,
 // and a modified bid is set, and a currency for that modofied bid is set,
 // it must match the seller currency. If not, reject the bid.
@@ -271,9 +252,6 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.max_allowed_size_debug_url_bytes),
       max_allowed_size_all_debug_urls_chars_(
           kBytesMultiplyer * runtime_config.max_allowed_size_all_debug_urls_kb),
-<<<<<<< HEAD
-      auction_scope_(GetAuctionScope(raw_request_)) {
-=======
       auction_scope_(GetAuctionScope(raw_request_)),
       code_version_(runtime_config.default_code_version),
       enable_report_win_url_generation_(
@@ -282,7 +260,6 @@ ScoreAdsReactor::ScoreAdsReactor(
               AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER),
       enable_seller_and_buyer_code_isolation_(
           runtime_config.enable_seller_and_buyer_udf_isolation) {
->>>>>>> upstream-v3.10.0
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::AuctionContextMap()->Remove(request_));
@@ -333,23 +310,14 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
             auction_result.ad_component_render_urls(),
             auction_result.auction_params().component_seller(),
             auction_result.bid_currency()),
-<<<<<<< HEAD
-        log_context_, enable_adtech_code_logging_, enable_debug_reporting);
-    if (!dispatch_request.ok()) {
-      PS_VLOG(2, log_context_)
-=======
         log_context_, enable_adtech_code_logging_, enable_debug_reporting,
         code_version_);
     if (!dispatch_request.ok()) {
       PS_VLOG(kDispatch, log_context_)
->>>>>>> upstream-v3.10.0
           << "Failed to create scoring request for protected audience: "
           << dispatch_request.status();
       continue;
     }
-<<<<<<< HEAD
-
-=======
     auto [unused_it_reporting, reporting_inserted] =
         component_level_reporting_data_.emplace(
             dispatch_request->id,
@@ -366,7 +334,6 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
                   1, metric::kAuctionScoreAdsFailedToInsertDispatchRequest));
       continue;
     }
->>>>>>> upstream-v3.10.0
     // Map all fields from a component auction result to a
     // AdWithBidMetadata used in this reactor. This way all the parsing
     // and result handling logic for single seller auctions can be
@@ -375,11 +342,6 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
         ad_data_.emplace(dispatch_request->id,
                          MapAuctionResultToAdWithBidMetadata(auction_result));
     if (!inserted) {
-<<<<<<< HEAD
-      PS_VLOG(2, log_context_) << "Protected Audience ScoreAd Request id "
-                                  "conflict detected: "
-                               << dispatch_request->id;
-=======
       PS_VLOG(kNoisyWarn, log_context_)
           << "Protected Audience ScoreAd Request id "
              "conflict detected: "
@@ -388,7 +350,6 @@ absl::Status ScoreAdsReactor::PopulateTopLevelAuctionDispatchRequests(
           metric_context_
               ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
                   1, metric::kAuctionScoreAdsFailedToInsertDispatchRequest));
->>>>>>> upstream-v3.10.0
       continue;
     }
 
@@ -413,16 +374,10 @@ void ScoreAdsReactor::PopulateProtectedAudienceDispatchRequests(
           MakeBidMetadata(raw_request_.publisher_hostname(),
                           ad->interest_group_owner(), ad->render(),
                           ad->ad_components(), raw_request_.top_level_seller(),
-<<<<<<< HEAD
-                          ad->bid_currency()));
-      if (!dispatch_request.ok()) {
-        PS_VLOG(2, log_context_)
-=======
                           ad->bid_currency()),
           code_version_);
       if (!dispatch_request.ok()) {
         PS_VLOG(kNoisyWarn, log_context_)
->>>>>>> upstream-v3.10.0
             << "Failed to create scoring request for protected audience: "
             << dispatch_request.status();
         continue;
@@ -430,16 +385,10 @@ void ScoreAdsReactor::PopulateProtectedAudienceDispatchRequests(
       auto [unused_it, inserted] =
           ad_data_.emplace(dispatch_request->id, std::move(ad));
       if (!inserted) {
-<<<<<<< HEAD
-        PS_VLOG(2, log_context_) << "Protected Audience ScoreAd Request id "
-                                    "conflict detected: "
-                                 << dispatch_request->id;
-=======
         PS_VLOG(kNoisyWarn, log_context_)
             << "Protected Audience ScoreAd Request id "
                "conflict detected: "
             << dispatch_request->id;
->>>>>>> upstream-v3.10.0
         continue;
       }
 
@@ -474,16 +423,10 @@ void ScoreAdsReactor::MayPopulateProtectedAppSignalsDispatchRequests(
         MakeBidMetadata(
             raw_request_.publisher_hostname(), pas_ad_with_bid->owner(),
             pas_ad_with_bid->render(), GetEmptyAdComponentRenderUrls(),
-<<<<<<< HEAD
-            raw_request_.top_level_seller(), pas_ad_with_bid->bid_currency()));
-    if (!dispatch_request.ok()) {
-      PS_VLOG(2, log_context_)
-=======
             raw_request_.top_level_seller(), pas_ad_with_bid->bid_currency()),
         code_version_);
     if (!dispatch_request.ok()) {
       PS_VLOG(kNoisyWarn, log_context_)
->>>>>>> upstream-v3.10.0
           << "Failed to create scoring request for protected app signals ad: "
           << dispatch_request.status();
       continue;
@@ -508,12 +451,8 @@ void ScoreAdsReactor::Execute() {
                                     << request_->ShortDebugString();
   log_context_.SetEventMessageField(*request_);
   PS_VLOG(kPlain, log_context_) << "ScoreAdsRawRequest:\n"
-<<<<<<< HEAD
-                                << raw_request_.DebugString();
-=======
                                 << raw_request_.ShortDebugString();
   log_context_.SetEventMessageField(raw_request_);
->>>>>>> upstream-v3.10.0
 
   DCHECK(raw_request_.protected_app_signals_ad_bids().empty() ||
          enable_protected_app_signals_)
@@ -562,13 +501,8 @@ void ScoreAdsReactor::Execute() {
             BuildTrustedScoringSignals(raw_request_, log_context_);
 
     if (!scoring_signals.ok()) {
-<<<<<<< HEAD
-      PS_VLOG(1, log_context_) << "No scoring signals found, finishing RPC: "
-                               << scoring_signals.status();
-=======
       PS_LOG(ERROR, log_context_) << "No scoring signals found, finishing RPC: "
                                   << scoring_signals.status();
->>>>>>> upstream-v3.10.0
       FinishWithStatus(server_common::FromAbslStatus(scoring_signals.status()));
       return;
     }
@@ -615,35 +549,6 @@ void ScoreAdsReactor::Execute() {
 
 void ScoreAdsReactor::PerformReporting(
     const ScoreAdsResponse::AdScore& winning_ad_score, absl::string_view id) {
-<<<<<<< HEAD
-  if (auction_scope_ == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
-    // TODO: Implement reporting for top level auction
-    // The following properties will not be available:
-    // raw_request_.per_buyer_signals()
-    // ad->join_count()
-    // ad->recency()
-    // ad->modeling_signals(),
-    // ad->ad_cost()
-    return;
-  }
-  if (auto ad_it = ad_data_.find(id); ad_it != ad_data_.end()) {
-    const auto& ad = ad_it->second;
-    BuyerReportingMetadata buyer_reporting_metadata;
-    if (enable_report_win_url_generation_) {
-      buyer_reporting_metadata = {
-          .buyer_signals = raw_request_.per_buyer_signals().at(
-              winning_ad_score.interest_group_owner()),
-          .join_count = ad->join_count(),
-          .recency = ad->recency(),
-          .modeling_signals = ad->modeling_signals(),
-          .seller = raw_request_.seller(),
-          .interest_group_name = winning_ad_score.interest_group_name(),
-          .ad_cost = ad->ad_cost()};
-    }
-    DispatchReportingRequestForPA(winning_ad_score,
-                                  BuildAuctionConfig(raw_request_),
-                                  buyer_reporting_metadata);
-=======
   if (auto ad_it = ad_data_.find(id); ad_it != ad_data_.end()) {
     if (enable_seller_and_buyer_code_isolation_) {
       DispatchReportResultRequest(winning_ad_score,
@@ -672,28 +577,11 @@ void ScoreAdsReactor::PerformReporting(
                                     BuildAuctionConfig(raw_request_),
                                     buyer_reporting_metadata);
     }
->>>>>>> upstream-v3.10.0
 
   } else if (auto protected_app_signals_ad_it =
                  protected_app_signals_ad_data_.find(id);
              protected_app_signals_ad_it !=
              protected_app_signals_ad_data_.end()) {
-<<<<<<< HEAD
-    const auto& ad = protected_app_signals_ad_it->second;
-    BuyerReportingMetadata buyer_reporting_metadata;
-    if (enable_report_win_url_generation_) {
-      buyer_reporting_metadata = {
-          .buyer_signals = raw_request_.per_buyer_signals().at(
-              winning_ad_score.interest_group_owner()),
-          .modeling_signals = ad->modeling_signals(),
-          .seller = raw_request_.seller(),
-          .interest_group_name = winning_ad_score.interest_group_name(),
-          .ad_cost = ad->ad_cost()};
-    }
-    DispatchReportingRequestForPAS(
-        winning_ad_score, BuildAuctionConfig(raw_request_),
-        buyer_reporting_metadata, ad->egress_features());
-=======
     if (!enable_seller_and_buyer_code_isolation_) {
       const auto& ad = protected_app_signals_ad_it->second;
       BuyerReportingMetadata buyer_reporting_metadata;
@@ -716,7 +604,6 @@ void ScoreAdsReactor::PerformReporting(
       FinishWithStatus(
           grpc::Status(grpc::StatusCode::INTERNAL, kInternalServerError));
     }
->>>>>>> upstream-v3.10.0
   } else {
     PS_LOG(ERROR, log_context_)
         << "Following id didn't map to any ProtectedAudience or "
@@ -731,19 +618,12 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
                                      absl::string_view ad_with_bid_currency,
                                      absl::string_view interest_group_name,
                                      absl::string_view interest_group_owner,
-<<<<<<< HEAD
-                                     const rapidjson::Document& response_json,
-                                     AdType ad_type,
-                                     ScoreAdsResponse::AdScore& ad_score,
-                                     ScoringData& scoring_data) {
-=======
                                      absl::string_view interest_group_origin,
                                      const rapidjson::Document& response_json,
                                      AdType ad_type,
                                      ScoreAdsResponse::AdScore& ad_score,
                                      ScoringData& scoring_data,
                                      const std::string& dispatch_response_id) {
->>>>>>> upstream-v3.10.0
   // Get ad rejection reason before updating the scoring data.
   std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
       ad_rejection_reason;
@@ -755,18 +635,6 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
 
   ad_score.set_interest_group_name(interest_group_name);
   ad_score.set_interest_group_owner(interest_group_owner);
-<<<<<<< HEAD
-  ad_score.set_ad_type(ad_type);
-  ad_score.set_buyer_bid(buyer_bid);
-  // Used for debug reporting.
-  // Should include bids rejected by bid currency mismatch
-  // and those not allowed in component auctions.
-  ad_scores_.push_back(std::make_unique<ScoreAdsResponse::AdScore>(ad_score));
-
-  if (CheckAndUpdateModifiedBid(auction_scope_, buyer_bid, ad_with_bid_currency,
-                                &ad_score)) {
-    PS_VLOG(1, log_context_)
-=======
   ad_score.set_interest_group_origin(interest_group_origin);
   ad_score.set_ad_type(ad_type);
   ad_score.set_buyer_bid(buyer_bid);
@@ -780,7 +648,6 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
   if (CheckAndUpdateModifiedBid(auction_scope_, buyer_bid, ad_with_bid_currency,
                                 &ad_score)) {
     PS_VLOG(kNoisyInfo, log_context_)
->>>>>>> upstream-v3.10.0
         << "Setting modified bid value to original buyer bid value (and "
            "currency) as the "
            "modified bid is not set. For interest group: "
@@ -789,15 +656,6 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
 
   if (IsBidCurrencyMismatched(auction_scope_, raw_request_.seller_currency(),
                               ad_score.bid(), ad_score.bid_currency())) {
-<<<<<<< HEAD
-    // Ignore currency-mismatched winner.
-    // TODO(b/311234165): Add metric for ads rejected for mismatched
-    // currency.
-    PS_VLOG(1, log_context_)
-        << "Skipping component bid as it does not match seller_currency: "
-        << interest_group_name << ": " << ad_score.DebugString();
-    return;
-=======
     ad_rejection_reason = ScoreAdsResponse::AdScore::AdRejectionReason{};
     ad_rejection_reason->set_interest_group_name(
         ad_score.interest_group_name());
@@ -808,21 +666,11 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
     PS_VLOG(kNoisyInfo, log_context_)
         << "Skipping component bid as it does not match seller_currency: "
         << interest_group_name << ": " << ad_score.DebugString();
->>>>>>> upstream-v3.10.0
   }
 
   if (IsIncomingBidInSellerCurrencyIllegallyModified(
           raw_request_.seller_currency(), ad_with_bid_currency,
           ad_score.incoming_bid_in_seller_currency(), buyer_bid)) {
-<<<<<<< HEAD
-    // Ignore illegally modified AdScore.
-    // TODO(b/311234165): Add metric for ads rejected for mismatched currency.
-    PS_VLOG(1, log_context_)
-        << "Skipping ad_score as its incomingBidInSellerCurrency was modified "
-           "when it should not have been: "
-        << interest_group_name << ": " << ad_score.DebugString();
-    return;
-=======
     ad_rejection_reason = ScoreAdsResponse::AdScore::AdRejectionReason{};
     ad_rejection_reason->set_interest_group_name(
         ad_score.interest_group_name());
@@ -835,7 +683,6 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
            "modified "
            "when it should not have been: "
         << interest_group_name << ": " << ad_score.DebugString();
->>>>>>> upstream-v3.10.0
   }
 
   const bool is_valid_ad =
@@ -861,13 +708,8 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
   }
 
   if (is_valid_ad && ad_score.desirability() > 0) {
-<<<<<<< HEAD
-    // Consider scored ad as valid (i.e. not rejected) when it has a positive
-    // desirability and either:
-=======
     // Consider scored ad as valid (i.e. not rejected) when it has a
     // positive desirability and either:
->>>>>>> upstream-v3.10.0
     // 1. scoreAd returned a number.
     // 2. scoreAd returned an object but the reject reason was not
     // populated.
@@ -955,16 +797,6 @@ ScoringData ScoreAdsReactor::FindWinningAd(
       continue;
     }
 
-<<<<<<< HEAD
-    long current_all_debug_urls_chars = 0;
-    auto ad_score = ParseScoreAdResponse(
-        *response_json, max_allowed_size_debug_url_chars_,
-        max_allowed_size_all_debug_urls_chars_, current_all_debug_urls_chars,
-        (auction_scope_ ==
-             AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER ||
-         auction_scope_ ==
-             AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER));
-=======
     auto ad_score = ParseScoreAdResponse(
         *response_json, max_allowed_size_debug_url_chars_,
         max_allowed_size_all_debug_urls_chars_,
@@ -973,7 +805,6 @@ ScoringData ScoreAdsReactor::FindWinningAd(
          auction_scope_ ==
              AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER),
         current_all_debug_urls_chars);
->>>>>>> upstream-v3.10.0
     if (!ad_score.ok()) {
       LogWarningForBadResponse(ad_score.status(), *response, ad, log_context_);
       continue;
@@ -983,16 +814,6 @@ ScoringData ScoreAdsReactor::FindWinningAd(
     if (ad) {
       HandleScoredAd(index, ad->bid(), ad->bid_currency(),
                      ad->interest_group_name(), ad->interest_group_owner(),
-<<<<<<< HEAD
-                     *response_json, AdType::AD_TYPE_PROTECTED_AUDIENCE_AD,
-                     *ad_score, scoring_data);
-    } else {
-      HandleScoredAd(index, protected_app_signals_ad_with_bid->bid(),
-                     /*ad_with_bid_currency=*/"", /*interest_group_name=*/"",
-                     protected_app_signals_ad_with_bid->owner(), *response_json,
-                     AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD, *ad_score,
-                     scoring_data);
-=======
                      ad->interest_group_origin(), *response_json,
                      AdType::AD_TYPE_PROTECTED_AUDIENCE_AD, *ad_score,
                      scoring_data, response->id);
@@ -1003,7 +824,6 @@ ScoringData ScoreAdsReactor::FindWinningAd(
                      /*interest_group_origin=*/"", *response_json,
                      AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD, *ad_score,
                      scoring_data, response->id);
->>>>>>> upstream-v3.10.0
     }
   }
   return scoring_data;
@@ -1072,19 +892,11 @@ void ScoreAdsReactor::PopulateHighestScoringOtherBidsData(
       auto* highest_scoring_other_bids_map =
           winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map();
 
-<<<<<<< HEAD
-      if (ad_with_bid_metadata_from_buyer) {
-        UpdateHighestScoringOtherBidMap(
-            ad_with_bid_metadata_from_buyer->bid(),
-            ad_with_bid_metadata_from_buyer->interest_group_owner(),
-            *highest_scoring_other_bids_map);
-=======
       std::string owner;
       float bid = 0.0;
       if (ad_with_bid_metadata_from_buyer != nullptr) {
         bid = ad_with_bid_metadata_from_buyer->bid();
         owner = ad_with_bid_metadata_from_buyer->interest_group_owner();
->>>>>>> upstream-v3.10.0
       } else {
         bid = protected_app_signals_ad_with_bid->bid();
         owner = protected_app_signals_ad_with_bid->owner();
@@ -1123,11 +935,7 @@ void ScoreAdsReactor::ScoreAdsCallback(
     LogIfError(metric_context_
                    ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
                        1, metric::kAuctionScoreAdsNoAdSelected));
-<<<<<<< HEAD
-    ABSL_LOG(WARNING) << "No ad was selected as most desirable";
-=======
     PS_LOG(WARNING, log_context_) << "No ad was selected as most desirable";
->>>>>>> upstream-v3.10.0
     if (enable_debug_reporting) {
       PerformDebugReporting(winning_ad);
     }
@@ -1154,12 +962,6 @@ void ScoreAdsReactor::ScoreAdsCallback(
     PerformDebugReporting(winning_ad);
   }
   *raw_response_.mutable_ad_score() = *winning_ad;
-<<<<<<< HEAD
-
-  PS_VLOG(2, log_context_) << "ScoreAdsRawResponse:\n"
-                           << raw_response_.DebugString();
-  if (!enable_report_result_url_generation_) {
-=======
   if (enable_report_result_url_generation_) {
     PerformReporting(*winning_ad, id);
   } else {
@@ -1167,7 +969,6 @@ void ScoreAdsReactor::ScoreAdsCallback(
       PopulateComponentReportingUrlsInTopLevelResponse(
           id, raw_response_, component_level_reporting_data_);
     }
->>>>>>> upstream-v3.10.0
     benchmarking_logger_->HandleResponseEnd();
     EncryptAndFinishOK();
     return;
@@ -1196,18 +997,11 @@ void ScoreAdsReactor::ReportingCallback(
                 absl::StatusToStringMode::kWithEverything);
         continue;
       }
-<<<<<<< HEAD
-      if (PS_VLOG_IS_ON(1) && enable_adtech_code_logging_) {
-        for (std::string& log : reporting_response.value().seller_logs) {
-          PS_VLOG(1, log_context_)
-              << "Log from Seller's execution script:" << log;
-=======
 
       auto LogUdf = [this](const std::vector<std::string>& adtech_logs,
                            absl::string_view prefix) {
         if (!enable_adtech_code_logging_) {
           return;
->>>>>>> upstream-v3.10.0
         }
         if (!PS_VLOG_IS_ON(kUdfLog) && !log_context_.is_debug_response()) {
           return;
@@ -1218,25 +1012,6 @@ void ScoreAdsReactor::ReportingCallback(
           PS_VLOG(kUdfLog, log_context_) << log_str;
           log_context_.SetEventMessageField(log_str);
         }
-<<<<<<< HEAD
-        for (std::string& log : reporting_response.value().buyer_logs) {
-          PS_VLOG(1, log_context_)
-              << "Log from Buyer's execution script:" << log;
-        }
-        for (std::string& log : reporting_response.value().buyer_error_logs) {
-          PS_VLOG(1, log_context_)
-              << "Error Log from Buyer's execution script:" << log;
-        }
-        for (std::string& log : reporting_response.value().buyer_warning_logs) {
-          PS_VLOG(1, log_context_)
-              << "Warning Log from Buyer's execution script:" << log;
-        }
-      }
-      // For component auctions, the reporting urls for seller are set in the
-      // component_seller_reporting_urls field. For single seller auctions and
-      // top level auctions, the reporting urls are set in the
-      // top_level_seller_reporting_urls field.
-=======
       };
       LogUdf(reporting_response->seller_logs, "Log from Seller's");
       LogUdf(reporting_response->seller_error_logs, "Error Log from Seller's");
@@ -1254,7 +1029,6 @@ void ScoreAdsReactor::ReportingCallback(
       // level auctions, the component_seller_reporting_urls and
       // buyer_reporting_urls are set based on the urls obtained from the
       // component auction whose buyer won the top level auction.
->>>>>>> upstream-v3.10.0
       if (auction_scope_ ==
           AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
         raw_response_.mutable_ad_score()
@@ -1393,15 +1167,9 @@ void ScoreAdsReactor::PerformDebugReporting(
   if (auction_scope_ == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     return;
   }
-<<<<<<< HEAD
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score);
-  for (const auto& ad_score : ad_scores_) {
-=======
   PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
       winning_ad_score, raw_request_.seller_currency());
   for (const auto& [id, ad_score] : ad_scores_) {
->>>>>>> upstream-v3.10.0
     if (ad_score->has_debug_report_urls()) {
       absl::string_view debug_url;
       bool is_win_debug_url = false;

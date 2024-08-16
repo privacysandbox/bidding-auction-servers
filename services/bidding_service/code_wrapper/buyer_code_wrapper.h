@@ -78,11 +78,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
       var generateBidResponse = {};
       try {
-<<<<<<< HEAD
-        generateBidResponse = generateBid($0);
-=======
         generateBidResponse = await generateBid($0);
->>>>>>> upstream-v3.10.0
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {

@@ -14,15 +14,6 @@
  * limitations under the License.
  */
 
-<<<<<<< HEAD
-#include <future>
-#include <istream>
-
-#include <torch/script.h>
-
-#include "absl/base/thread_annotations.h"
-#include "absl/container/flat_hash_map.h"
-=======
 #include <atomic>
 #include <future>
 #include <istream>
@@ -35,24 +26,17 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/random/random.h"
->>>>>>> upstream-v3.10.0
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
-<<<<<<< HEAD
-#include "modules/module_interface.h"
-#include "proto/inference_sidecar.pb.h"
-#include "src/util/status_macro/status_macros.h"
-=======
 #include "absl/synchronization/notification.h"
 #include "model/model_store.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "src/util/status_macro/status_macros.h"
 #include "utils/log.h"
->>>>>>> upstream-v3.10.0
 #include "utils/request_parser.h"
 
 #include "pytorch_parser.h"
@@ -64,14 +48,9 @@ namespace {
 // the inference result for a single request in a batched predict request.
 // The forward method of a torch module is non-const although we disallow
 // mutable models.
-<<<<<<< HEAD
-absl::StatusOr<torch::IValue> PredictInternal(torch::jit::script::Module* model,
-                                              const InferenceRequest& request) {
-=======
 absl::StatusOr<torch::IValue> PredictInternal(
     std::shared_ptr<torch::jit::script::Module> model,
     const InferenceRequest& request) {
->>>>>>> upstream-v3.10.0
   absl::string_view model_key = request.model_path;
   std::vector<torch::jit::IValue> inputs;
   for (Tensor tensor : request.inputs) {
@@ -101,26 +80,6 @@ absl::StatusOr<torch::IValue> PredictInternal(
   }
 }
 
-<<<<<<< HEAD
-class PyTorchModule final : public ModuleInterface {
- public:
-  absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
-  absl::StatusOr<RegisterModelResponse> RegisterModel(
-      const RegisterModelRequest& request) override ABSL_LOCKS_EXCLUDED(mu_);
-
- private:
-  // The key to `model map` is the `model_path` field in an inference request.
-  absl::flat_hash_map<std::string, std::unique_ptr<torch::jit::script::Module>>
-      model_map_ ABSL_GUARDED_BY(mu_);
-  absl::Mutex mu_;
-};
-
-absl::StatusOr<PredictResponse> PyTorchModule::Predict(
-    const PredictRequest& request) {
-  absl::ReaderMutexLock lock(&mu_);
-
-=======
 // Initializes PyTorch runtime inter-operations and intra-operations parallelism
 // threading configurations.
 absl::Status InitRuntimeThreadConfig(
@@ -224,7 +183,6 @@ class PyTorchModule final : public ModuleInterface {
 
 absl::StatusOr<PredictResponse> PyTorchModule::Predict(
     const PredictRequest& request, const RequestContext& request_context) {
->>>>>>> upstream-v3.10.0
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
@@ -236,22 +194,12 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   std::vector<std::future<absl::StatusOr<torch::IValue>>> tasks;
   for (const InferenceRequest& inference_request : (*parsed_requests)) {
     absl::string_view model_key = inference_request.model_path;
-<<<<<<< HEAD
-    auto it = model_map_.find(model_key);
-    if (it == model_map_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Model ", model_key, " has not been registered"));
-    }
-    tasks.push_back(std::async(std::launch::async, &PredictInternal,
-                               it->second.get(), inference_request));
-=======
     INFERENCE_LOG(INFO, request_context)
         << "Received inference request to model: " << model_key;
     PS_ASSIGN_OR_RETURN(std::shared_ptr<torch::jit::script::Module> model,
                         store_.GetModel(model_key, request.is_consented()));
     tasks.push_back(std::async(std::launch::async, &PredictInternal, model,
                                inference_request));
->>>>>>> upstream-v3.10.0
   }
 
   std::vector<PerModelOutput> batch_result_outputs;
@@ -272,8 +220,6 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   }
   PS_ASSIGN_OR_RETURN(std::string output_json,
                       ConvertBatchOutputsToJson(batch_result_outputs));
-<<<<<<< HEAD
-=======
 
   {
     absl::MutexLock lock(&per_model_inference_count_mu_);
@@ -284,7 +230,6 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   }
   inference_notification_.Notify();
 
->>>>>>> upstream-v3.10.0
   PredictResponse response;
   response.set_output(output_json);
   return response;
@@ -302,28 +247,6 @@ absl::StatusOr<RegisterModelResponse> PyTorchModule::RegisterModel(
         request.model_files().size()));
   }
 
-<<<<<<< HEAD
-  absl::WriterMutexLock lock(&mu_);
-  if (model_map_.find(model_key) != model_map_.end()) {
-    return absl::AlreadyExistsError(
-        absl::StrCat("Model ", model_key, " has already been registered"));
-  }
-
-  // Convert PyTorch exception to absl status.
-  try {
-    const std::string& model_payload = request.model_files().begin()->second;
-    std::istringstream is(model_payload);
-    model_map_[model_key] =
-        std::make_unique<torch::jit::script::Module>(torch::jit::load(is));
-    // Turn on eval model for layers that behave differently during train and
-    // eval times, for example, dropout and batch norm layers.
-    model_map_[model_key]->eval();
-  } catch (...) {
-    return absl::InternalError("Error loading model");
-  }
-
-  return RegisterModelResponse();
-=======
   if (store_.GetModel(model_key).ok()) {
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_key, " has already been registered"));
@@ -362,15 +285,10 @@ void PyTorchModule::ResetModels() {
     CHECK(store_.ResetModel(model_key).ok())
         << "Failed to reset model: " << model_key;
   }
->>>>>>> upstream-v3.10.0
 }
 
 }  // namespace
 
-<<<<<<< HEAD
-std::unique_ptr<ModuleInterface> ModuleInterface::Create() {
-  return std::make_unique<PyTorchModule>();
-=======
 std::unique_ptr<ModuleInterface> ModuleInterface::Create(
     const InferenceSidecarRuntimeConfig& config) {
   return std::make_unique<PyTorchModule>(config);
@@ -378,7 +296,6 @@ std::unique_ptr<ModuleInterface> ModuleInterface::Create(
 
 absl::string_view ModuleInterface::GetModuleVersion() {
   return "pytorch_v2_1_1";
->>>>>>> upstream-v3.10.0
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

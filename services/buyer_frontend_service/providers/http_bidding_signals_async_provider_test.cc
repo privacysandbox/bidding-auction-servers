@@ -112,25 +112,9 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
             EXPECT_EQ(input->hostname, request.publisher_name());
             EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
 
-<<<<<<< HEAD
-        EXPECT_FALSE(request.has_buyer_kv_experiment_group_id());
-        EXPECT_EQ(request.buyer_kv_experiment_group_id(), 0);
-        EXPECT_EQ(input->buyer_kv_experiment_group_id, "");
-
-        // Collect all expected keys
-        UrlKeysSet expected_keys;
-        UrlKeysSet expected_ig_names;
-        for (const auto& interest_group :
-             request.buyer_input().interest_groups()) {
-          expected_ig_names.emplace(interest_group.name());
-          expected_keys.insert(interest_group.bidding_signals_keys().begin(),
-                               interest_group.bidding_signals_keys().end());
-        }
-=======
             EXPECT_FALSE(request.has_buyer_kv_experiment_group_id());
             EXPECT_EQ(request.buyer_kv_experiment_group_id(), 0);
             EXPECT_EQ(input->buyer_kv_experiment_group_id, "");
->>>>>>> upstream-v3.10.0
 
             // Collect all expected keys
             UrlKeysSet expected_keys;

@@ -23,10 +23,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-<<<<<<< HEAD
-=======
         "@com_google_absl//absl/container:flat_hash_map",
->>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
@@ -53,10 +50,7 @@ cc_library(
         "@curl",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
-<<<<<<< HEAD
-=======
         "@libevent//:event",
->>>>>>> upstream-v3.10.0
     ],
 )
 
@@ -77,10 +71,7 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
-<<<<<<< HEAD
-=======
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
->>>>>>> upstream-v3.10.0
         "@rapidjson",
     ],
 )

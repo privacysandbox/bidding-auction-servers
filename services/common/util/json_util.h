@@ -168,8 +168,6 @@ GetArrayMember(const T& document, const std::string& member_name) {
   return it->value.GetArray();
 }
 
-<<<<<<< HEAD
-=======
 // Retrieves the array value of the specified member in the document as a
 // non-const array.
 template <typename T>
@@ -209,7 +207,6 @@ inline absl::StatusOr<int> GetIntMember(const T& document,
   return it->value.GetInt();
 }
 
->>>>>>> upstream-v3.10.0
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_JSON_UTIL_H_

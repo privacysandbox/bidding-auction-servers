@@ -103,11 +103,7 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
                                 GetBidsResponse::GetBidsRawResponse>>,
                             ResponseMetadata) &&>
         on_done,
-<<<<<<< HEAD
-    absl::Duration timeout) const {
-=======
     absl::Duration timeout, RequestConfig request_config) {
->>>>>>> upstream-v3.10.0
   auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   switch (buyer_mock_type_) {
     case BuyerMockType::DEBUG_REPORTING: {
@@ -135,11 +131,7 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
       break;
     }
   }
-<<<<<<< HEAD
-  std::move(on_done)(std::move(response));
-=======
   std::move(on_done)(std::move(response), /* response_metadata= */ {});
->>>>>>> upstream-v3.10.0
   return absl::OkStatus();
 }
 
@@ -213,12 +205,8 @@ class BuyerFrontEndAsyncClientFactoryStub
       const SelectAdRequest& request,
       const ProtectedAuctionInput& protected_auction_input,
       const BuyerMockType buyer_mock_type);
-<<<<<<< HEAD
-  std::shared_ptr<const BuyerFrontEndAsyncClient> Get(
-=======
 
   std::shared_ptr<BuyerFrontEndAsyncClient> Get(
->>>>>>> upstream-v3.10.0
       absl::string_view client_key) const override;
 
   std::vector<

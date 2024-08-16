@@ -37,17 +37,10 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-<<<<<<< HEAD
-#include "services/common/metric/server_definition.h"
-#include "services/common/reporters/async_reporter.h"
-#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/logger/request_context_impl.h"
-=======
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -58,10 +51,6 @@ inline constexpr char kNoAdsWithValidScoringSignals[] =
     "No ads with valid scoring signals.";
 inline constexpr char kNoValidComponentAuctions[] =
     "No component auction results in request.";
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream-v3.10.0
 // An aggregate of the data we track when scoring all the ads.
 struct ScoringData {
   // Index of the most desirable ad. This helps us to set the overall response
@@ -162,91 +151,20 @@ class ScoreAdsReactor
   static constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 
   void DispatchReportingRequestForPA(
-<<<<<<< HEAD
-      const ScoreAdsResponse::AdScore& winning_ad_score,
-      const std::shared_ptr<std::string>& auction_config,
-      const BuyerReportingMetadata& buyer_reporting_metadata) {
-    ReportingDispatchRequestData dispatch_request_data = {
-        .handler_name = kReportingDispatchHandlerFunctionName,
-        .auction_config = auction_config,
-        .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-        .publisher_hostname = raw_request_.publisher_hostname(),
-        .log_context = log_context_,
-        .buyer_reporting_metadata = buyer_reporting_metadata};
-    if (auction_scope_ ==
-        AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
-      dispatch_request_data.component_reporting_metadata = {
-          .top_level_seller = raw_request_.top_level_seller(),
-          .component_seller = raw_request_.seller()};
-    }
-    if (winning_ad_score.bid() > 0) {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.bid();
-    } else {
-      dispatch_request_data.component_reporting_metadata.modified_bid =
-          winning_ad_score.buyer_bid();
-    }
-    DispatchReportingRequest(dispatch_request_data);
-  }
-=======
       absl::string_view dispatch_id,
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata);
->>>>>>> upstream-v3.10.0
 
   void DispatchReportingRequestForPAS(
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata,
-<<<<<<< HEAD
-      std::string_view egress_features) {
-    DispatchReportingRequest(
-        {.handler_name = kReportingProtectedAppSignalsFunctionName,
-         .auction_config = auction_config,
-         .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-         .publisher_hostname = raw_request_.publisher_hostname(),
-         .log_context = log_context_,
-         .buyer_reporting_metadata = buyer_reporting_metadata,
-         .egress_features = egress_features});
-  }
-
-  void DispatchReportingRequest(
-      const ReportingDispatchRequestData& dispatch_request_data) {
-    ReportingDispatchRequestConfig dispatch_request_config = {
-        .enable_report_win_url_generation = enable_report_win_url_generation_,
-        .enable_protected_app_signals = enable_protected_app_signals_,
-        .enable_report_win_input_noising = enable_report_win_input_noising_,
-        .enable_adtech_code_logging = enable_adtech_code_logging_};
-    DispatchRequest dispatch_request = GetReportingDispatchRequest(
-        dispatch_request_config, dispatch_request_data);
-    dispatch_request.tags[kRomaTimeoutMs] = roma_timeout_ms_;
-
-    std::vector<DispatchRequest> dispatch_requests = {dispatch_request};
-    auto status = dispatcher_.BatchExecute(
-        dispatch_requests,
-        [this](const std::vector<absl::StatusOr<DispatchResponse>>& result) {
-          ReportingCallback(result);
-        });
-
-    if (!status.ok()) {
-      std::string original_request;
-      google::protobuf::TextFormat::PrintToString(raw_request_,
-                                                  &original_request);
-      PS_VLOG(1, log_context_)
-          << "Reporting execution request failed for batch: "
-          << original_request
-          << status.ToString(absl::StatusToStringMode::kWithEverything);
-      EncryptAndFinishOK();
-    }
-  }
-=======
       std::string_view egress_payload,
       absl::string_view temporary_egress_payload);
 
   void DispatchReportingRequest(
       const ReportingDispatchRequestData& dispatch_request_data);
->>>>>>> upstream-v3.10.0
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
   // Dispatches request to reportResult() udf with seller and buyer udf
@@ -263,13 +181,10 @@ class ScoreAdsReactor
   void ReportingCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
-<<<<<<< HEAD
-=======
   // Function called after reportResult udf execution.
   void ReportResultCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
->>>>>>> upstream-v3.10.0
   // Creates and populates dispatch requests using AdWithBidMetadata objects
   // in the input proto for single seller and component auctions.
   void PopulateProtectedAudienceDispatchRequests(
@@ -334,11 +249,7 @@ class ScoreAdsReactor
   const AsyncReporter& async_reporter_;
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
-<<<<<<< HEAD
-  server_common::log::ContextImpl log_context_;
-=======
   RequestLogContext log_context_;
->>>>>>> upstream-v3.10.0
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
@@ -361,16 +272,12 @@ class ScoreAdsReactor
   // Impacts the creation of scoreAd input params and
   // parsing of scoreAd output.
   AuctionScope auction_scope_;
-<<<<<<< HEAD
-
-=======
   // Specifies which verison of scoreAd to use for this request.
   absl::string_view code_version_;
   bool enable_report_win_url_generation_;
   bool enable_seller_and_buyer_code_isolation_;
   ReportingDispatchRequestConfig reporting_dispatch_request_config_;
   PostAuctionSignals post_auction_signals_;
->>>>>>> upstream-v3.10.0
   google::protobuf::RepeatedPtrField<std::string>
   GetEmptyAdComponentRenderUrls() {
     static google::protobuf::RepeatedPtrField<std::string>

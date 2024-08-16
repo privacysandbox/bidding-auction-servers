@@ -105,10 +105,7 @@ cc_binary(
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     local_defines = ENABLE_CORE_DUMPS_DEFINES,
-<<<<<<< HEAD
-=======
     malloc = "@com_google_tcmalloc//tcmalloc",
->>>>>>> upstream-v3.10.0
     deps = [
         ":seller_frontend_service",
         "//services/common/clients/config:config_client_util",
@@ -212,10 +209,7 @@ cc_test(
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
-<<<<<<< HEAD
-=======
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )
@@ -240,8 +234,6 @@ cc_test(
         "@google_privacysandbox_servers_common//src/communication:encoding_utils",
         "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
-<<<<<<< HEAD
-=======
     ],
 )
 
@@ -277,6 +269,5 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/core/test/utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
->>>>>>> upstream-v3.10.0
     ],
 )

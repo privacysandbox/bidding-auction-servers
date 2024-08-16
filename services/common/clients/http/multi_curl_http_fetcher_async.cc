@@ -24,10 +24,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-<<<<<<< HEAD
-=======
 #include "event2/thread.h"
->>>>>>> upstream-v3.10.0
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -456,47 +453,6 @@ std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
               absl::StrCat("Failed to curl ", request_url,
                            "\nHTTP Code: ", http_code, "\nEndpoint returned: ",
                            request_data->response_with_metadata.body));
-        } else {
-          status = absl::OkStatus();
-        }
-      } break;
-      case CURLE_OPERATION_TIMEDOUT:
-        status = absl::DeadlineExceededError(result_msg);
-        break;
-      case CURLE_URL_MALFORMAT:
-        status = absl::InvalidArgumentError(result_msg);
-        break;
-      default:
-        status = absl::InternalError(result_msg);
-        break;
-    }
-  } else {
-    status = absl::InternalError(
-        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
-  }
-  return std::make_pair(status, output);
-}
-
-std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
-    CURLMsg* msg) {
-  void* output;
-  absl::Status status;
-  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
-  if (msg->msg == CURLMSG_DONE) {
-    auto result_msg = curl_easy_strerror(msg->data.result);
-    switch (msg->data.result) {
-      case CURLE_OK: {
-        long http_code = 400;
-        curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
-        if (http_code >= 400) {
-          char* request_url = nullptr;
-          curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL,
-                            &request_url);
-          auto request_data = static_cast<CurlRequestData*>(output);
-          status = absl::InternalError(
-              absl::StrCat("Failed to curl ", request_url,
-                           "\nHTTP Code: ", http_code, "\nEndpoint returned: ",
-                           request_data->output ? *request_data->output : ""));
         } else {
           status = absl::OkStatus();
         }

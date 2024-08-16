@@ -45,26 +45,16 @@ cc_library(
     deps = [
         ":bidding_code_fetch_config_cc_proto",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
-<<<<<<< HEAD
-        "//services/common/clients/code_dispatcher:v8_dispatcher",
-        "//services/common/code_fetch:periodic_bucket_fetcher",
-        "//services/common/code_fetch:periodic_code_fetcher",
-=======
         "//services/common/blob_fetch:fetch_mode_cc_proto",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
         "//services/common/code_fetch:periodic_bucket_fetcher",
         "//services/common/code_fetch:periodic_code_fetcher",
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "//services/common/util:file_util",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
         "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
@@ -115,17 +105,11 @@ cc_library(
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
-<<<<<<< HEAD
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
-        "//services/common/clients/kv_server:kv_async_client",
-        "//services/common/code_dispatch:code_dispatch_reactor",
-=======
         "//services/common:feature_flags",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/clients/kv_server:kv_async_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "//services/common/metric:server_definition",
         "//services/common/util:json_util",
         "//services/common/util:request_metadata",
@@ -133,10 +117,6 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@rapidjson",
@@ -264,21 +244,11 @@ cc_proto_library(
 cc_binary(
     name = "server",
     srcs = ["bidding_main.cc"],
-<<<<<<< HEAD
-    defines = select({
-        "//:inference": ["PS_INFERENCE_NON_PROD=1"],
-        "//conditions:default": [],
-    }),
-=======
->>>>>>> upstream-v3.10.0
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     local_defines = ENABLE_CORE_DUMPS_DEFINES,
-<<<<<<< HEAD
-=======
     malloc = "@com_google_tcmalloc//tcmalloc",
->>>>>>> upstream-v3.10.0
     visibility = ["//visibility:public"],
     deps = [
         ":bidding_code_fetch_config_cc_proto",

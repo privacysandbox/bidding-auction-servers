@@ -32,11 +32,7 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
-<<<<<<< HEAD
-#include "services/auction_service/auction_code_fetch_config.pb.h"
-=======
 #include "services/auction_service/auction_constants.h"
->>>>>>> upstream-v3.10.0
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
@@ -51,17 +47,11 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
-<<<<<<< HEAD
-#include "src/concurrent/event_engine_executor.h"
-#include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/encryption/key_fetcher/key_fetcher_manager.h"
-=======
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
->>>>>>> upstream-v3.10.0
 #include "src/public/cpio/interface/cpio.h"
 #include "src/util/rlimit_core_config.h"
 #include "src/util/status_macro/status_macros.h"
@@ -233,68 +223,6 @@ absl::Status RunServer() {
       code_fetch_proto.enable_private_aggregate_reporting();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-<<<<<<< HEAD
-  if (enable_protected_app_signals) {
-    CollectBuyerOriginEndpoints(
-        code_fetch_proto.protected_app_signals_buyer_report_win_js_urls(),
-        buyer_origins, endpoints);
-  }
-
-  // Starts periodic code blob fetching from an arbitrary url only if js_url is
-  // specified
-  std::string js_url = code_fetch_proto.auction_js_url();
-  if (!js_url.empty()) {
-    endpoints.push_back(js_url);
-    auto wrap_code =
-        [num_protected_audience_endpoints, enable_protected_app_signals,
-         enable_report_result_url_generation, enable_report_win_url_generation,
-         buyer_origins](const std::vector<std::string>& ad_tech_code_blobs) {
-          CHECK(buyer_origins.size() == ad_tech_code_blobs.size() - 1)
-              << "Error fetching code blobs from buyer. Buyer size:"
-              << buyer_origins.size()
-              << " and blobs count:" << ad_tech_code_blobs.size();
-          // Collect code blobs for protected audience.
-          auto buyer_origin_code_map = GetCodeBlobMap(
-              /*first=*/0, num_protected_audience_endpoints, buyer_origins,
-              ad_tech_code_blobs, "buyer_report_win_js_urls");
-          // Collect code blobs for protected app signals.
-          absl::flat_hash_map<std::string, std::string>
-              protected_app_signals_buyer_origin_code_map;
-          if (enable_protected_app_signals) {
-            protected_app_signals_buyer_origin_code_map = GetCodeBlobMap(
-                num_protected_audience_endpoints, buyer_origins.size(),
-                buyer_origins, ad_tech_code_blobs,
-                "protected_app_signals_buyer_report_win_js_urls");
-          }
-          return GetSellerWrappedCode(
-              ad_tech_code_blobs.at(ad_tech_code_blobs.size() - 1),
-              enable_report_result_url_generation, enable_protected_app_signals,
-              enable_report_win_url_generation, buyer_origin_code_map,
-              protected_app_signals_buyer_origin_code_map);
-        };
-
-    code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-        endpoints, absl::Milliseconds(code_fetch_proto.url_fetch_period_ms()),
-        http_fetcher.get(), &dispatcher, executor.get(),
-        absl::Milliseconds(code_fetch_proto.url_fetch_timeout_ms()),
-        std::move(wrap_code), "v1");
-
-    code_fetcher->Start();
-  } else if (!code_fetch_proto.auction_js_path().empty()) {
-    std::ifstream ifs(code_fetch_proto.auction_js_path().data());
-    std::string adtech_code_blob((std::istreambuf_iterator<char>(ifs)),
-                                 (std::istreambuf_iterator<char>()));
-
-    adtech_code_blob = GetSellerWrappedCode(
-        adtech_code_blob, enable_report_result_url_generation, false, {});
-
-    PS_RETURN_IF_ERROR(dispatcher.LoadSync("v1", adtech_code_blob))
-        << "Could not load Adtech untrusted code for scoring.";
-  } else {
-    return absl::UnavailableError(
-        "Code fetching config requires either a path or url.");
-  }
-=======
   code_fetch_proto.set_enable_seller_and_buyer_udf_isolation(
       kEnableSellerAndBuyerUdfIsolation);
   MultiCurlHttpFetcherAsync http_fetcher =
@@ -307,7 +235,6 @@ absl::Status RunServer() {
       enable_protected_app_signals);
   PS_RETURN_IF_ERROR(code_fetch_manager.Init())
       << "Failed to initialize UDF fetch.";
->>>>>>> upstream-v3.10.0
 
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
@@ -400,14 +327,8 @@ absl::Status RunServer() {
   PS_LOG(INFO) << "Server listening on " << server_address;
   server->Wait();
   // Ends periodic code blob fetching from an arbitrary url.
-<<<<<<< HEAD
-  if (code_fetcher) {
-    code_fetcher->End();
-  }
-=======
   PS_RETURN_IF_ERROR(code_fetch_manager.End())
       << "Error shutting down UDF fetcher.";
->>>>>>> upstream-v3.10.0
   return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -2,8 +2,6 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-<<<<<<< HEAD
-=======
 ## 0.58.0 (2024-04-26)
 
 
@@ -18,7 +16,6 @@ All notable changes to this project will be documented in this file. See [commit
 
 * Upgrade OpenSSF scorecard GitHub Action
 
->>>>>>> upstream-v3.10.0
 ## 0.57.0 (2024-03-10)
 
 

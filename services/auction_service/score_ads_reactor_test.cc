@@ -43,15 +43,10 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
-<<<<<<< HEAD
-#include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
-=======
 #include "services/common/util/proto_util.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 #include "src/logger/request_context_logger.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -67,22 +62,15 @@ constexpr char kTestReportingWinResponseJson[] =
 constexpr int kTestDesirability = 5;
 constexpr float kNotAnyOriginalBid = 1689.7;
 constexpr char kTestConsentToken[] = "testConsentedToken";
-<<<<<<< HEAD
-constexpr char kTestEgressFeatures[] = "testEgressFeatures";
-=======
 constexpr char kTestEgressPayload[] = "testEgressPayload";
 constexpr char kTestTemporaryEgressPayload[] = "testTemporaryEgressPayload";
->>>>>>> upstream-v3.10.0
 constexpr char kTestComponentReportResultUrl[] =
     "http://reportResultUrl.com&bid=2.10&modifiedBid=1.0";
 constexpr char kTestComponentReportWinUrl[] =
     "http://reportWinUrl.com&bid=2.10&modifiedBid=1.0";
 constexpr char kUsdIsoCode[] = "USD";
 constexpr char kEuroIsoCode[] = "EUR";
-<<<<<<< HEAD
-=======
 constexpr char kSterlingIsoCode[] = "GBP";
->>>>>>> upstream-v3.10.0
 constexpr char kFooComponentsRenderUrl[] =
     "fooMeOnceAds.com/render_ad?id=hasFooComp";
 
@@ -149,8 +137,6 @@ constexpr char kComponentWithCurrencyAdScore[] = R"(
       "logs":[]
       }
 )";
-<<<<<<< HEAD
-=======
 
 constexpr char kComponentWithCurrencyAndIncomingAndRejectReasAdScore[] = R"(
       {
@@ -165,7 +151,6 @@ constexpr char kComponentWithCurrencyAndIncomingAndRejectReasAdScore[] = R"(
       "logs":[]
       }
 )";
->>>>>>> upstream-v3.10.0
 
 using ::google::protobuf::TextFormat;
 using ::testing::AnyNumber;
@@ -209,10 +194,7 @@ void GetTestAdWithBidSameComponentAsFoo(AdWithBidMetadata& foo) {
   int number_of_component_ads = 3;
   foo.mutable_ad()->mutable_struct_value()->MergeFrom(
       MakeAnAd(kFooComponentsRenderUrl, "arbitraryMetadataKey", 2));
-<<<<<<< HEAD
-=======
   // This must have an entry in kTestScoringSignals.
->>>>>>> upstream-v3.10.0
   foo.set_render(kFooComponentsRenderUrl);
   foo.set_bid(2.10);
   foo.set_bid_currency(kUsdIsoCode);
@@ -583,22 +565,6 @@ TEST_F(
       })JSON");
   CHECK_OK(expected_foo_comp_ad_2) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
-<<<<<<< HEAD
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-        EXPECT_EQ(batch.size(), 2);
-        if (batch.size() == 2) {
-          if (batch.at(0).id == kFooComponentsRenderUrl) {
-            CheckInputCorrectForAdWithFooComp(batch.at(0).input);
-            CheckInputCorrectForFoo(batch.at(1).input);
-          } else {
-            CheckInputCorrectForAdWithFooComp(batch.at(1).input);
-            CheckInputCorrectForFoo(batch.at(0).input);
-          }
-        }
-        return absl::OkStatus();
-      });
-=======
       .WillOnce(
           [expected_foo_ad, expected_foo_comp_ad_1, expected_foo_comp_ad_2](
               std::vector<DispatchRequest>& batch,
@@ -617,7 +583,6 @@ TEST_F(
             }
             return absl::OkStatus();
           });
->>>>>>> upstream-v3.10.0
   RawRequest raw_request;
   AdWithBidMetadata foo, has_foo_components;
   GetTestAdWithBidFoo(foo);
@@ -716,12 +681,6 @@ TEST_F(ScoreAdsReactorTest,
   CHECK_OK(expected_foo_ad_2) << "Malformed ad JSON";
 
   EXPECT_CALL(dispatcher, BatchExecute)
-<<<<<<< HEAD
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-        for (const auto& request : batch) {
-          CheckInputCorrectForFoo(request.input);
-=======
       .WillOnce([expected_foo_ad_1, expected_foo_ad_2](
                     std::vector<DispatchRequest>& batch,
                     BatchDispatchDoneCallback done_callback) {
@@ -731,7 +690,6 @@ TEST_F(ScoreAdsReactorTest,
           } else {
             CheckInputCorrectForFoo(request.input, *expected_foo_ad_2);
           }
->>>>>>> upstream-v3.10.0
         }
         return absl::OkStatus();
       });
@@ -763,12 +721,6 @@ TEST_F(ScoreAdsReactorTest,
     })JSON");
   CHECK_OK(expected_bar_ad_2) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
-<<<<<<< HEAD
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-        for (const auto& request : batch) {
-          CheckInputCorrectForBar(request.input);
-=======
       .WillOnce([expected_bar_ad_1, expected_bar_ad_2](
                     std::vector<DispatchRequest>& batch,
                     BatchDispatchDoneCallback done_callback) {
@@ -778,7 +730,6 @@ TEST_F(ScoreAdsReactorTest,
           } else {
             CheckInputCorrectForBar(request.input, *expected_bar_ad_1);
           }
->>>>>>> upstream-v3.10.0
         }
         return absl::OkStatus();
       });
@@ -801,13 +752,8 @@ TEST_F(ScoreAdsReactorTest,
       })JSON");
   CHECK_OK(expected_ad) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
-<<<<<<< HEAD
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-=======
       .WillOnce([expected_ad](std::vector<DispatchRequest>& batch,
                               BatchDispatchDoneCallback done_callback) {
->>>>>>> upstream-v3.10.0
         for (const auto& request : batch) {
           auto input = request.input;
           auto observed_ad = JsonStringToValue(
@@ -853,13 +799,8 @@ TEST_F(ScoreAdsReactorTest,
       })JSON");
   CHECK_OK(expected_ad) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
-<<<<<<< HEAD
-      .WillOnce([](std::vector<DispatchRequest>& batch,
-                   BatchDispatchDoneCallback done_callback) {
-=======
       .WillOnce([expected_ad](std::vector<DispatchRequest>& batch,
                               BatchDispatchDoneCallback done_callback) {
->>>>>>> upstream-v3.10.0
         for (const auto& request : batch) {
           auto input = request.input;
           auto observed_ad = JsonStringToValue(
@@ -1051,18 +992,6 @@ TEST_F(ScoreAdsReactorTest,
 TEST_F(ScoreAdsReactorTest,
        RejectsBidsForFailureToMatchIncomingBidInSellerCurrency) {
   MockCodeDispatchClient dispatcher;
-<<<<<<< HEAD
-  const int low_score = 1, high_score = 10;
-  bool allowComponentAuction = false;
-  RawRequest raw_request;
-  // foo_two and bar are already in USD.
-  AdWithBidMetadata foo_two, bar;
-  GetTestAdWithBidSameComponentAsFoo(foo_two);
-  GetTestAdWithBidBar(bar);
-  // Setting seller_currency to USD requires the converting of all bids to USD.
-  BuildRawRequest({foo_two, bar}, kTestSellerSignals, kTestAuctionSignals,
-                  kTestScoringSignals, kTestPublisherHostname, raw_request,
-=======
   bool allowComponentAuction = false;
   RawRequest raw_request;
   // foo_two and bar are already in USD.
@@ -1074,7 +1003,6 @@ TEST_F(ScoreAdsReactorTest,
   BuildRawRequest({bar, foo_two, barbecue}, kTestSellerSignals,
                   kTestAuctionSignals, kTestScoringSignals,
                   kTestPublisherHostname, raw_request,
->>>>>>> upstream-v3.10.0
                   /*enable_debug_reporting=*/false,
                   /*enable_adtech_code_logging=*/false,
                   /*top_level_seller=*/"",
@@ -1090,49 +1018,22 @@ TEST_F(ScoreAdsReactorTest,
 
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([&allowComponentAuction, &score_to_ad, &id_to_ad,
-<<<<<<< HEAD
-                       &foo_two,
-                       &bar](std::vector<DispatchRequest>& batch,
-                             BatchDispatchDoneCallback done_callback) {
-=======
                        &foo_two](std::vector<DispatchRequest>& batch,
                                  BatchDispatchDoneCallback done_callback) {
->>>>>>> upstream-v3.10.0
         ABSL_LOG(INFO) << "Batch executing";
         // Each original ad request (AdWithBidMetadata) is stored by its
         // expected score and later compared to the output AdScore with the
         // matching score.
         std::vector<std::string> json_ad_scores;
-<<<<<<< HEAD
-        for (const auto& request : batch) {
-          ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
-          score_to_ad.insert_or_assign(
-              (request.id == foo_two.render()) ? low_score : high_score,
-              id_to_ad.at(request.id));
-=======
         int desirability_score = 1;
         for (const auto& request : batch) {
           ABSL_LOG(INFO) << "Accessing id ad mapping for " << request.id;
           score_to_ad.insert_or_assign(desirability_score,
                                        id_to_ad.at(request.id));
->>>>>>> upstream-v3.10.0
           ABSL_LOG(INFO) << "Successfully accessed id ad mapping for "
                          << request.id;
           json_ad_scores.push_back(absl::Substitute(
               kOneSellerSimpleAdScoreTemplate,
-<<<<<<< HEAD
-              // Explicitly setting foo_two to the lower score and bar to the
-              // higher should make bar win.... but see below!
-              (request.id == foo_two.render()) ? low_score : high_score,
-              // Both foo_two and bar have a bid_currency of USD, and
-              // sellerCurrency is USD, so incomingBidInSellerCurrency must be
-              // either A) unset or B) unchanged, else the bid will be rejected.
-              // Setting to bar.bid plus 1689 will thus cause rejection (as it
-              // does not match bar.bid) whereas setting to 0 is acceptable.
-              // foo_two has the lower bid but will win
-              // because bar will be rejected for modified bid currency.
-              (request.id == foo_two.render()) ? 0.0f : bar.bid() + 1689,
-=======
               // AdWithBids are fed into the script in the reverse order they
               // are added to the request, so the scores should be: { bar: 3,
               // foo_two: 2, barbecue: 1}. Thus bar is the most desirable and
@@ -1152,7 +1053,6 @@ TEST_F(ScoreAdsReactorTest,
               // but lose the auction. barbecue.incomingBidInSellerCurrency will
               // be recored as the highestScoringOtherBid.
               (request.id == foo_two.render()) ? 0.0f : kNotAnyOriginalBid,
->>>>>>> upstream-v3.10.0
               (allowComponentAuction) ? "true" : "false"));
         }
         return FakeExecute(batch, std::move(done_callback),
@@ -1174,12 +1074,6 @@ TEST_F(ScoreAdsReactorTest,
 
   // We expect foo_two to win the auction even though it is explicitly set to
   // the lower bid. This is because we modified the incomingBidInSellerCurrency
-<<<<<<< HEAD
-  // on bar, but just didn't set it.
-  EXPECT_EQ(scored_ad.render(), kFooComponentsRenderUrl);
-  EXPECT_EQ(scored_ad.buyer_bid(), foo_two.bid());
-
-=======
   // on bar.
   EXPECT_EQ(scored_ad.render(), kFooComponentsRenderUrl);
   // Desirability should be 2 (bar should have been 3 and should have been
@@ -1187,7 +1081,6 @@ TEST_F(ScoreAdsReactorTest,
   EXPECT_FLOAT_EQ(scored_ad.desirability(), 2);
 
   EXPECT_FLOAT_EQ(scored_ad.buyer_bid(), foo_two.bid());
->>>>>>> upstream-v3.10.0
   EXPECT_EQ(scored_ad.component_renders_size(), 3);
   EXPECT_EQ(scored_ad.component_renders().size(),
             original_ad_with_bid.ad_components().size());
@@ -1195,19 +1088,6 @@ TEST_F(ScoreAdsReactorTest,
             original_ad_with_bid.interest_group_name());
   EXPECT_EQ(scored_ad.interest_group_owner(),
             original_ad_with_bid.interest_group_owner());
-<<<<<<< HEAD
-  EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
-  // Not a component auction, bid should not be set.
-  EXPECT_FLOAT_EQ(scored_ad.bid(), 0.0f);
-  // Desirability must be present but was determined by the scoring code.
-  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
-  // Since in the above test we are assuming not component auctions, verify.
-  EXPECT_FALSE(scored_ad.allow_component_auction());
-  // The other bid should have been straighr-up rejected for illegally modifying
-  // the incomingBidInSellerCurrency.
-  ASSERT_EQ(scored_ad.ig_owner_highest_scoring_other_bids_map().size(), 0);
-  EXPECT_EQ(scored_ad.ad_type(), AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
-=======
   EXPECT_EQ(scored_ad.interest_group_origin(),
             original_ad_with_bid.interest_group_origin());
   EXPECT_EQ(scored_ad.buyer_bid(), original_ad_with_bid.bid());
@@ -1247,7 +1127,6 @@ TEST_F(ScoreAdsReactorTest,
             bar.interest_group_owner());
   EXPECT_EQ(bar_ad_rejection_reason.rejection_reason(),
             SellerRejectionReason::INVALID_BID);
->>>>>>> upstream-v3.10.0
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -3066,14 +2945,10 @@ ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
 
 class ScoreAdsReactorProtectedAppSignalsTest : public ScoreAdsReactorTest {
  protected:
-<<<<<<< HEAD
-  void SetUp() override { runtime_config_.enable_protected_app_signals = true; }
-=======
   void SetUp() override {
     runtime_config_.enable_protected_app_signals = true;
     server_common::log::PS_VLOG_IS_ON(/*verbose_level=*/0, /*max_v=*/10);
   }
->>>>>>> upstream-v3.10.0
 
   ScoreAdsResponse ExecuteScoreAds(const RawRequest& raw_request,
                                    MockCodeDispatchClient& dispatcher) {

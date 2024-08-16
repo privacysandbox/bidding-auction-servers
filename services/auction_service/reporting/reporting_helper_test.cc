@@ -35,11 +35,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-<<<<<<< HEAD
-constexpr char kTestEgressFeatures[] = "testEgressFeatures";
-=======
 constexpr char kTestEgressPayload[] = "testEgressPayload";
->>>>>>> upstream-v3.10.0
 constexpr int kMinNoisedJoinCount = 0;
 constexpr int kMaxNoisedJoinCount = 17;
 constexpr int kMinNoisedRecency = -1;
@@ -188,26 +184,16 @@ BuyerReportingMetadata GetTestBuyerReportingMetadata() {
 ReportingDispatchRequestData GetTestDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-<<<<<<< HEAD
-    const std::string& handler_name) {
-  server_common::log::ContextImpl log_context(
-      {}, server_common::ConsentedDebugConfiguration());
-=======
     const std::string& handler_name, std::string seller_currency) {
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
->>>>>>> upstream-v3.10.0
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
   ReportingDispatchRequestData reporting_dispatch_request_data = {
       .handler_name = handler_name,
       .auction_config = auction_config,
-<<<<<<< HEAD
-      .post_auction_signals = GeneratePostAuctionSignals(winning_ad_score),
-=======
       .post_auction_signals = GeneratePostAuctionSignals(
           winning_ad_score, std::move(seller_currency)),
->>>>>>> upstream-v3.10.0
       .publisher_hostname = kTestPublisherHostName,
       .log_context = log_context};
   if (dispatch_request_config.enable_report_win_url_generation) {
@@ -226,16 +212,6 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
 ReportingDispatchRequestData GetTestComponentDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-<<<<<<< HEAD
-    const std::string& handler_name) {
-  ReportingDispatchRequestData reporting_dispatch_request_data =
-      GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 handler_name);
-  reporting_dispatch_request_data.component_reporting_metadata = {
-      .top_level_seller = kTestTopLevelSeller,
-      .component_seller = kTestSeller,
-      .modified_bid = kTestModifiedBid};
-=======
     const std::string& handler_name, std::string seller_currency) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
@@ -245,19 +221,11 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestData(
       .component_seller = kTestSeller,
       .modified_bid_currency = winning_ad_score.bid_currency(),
       .modified_bid = winning_ad_score.bid()};
->>>>>>> upstream-v3.10.0
   return reporting_dispatch_request_data;
 }
 
 ReportingDispatchRequestData GetTestComponentDispatchRequestDataForPAS(
     const ScoreAdsResponse::AdScore& winning_ad_score,
-<<<<<<< HEAD
-    const ReportingDispatchRequestConfig& dispatch_request_config) {
-  ReportingDispatchRequestData reporting_dispatch_request_data =
-      GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 kReportingProtectedAppSignalsFunctionName);
-  reporting_dispatch_request_data.egress_features = kTestEgressFeatures;
-=======
     const ReportingDispatchRequestConfig& dispatch_request_config,
     std::string seller_currency) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
@@ -265,7 +233,6 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestDataForPAS(
                                  kReportingProtectedAppSignalsFunctionName,
                                  std::move(seller_currency));
   reporting_dispatch_request_data.egress_payload = kTestEgressPayload;
->>>>>>> upstream-v3.10.0
   return reporting_dispatch_request_data;
 }
 
@@ -298,11 +265,7 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
               absl::string_view expected_seller_reporting_signals,
               absl::string_view expected_unnoised_buyer_metadata_json =
                   kTestBuyerMetadata,
-<<<<<<< HEAD
-              absl::string_view expected_egress_features = "") {
-=======
               absl::string_view expected_egress_payload = "") {
->>>>>>> upstream-v3.10.0
   EXPECT_EQ(
       *(response_vector[ReportingArgIndex(ReportingArgs::kAuctionConfig)]),
       kTestAuctionConfig);
@@ -329,79 +292,6 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
     EXPECT_EQ(
         *(response_vector[ReportingArgIndex(ReportingArgs::kEgressPayload)]),
         expected_egress_payload);
-  }
-}
-
-absl::StatusOr<BuyerReportingMetadata> ParseBuyerReportingMetadata(
-    const std::string& buyer_reporting_metadata_json) {
-  BuyerReportingMetadata reporting_metadata{};
-  PS_ASSIGN_OR_RETURN(rapidjson::Document document,
-                      ParseJsonString(buyer_reporting_metadata_json));
-  rapidjson::Value buyer_signals;
-  PS_ASSIGN_IF_PRESENT(buyer_signals, document, kBuyerSignals, GetObject);
-  PS_ASSIGN_OR_RETURN(reporting_metadata.buyer_signals,
-                      SerializeJsonDoc(buyer_signals));
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.seller, document, kSellerTag,
-                       GetString);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.interest_group_name, document,
-                       kInterestGroupName, GetString);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.ad_cost, document, kAdCostTag,
-                       GetFloat);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.join_count, document, kJoinCount,
-                       GetInt);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.recency, document, kRecency,
-                       GetInt64);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.modeling_signals, document,
-                       kModelingSignalsTag, GetInt);
-  return reporting_metadata;
-}
-
-void VerifyBuyerReportingMetadata(
-    const std::string& buyer_reporting_metadata_json,
-    const BuyerReportingMetadata& expected_buyer_reporting_metadata) {
-  absl::StatusOr<BuyerReportingMetadata> buyer_reporting_metadata =
-      ParseBuyerReportingMetadata(buyer_reporting_metadata_json);
-  ASSERT_TRUE(buyer_reporting_metadata.ok());
-  EXPECT_EQ(buyer_reporting_metadata.value().buyer_signals,
-            expected_buyer_reporting_metadata.buyer_signals);
-  EXPECT_EQ(buyer_reporting_metadata.value().interest_group_name,
-            expected_buyer_reporting_metadata.interest_group_name);
-  EXPECT_EQ(buyer_reporting_metadata.value().seller,
-            expected_buyer_reporting_metadata.seller);
-  EXPECT_EQ(buyer_reporting_metadata.value().ad_cost,
-            expected_buyer_reporting_metadata.ad_cost);
-  if (expected_buyer_reporting_metadata.join_count.has_value() &&
-      buyer_reporting_metadata.value().join_count.value() !=
-          expected_buyer_reporting_metadata.join_count.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().join_count.value(),
-              kMinNoisedJoinCount);
-    EXPECT_LT(buyer_reporting_metadata.value().join_count.value(),
-              kMaxNoisedJoinCount);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().join_count.value(),
-              expected_buyer_reporting_metadata.join_count.value());
-  }
-  if (expected_buyer_reporting_metadata.recency.has_value() &&
-      buyer_reporting_metadata.value().recency.value() !=
-          expected_buyer_reporting_metadata.recency.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().recency.value(),
-              kMinNoisedRecency);
-    EXPECT_LT(buyer_reporting_metadata.value().recency.value(),
-              kMaxNoisedRecency);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().recency.value(),
-              expected_buyer_reporting_metadata.recency.value());
-  }
-  if (expected_buyer_reporting_metadata.modeling_signals.has_value() &&
-      buyer_reporting_metadata.value().modeling_signals.value() !=
-          expected_buyer_reporting_metadata.join_count.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().modeling_signals.value(),
-              kMinNoisedModelingSignals);
-    EXPECT_LT(buyer_reporting_metadata.value().modeling_signals.value(),
-              kMaxNoisedModelingSignals);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().modeling_signals.value(),
-              expected_buyer_reporting_metadata.modeling_signals.value());
   }
 }
 
@@ -558,11 +448,7 @@ TEST(GetReportingInput, ReturnsTheInputArgsForReportResultForComponentAuction) {
   ReportingDispatchRequestData dispatch_request_data =
       GetTestComponentDispatchRequestData(
           winning_ad_score, dispatch_request_config,
-<<<<<<< HEAD
-          kReportingDispatchHandlerFunctionName);
-=======
           kReportingDispatchHandlerFunctionName, "");
->>>>>>> upstream-v3.10.0
   std::vector<std::shared_ptr<std::string>> response_vector =
       GetReportingInput(dispatch_request_config, dispatch_request_data);
   TestArgs(response_vector, dispatch_request_config,
@@ -587,19 +473,12 @@ TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
       .enable_adtech_code_logging = true};
   ReportingDispatchRequestData dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-<<<<<<< HEAD
-                                 kReportingDispatchHandlerFunctionName);
-  DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
-                                                        dispatch_request_data);
-  TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals);
-=======
                                  kReportingDispatchHandlerFunctionName,
                                  /*seller_currency=*/kUsdIsoCode);
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config,
            kTestSellerReportingSignalsWithOtherBidCurrency);
->>>>>>> upstream-v3.10.0
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
   EXPECT_EQ(request.version_string, kReportingBlobVersion);
@@ -619,55 +498,6 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
   winning_ad_score.set_desirability(kTestDesirability);
   winning_ad_score.set_render(kTestRender);
   ReportingDispatchRequestConfig dispatch_request_config = {
-<<<<<<< HEAD
-      .enable_report_win_url_generation = true,
-      .enable_report_win_input_noising = false,
-      .enable_adtech_code_logging = true};
-  ReportingDispatchRequestData dispatch_request_data =
-      GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 kReportingDispatchHandlerFunctionName);
-  DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
-                                                        dispatch_request_data);
-  TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals);
-  EXPECT_EQ(request.id, kTestRender);
-  EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
-  EXPECT_EQ(request.version_string, kDispatchRequestVersion);
-}
-
-TEST(GetReportingDispatchRequest,
-     DispatchRequestSuccessWithReportWinAndNoisingEnabled) {
-  ScoreAdsResponse::AdScore winning_ad_score;
-  winning_ad_score.set_buyer_bid(kTestBuyerBid);
-  winning_ad_score.set_interest_group_owner(kTestInterestGroupOwner);
-  winning_ad_score.set_interest_group_name(kTestInterestGroupName);
-  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
-      ->try_emplace(kTestInterestGroupOwner, google::protobuf::ListValue());
-  winning_ad_score.mutable_ig_owner_highest_scoring_other_bids_map()
-      ->at(kTestInterestGroupOwner)
-      .add_values()
-      ->set_number_value(kTestHighestScoringOtherBid);
-  winning_ad_score.set_desirability(kTestDesirability);
-  winning_ad_score.set_render(kTestRender);
-  std::shared_ptr<std::string> auction_config =
-      std::make_shared<std::string>(kTestAuctionConfig);
-  server_common::log::ContextImpl log_context(
-      {}, server_common::ConsentedDebugConfiguration());
-  ReportingDispatchRequestConfig dispatch_request_config = {
-      .enable_report_win_url_generation = true,
-      .enable_report_win_input_noising = true,
-      .enable_adtech_code_logging = true};
-  ReportingDispatchRequestData reporting_dispatch_request_data =
-      GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 kReportingDispatchHandlerFunctionName);
-  DispatchRequest request = GetReportingDispatchRequest(
-      dispatch_request_config, reporting_dispatch_request_data);
-  TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
-           /*expected_unnoised_buyer_metadata_json=*/"");
-  VerifyBuyerReportingMetadata(
-      *(request
-            .input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]),
-      GetTestBuyerReportingMetadata());
-=======
       .enable_report_win_url_generation = true,
       .enable_report_win_input_noising = false,
       .enable_adtech_code_logging = true};
@@ -678,7 +508,6 @@ TEST(GetReportingDispatchRequest,
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals);
->>>>>>> upstream-v3.10.0
   EXPECT_EQ(request.id, kTestRender);
   EXPECT_EQ(request.handler_name, kReportingDispatchHandlerFunctionName);
   EXPECT_EQ(request.version_string, kReportingBlobVersion);
@@ -743,20 +572,12 @@ TEST(GetReportingDispatchRequest,
       .enable_report_win_input_noising = true};
   ReportingDispatchRequestData dispatch_request_data =
       GetTestComponentDispatchRequestDataForPAS(winning_ad_score,
-<<<<<<< HEAD
-                                                dispatch_request_config);
-=======
                                                 dispatch_request_config, "");
->>>>>>> upstream-v3.10.0
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
            /*expected_unnoised_buyer_metadata_json=*/"",
-<<<<<<< HEAD
-           dispatch_request_data.egress_features);
-=======
            dispatch_request_data.egress_payload);
->>>>>>> upstream-v3.10.0
   VerifyBuyerReportingMetadata(
       *(request
             .input[ReportingArgIndex(ReportingArgs::kBuyerReportingMetadata)]),

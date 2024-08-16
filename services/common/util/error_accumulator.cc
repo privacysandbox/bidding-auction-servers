@@ -20,11 +20,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-<<<<<<< HEAD
-ErrorAccumulator::ErrorAccumulator(server_common::log::ContextImpl* log_context)
-=======
 ErrorAccumulator::ErrorAccumulator(RequestLogContext* log_context)
->>>>>>> upstream-v3.10.0
     : log_context_(log_context) {}
 
 void ErrorAccumulator::ReportError(

@@ -33,19 +33,15 @@ using ::testing::Return;
 TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
   constexpr absl::string_view platform_format = R"json(
 {
-<<<<<<< HEAD
-  "GCP": "https://publickeyservice.foo/v1alpha/publicKeys",
-  "AWS": "https://publickeyservice.cloudfront.net/v1alpha/publicKeys",
-  "AZURE": "https://publickeyservice.bar/v1alpha/publicKeys"
-=======
   "GCP": "%s",
-  "AWS": "%s"
->>>>>>> upstream-v3.10.0
+  "AWS": "%s",
+  "Azure": "%s"
 }
 )json";
 
-  std::string per_platform_public_key_endpoints = absl::StrFormat(
-      platform_format, kGCPProdPublicKeyEndpoint, kAWSProdPublicKeyEndpoint);
+  std::string per_platform_public_key_endpoints =
+      absl::StrFormat(platform_format, kGCPProdPublicKeyEndpoint,
+                      kAWSProdPublicKeyEndpoint, kAzureProdPublicKeyEndpoint);
 
   auto map = ParseCloudPlatformPublicKeysMap(per_platform_public_key_endpoints);
   ASSERT_TRUE(map.ok());
@@ -54,13 +50,9 @@ TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
   EXPECT_EQ((*map)[server_common::CloudPlatform::kGcp][0],
             kGCPProdPublicKeyEndpoint);
   EXPECT_EQ((*map)[server_common::CloudPlatform::kAws][0],
-<<<<<<< HEAD
-            "https://publickeyservice.cloudfront.net/v1alpha/publicKeys");
-  EXPECT_EQ((*map)[server_common::CloudPlatform::kAzure][0],
-            "https://publickeyservice.bar/v1alpha/publicKeys");
-=======
             kAWSProdPublicKeyEndpoint);
->>>>>>> upstream-v3.10.0
+  EXPECT_EQ((*map)[server_common::CloudPlatform::kAzure][0],
+            kAzureProdPublicKeyEndpoint);
 }
 
 TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_InvalidJson) {

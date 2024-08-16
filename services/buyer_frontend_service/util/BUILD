@@ -33,11 +33,7 @@ cc_library(
 )
 
 cc_test(
-<<<<<<< HEAD
-    name = "buyer_frontend_utils_test",
-=======
     name = "proto_factory_test",
->>>>>>> upstream-v3.10.0
     size = "small",
     testonly = True,
     srcs = [

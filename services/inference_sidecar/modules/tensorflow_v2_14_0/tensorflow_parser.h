@@ -26,8 +26,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
-<<<<<<< HEAD
-=======
 struct TensorWithName {
   // tensorflow::Tensor doesn't hold the name of the tensor so we need to create
   // a superset struct.
@@ -38,7 +36,6 @@ struct TensorWithName {
       : tensor_name(tensor_name), tensor(tensor) {}
 };
 
->>>>>>> upstream-v3.10.0
 // Transforms an internal ML framework agnostic dense tensor representation
 // into a Tensorflow tensor.
 absl::StatusOr<tensorflow::Tensor> ConvertFlatArrayToTensor(
@@ -48,11 +45,7 @@ absl::StatusOr<tensorflow::Tensor> ConvertFlatArrayToTensor(
 // a JSON string.
 // batch_outputs contains a collection of <model_path, inference_output> pairs.
 absl::StatusOr<std::string> ConvertTensorsToJson(
-<<<<<<< HEAD
-    const std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>&
-=======
     const std::vector<std::pair<std::string, std::vector<TensorWithName>>>&
->>>>>>> upstream-v3.10.0
         batch_outputs);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

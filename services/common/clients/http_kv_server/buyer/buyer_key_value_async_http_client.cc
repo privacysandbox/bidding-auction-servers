@@ -112,23 +112,6 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetBuyerValuesInput>();
-<<<<<<< HEAD
-    auto status = Execute(
-        std::move(request), {},
-        [](absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
-               buyer_kv_output) mutable {
-          if (!buyer_kv_output.ok()) {
-            PS_VLOG(1)
-                << "BuyerKeyValueAsyncHttpClient pre-warm returned status:"
-                << buyer_kv_output.status().message();
-          }
-        },
-        // Longer timeout for first request
-        absl::Milliseconds(60000));
-    if (!status.ok()) {
-      PS_VLOG(1) << "BuyerKeyValueAsyncHttpClient pre-warming failed: "
-                 << status;
-=======
     auto status =
         Execute(
             std::move(request), {},
@@ -145,7 +128,6 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
     if (!status.ok()) {
       PS_LOG(ERROR) << "BuyerKeyValueAsyncHttpClient pre-warming failed: "
                     << status;
->>>>>>> upstream-v3.10.0
     }
   }
 }

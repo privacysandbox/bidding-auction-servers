@@ -27,10 +27,7 @@
 #include "quiche/common/quiche_data_writer.h"
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
-<<<<<<< HEAD
-=======
 #include "services/common/clients/async_grpc/request_config.h"
->>>>>>> upstream-v3.10.0
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

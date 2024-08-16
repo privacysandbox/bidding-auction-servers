@@ -30,12 +30,9 @@ inline constexpr char kMissingInputs[] = "Missing inputs";
 inline constexpr char kInternalServerError[] = "Internal server error.";
 inline constexpr char kSellerDomainEmpty[] =
     "Seller domain in server must be configured.";
-<<<<<<< HEAD
-=======
 
 inline constexpr char kUnsupportedMetadataValues[] =
     "Unsupported version and compression combination";
->>>>>>> upstream-v3.10.0
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

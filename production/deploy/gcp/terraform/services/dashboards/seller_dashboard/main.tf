@@ -1199,12 +1199,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-<<<<<<< HEAD
-                  "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.duration_ms'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.count' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div",
-                  "unitOverride": ""
-=======
                   "timeSeriesQueryLanguage": "fetch generic_task\n| { metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.duration_ms'\n  ; metric 'workload.googleapis.com/sfe.initiated_request.to_bfe.count' }\n| filter (metric.deployment_environment == '${var.environment}')\n| group_by\n    [metric.buyer, metric.service_name, metric.deployment_environment,\n     metric.operator, metric.Noise, resource.task_id, metric.service_version]\n| align rate(1m)\n| outer_join 0\n| div"
->>>>>>> upstream-v3.10.0
                 }
               }
             ],
@@ -1514,8 +1509,6 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "height": 19,
         "widget": {
           "title": "sfe.business_logic.request_with_winner.duration_ms [95TH PERCENTILE]",
-<<<<<<< HEAD
-=======
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1556,52 +1549,6 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "height": 19,
         "widget": {
           "title": "sfe.protected_ciphertext.size_bytes [95TH PERCENTILE]",
->>>>>>> upstream-v3.10.0
-          "xyChart": {
-            "chartOptions": {},
-            "dataSets": [
-              {
-                "minAlignmentPeriod": "60s",
-                "plotType": "LINE",
-                "targetAxis": "Y1",
-                "timeSeriesQuery": {
-                  "timeSeriesFilter": {
-                    "aggregation": {
-                      "alignmentPeriod": "60s",
-                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
-                      "groupByFields": [
-                        "metric.label.\"service_name\"",
-                        "metric.label.\"deployment_environment\"",
-                        "metric.label.\"operator\"",
-                        "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
-                        "metric.label.\"service_version\""
-                      ],
-                      "perSeriesAligner": "ALIGN_DELTA"
-                    },
-<<<<<<< HEAD
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.business_logic.request_with_winner.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
-=======
-                    "filter": "metric.type=\"workload.googleapis.com/sfe.protected_ciphertext.size_bytes\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
->>>>>>> upstream-v3.10.0
-                  }
-                }
-              }
-            ],
-            "yAxis": {
-              "scale": "LINEAR"
-            }
-          }
-        },
-        "width": 24,
-        "xPos": 24,
-<<<<<<< HEAD
-        "yPos": 339
-      },
-      {
-        "height": 19,
-        "widget": {
-          "title": "sfe.protected_ciphertext.size_bytes [95TH PERCENTILE]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1636,8 +1583,6 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         },
         "width": 24,
         "xPos": 24,
-=======
->>>>>>> upstream-v3.10.0
         "yPos": 358
       },
       {

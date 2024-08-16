@@ -199,19 +199,11 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     ABSL_LOG(WARNING) << "Neither protected audience nor protected app signals "
                          "is enabled";
   }
-<<<<<<< HEAD
-  PS_VLOG(1) << "Protected Audience support enabled on the service: "
-             << enable_protected_audience;
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << enable_protected_app_signals;
-  PS_VLOG(1) << "Successfully constructed the config client.";
-=======
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
                << enable_protected_audience;
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << enable_protected_app_signals;
   PS_LOG(INFO) << "Successfully constructed the config client.";
->>>>>>> upstream-v3.10.0
   return config_client;
 }
 

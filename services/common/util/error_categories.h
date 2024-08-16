@@ -55,11 +55,8 @@ inline constexpr char kBadBuyerInputProto[] =
 inline constexpr char kPASSignalsForComponentAuction[] =
     "Unsupported component auction input (protected signals) for buyer: %s";
 inline constexpr char kMalformedBuyerInput[] = "Malformed buyer input.";
-<<<<<<< HEAD
-=======
 inline constexpr char kEmptySelectAdRequest[] =
     "Empty SelectAdRequest received.";
->>>>>>> upstream-v3.10.0
 inline constexpr char kEmptyProtectedAuctionCiphertextError[] =
     "protected_auction_ciphertext must be non-null.";
 inline constexpr char kUnsupportedClientType[] = "Unsupported client type.";
@@ -81,14 +78,11 @@ inline constexpr char kUnsupportedAdTypeInAuctionResultError[] =
     "Unsupported ad type.";
 inline constexpr char kTopLevelWinReportingUrlsInAuctionResultError[] =
     "Top Level Win Reporting URLs should not be present.";
-<<<<<<< HEAD
-=======
 inline constexpr char kMultipleComponentAuctionResultsError[] =
     "Top Level Auction contains multiple auction results for the same seller: ";
 inline constexpr absl::string_view kMismatchedCurrencyInAuctionResultError =
     "Component seller auction result bid currency does not match top-level "
     "seller's expected currency for this component seller.";
->>>>>>> upstream-v3.10.0
 
 // Server side errors listed here.
 inline constexpr char kInternalError[] = "Internal Error";
@@ -105,31 +99,20 @@ inline constexpr char kEmptySeller[] =
     "Seller origin missing in auction config";
 inline constexpr char kEmptyBuyerSignals[] =
     "Buyer signals missing in auction config for buyer: %s";
-<<<<<<< HEAD
-inline constexpr char kUnknownClientType[] =
-    "Unknown client type in SelectAdRequest";
-=======
->>>>>>> upstream-v3.10.0
 inline constexpr char kWrongSellerDomain[] =
     "Seller domain passed in request does not match this server's domain";
 inline constexpr char kEmptyBuyerInPerBuyerConfig[] =
     "One or more buyer keys are empty in per buyer config map";
-<<<<<<< HEAD
-=======
 inline constexpr absl::string_view kEmptySellerInPerComponentSellerConfig =
     "One or more seller keys are empty in per component seller config map";
->>>>>>> upstream-v3.10.0
 inline constexpr char kDeviceComponentAuctionWithAndroid[] =
     "Device orchestrated Component Auctions not supported for Android";
 inline constexpr char kNoComponentAuctionResults[] =
     "No Component Auction Results for Top Level Seller auction";
 inline constexpr char kEmptyComponentAuctionResults[] =
     "Empty Component Auction Results for Top Level Seller auction";
-<<<<<<< HEAD
-=======
 inline constexpr absl::string_view kInvalidExpectedComponentSellerCurrency =
     "Invalid Expected Component Seller Currency";
->>>>>>> upstream-v3.10.0
 
 // Error handling related constants.
 inline constexpr char kErrorDelimiter[] = "; ";

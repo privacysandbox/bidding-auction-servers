@@ -31,10 +31,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 using google::scp::core::test::EqualsProto;
-<<<<<<< HEAD
-using server_common::log::ContextImpl;
-=======
->>>>>>> upstream-v3.10.0
 
 constexpr char kTestSeller[] = "sample-seller";
 constexpr char kBuyer1[] = "bg1";
@@ -65,10 +61,7 @@ AuctionResult MapBasicScoreFieldsToAuctionResult(
   auction_result.set_score(high_score.desirability());
   auction_result.set_interest_group_name(high_score.interest_group_name());
   auction_result.set_interest_group_owner(high_score.interest_group_owner());
-<<<<<<< HEAD
-=======
   auction_result.set_interest_group_origin(high_score.interest_group_origin());
->>>>>>> upstream-v3.10.0
   auction_result.set_ad_render_url(high_score.render());
   auction_result.mutable_win_reporting_urls()
       ->mutable_buyer_reporting_urls()
@@ -408,11 +401,7 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
     bidding_group_map_ =
         MakeARandomSingleSellerAuctionResult().bidding_groups();
     absl::btree_map<std::string, std::string> context_map;
-<<<<<<< HEAD
-    log_context_ = std::make_unique<ContextImpl>(
-=======
     log_context_ = std::make_unique<RequestLogContext>(
->>>>>>> upstream-v3.10.0
         context_map, server_common::ConsentedDebugConfiguration());
   }
 
@@ -420,11 +409,7 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
   ScoreAdsResponse::AdScore valid_score_;
   AuctionResult::Error valid_error_;
   IgsWithBidsMap bidding_group_map_;
-<<<<<<< HEAD
-  std::unique_ptr<ContextImpl> log_context_;
-=======
   std::unique_ptr<RequestLogContext> log_context_;
->>>>>>> upstream-v3.10.0
   std::unique_ptr<OhttpHpkeDecryptedMessage> MakeDecryptedMessage() {
     auto [request, context] =
         GetFramedInputAndOhttpContext(MakeARandomString());
@@ -451,13 +436,8 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
-<<<<<<< HEAD
-  // Should not populate bid value for single seller auction.
-  expected.clear_bid();
-=======
   // IG Origin is Android exclusive and will not be parsed or encoded for web.
   expected.clear_interest_group_origin();
->>>>>>> upstream-v3.10.0
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),
                                             this->bidding_group_map_.end());
   auto decrypted_message = MakeDecryptedMessage();

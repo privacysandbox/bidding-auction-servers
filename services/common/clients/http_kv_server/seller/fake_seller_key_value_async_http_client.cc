@@ -18,10 +18,7 @@
 #include <fstream>
 
 #include "absl/strings/match.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/request_response_constants.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

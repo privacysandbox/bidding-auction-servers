@@ -84,12 +84,8 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const ProtectedAppSignals& protected_app_signals, const std::string& seller,
     const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data =
-<<<<<<< HEAD
-        absl::nullopt);
-=======
         absl::nullopt,
     bool enable_unlimited_egress = false);
->>>>>>> upstream-v3.10.0
 
 // Creates a generate protected app signals bids request using the provided
 // raw request.

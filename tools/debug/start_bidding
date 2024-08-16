@@ -48,11 +48,8 @@ export SERVER_START_CMD=$(cat << END
       "prepareDataForAdsRetrievalWasmHelperUrl": ""
     }' \
 --enable_protected_app_signals="false" \
-<<<<<<< HEAD
-=======
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
->>>>>>> upstream-v3.10.0
 --enable_protected_audience="true" \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \
 --ps_verbosity=2 \

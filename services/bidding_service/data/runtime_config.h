@@ -27,11 +27,6 @@ struct BiddingServiceRuntimeConfig {
   // Endpoint where the ad retrieval server is listening for protected app
   // signals. Must be present iff running with protected app signals support.
   std::string tee_ad_retrieval_kv_server_addr = "";
-<<<<<<< HEAD
-
-  // Endpoint where ads metadata can be retrieved using PAS ad ids.
-  std::string tee_kv_server_addr = "";
-=======
   // Authority header value for said endpoint.
   std::string tee_ad_retrieval_kv_server_grpc_arg_default_authority = "";
 
@@ -39,7 +34,6 @@ struct BiddingServiceRuntimeConfig {
   std::string tee_kv_server_addr = "";
   // Authority header value for said endpoint.
   std::string tee_kv_server_grpc_arg_default_authority = "";
->>>>>>> upstream-v3.10.0
 
   bool enable_buyer_debug_url_generation = false;
   // Sets the timeout used by Roma for dispatch requests

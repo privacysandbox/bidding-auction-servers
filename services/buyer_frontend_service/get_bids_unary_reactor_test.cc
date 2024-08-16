@@ -345,12 +345,8 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
     TrustedServersConfigClient config_client({});
     config_client.SetFlagForTest(kTrue, TEST_MODE);
     key_fetcher_manager_ =
-<<<<<<< HEAD
-        CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
-=======
         CreateKeyFetcherManager(config_client,
                                 /*public_key_fetcher=*/nullptr);
->>>>>>> upstream-v3.10.0
     SetupMockCryptoClientWrapper(*crypto_client_);
 
     server_common::log::PS_VLOG_IS_ON(0, 10);
@@ -431,16 +427,6 @@ TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
 
   EXPECT_CALL(
       protected_app_signals_bidding_client_mock_,
-<<<<<<< HEAD
-      ExecuteInternal(
-          Pointee(
-              EqGenerateProtectedAppSignalsBidsRawRequest(expected_request)),
-          An<const RequestMetadata&>(),
-          An<absl::AnyInvocable<
-              void(absl::StatusOr<std::unique_ptr<
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
-=======
       ExecuteInternal(Pointee(EqGenerateProtectedAppSignalsBidsRawRequest(
                           expected_request)),
                       An<const RequestMetadata&>(),
@@ -449,7 +435,6 @@ TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
                                    GenerateProtectedAppSignalsBidsRawResponse>>,
                                ResponseMetadata) &&>>(),
                       An<absl::Duration>(), An<RequestConfig>()))
->>>>>>> upstream-v3.10.0
       .Times(1);
 
   // No protected audience buyer input and hence no outbound call to bidding
@@ -514,14 +499,9 @@ TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-<<<<<<< HEAD
-                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
-=======
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
                    ResponseMetadata) &&>>(),
           An<absl::Duration>(), An<RequestConfig>()))
->>>>>>> upstream-v3.10.0
       .Times(1);
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, bidding_signals_provider_,
@@ -547,14 +527,9 @@ TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-<<<<<<< HEAD
-                       GenerateBidsResponse::GenerateBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
-=======
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
                    ResponseMetadata) &&>>(),
           An<absl::Duration>(), An<RequestConfig>()))
->>>>>>> upstream-v3.10.0
       .Times(0);
   EXPECT_CALL(
       protected_app_signals_bidding_client_mock_,
@@ -563,14 +538,9 @@ TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
           An<const RequestMetadata&>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
-<<<<<<< HEAD
-                       GenerateProtectedAppSignalsBidsRawResponse>>) &&>>(),
-          An<absl::Duration>()))
-=======
                        GenerateProtectedAppSignalsBidsRawResponse>>,
                    ResponseMetadata) &&>>(),
           An<absl::Duration>(), An<RequestConfig>()))
->>>>>>> upstream-v3.10.0
       .Times(1);
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, bidding_signals_provider_,

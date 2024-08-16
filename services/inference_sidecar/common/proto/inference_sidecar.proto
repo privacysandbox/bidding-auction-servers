@@ -23,30 +23,22 @@ service InferenceService {
   // Registers model.
   rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse) {
   }
-<<<<<<< HEAD
-=======
   // Gets model paths for successfully registered models.
   rpc GetModelPaths(GetModelPathsRequest) returns (GetModelPathsResponse) {
   }
->>>>>>> upstream-v3.10.0
 }
 
 message PredictRequest {
   // Input data.
   bytes input = 1;
-<<<<<<< HEAD
-=======
   // Should consented logs be collected for the given predict request.
   bool is_consented = 2;
->>>>>>> upstream-v3.10.0
 }
 
 // Response for PredictRequest on a successful run.
 message PredictResponse {
   // Output data.
   bytes output = 1;
-<<<<<<< HEAD
-=======
   // Consented debugging log.
   InferenceDebugInfo debug_info = 2;
   // Map of metric names to their values and optional partition.
@@ -60,7 +52,6 @@ message MetricValue {
   int64 value = 1;
   // Partition specifies a subgroup for the metric to facilitate segmented analysis.
   string partition = 2;
->>>>>>> upstream-v3.10.0
 }
 
 message ModelSpec {
@@ -79,8 +70,6 @@ message RegisterModelRequest {
 
 message RegisterModelResponse {
 }
-<<<<<<< HEAD
-=======
 
 message GetModelPathsRequest {
 }
@@ -128,4 +117,3 @@ message InferenceSidecarRuntimeConfig {
 message InferenceDebugInfo {
   repeated string logs = 1;
 }
->>>>>>> upstream-v3.10.0

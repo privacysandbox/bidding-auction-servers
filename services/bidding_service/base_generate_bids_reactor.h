@@ -24,12 +24,8 @@
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
-<<<<<<< HEAD
-=======
 #include "services/common/loggers/request_log_context.h"
->>>>>>> upstream-v3.10.0
 #include "services/common/util/request_response_constants.h"
-#include "src/logger/request_context_impl.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -97,10 +93,6 @@ class BaseGenerateBidsReactor
   RomaRequestContextFactory roma_request_context_factory_;
   RequestLogContext log_context_;
   bool enable_adtech_code_logging_;
-<<<<<<< HEAD
-  server_common::log::ContextImpl log_context_;
-=======
->>>>>>> upstream-v3.10.0
   int max_allowed_size_debug_url_chars_;
   long max_allowed_size_all_debug_urls_chars_;
 };

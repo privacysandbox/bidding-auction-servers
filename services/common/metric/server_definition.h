@@ -597,8 +597,6 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kSfeWithWinnerTimeMs,
         &kProtectedCiphertextSize,
         &kAuctionConfigSize,
-<<<<<<< HEAD
-=======
         &kAuctionBidRejectedCount,
         &kDeviceSignalsSize,
         &kAdRenderIDsSize,
@@ -606,7 +604,6 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kUserBiddingSignalsSize,
         &kComponentAdsSize,
         &kIGCount,
->>>>>>> upstream-v3.10.0
 };
 
 template <>

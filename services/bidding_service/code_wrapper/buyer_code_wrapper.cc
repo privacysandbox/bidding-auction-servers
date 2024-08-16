@@ -21,12 +21,8 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "services/bidding_service/constants.h"
-<<<<<<< HEAD
-#include "src/logger/request_context_impl.h"
-=======
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/reporting_util.h"
->>>>>>> upstream-v3.10.0
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

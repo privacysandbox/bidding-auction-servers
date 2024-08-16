@@ -159,17 +159,10 @@ cc_library(
     deps = [
         ":error_categories",
         ":error_reporter",
-<<<<<<< HEAD
-        "//services/common/loggers:source_location_context",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
         "//services/common/loggers:request_log_context",
         "//services/common/loggers:source_location_context",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
@@ -208,10 +201,7 @@ cc_library(
         ":post_auction_signals",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -219,10 +209,6 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
@@ -277,19 +263,12 @@ cc_library(
     srcs = ["async_task_tracker.cc"],
     hdrs = ["async_task_tracker.h"],
     deps = [
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
->>>>>>> upstream-v3.10.0
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:source_location",
     ],
 )
@@ -328,19 +307,12 @@ cc_library(
         "binary_http_utils.h",
     ],
     deps = [
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
->>>>>>> upstream-v3.10.0
         "@com_github_google_quiche//quiche:binary_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -400,18 +372,11 @@ cc_library(
     ],
     deps = [
         "//services/common/encryption:mock_crypto_client_wrapper",
-<<<<<<< HEAD
-=======
         "//services/common/loggers:request_log_context",
->>>>>>> upstream-v3.10.0
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf",
-<<<<<<< HEAD
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
-=======
->>>>>>> upstream-v3.10.0
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -483,8 +448,6 @@ cc_library(
     visibility = ["//services:__subpackages__"],
     deps = ["@com_google_absl//absl/strings"],
 )
-<<<<<<< HEAD
-=======
 
 cc_library(
     name = "tcmalloc_utils",
@@ -547,4 +510,3 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
->>>>>>> upstream-v3.10.0

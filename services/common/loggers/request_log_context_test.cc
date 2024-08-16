@@ -13,27 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-<<<<<<<< HEAD:services/common/loggers/source_location_context.h
-
-#ifndef SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
-#define SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
-#include <utility>
-
-#include "src/util/status_macro/source_location.h"
-namespace privacy_sandbox::bidding_auction_servers::log {
-template <class T>
-struct ParamWithSourceLoc {
-  T mandatory_param;
-  server_common::SourceLocation location;
-  template <class U>
-  ParamWithSourceLoc(
-      U param, server_common::SourceLocation loc_in PS_LOC_CURRENT_DEFAULT_ARG)
-      : mandatory_param(std::forward<U>(param)), location(loc_in) {}
-};
-}  // namespace privacy_sandbox::bidding_auction_servers::log
-
-#endif  // SERVICES_COMMON_LOGGERS_SOURCE_LOCATION_CONTEXT_H_
-========
 
 #include "services/common/loggers/request_log_context.h"
 
@@ -46,4 +25,3 @@ TEST(RequestLogContext, Initialization) {
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers
->>>>>>>> upstream-v3.10.0:services/common/loggers/request_log_context_test.cc

@@ -618,8 +618,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
                   .number_value(),
               1.0);
   }
-<<<<<<< HEAD
-=======
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
@@ -694,7 +692,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     EXPECT_EQ(ad_with_bid.buyer_reporting_id(), test_buyer_reporting_id);
   }
->>>>>>> upstream-v3.10.0
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,
@@ -1176,12 +1173,7 @@ void GenerateBidCodeWrapperTestHelper(
           config_client, /* public_key_fetcher= */ nullptr);
 
   BiddingServiceRuntimeConfig runtime_config{
-<<<<<<< HEAD
-      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .enable_adtech_code_logging = enable_adtech_code_logging};
-=======
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
->>>>>>> upstream-v3.10.0
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), std::move(runtime_config),

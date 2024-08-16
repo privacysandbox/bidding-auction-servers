@@ -40,10 +40,7 @@
 #include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
-<<<<<<< HEAD
-=======
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
->>>>>>> upstream-v3.10.0
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -109,8 +106,6 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
     config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-<<<<<<< HEAD
-=======
     config_.SetFlagForTest("{}", SELLER_CLOUD_PLATFORMS_MAP);
     absl::SetFlag(&FLAGS_enable_chaffing, false);
   }
@@ -123,7 +118,6 @@ class SellerFrontEndServiceTest : public ::testing::Test {
             // Reporting Client.
             std::make_unique<MockAsyncReporter>(
                 std::make_unique<MockHttpFetcherAsync>())};
->>>>>>> upstream-v3.10.0
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
@@ -310,10 +304,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
       GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
   request.mutable_auction_config()->clear_buyer_list();
-<<<<<<< HEAD
-  // This is a valid seller currency and should cause no issues.
-  request.mutable_auction_config()->set_seller_currency("USD");
-=======
 
   request.mutable_auction_config()->set_seller_currency(kUsdIsoCode);
 
@@ -323,7 +313,6 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   request.mutable_auction_config()->mutable_per_buyer_config()->insert(
       {std::string(kSampleBuyer), per_buyer_config});
 
->>>>>>> upstream-v3.10.0
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
@@ -362,22 +351,13 @@ TYPED_TEST(SellerFrontEndServiceTest,
   auto [protected_auction_input, request, encryption_context] =
       GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_ANDROID,
                                           kSampleSellerDomain);
-<<<<<<< HEAD
-  // This is not a valid currency code and should fail validation.
-  request.mutable_auction_config()->set_seller_currency("dollars");
-=======
   request.mutable_auction_config()->set_seller_currency(
       kInvalidSellerCurrencyCode);
->>>>>>> upstream-v3.10.0
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-<<<<<<< HEAD
-  ASSERT_EQ(status.error_message(), kInvalidSellerCurrency);
-=======
   EXPECT_EQ(status.error_message(), kInvalidSellerCurrency);
->>>>>>> upstream-v3.10.0
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -413,21 +393,13 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                           kSampleSellerDomain);
   SelectAdRequest::AuctionConfig::PerBuyerConfig per_buyer_config;
   per_buyer_config.set_buyer_signals(R"JSON({"someKey":["some","value"]})JSON");
-<<<<<<< HEAD
-  // This is not a valid currency code and should fail validation.
-  per_buyer_config.set_buyer_currency("dollars");
-=======
   per_buyer_config.set_buyer_currency(kInvalidSellerCurrencyCode);
->>>>>>> upstream-v3.10.0
   request.mutable_auction_config()->mutable_per_buyer_config()->insert(
       {std::string(kSampleBuyer), per_buyer_config});
   SelectAdResponse response;
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-<<<<<<< HEAD
-  ASSERT_EQ(status.error_message(), kInvalidBuyerCurrency);
-=======
   EXPECT_EQ(status.error_message(), kInvalidBuyerCurrency);
 }
 
@@ -499,7 +471,6 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
   EXPECT_EQ(status.error_message(), kInvalidExpectedComponentSellerCurrency);
->>>>>>> upstream-v3.10.0
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
@@ -606,11 +577,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), encryption_context);
-<<<<<<< HEAD
-  ASSERT_TRUE(auction_result.is_chaff());
-=======
   EXPECT_TRUE(auction_result.is_chaff());
->>>>>>> upstream-v3.10.0
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
@@ -695,11 +662,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), encryption_context);
-<<<<<<< HEAD
-  ASSERT_TRUE(auction_result.is_chaff());
-=======
   EXPECT_TRUE(auction_result.is_chaff());
->>>>>>> upstream-v3.10.0
 }
 
 void SetupFailingBuyerClientMock(

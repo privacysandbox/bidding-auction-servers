@@ -34,11 +34,7 @@ inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-<<<<<<< HEAD
-inline constexpr int kNumAuctionResultKeys = 13;
-=======
 inline constexpr int kNumAuctionResultKeys = 14;
->>>>>>> upstream-v3.10.0
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // WinReportingUrls response.
@@ -88,10 +84,7 @@ inline constexpr char kAdRenderUrl[] = "adRenderURL";              // length: 11
 inline constexpr char kBidCurrency[] = "bidCurrency";              // length: 11
 inline constexpr char kBiddingGroups[] = "biddingGroups";          // length: 13
 inline constexpr char kTopLevelSeller[] = "topLevelSeller";        // length: 14
-<<<<<<< HEAD
-=======
 inline constexpr char kBuyerReportingId[] = "buyerReportingId";    // length: 16
->>>>>>> upstream-v3.10.0
 inline constexpr char kWinReportingUrls[] = "winReportingURLs";    // length: 16
 inline constexpr char kInterestGroupName[] = "interestGroupName";  // length: 17
 inline constexpr char kInterestGroupOwner[] =

@@ -17,18 +17,22 @@
 schemaVersion: 2.0.0
 
 fileExistenceTests:
-  - name: init_server_basic
-    path: /server/bin/init_server_basic
-    shouldExist: true
-    isExecutableBy: any
-
   - name: server
     path: /server/bin/server
     shouldExist: true
     isExecutableBy: any
 
+  - name: init_server_basic
+    path: /server/bin/init_server_basic
+    shouldExist: true
+    isExecutableBy: any
+
   - name: ca-certs
     path: /etc/ssl/certs/ca-certificates.crt
+    shouldExist: true
+
+  - name: egress_cddl_spec_v1.0.0
+    path: /egress_cddl_spec/1.0.0
     shouldExist: true
 
 licenseTests:

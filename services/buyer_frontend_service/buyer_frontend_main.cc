@@ -40,10 +40,7 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
-<<<<<<< HEAD
-=======
 #include "services/common/util/tcmalloc_utils.h"
->>>>>>> upstream-v3.10.0
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
@@ -178,23 +175,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   // Set verbosity
   server_common::log::PS_VLOG_IS_ON(
       0, config_client.GetIntParameter(PS_VERBOSITY));
-<<<<<<< HEAD
-
-  const bool enable_protected_app_signals =
-      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  const bool enable_protected_audience =
-      config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  if (!enable_protected_audience && !enable_protected_app_signals) {
-    ABSL_LOG(WARNING) << "Neither Protected Audience nor Protected App Signals "
-                         "support enabled";
-  }
-
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << enable_protected_app_signals;
-  PS_VLOG(1) << "Protected Audience support enabled on the service: "
-             << enable_protected_audience;
-  PS_VLOG(1) << "Successfully constructed the config client.\n";
-=======
 
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -210,7 +190,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
                << enable_protected_audience;
   PS_LOG(INFO) << "Successfully constructed the config client.\n";
->>>>>>> upstream-v3.10.0
   return config_client;
 }
 
