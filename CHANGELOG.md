@@ -2,6 +2,138 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.11.0 (2024-08-19)
+
+
+### Features
+
+* [IsolateBuyerAndSellerCodeExecution] Add wrapper for buyer's reportWin() udf
+* [PrivateAggregation] Add PrivateAggregateReportingResponse in Auction Service response
+* [PrivateAggregation] Append private aggregation wrapper to existing seller's wrapper
+* [reporting] Enable reportResult execution for topLevelSeller
+* Add `common.privateAggregation.createContribution` function for creating a contribution object.
+* Add `common.privateAggregation.ReservedEvent` object that holds reserved events string constants.
+* Add auction_service.privateAggregation.contributeToHistogram/OnEvent
+* Add bucket protos (Bucket128Bit, BucketOffset, SignalBucket, PrivateAggregationBucket) and add bucket and value fields to PrivateAggregateContribution
+* Add chaffing feature flags in SFE/BFE.
+* Add checksum capability to model loading
+* Add config flag enable_private_aggregate_reporting to bidding service's runtime_config
+* Add config flag enable_private_aggregation_generation to auction service's runtime_config
+* Add ConvertSignalValueToInt for calculating final value from contribution's base value, scale, and offset.
+* Add distribution of IGs related metrics
+* Add enable_private_aggregate_reporting for GetSellerWrappedCode and unit tests that uses GetSellerWrappedCode
+* Add event code and private aggregation objects for contributeToHistogramOnEvent, also added tests for event field
+* add EventMessage to log context
+* Add helper functions convertEventToInt and convertBaseValueToInt and tests for them for contributeToHistogramOnEvent for bidding service
+* Add Inference Metrics like count, duration, error and size to TF & Pytorch sidecars.
+* add option to switch DebugInfo in secure invoke encrypt
+* Add PrivateAggregateContribution proto with event field and enum EventType to the .proto file
+* Add proto messages for SignalValue, PrivateAggregationValue, and BaseValue enum.
+* Add request creation timestamp to ProtectedAuctionInput
+* Add request/response to ExecuteInternal on async clients
+* Add support for collecting metrics from the Roma callbacks.
+* Add tee-container-log-redirect option in terraform
+* Add wrapper and test files with method headers for contributeToHistogramOnEvent for bidding service
+* Added `isValidCustomEvent` validation function for common.privateAggregation
+* Added isValidValue validation function for common.privateAggregation
+* Added new files for JS private aggregation util for bidding service
+* Bash script for ASG and Cloud Map Custom HealthChecks
+* Bid Currency Support for Top-Level Seller in Server-Orchestrated Multi-Seller Auctions
+* Change js helper convertEventToInt to mapEventToEnum to return string corresponding to enum instead of int
+* configured public key urls are verified against an explicit allowlist
+* Consented request replace enable_adtech_code_logging in Bidding Server
+* contributeToHistogram with test for bidding service
+* contributeToHistogramOnEvent with tests, using common private aggregation helpers
+* Convert Private Aggregation wrapper functions from .js to C++ string
+* Create a periodic model fetcher library for inference
+* Create inference model store for model management
+* Create logging library for inference consented logs
+* Debug Reporting for Bid Currency
+* Declare inference JS error schema
+* Declare schema for model fetching metadata file
+* decrease aws/build_and_test duration by ~75%
+* Enable blob fetcher to only fetch blobs with given prefixes
+* Enable dynamic model loading for inference
+* Enable Service Mesh on AWS by Default
+* export non-privacy log through otel with safe system context
+* Feature Flag for TLS in Service Mesh
+* Force chaffing to enabled for prod builds on BFE + update common repo dep
+* Force the ML model reset with the probability of 0.1%
+* Forward per request consented debugging config to roma callback
+* Handle chaff and new request format on BFE
+* Implement AWS Cloud Un-Map
+* Implement new SFE <> BFE request format for chaffing
+* Implement the probabilistic model reset for PyTorch
+* Implement the probabilistic model reset for TensorFlow.
+* Instrument inference JS error for the PyTorch sidecar
+* Integrate with Trusted KV Server in Mesh
+* Load models using model metadata config for the periodic model fetcher
+* Load Test Flag for AWS
+* Log consented debugging information in inference sidecar
+* log EventMessage in servers
+* log udf log in EventMessage for non_prod debug_info
+* Make chaffing flag configurable via Terraform
+* move ig metric to bfe
+* Propagate inference error back to JS caller
+* Remove enableAdtechCodeLogging flag value
+* Remove Envoy Access Logging
+* Route consented inference requests to a consented model store
+* send chaff requests from SFE
+* Service Mesh in AWS
+* Support CPU isolation in the inference sidecar
+* Unit test for loading parsing fake contributions in Roma for bidding service
+* Unpad KV server responses
+* update code/cloud build to use tags
+* Update Demo Terraform Configs with values for integrating TEE KV Servers into Mesh
+* Upgrade AWS Provider for Terraform from v3.xx to v4.xx
+* Use gRPC for AWS Service Mesh Envoy HCs
+* Write a fake generateBid() script which calls privateAggregation.contributeToHistogramOnEvent(event, <fake contribution>)
+
+
+### Bug Fixes
+
+* [IsolateBuyerAndSellerCodeExecution] Add a new class for buyer's reporting code fetch and load
+* [IsolateBuyerAndSellerCodeExecution] Add a new code wrapper with only scoreAd and reportResult
+* [IsolateBuyerAndSellerCodeExecution] Add config flag to enable seller and buyer code isolation
+* [IsolateBuyerAndSellerCodeExecution] Modify seller_udf_manager to fetch and load buyer udfs
+* [IsolateBuyerAndSellerCodeExecution] Refactor the code fetch files.
+* Add BidCurrency SUT to Pre-Submit
+* add check back in default grpc client
+* Add createContribution inside contributeToHistogram/OnEvent and fixed typo with createContribution's value conditional statement.
+* Add DebugInfo pointer for debugging log into RomaRequestContext
+* Add generation_id to chaff requests
+* Adds domain equality validations to buyer reporting UDF URL
+* Align plaintext buyer request for basic SUT with encrypted version
+* Allow up to 15 buyers when chaffing enabled
+* chaffing bugs ([027d5bb]( )), closes [/github.com/abseil/abseil-cpp/blob/master/absl/container/internal/raw_hash_set.h#L1572]( )
+* Changed raw string delimiter JSCODE to JS_CODE for consistency
+* clean up log verbosity 3
+* Correct output_filter typo
+* do not try to impersonate service accounts if TEST_MODE=true
+* Don't set chaff size for non-chaff requests
+* Eliminate Terraform Error Message about empty Authority Field
+* Ensure instance id is set in logs on AWS when not using mesh.
+* Execute Callback for empty HTTP request vector
+* Fix bugs in reportWin URL validation in auction service
+* Fix release notes by adding a dedicated tag on main to generate the changelog
+* make num_chaff_requests not have a static lower bound
+* Make terraform for aws delete cloud maps without error
+* Redirect misleading log to /dev/null
+* scorecard.yaml version updates
+* shuffle request order (real and chaff) on SFE
+* truncate curl failure info for fail count metric
+* Update setup_2 and demo terraform configs to valid state
+* Update SUTs to include and test Experiment Group ID
+* Upgrades google terraform plugin to 5.31.0 to fix crash
+
+
+### Documentation
+
+* Add PAS input example to BFE
+* Document how to deployment B&A without inference
+* Update inference_sidecar README with model size limits
+* Updated expected format for INFERENCE_MODEL_BUCKET_PATHS in README
+
 ## 3.10.0 (2024-07-13)
 
 

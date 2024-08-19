@@ -31,6 +31,8 @@ inline constexpr absl::string_view ENABLE_BIDDING_SERVICE_BENCHMARK =
     "ENABLE_BIDDING_SERVICE_BENCHMARK";
 inline constexpr absl::string_view BUYER_CODE_FETCH_CONFIG =
     "BUYER_CODE_FETCH_CONFIG";
+inline constexpr absl::string_view EGRESS_SCHEMA_FETCH_CONFIG =
+    "EGRESS_SCHEMA_FETCH_CONFIG";
 inline constexpr absl::string_view JS_NUM_WORKERS = "JS_NUM_WORKERS";
 inline constexpr absl::string_view JS_WORKER_QUEUE_LEN = "JS_WORKER_QUEUE_LEN";
 inline constexpr absl::string_view TEE_AD_RETRIEVAL_KV_SERVER_ADDR =
@@ -54,12 +56,13 @@ inline constexpr absl::string_view
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
         "BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr int kNumRuntimeFlags = 15;
+inline constexpr int kNumRuntimeFlags = 16;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
     ENABLE_BIDDING_SERVICE_BENCHMARK,
     BUYER_CODE_FETCH_CONFIG,
+    EGRESS_SCHEMA_FETCH_CONFIG,
     JS_NUM_WORKERS,
     JS_WORKER_QUEUE_LEN,
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR,

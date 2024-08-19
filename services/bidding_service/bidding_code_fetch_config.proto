@@ -89,4 +89,9 @@ message BuyerCodeFetchConfig {
 
    blob_fetch.FetchMode fetch_mode = 20;
 
+   // Enables private aggregate reporting.
+   bool enable_private_aggregate_reporting = 21;
+
+
+
 }

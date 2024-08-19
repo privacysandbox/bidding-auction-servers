@@ -26,7 +26,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Maximum number of keys in the incoming ProtectedAudienceInput request.
-inline constexpr int kNumRequestRootKeys = 6;
+inline constexpr int kNumRequestRootKeys = 7;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // ConsentedDebugConfig request.
@@ -74,6 +74,7 @@ inline constexpr char kToken[] = "token";
 inline constexpr char kIsDebugResponse[] = "isDebugInfoInResponse";
 inline constexpr int kRelativeTimeIndex = 0;
 inline constexpr int kAdRenderIdIndex = 1;
+inline constexpr char kRequestTimestampMs[] = "requestTimestampMs";
 
 // Constants for the fields in response sent back to clients.
 inline constexpr char kBid[] = "bid";                              // length: 3
@@ -91,10 +92,10 @@ inline constexpr char kInterestGroupOwner[] =
     "interestGroupOwner";  // length: 18
 
 inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
-    kRequestRootKeys = {
-        kVersion,      kPublisher,      kInterestGroups,
-        kGenerationId, kDebugReporting, kConsentedDebugConfig,
-};
+    kRequestRootKeys = {kVersion,           kPublisher,
+                        kInterestGroups,    kGenerationId,
+                        kDebugReporting,    kConsentedDebugConfig,
+                        kRequestTimestampMs};
 inline constexpr int kNumInterestGroupKeys = 6;
 inline constexpr std::array<absl::string_view, kNumInterestGroupKeys>
     kInterestGroupKeys = {kName, kBiddingSignalsKeys, kUserBiddingSignals,

@@ -22,12 +22,15 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common:feature_flags",
+        "//services/common/clients:async_client",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",
+        "//services/common/loggers:request_log_context",
+        "//services/common/util:client_contexts",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/interface:key_fetcher_manager_interface",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
     ],
 )

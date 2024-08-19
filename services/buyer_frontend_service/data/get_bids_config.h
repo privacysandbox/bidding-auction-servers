@@ -31,6 +31,8 @@ struct GetBidsConfig {
   bool is_protected_app_signals_enabled;
   // Indicates whether Protected Audience support is enabled or not.
   bool is_protected_audience_enabled;
+  // Whether chaffing is enabled.
+  bool is_chaffing_enabled;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

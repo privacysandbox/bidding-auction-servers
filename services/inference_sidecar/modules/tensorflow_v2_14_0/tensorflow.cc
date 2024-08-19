@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <future>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,8 @@
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/tsl/platform/env.h"
 #include "tensorflow/tsl/platform/file_system.h"
+#include "utils/error.h"
+#include "utils/inference_metric_util.h"
 #include "utils/log.h"
 #include "utils/request_parser.h"
 
@@ -63,9 +66,9 @@ absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>
-PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
-                const InferenceRequest& inference_request) {
+absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
+    std::shared_ptr<tensorflow::SavedModelBundle> model,
+    const InferenceRequest& inference_request) {
   std::vector<std::pair<std::string, tensorflow::Tensor>> inputs;
   for (const auto& tensor : inference_request.inputs) {
     if (tensor.tensor_name.empty()) {
@@ -82,7 +85,7 @@ PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
   absl::string_view model_key = inference_request.model_path;
   const auto& signature_map = model->meta_graph_def.signature_def();
   if (signature_map.find("serving_default") == signature_map.end()) {
-    return absl::InvalidArgumentError(absl::StrCat(
+    return absl::InternalError(absl::StrCat(
         "The 'serving_default' signature was not found for model '",
         model_key));
   }
@@ -110,7 +113,7 @@ PredictPerModel(std::shared_ptr<tensorflow::SavedModelBundle> model,
     zipped_vector.push_back(TensorWithName(output_names[i], outputs[i]));
   }
 
-  return std::make_pair(std::string(model_key), zipped_vector);
+  return zipped_vector;
 }
 
 absl::StatusOr<std::unique_ptr<tensorflow::SavedModelBundle>>
@@ -198,44 +201,76 @@ class TensorflowModule final : public ModuleInterface {
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     const PredictRequest& request, const RequestContext& request_context) {
+  PredictResponse predict_response;
+  absl::Time start_inference_execution_time = absl::Now();
+  AddMetric(predict_response, "kInferenceRequestSize", request.ByteSizeLong());
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
-    return absl::InvalidArgumentError(parsed_requests.status().message());
+    INFERENCE_LOG(ERROR, request_context) << parsed_requests.status();
+    predict_response.set_output(CreateBatchErrorString(
+        Error{.error_type = Error::INPUT_PARSING,
+              .description = std::string(parsed_requests.status().message())}));
+    return predict_response;
   }
 
-  std::vector<std::future<
-      absl::StatusOr<std::pair<std::string, std::vector<TensorWithName>>>>>
-      tasks;
+  AddMetric(predict_response, "kInferenceRequestCount",
+            parsed_requests->size());
 
-  for (const InferenceRequest& inference_request : *parsed_requests) {
-    absl::string_view model_key = inference_request.model_path;
+  std::vector<TensorsOrError> batch_outputs(parsed_requests->size());
+  std::vector<std::future<absl::StatusOr<std::vector<TensorWithName>>>> tasks(
+      parsed_requests->size());
+  for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
+    const InferenceRequest& inference_request = (*parsed_requests)[task_id];
+    const std::string& model_path = inference_request.model_path;
     INFERENCE_LOG(INFO, request_context)
-        << "Received inference request to model: " << model_key;
-    PS_ASSIGN_OR_RETURN(std::shared_ptr<tensorflow::SavedModelBundle> model,
-                        store_.GetModel(model_key, request.is_consented()));
-    tasks.push_back(std::async(std::launch::async, &PredictPerModel, model,
-                               inference_request));
-  }
-
-  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
-      batch_outputs;
-  for (size_t task_id = 0; task_id < tasks.size(); ++task_id) {
-    auto result_status_or = tasks[task_id].get();
-    if (!result_status_or.ok()) {
-      const auto& model_key = (*parsed_requests)[task_id].model_path;
-      return absl::Status(result_status_or.status().code(),
-                          absl::StrCat("Error during inference for model '",
-                                       model_key, "', Task ID: ", task_id, ". ",
-                                       result_status_or.status().message()));
+        << "Received inference request to model: " << model_path;
+    absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>> model =
+        store_.GetModel(model_path, request.is_consented());
+    if (!model.ok()) {
+      INFERENCE_LOG(ERROR, request_context)
+          << "Fails to get model : " << model_path << model.status();
+      batch_outputs[task_id] = TensorsOrError{
+          .model_path = model_path,
+          .error = Error{.error_type = Error::MODEL_NOT_FOUND,
+                         .description = std::string(model.status().message())}};
+    } else {
+      tasks[task_id] = std::async(std::launch::async, &PredictPerModel, *model,
+                                  inference_request);
     }
-
-    batch_outputs.push_back(result_status_or.value());
   }
 
-  auto output_json = ConvertTensorsToJson(batch_outputs);
+  for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
+    if (!batch_outputs[task_id].error) {
+      absl::StatusOr<std::vector<TensorWithName>> tensors =
+          tasks[task_id].get();
+      const std::string& model_path = (*parsed_requests)[task_id].model_path;
+      if (!tensors.ok()) {
+        INFERENCE_LOG(ERROR, request_context)
+            << "Inference fails for model: " << model_path << tensors.status();
+        Error::ErrorType error_type =
+            tensors.status().code() == absl::StatusCode::kInvalidArgument
+                ? Error::INPUT_PARSING
+                : Error::MODEL_EXECUTION;
+        batch_outputs[task_id] = TensorsOrError{
+            .model_path = model_path,
+            .error =
+                Error{.error_type = error_type,
+                      .description = std::string(tensors.status().message())}};
+      } else {
+        batch_outputs[task_id] =
+            TensorsOrError{.model_path = model_path, .tensors = *tensors};
+      }
+    }
+  }
+
+  auto output_json = ConvertTensorsOrErrorToJson(batch_outputs);
   if (!output_json.ok()) {
-    return absl::InternalError("Error during output parsing to json");
+    INFERENCE_LOG(ERROR, request_context) << output_json.status();
+    predict_response.set_output(CreateBatchErrorString(
+        Error{.error_type = Error::OUTPUT_PARSING,
+              .description = "Error during output parsing to json."}));
+    return predict_response;
   }
 
   {
@@ -247,8 +282,13 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   }
   inference_notification_.Notify();
 
-  PredictResponse predict_response;
   predict_response.set_output(output_json.value());
+  int inference_execution_time_ms =
+      (absl::Now() - start_inference_execution_time) / absl::Milliseconds(1);
+  AddMetric(predict_response, "kInferenceRequestDuration",
+            inference_execution_time_ms);
+  AddMetric(predict_response, "kInferenceResponseSize",
+            predict_response.ByteSizeLong());
   return predict_response;
 }
 

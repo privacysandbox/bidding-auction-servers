@@ -17,6 +17,7 @@
 
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 
@@ -70,34 +71,53 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   HTTPRequest request = BuildBuyerKeyValueRequest(kv_server_base_address_,
                                                   metadata, std::move(keys));
 
   size_t request_size = 0;
-  for (std::string& header : request.headers) {
+  for (absl::string_view header : request.headers) {
     request_size += header.size();
   }
   request_size += request.url.size();
-  auto done_callback = [on_done = std::move(on_done), request_size](
+  EventMessage::KvSignal bid_signal = [&]() {
+    EventMessage::KvSignal signal;
+    if (!context.log.is_debug_response()) {
+      return signal;
+    }
+    signal.set_request(request.url);
+    for (absl::string_view header : request.headers) {
+      signal.add_request_header(header);
+    }
+    return signal;
+  }();
+  auto done_callback = [on_done = std::move(on_done), request_size,
+                        bid_signal = std::move(bid_signal), context](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
-      PS_VLOG(kKVLog) << "BuyerKeyValueAsyncHttpClient Success Response:\n"
-                      << resultStr.value();
+      PS_VLOG(kKVLog, context.log)
+          << "BuyerKeyValueAsyncHttpClient Success Response:\n"
+          << resultStr.value();
+      if (context.log.is_debug_response()) {
+        bid_signal.set_response(resultStr.value());
+        context.log.SetEventMessageField(std::move(bid_signal));
+      }
       size_t response_size = resultStr->size();
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
           std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
               {std::move(resultStr.value()), request_size, response_size}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
-      PS_VLOG(kNoisyWarn) << "BuyerKeyValueAsyncHttpClient Failure Response: "
-                          << resultStr.status();
+      PS_VLOG(kNoisyWarn, context.log)
+          << "BuyerKeyValueAsyncHttpClient Failure Response: "
+          << resultStr.status();
       std::move(on_done)(resultStr.status());
     }
   };
-  PS_VLOG(kKVLog) << "BTS Request Url:\n" << request.url << "\nHeaders:\n";
+  PS_VLOG(kKVLog, context.log) << "BTS Request Url:\n"
+                               << request.url << "\nHeaders:\n";
   for (const auto& header : request.headers) {
-    PS_VLOG(kKVLog) << header;
+    PS_VLOG(kKVLog, context.log) << header;
   }
   http_fetcher_async_->FetchUrl(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),
@@ -112,22 +132,21 @@ BuyerKeyValueAsyncHttpClient::BuyerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetBuyerValuesInput>();
-    auto status =
-        Execute(
-            std::move(request), {},
-            [](absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
-                   buyer_kv_output) mutable {
-              if (!buyer_kv_output.ok()) {
-                PS_LOG(ERROR)
-                    << "BuyerKeyValueAsyncHttpClient pre-warm returned status:"
-                    << buyer_kv_output.status().message();
-              }
-            },
-            // Longer timeout for first request
-            absl::Milliseconds(60000));
+    auto status = Execute(
+        std::move(request), {},
+        [](absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
+               buyer_kv_output) mutable {
+          if (!buyer_kv_output.ok()) {
+            PS_LOG(ERROR, SystemLogContext())
+                << "BuyerKeyValueAsyncHttpClient pre-warm returned status:"
+                << buyer_kv_output.status().message();
+          }
+        },
+        // Longer timeout for first request
+        absl::Milliseconds(60000));
     if (!status.ok()) {
-      PS_LOG(ERROR) << "BuyerKeyValueAsyncHttpClient pre-warming failed: "
-                    << status;
+      PS_LOG(ERROR, SystemLogContext())
+          << "BuyerKeyValueAsyncHttpClient pre-warming failed: " << status;
     }
   }
 }

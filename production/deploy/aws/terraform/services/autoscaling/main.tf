@@ -30,7 +30,6 @@ resource "aws_launch_template" "instance_launch_template" {
   enclave_options {
     enabled = true
   }
-
   user_data = base64encode(templatefile(
     "${path.module}/instance_init_script.tftpl",
     {
@@ -75,7 +74,7 @@ resource "aws_autoscaling_group" "instance_asg" {
   max_size                  = var.autoscaling_max_size
   min_size                  = var.autoscaling_min_size
   desired_capacity          = var.autoscaling_desired_capacity
-  health_check_grace_period = 20
+  health_check_grace_period = var.healthcheck_grace_period_sec
   health_check_type         = "ELB"
   vpc_zone_identifier       = var.autoscaling_subnet_ids
   target_group_arns         = var.target_group_arns

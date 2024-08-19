@@ -13,33 +13,30 @@ Experimental. A special build flag is required for Docker image creation.
 -   Platform: Currrently supports GCP. AWS support is in progress.
 -   ML Frameworks: TensorFlow and PyTorch are supported.
 
+### Models Supported by B&A Inference
+
+There are currently limitations on the size of the model supported by the inference sidecar. The
+maximum size of ML models supported is 2GB due to the protocol buffer size limit.
+
 ## Build the B&A Inference Docker Image
 
+As current setting in our build favor, we will by default include inference packaging.
+
 Use the `production/packaging/build_and_test_all_in_docker` script to build and push Docker images
-of B&A to your GCP image repo. Please make sure you use `inference_non_prod` build flag.
 
-Here's how to enable TensorFlow v2.14:
+of B&A to your GCP image repo, for AWS you will need to manually add to the terrorform config file
+after build. If you want to enforce rebuild all sidecar binary, please set
+`--rebuild-inference-sidecar`, otherwise script will skip build exist binary.
 
-```shell
-cd services/inference_sidecar/modules/tensorflow_v2_14_0
-./builders/tools/bazel-debian run //:generate_artifacts
+By default we will packaging all models(tensorflow_v2_14_0 and pytorch_v2_1_1) binary in the built
+image. You can congfig to target specific model by change .bazelrc files's `--//:inference_runtime`
+to "tensorflow"/"pytorch".
 
-export BAZEL_EXTRA_ARGS=--//:inference_runtime=tensorflow
-cd $(git rev-parse --show-toplevel)
-./production/packaging/build_and_test_all_in_docker \
-  --service-path bidding_service --instance gcp --platform gcp \
-  --no-precommit --no-tests \
-  --gcp-image-repo $REPO_PATH \
-  --build-flavor inference_non_prod --gcp-image-tag $IMAGE_TAG
-unset BAZEL_EXTRA_ARGS
-```
+To disable Inference packaging Build: change .bazelrc files's `--//:inference_build` to "no".
 
-Similarly, to enable PyTorch v2.1, you can navigate to the
-`services/inference_sidecar/modules/pytorch_v2_1_1` directory and execute the `generate_artifacts`
-tool. During the `build_and_test_all_in_docker` step, replace the BAZEL_EXTRA_ARGS environment
-variable with `--//:inference_runtime=pytorch`.
+## Cloud Deployment
 
-## Start the B&A servers in GCP
+### Start the B&A servers in GCP
 
 -   Create a GCS bucket and store ML models into it.
 -   The GCS bucket needs to give the service account associated with the GCE instance both storage
@@ -49,8 +46,55 @@ variable with `--//:inference_runtime=pytorch`.
     [deployment guide](https://github.com/privacysandbox/bidding-auction-servers/tree/main/production/deploy/gcp/terraform/environment/demo/README.md).
 -   In the B&A deployment terraform configuration, set runtime flags:
 
-    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar`.
+    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar_<module_name>` for GCP
+        platform. the suffix module name support currently are `pytorch_v2_1_1` and
+        `tensorflow_v2_14_0`.
     -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the GCS bucket that you have created. Note
+        that this _not_ a url. For example, the bucket name can be "test_models".
+    -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
+        bucket. There must be NO spaces between each comma separated model path. For example, within
+        the "test_models" bucket there are saved models "tensorflow/model1" and "tensorflow/model1".
+        To load these two models, this flag should be set to "tensorflow/model1,tensorflow/model2".
+    -   Set `INFERENCE_SIDECAR_RUNTIME_CONFIG` which has the following format:
+
+        ```javascript
+        {
+            "num_interop_threads": <integer_value>,
+            "num_intraop_threads": <integer_value>,
+            "module_name": <string_value>,
+            "cpuset": <an array of integer values>
+        }
+        ```
+
+        `module_name` flag is required and should be one of "test", "tensorflow_v2_14_0", or
+        "pytorch_v2_1_1". All other flags are optional.
+
+### Start the B&A servers in AWS
+
+-   Create a S3 bucket and store ML models into it.
+-   Grant Access to your new S3 Bucket to Bidding instance. Perfer to using terraform config:
+    example as:
+
+    ```javascript
+    resource "aws_iam_policy" "instance_policy" {
+       ...
+       statement {
+           actions = [
+               "s3:ListBucket",
+               "s3:GetBucketLocation",
+               "s3:GetObject",
+           ]
+       effect    = "Allow"
+       resources = ["arn:aws:s3:::<your-bucket-name>"]
+       }
+    }
+    ```
+
+-   In the B&A deployment terraform configuration, set runtime flags:
+
+    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/inference_sidecar_<module_name>` for AWS platform.
+        the suffix module name support currently are `pytorch_v2_1_1` and `tensorflow_v2_14_0`.
+    -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the S3 bucket that you have created. Note
         that this _not_ a url. For example, the bucket name can be "test_models".
     -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
         bucket. For example, within the "test_models" bucket there are saved models
@@ -70,7 +114,16 @@ variable with `--//:inference_runtime=pytorch`.
         `module_name` flag is required and should be one of "test", "tensorflow_v2_14_0", or
         "pytorch_v2_1_1". All other flags are optional.
 
-## Start the B&A servers locally for testing/debugging
+### Note on B&A deployment without inference
+
+-   In either GCP or AWS terraform config, inference is only enabled when
+    `INFERENCE_SIDECAR_BINARY_PATH` is set.
+-   When inference is not enabled, invocations of inference callbacks in UDF (e.g.,
+    `runInference()`) will fail the UDF execution.
+
+## Local Testing
+
+### Start the B&A servers locally for testing/debugging
 
 The servers run locally and the ML models are directly read from the local disk.
 
@@ -78,7 +131,9 @@ The servers run locally and the ML models are directly read from the local disk.
     `--inference_model_local_paths`, `--inference_sidecar_runtime_config`.
 -   Utilize services/inference_sidecar/common/tools/debug/start_inference script.
 
-## Trigger ML Inference
+## Inference API
+
+### Trigger ML inference in UDF
 
 To invoke ML inference within generateBid() or any other UDF:
 
@@ -127,7 +182,7 @@ function generateBid() {
 }
 ```
 
-## Inference API
+### JSON request
 
 A Batch Inference Request (called `request`in JSON API) is an array of single inference requests.
 Each single inference request contains an obligatory `model_path` string field (the same path you

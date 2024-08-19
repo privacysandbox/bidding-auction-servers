@@ -40,6 +40,7 @@
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/common/util/cancellation_wrapper.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -78,6 +79,7 @@ struct ScoringData {
 struct ComponentReportingDataInAuctionResult {
   std::string component_seller;
   WinReportingUrls win_reporting_urls;
+  std::string buyer_reporting_id;
 };
 
 // This is a gRPC reactor that serves a single ScoreAdsRequest.
@@ -90,8 +92,8 @@ class ScoreAdsReactor
           ScoreAdsResponse, ScoreAdsResponse::ScoreAdsRawResponse> {
  public:
   explicit ScoreAdsReactor(
-      CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
-      ScoreAdsResponse* response,
+      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      const ScoreAdsRequest* request, ScoreAdsResponse* response,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
@@ -165,13 +167,41 @@ class ScoreAdsReactor
 
   void DispatchReportingRequest(
       const ReportingDispatchRequestData& dispatch_request_data);
+  // [[deprecated("DEPRECATED for Protected Audience. Please use
+  // PerformReportingWithSellerAndBuyerCodeIsolation instead")]]
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
+  // Performs reportResult and reportWin udf execution with seller and buyer
+  // code isolation
+  void PerformReportingWithSellerAndBuyerCodeIsolation(
+      const ScoreAdsResponse::AdScore& winning_ad_score, absl::string_view id);
+
   // Dispatches request to reportResult() udf with seller and buyer udf
   // isolation.
+  // These global objects are expected to be set before
+  // DispatchReportResultRequest call:
+  // - buyer_reporting_dispatch_request_data_
+  // - post_auction_signals_
+  // - reporting_dispatch_request_config_
+  // - raw_response_
   void DispatchReportResultRequest(
+      const ScoreAdsResponse::AdScore& winning_ad_score);
+  // Dispatches request to reportResult() udf with seller and buyer udf
+  // isolation for component auctions.
+  // These global objects are expected to be set before
+  // DispatchReportResultRequest call:
+  // - buyer_reporting_dispatch_request_data_
+  // - post_auction_signals_
+  // - reporting_dispatch_request_config_
+  // - raw_response_
+  void DispatchReportResultRequestForComponentAuction(
+      const ScoreAdsResponse::AdScore& winning_ad_score);
+  // Dispatches request to reportResult() udf with seller and buyer udf
+  // isolation for top level auctions.
+  void DispatchReportResultRequestForTopLevelAuction(
       const ScoreAdsResponse::AdScore& winning_ad_score,
-      const std::shared_ptr<std::string>& auction_config);
+      absl::string_view dispatch_id);
+
   // Publishes metrics and Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);
 
@@ -182,9 +212,10 @@ class ScoreAdsReactor
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
   // Function called after reportResult udf execution.
-  void ReportResultCallback(
+  void CancellableReportResultCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
-
+  void ReportWinCallback(
+      const std::vector<absl::StatusOr<DispatchResponse>>& responses);
   // Creates and populates dispatch requests using AdWithBidMetadata objects
   // in the input proto for single seller and component auctions.
   void PopulateProtectedAudienceDispatchRequests(
@@ -228,6 +259,11 @@ class ScoreAdsReactor
                       ScoringData& scoring_data,
                       const std::string& dispatch_response_id);
 
+  CLASS_CANCELLATION_WRAPPER(ReportResultCallback, enable_cancellation_,
+                             context_, FinishWithStatus)
+
+  grpc::CallbackServerContext* context_;
+
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's
   // DispatchResponse with more data which is then passed into the final
@@ -267,7 +303,9 @@ class ScoreAdsReactor
   std::string seller_origin_;
   int max_allowed_size_debug_url_chars_;
   long max_allowed_size_all_debug_urls_chars_;
-
+  BuyerReportingDispatchRequestData buyer_reporting_dispatch_request_data_ = {
+      .log_context = log_context_};
+  rapidjson::Document seller_device_signals_;
   // Specifies whether this is a single seller or component auction.
   // Impacts the creation of scoreAd input params and
   // parsing of scoreAd output.

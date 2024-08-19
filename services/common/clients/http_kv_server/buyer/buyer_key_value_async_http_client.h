@@ -94,7 +94,8 @@ class BuyerKeyValueAsyncHttpClient
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout,
+      RequestContext context = NoOpContext()) const override;
 
  private:
   std::unique_ptr<HttpFetcherAsync> http_fetcher_async_;

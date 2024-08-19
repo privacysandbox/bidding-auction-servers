@@ -65,11 +65,13 @@ variable "target_group_arns" {
 variable "enclave_memory_mib" {
   description = "Amount of memory to allocate to the enclave."
   type        = number
+  default     = 1
 }
 
 variable "enclave_cpu_count" {
   description = "The number of vcpus to allocate to the enclave."
   type        = number
+  default     = 1
 }
 
 variable "service" {
@@ -92,41 +94,49 @@ variable "enclave_log_path" {
 variable "cloud_map_service_id" {
   description = "The ID of the service discovery service"
   type        = string
+  default     = ""
 }
 
 variable "region" {
   description = "AWS region in which services have been created"
   type        = string
+  default     = ""
 }
 
 variable "app_mesh_name" {
   description = "Name of the AWS App Mesh in which this service will communicate."
   type        = string
+  default     = ""
 }
 
 variable "virtual_node_name" {
   description = "Name of the App Mesh Virtual Node of which instance in this ASG will be a part."
   type        = string
+  default     = ""
 }
 
 variable "healthcheck_interval_sec" {
   description = "Amount of time between health check intervals in seconds."
   type        = number
+  default     = 1
 }
 
 variable "healthcheck_timeout_sec" {
   description = "Amount of time to wait for a health check response in seconds."
   type        = number
+  default     = 1
 }
 
 variable "healthcheck_healthy_threshold" {
   description = "Consecutive health check successes required to be considered healthy."
   type        = number
+  default     = 1
 }
 
 variable "healthcheck_unhealthy_threshold" {
   description = "Consecutive health check failures required to be considered unhealthy."
   type        = number
+  default     = 1
 }
 
 variable "healthcheck_grace_period_sec" {

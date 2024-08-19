@@ -50,7 +50,7 @@ absl::Status FakeBuyerKeyValueAsyncHttpClient::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   HTTPRequest request = BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
       kv_server_base_address_, metadata, std::move(keys));
   PS_VLOG(kKVLog) << "FakeBuyerKeyValueAsyncHttpClient Request: "

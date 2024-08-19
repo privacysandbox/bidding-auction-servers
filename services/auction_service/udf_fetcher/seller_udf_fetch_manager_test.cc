@@ -24,6 +24,7 @@
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/util/file_util.h"
 #include "src/core/interface/async_context.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
@@ -65,6 +66,7 @@ struct TestSellerUdfConfig {
 class SellerUdfFetchManagerTest : public testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     executor_ = std::make_unique<MockExecutor>();
     http_fetcher_ = std::make_unique<MockHttpFetcherAsync>();
     dispatcher_ = std::make_unique<MockV8Dispatcher>();
@@ -333,7 +335,8 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         EXPECT_EQ(blob_data,
                   GetSellerWrappedCode(
                       expected_seller_udf,
-                      udf_config.enable_report_result_url_generation()));
+                      udf_config.enable_report_result_url_generation(),
+                      udf_config.enable_private_aggregate_reporting()));
         return absl::OkStatus();
       });
 
@@ -419,7 +422,8 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         EXPECT_EQ(blob_data,
                   GetSellerWrappedCode(
                       expected_seller_udf,
-                      udf_config.enable_report_result_url_generation()));
+                      udf_config.enable_report_result_url_generation(),
+                      udf_config.enable_private_aggregate_reporting()));
         return absl::OkStatus();
       });
 

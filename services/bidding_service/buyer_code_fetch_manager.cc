@@ -24,11 +24,11 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-#include "services/common/code_fetch/periodic_bucket_fetcher.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/file_util.h"
 #include "src/concurrent/event_engine_executor.h"
-#include "src/logger/request_context_logger.h"
 #include "src/util/status_macro/status_macros.h"
 
 #include "buyer_code_fetch_manager.h"
@@ -48,7 +48,8 @@ using ::google::scp::core::errors::GetErrorMessage;
 
 BuyerCodeFetchManager::~BuyerCodeFetchManager() {
   if (absl::Status shutdown = End(); !shutdown.ok()) {
-    PS_LOG(ERROR) << "BuyerCodeFetchManager shutdown failed. " << shutdown;
+    PS_LOG(ERROR, SystemLogContext())
+        << "BuyerCodeFetchManager shutdown failed. " << shutdown;
   }
 }
 
@@ -90,7 +91,7 @@ absl::Status BuyerCodeFetchManager::InitializeLocalCodeFetch() {
   PS_ASSIGN_OR_RETURN(auto adtech_code_blob,
                       GetFileContent(udf_config_.bidding_js_path(),
                                      /*log_on_error=*/true));
-  adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, "");
+  adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, {});
   return dispatcher_.LoadSync(kProtectedAudienceGenerateBidBlobVersion,
                               adtech_code_blob);
 }
@@ -109,9 +110,12 @@ absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetch() {
 }
 
 absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetchForPA() {
-  auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
-    return GetBuyerWrappedCode(adtech_code_blobs[kJsBlobIndex], kUnusedWasmBlob,
-                               AuctionType::kProtectedAudience);
+  auto wrap_code = [this](const std::vector<std::string>& adtech_code_blobs) {
+    BuyerCodeWrapperConfig wrapper_config = {
+        .ad_tech_wasm = kUnusedWasmBlob,
+        .enable_private_aggregate_reporting =
+            udf_config_.enable_private_aggregate_reporting()};
+    return GetBuyerWrappedCode(adtech_code_blobs[kJsBlobIndex], wrapper_config);
   };
 
   PS_ASSIGN_OR_RETURN(
@@ -129,10 +133,13 @@ absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetchForPA() {
 absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetchForPAS() {
   auto wrap_bidding_code =
       [](const std::vector<std::string>& ad_tech_code_blobs) {
-        return GetBuyerWrappedCode(
-            ad_tech_code_blobs[kJsBlobIndex], kUnusedWasmBlob,
-            AuctionType::kProtectedAppSignals,
-            /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler);
+        BuyerCodeWrapperConfig wrapper_config = {
+            .ad_tech_wasm = kUnusedWasmBlob,
+            .auction_type = AuctionType::kProtectedAppSignals,
+            .auction_specific_setup = kEncodedProtectedAppSignalsHandler,
+        };
+        return GetBuyerWrappedCode(ad_tech_code_blobs[kJsBlobIndex],
+                                   wrapper_config);
       };
 
   auto wrap_ads_retrieval_code =
@@ -175,12 +182,14 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetch() {
 }
 
 absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPA() {
-  auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
-    return GetBuyerWrappedCode(adtech_code_blobs[kJsBlobIndex],
-                               adtech_code_blobs.size() == kMaxNumCodeBlobs
-                                   ? adtech_code_blobs[kWasmBlobIndex]
-                                   : kUnusedWasmBlob,
-                               AuctionType::kProtectedAudience);
+  auto wrap_code = [this](const std::vector<std::string>& adtech_code_blobs) {
+    const bool is_wasm_present = adtech_code_blobs.size() == kMaxNumCodeBlobs;
+    BuyerCodeWrapperConfig wrapper_config = {
+        .ad_tech_wasm = (is_wasm_present ? adtech_code_blobs[kWasmBlobIndex]
+                                         : kUnusedWasmBlob),
+        .enable_private_aggregate_reporting =
+            udf_config_.enable_private_aggregate_reporting()};
+    return GetBuyerWrappedCode(adtech_code_blobs[kJsBlobIndex], wrapper_config);
   };
 
   PS_ASSIGN_OR_RETURN(
@@ -199,13 +208,17 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPAS() {
       [](const std::vector<std::string>& ad_tech_code_blobs) {
         DCHECK_GE(ad_tech_code_blobs.size(), kMinNumCodeBlobs);
         DCHECK_LE(ad_tech_code_blobs.size(), kMaxNumCodeBlobs);
-        return GetBuyerWrappedCode(
-            ad_tech_code_blobs[kJsBlobIndex],
-            ad_tech_code_blobs.size() == kMaxNumCodeBlobs
-                ? ad_tech_code_blobs[kWasmBlobIndex]
-                : kUnusedWasmBlob,
-            AuctionType::kProtectedAppSignals,
-            /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler);
+        const bool is_wasm_present =
+            ad_tech_code_blobs.size() == kMaxNumCodeBlobs;
+        BuyerCodeWrapperConfig wrapper_config = {
+            .ad_tech_wasm =
+                (is_wasm_present ? ad_tech_code_blobs[kWasmBlobIndex]
+                                 : kUnusedWasmBlob),
+            .auction_type = AuctionType::kProtectedAppSignals,
+            .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
+
+        return GetBuyerWrappedCode(ad_tech_code_blobs[kJsBlobIndex],
+                                   wrapper_config);
       };
 
   auto wrap_ads_retrieval_code =
@@ -245,7 +258,7 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPAS() {
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<CodeFetcherInterface>>
+absl::StatusOr<std::unique_ptr<FetcherInterface>>
 BuyerCodeFetchManager::StartUrlFetch(
     const std::string& js_url, const std::string& wasm_helper_url,
     const std::string& roma_version, absl::string_view script_logging_name,
@@ -270,7 +283,7 @@ BuyerCodeFetchManager::StartUrlFetch(
   return code_fetcher;
 }
 
-absl::StatusOr<std::unique_ptr<CodeFetcherInterface>>
+absl::StatusOr<std::unique_ptr<FetcherInterface>>
 BuyerCodeFetchManager::StartBucketFetch(
     const std::string& bucket_name, const std::string& default_version,
     absl::string_view script_logging_name, absl::Duration url_fetch_period_ms,
@@ -284,7 +297,7 @@ BuyerCodeFetchManager::StartBucketFetch(
         absl::StrCat(kEmptyBucketDefault, script_logging_name));
   }
 
-  auto bucket_fetcher = std::make_unique<PeriodicBucketFetcher>(
+  auto bucket_fetcher = std::make_unique<PeriodicBucketCodeFetcher>(
       bucket_name, url_fetch_period_ms, &dispatcher_, &executor_,
       std::move(wrap_code), blob_storage_client_.get());
   PS_RETURN_IF_ERROR(bucket_fetcher->Start())

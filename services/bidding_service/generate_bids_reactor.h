@@ -53,8 +53,8 @@ class GenerateBidsReactor
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
   explicit GenerateBidsReactor(
-      CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
-      GenerateBidsResponse* response,
+      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      const GenerateBidsRequest* request, GenerateBidsResponse* response,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
@@ -82,6 +82,8 @@ class GenerateBidsReactor
   // Encrypts the response before the GRPC call is finished with the provided
   // status.
   void EncryptResponseAndFinish(grpc::Status status);
+
+  grpc::CallbackServerContext* context_;
 
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_;
 

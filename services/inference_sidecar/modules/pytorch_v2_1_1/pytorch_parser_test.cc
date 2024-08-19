@@ -248,5 +248,25 @@ TEST(PyTorchModuleTest, ConvertBatchOutputsToJsonTest_2Models) {
   EXPECT_EQ(result.value(), expected_json);
 }
 
+TEST(PyTorchModuleTest, TestConvertBatchOutput_PartialResult) {
+  PerModelOutput output1;
+  output1.model_path = "/path/to/model/1";
+  torch::IValue tensor_ivalue1 = torch::tensor({1, 2, 3});
+  output1.inference_output = tensor_ivalue1;
+
+  PerModelOutput output2;
+  output2.model_path = "/path/to/model/2";
+  output2.error = Error{.error_type = Error::MODEL_NOT_FOUND,
+                        .description = "Model not found."};
+
+  std::vector<PerModelOutput> batch_outputs = {output1, output2};
+
+  absl::StatusOr<std::string> result = ConvertBatchOutputsToJson(batch_outputs);
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(
+      result.value(),
+      R"({"response":[{"model_path":"/path/to/model/1","tensors":[{"tensor_shape":[3],"data_type":"INT64","tensor_content":[1,2,3]}]},{"model_path":"/path/to/model/2","error":{"error_type":"MODEL_NOT_FOUND","description":"Model not found."}}]})");
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

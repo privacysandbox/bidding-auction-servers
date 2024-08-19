@@ -27,7 +27,7 @@
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/code_fetch/code_fetcher_interface.h"
+#include "services/common/data_fetch/fetcher_interface.h"
 #include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -40,7 +40,7 @@ inline constexpr absl::string_view kUdfRequiredResponseHeader =
 // This class manages:
 // -Periodic fetch of the reportWin() udf for all buyers
 // -Loading of the fetched blobs into Roma.
-class BuyerReportingUdfFetchManager : public CodeFetcherInterface {
+class BuyerReportingUdfFetchManager : public FetcherInterface {
  public:
   explicit BuyerReportingUdfFetchManager(
       const auction_service::SellerCodeFetchConfig* config,

@@ -15,14 +15,18 @@
 #ifndef SERVICES_AUCTION_SERVICE_INTEGRATION_TEST_UTIL_H_
 #define SERVICES_AUCTION_SERVICE_INTEGRATION_TEST_UTIL_H_
 
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
+#include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr absl::string_view kTestSeller = "http://seller.com";
+constexpr absl::string_view kTestComponentSeller = "http://componentseller.com";
 constexpr absl::string_view kTestInterestGroupName = "testInterestGroupName";
 constexpr double kTestAdCost = 2.0;
 constexpr long kTestRecency = 3;
@@ -30,6 +34,56 @@ constexpr int kTestModelingSignals = 4;
 constexpr int kTestJoinCount = 5;
 constexpr absl::string_view kTestBuyerSignals = R"([1,"test",[2]])";
 constexpr absl::string_view kTestAuctionSignals = R"([[3,"test",[4]]])";
+constexpr inline char kExpectedComponentReportResultUrl[] =
+    "http://"
+    "test.com&bid=1&bidCurrency=EUR&highestScoringOtherBid=0&"
+    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
+    "com&interestGroupOwner=barStandardAds.com&topLevelSeller=topLevelSeller&"
+    "modifiedBid=2";
+constexpr inline char kTestGenerationId[] = "generationId";
+constexpr inline char kExpectedComponentReportWinUrl[] =
+    "http://test.com?seller=http://"
+    "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
+    "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
+    "auctionSignals=3,test,4&desirability="
+    "undefined&topLevelSeller=topLevelSeller&modifiedBid=undefined";
+constexpr inline char kTestInteractionEvent[] = "clickEvent";
+constexpr inline char kTestInteractionReportingUrl[] = "http://click.com";
+constexpr char kTestIgOwner[] = "barStandardAds.com";
+TestComponentAuctionResultData GenerateTestComponentAuctionResultData();
+
+struct LocalAuctionStartResult {
+  int port;
+  std::unique_ptr<grpc::Server> server;
+
+  // Shutdown the server when the test is done.
+  ~LocalAuctionStartResult() {
+    if (server) {
+      server->Shutdown();
+    }
+  }
+};
+
+inline LocalAuctionStartResult StartLocalAuction(
+    AuctionService* auction_service) {
+  grpc::ServerBuilder builder;
+  int port;
+  builder.AddListeningPort("[::]:0",
+                           grpc::experimental::LocalServerCredentials(
+                               grpc_local_connect_type::LOCAL_TCP),
+                           &port);
+  builder.RegisterService(auction_service);
+  std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
+  return {port, std::move(server)};
+}
+
+inline std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
+  std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
+      absl::StrFormat("localhost:%d", port),
+      grpc::experimental::LocalCredentials(grpc_local_connect_type::LOCAL_TCP));
+  return Auction::NewStub(channel);
+}
 
 struct TestBuyerReportingSignals {
   absl::string_view seller = kTestSeller;
@@ -47,10 +101,10 @@ struct TestScoreAdsRequestConfig {
   bool enable_debug_reporting = false;
   int desired_ad_count = 90;
   std::string top_level_seller = "";
-  std::string component_level_seller = "";
   bool is_consented = false;
   std::optional<std::string> buyer_reporting_id;
   std::string interest_group_owner = "";
+  TestComponentAuctionResultData component_auction_data;
 };
 
 // This function simulates a E2E successful call to ScoreAds in the
@@ -63,6 +117,7 @@ struct TestScoreAdsRequestConfig {
 void LoadAndRunScoreAdsForPA(
     const AuctionServiceRuntimeConfig& runtime_config,
     const TestScoreAdsRequestConfig& test_score_ads_request_config,
+    absl::string_view buyer_udf, absl::string_view seller_udf,
     ScoreAdsResponse& response);
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -18,16 +18,37 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 package(default_visibility = ["//:__subpackages__"])
 
 cc_library(
+    name = "blob_fetcher_base",
+    hdrs = ["blob_fetcher_base.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+    ],
+)
+
+cc_library(
+    name = "blob_fetcher_mock",
+    testonly = 1,
+    hdrs = ["blob_fetcher_mock.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":blob_fetcher_base",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "blob_fetcher",
     srcs = ["blob_fetcher.cc"],
     hdrs = ["blob_fetcher.h"],
     deps = [
+        ":blob_fetcher_base",
+        "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
         "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
@@ -42,6 +63,7 @@ cc_test(
     deps = [
         ":blob_fetcher",
         "//services/common/test:mocks",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

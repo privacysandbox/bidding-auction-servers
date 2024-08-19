@@ -109,7 +109,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                   .compression = config_client_.GetBooleanParameter(
                       ENABLE_BUYER_COMPRESSION),
                   .secure_client =
-                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS)});
+                      config_client_.GetBooleanParameter(BUYER_EGRESS_TLS),
+                  .chaffing_enabled =
+                      config_client_.GetBooleanParameter(ENABLE_CHAFFING)});
         }()),
         clients_{
             *scoring_signals_async_provider_,

@@ -21,6 +21,7 @@
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -44,7 +45,8 @@ std::unique_ptr<kv_server::v2::KeyValueService::Stub> CreateStub(
 class KVAsyncGrpcTest : public ::testing::Test {
  public:
   void SetUp() override {
-    config_client_.SetFlagForTest(kTrue, TEST_MODE);
+    CommonTestInit();
+    config_client_.SetOverride(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client_, /* public_key_fetcher=*/nullptr);
   }
@@ -68,10 +70,11 @@ TEST_F(KVAsyncGrpcTest, CallsServerWithRequest) {
   TestClient class_under_test(key_fetcher_manager_.get(),
                               CreateStub(fake_service_thread->GetServerAddr()));
   absl::Notification notification;
+  grpc::ClientContext context;
 
   RawRequest raw_request;
   absl::Status status = class_under_test.ExecuteInternal(
-      std::make_unique<RawRequest>(raw_request), {},
+      std::make_unique<RawRequest>(raw_request), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
@@ -103,10 +106,11 @@ TEST_F(KVAsyncGrpcTest, CallsServerWithMetadata) {
   TestClient class_under_test(key_fetcher_manager_.get(),
                               CreateStub(fake_service_thread->GetServerAddr()));
   absl::Notification notification;
+  grpc::ClientContext context;
 
   RawRequest raw_request;
   absl::Status status = class_under_test.ExecuteInternal(
-      std::make_unique<RawRequest>(raw_request), sent_metadata,
+      std::make_unique<RawRequest>(raw_request), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
@@ -135,10 +139,11 @@ TEST_F(KVAsyncGrpcTest, PassesStatusToCallback) {
   TestClient class_under_test(key_fetcher_manager_.get(),
                               CreateStub(fake_service_thread->GetServerAddr()));
   absl::Notification notification;
+  grpc::ClientContext context;
 
   RawRequest raw_request;
   absl::Status status = class_under_test.ExecuteInternal(
-      std::make_unique<RawRequest>(raw_request), {},
+      std::make_unique<RawRequest>(raw_request), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {

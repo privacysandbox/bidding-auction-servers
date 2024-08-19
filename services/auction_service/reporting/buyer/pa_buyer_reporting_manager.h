@@ -26,13 +26,26 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+inline constexpr int kPAReportWinArgSize = 6;
+enum class PAReportWinArgs : int {
+  kAuctionConfig,
+  kPerBuyerSignals,
+  kSignalsForWinner,
+  kBuyerReportingSignals,
+  kDirectFromSellerSignals,
+  kEnableLogging
+};
+
+inline constexpr int PAReportWinArgIndex(PAReportWinArgs arg) {
+  return static_cast<std::underlying_type_t<PAReportWinArgs>>(arg);
+}
+
 // Generates the DispatchRequest and invokes reportWin() udf with
 // report_win_callback function for Protected Audience auctions
 absl::Status PerformPAReportWin(
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const BuyerReportingMetadata& buyer_reporting_metadata,
-    const std::string& seller_signals,
-    const rapidjson::Document& seller_device_signals,
+    const BuyerReportingDispatchRequestData& request_data,
+    rapidjson::Document& seller_device_signals,
     absl::AnyInvocable<
         void(const std::vector<absl::StatusOr<DispatchResponse>>&)>
         report_win_callback,

@@ -12,19 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@google_privacysandbox_servers_common//third_party:container_deps.bzl", common_container_deps = "container_deps")
 load("@io_bazel_rules_docker//container:container.bzl", "container_pull")
+load("@rules_oci//oci:pull.bzl", "oci_pull")
 
 def container_deps():
-    images = {
-        "aws-lambda-python": {
-            "arch_hashes": {
-                # 3.9.2022.09.27.12
-                "amd64": "c5d5475944755926a3caa6aac4486632f5fed11d531e6437b42dd48718725f29",
-                "arm64": "d4d6d56eae30e4f74c6aa617043e2018142b2c4aafa02468653799c891bf86cf",
-            },
-            "registry": "public.ecr.aws",
-            "repository": "lambda/python",
-        },
+    common_container_deps()
+
+    # GCP SFE still needs the docker images due to compatibility issues with container_flatten rule.
+    docker_images = {
         "envoy-distroless": {
             "arch_hashes": {
                 # v1.23.1
@@ -43,19 +39,33 @@ def container_deps():
             "registry": "gcr.io",
             "repository": "distroless/cc-debian11",
         },
-        "runtime-debian-slim": {
+    }
+
+    images = {
+        "aws-lambda-python": {
             "arch_hashes": {
-                # stable-20221004-slim
-                "amd64": "a4912461baca94ca557af4e779857867a25e0215d157d2dc04f148811e7877f8",
-                "arm64": "af9a018b749427a53fded449bd1fbb2cbdc7077d8922b7ebb7bd6478ed40d8e7",
+                # 3.9.2022.09.27.12
+                "amd64": "c5d5475944755926a3caa6aac4486632f5fed11d531e6437b42dd48718725f29",
+                "arm64": "d4d6d56eae30e4f74c6aa617043e2018142b2c4aafa02468653799c891bf86cf",
             },
-            "registry": "docker.io",
-            "repository": "library/debian",
+            "registry": "public.ecr.aws",
+            "repository": "lambda/python",
         },
     }
 
     [
         container_pull(
+            name = img_name + "-" + arch,
+            digest = "sha256:" + hash,
+            registry = image["registry"],
+            repository = image["repository"],
+        )
+        for img_name, image in docker_images.items()
+        for arch, hash in image["arch_hashes"].items()
+    ]
+
+    [
+        oci_pull(
             name = img_name + "-" + arch,
             digest = "sha256:" + hash,
             registry = image["registry"],

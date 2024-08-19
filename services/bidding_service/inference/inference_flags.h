@@ -25,6 +25,8 @@ ABSL_DECLARE_FLAG(std::optional<std::string>, inference_sidecar_binary_path);
 ABSL_DECLARE_FLAG(std::optional<std::string>, inference_model_local_paths);
 ABSL_DECLARE_FLAG(std::optional<std::string>, inference_model_bucket_name);
 ABSL_DECLARE_FLAG(std::optional<std::string>, inference_model_bucket_paths);
+ABSL_DECLARE_FLAG(std::optional<std::string>, inference_model_config_path);
+ABSL_DECLARE_FLAG(std::optional<std::int64_t>, inference_model_fetch_period_ms);
 ABSL_DECLARE_FLAG(std::optional<std::string>, inference_sidecar_runtime_config);
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -35,11 +37,16 @@ inline constexpr char INFERENCE_MODEL_BUCKET_NAME[] =
     "INFERENCE_MODEL_BUCKET_NAME";
 inline constexpr char INFERENCE_MODEL_BUCKET_PATHS[] =
     "INFERENCE_MODEL_BUCKET_PATHS";
+inline constexpr char INFERENCE_MODEL_CONFIG_PATH[] =
+    "INFERENCE_MODEL_CONFIG_PATH";
+inline constexpr char INFERENCE_MODEL_FETCH_PERIOD_MS[] =
+    "INFERENCE_MODEL_FETCH_PERIOD_MS";
 inline constexpr char INFERENCE_SIDECAR_RUNTIME_CONFIG[] =
     "INFERENCE_SIDECAR_RUNTIME_CONFIG";
 inline constexpr absl::string_view kInferenceFlags[] = {
-    INFERENCE_SIDECAR_BINARY_PATH, INFERENCE_MODEL_BUCKET_NAME,
-    INFERENCE_MODEL_BUCKET_PATHS, INFERENCE_SIDECAR_RUNTIME_CONFIG};
+    INFERENCE_SIDECAR_BINARY_PATH,   INFERENCE_MODEL_BUCKET_NAME,
+    INFERENCE_MODEL_BUCKET_PATHS,    INFERENCE_MODEL_CONFIG_PATH,
+    INFERENCE_MODEL_FETCH_PERIOD_MS, INFERENCE_SIDECAR_RUNTIME_CONFIG};
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

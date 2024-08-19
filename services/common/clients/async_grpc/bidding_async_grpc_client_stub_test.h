@@ -35,6 +35,7 @@
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -60,7 +61,10 @@ struct AsyncGrpcClientTypeDefinitions {
 template <class AsyncGrpcClientType>
 class AsyncGrpcClientStubTest : public ::testing::Test {
  protected:
-  void SetUp() override { config_client_.SetFlagForTest(kTrue, TEST_MODE); }
+  void SetUp() override {
+    CommonTestInit();
+    config_client_.SetOverride(kTrue, TEST_MODE);
+  }
 
   TrustedServersConfigClient config_client_{{}};
 };
@@ -154,9 +158,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
+  grpc::ClientContext context;
 
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
@@ -210,8 +215,9 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::make_unique<RawRequest>(), sent_metadata,
+      std::make_unique<RawRequest>(), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
@@ -261,9 +267,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
+  grpc::ClientContext context;
 
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
@@ -321,8 +328,9 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
                                                  client_config.secure_client));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); },
@@ -371,9 +379,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
                               client_config, stub.get());
   absl::Notification notification;
   std::unique_ptr<Response> output;
+  grpc::ClientContext context;
 
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification, &expected_output](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
@@ -421,9 +430,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
                               client_config, stub.get());
   absl::Notification notification;
   std::unique_ptr<Response> output;
+  grpc::ClientContext context;
 
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
@@ -472,9 +482,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
                               client_config, stub.get());
   absl::Notification notification;
   std::unique_ptr<Response> output;
+  grpc::ClientContext context;
 
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {

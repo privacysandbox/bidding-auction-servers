@@ -94,6 +94,7 @@ cc_library(
         "@inference_common//model:model_store",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:inference_metric_util",
         "@inference_common//utils:log",
         "@inference_common//utils:request_parser",
         "@pytorch_v2_1_1//:torch",
@@ -157,6 +158,8 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
+        "@inference_common//utils:inference_metric_util",
+        "@inference_common//utils:test_util",
     ],
 )
 
@@ -171,6 +174,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:error",
         "@inference_common//utils:request_parser",
         "@pytorch_v2_1_1//:torch",
     ],
@@ -188,6 +192,7 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:error",
     ],
 )
 

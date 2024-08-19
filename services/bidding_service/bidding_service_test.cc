@@ -23,7 +23,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
+#include "services/bidding_service/cddl_spec_cache.h"
 #include "services/bidding_service/constants.h"
+#include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/generate_bids_reactor.h"
 #include "services/bidding_service/generate_bids_reactor_test_utils.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
@@ -33,6 +35,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/service_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -47,7 +50,10 @@ using ::testing::NiceMock;
 
 class BiddingServiceTest : public ::testing::Test {
  protected:
-  void SetUp() override { config_.SetFlagForTest(kTrue, TEST_MODE); }
+  void SetUp() override {
+    CommonTestInit();
+    config_.SetOverride(kTrue, TEST_MODE);
+  }
 
   MockCodeDispatchClient code_dispatch_client_;
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_ =
@@ -71,6 +77,7 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
       std::make_unique<NiceMock<MockCryptoClientWrapper>>();
   BiddingService service(
       [this, &init_pending](
+          grpc::CallbackServerContext* context,
           const GenerateBidsRequest* request, GenerateBidsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
@@ -78,7 +85,7 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
         std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
             std::make_unique<BiddingNoOpLogger>();
         auto mock = std::make_unique<MockGenerateBidsReactor>(
-            code_dispatch_client_, request, response, "",
+            context, code_dispatch_client_, request, response, "",
             std::move(benchmarkingLogger), key_fetcher_manager, crypto_client,
             runtime_config);
         EXPECT_CALL(*mock, Execute).Times(1);
@@ -87,19 +94,22 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
       },
       CreateKeyFetcherManager(config_, /*public_key_fetcher=*/nullptr),
       std::move(crypto_client), runtime_config_,
-      [this](const grpc::CallbackServerContext* context,
+      [this](grpc::CallbackServerContext* context,
              const GenerateProtectedAppSignalsBidsRequest* request,
              const BiddingServiceRuntimeConfig& runtime_config,
              GenerateProtectedAppSignalsBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client,
              KVAsyncClient* ad_retrieval_async_client,
-             KVAsyncClient* kv_async_client) {
+             KVAsyncClient* kv_async_client,
+             EgressSchemaCache* egress_schema_cache,
+             EgressSchemaCache* limited_egress_schema_cache) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
                 context, code_dispatch_client_, runtime_config, request,
                 response, key_fetcher_manager, crypto_client,
-                ad_retrieval_async_client, kv_async_client);
+                ad_retrieval_async_client, kv_async_client, egress_schema_cache,
+                limited_egress_schema_cache);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
       });
@@ -117,12 +127,13 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
   });
   BiddingService bidding_service(
       [this, &init_pending](
+          grpc::CallbackServerContext* context,
           const GenerateBidsRequest* request, GenerateBidsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
           const BiddingServiceRuntimeConfig& runtime_config) {
         auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-            code_dispatch_client_, request, response,
+            context, code_dispatch_client_, request, response,
             std::move(benchmarking_logger_), key_fetcher_manager, crypto_client,
             runtime_config);
         init_pending.DecrementCount();
@@ -130,19 +141,22 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
       },
       CreateKeyFetcherManager(config_, /*public_key_fetcher=*/nullptr),
       std::move(crypto_client_), runtime_config_,
-      [this](const grpc::CallbackServerContext* context,
+      [this](grpc::CallbackServerContext* context,
              const GenerateProtectedAppSignalsBidsRequest* request,
              const BiddingServiceRuntimeConfig& runtime_config,
              GenerateProtectedAppSignalsBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client,
              KVAsyncClient* ad_retrieval_async_client,
-             KVAsyncClient* kv_async_client) {
+             KVAsyncClient* kv_async_client,
+             EgressSchemaCache* egress_schema_cache,
+             EgressSchemaCache* limited_egress_schema_cache) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
                 context, code_dispatch_client_, runtime_config, request,
                 response, key_fetcher_manager, crypto_client,
-                ad_retrieval_async_client, kv_async_client);
+                ad_retrieval_async_client, kv_async_client, egress_schema_cache,
+                limited_egress_schema_cache);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
       });
@@ -160,8 +174,8 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
 class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
  protected:
   void SetUp() override {
-    config_.SetFlagForTest(kTrue, TEST_MODE);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, TEST_MODE);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     runtime_config_ = {.is_protected_app_signals_enabled = true};
     SetupMockCryptoClientWrapper(*crypto_client_);
     server_common::GrpcInit gprc_init;
@@ -169,39 +183,56 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
 
   BiddingService CreateBiddingService() {
     return BiddingService(
-        [this](const GenerateBidsRequest* request,
+        [this](grpc::CallbackServerContext* context,
+               const GenerateBidsRequest* request,
                GenerateBidsResponse* response,
                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                CryptoClientWrapperInterface* crypto_client,
                const BiddingServiceRuntimeConfig& runtime_config) {
           auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-              code_dispatch_client_, request, response,
+              context, code_dispatch_client_, request, response,
               std::move(benchmarking_logger_), key_fetcher_manager,
               crypto_client, runtime_config);
           return generate_bids_reactor.release();
         },
         CreateKeyFetcherManager(config_, /*public_key_fetcher=*/nullptr),
         std::move(crypto_client_), runtime_config_,
-        [this](const grpc::CallbackServerContext* context,
+        [this](grpc::CallbackServerContext* context,
                const GenerateProtectedAppSignalsBidsRequest* request,
                const BiddingServiceRuntimeConfig& runtime_config,
                GenerateProtectedAppSignalsBidsResponse* response,
                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                CryptoClientWrapperInterface* crypto_client,
                KVAsyncClient* ad_retrieval_async_client,
-               KVAsyncClient* kv_async_client) {
+               KVAsyncClient* kv_async_client,
+               EgressSchemaCache* egress_schema_cache,
+               EgressSchemaCache* limited_egress_schema_cache) {
           auto reactor =
               std::make_unique<ProtectedAppSignalsGenerateBidsReactor>(
                   context, code_dispatch_client_, runtime_config, request,
                   response, key_fetcher_manager, crypto_client,
-                  ad_retrieval_async_client, kv_async_client);
+                  ad_retrieval_async_client, kv_async_client,
+                  egress_schema_cache, limited_egress_schema_cache);
           return reactor.release();
         },
-        std::move(ad_retrieval_client_));
+        std::move(ad_retrieval_client_),
+        /*kv_async_client=*/nullptr, std::move(egress_schema_cache_),
+        std::move(limited_egress_schema_cache_));
+  }
+
+  std::unique_ptr<EgressSchemaCacheMock> CreateEgressSchemaCacheMock() {
+    auto cddl_spec_cache = std::make_unique<CddlSpecCache>(
+        "services/bidding_service/egress_cddl_spec/");
+    CHECK_OK(cddl_spec_cache->Init());
+    return std::make_unique<EgressSchemaCacheMock>(std::move(cddl_spec_cache));
   }
 
   std::unique_ptr<KVAsyncClientMock> ad_retrieval_client_ =
       std::make_unique<KVAsyncClientMock>();
+  std::unique_ptr<EgressSchemaCacheMock> egress_schema_cache_ =
+      CreateEgressSchemaCacheMock();
+  std::unique_ptr<EgressSchemaCacheMock> limited_egress_schema_cache_ =
+      CreateEgressSchemaCacheMock();
   int num_roma_requests_ = 0;
 };
 
@@ -274,7 +305,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
       });
   EXPECT_CALL(*ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>

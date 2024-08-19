@@ -39,6 +39,7 @@ export SERVER_START_CMD=$(cat << END
 --get_bid_rpc_timeout_ms=60000 --key_value_signals_fetch_rpc_timeout_ms 60000 \
 --create_new_event_engine="false" \
 --test_mode="true" \
+--enable_chaffing="false" \
 --telemetry_config="mode: EXPERIMENT" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \

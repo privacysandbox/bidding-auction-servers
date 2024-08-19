@@ -84,10 +84,10 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-    absl::SetFlag(&FLAGS_enable_chaffing, false);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING);
   }
 
   TrustedServersConfigClient config_ = CreateConfig();
@@ -457,14 +457,14 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-    absl::SetFlag(&FLAGS_enable_chaffing, false);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING);
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));
-    server_common::log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::SetGlobalPSVLogLevel(10);
   }
 
   // This could return any valid byte string.
@@ -613,7 +613,7 @@ TEST_F(SelectAdReactorPASTest, PASBuyerInputIsPopulatedForGetBids) {
 
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -649,11 +649,11 @@ TEST_F(SelectAdReactorPASTest, PASBuyerInputIsPopulatedForGetBids) {
 }
 
 TEST_F(SelectAdReactorPASTest, PASBuyerInputIsClearedIfFeatureNotAvailable) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+  config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
   auto mock_get_bids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                               get_bids_raw_request,
-                          const RequestMetadata& metadata,
+                          grpc::ClientContext* context,
                           GetBidDoneCallback on_done, absl::Duration timeout,
                           RequestConfig request_config) {
     // Expect PAS buyer inputs to be populated correctly in GetBids.
@@ -689,7 +689,7 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
   // Setup BFE to return a PAS bid.
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -716,7 +716,7 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
       .WillOnce(
           [this, &select_ad_req, &protected_auction_input](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
             EXPECT_EQ(request->publisher_hostname(),
                       protected_auction_input.publisher_name());
@@ -760,14 +760,14 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
 
 TEST_F(SelectAdReactorPASTest,
        PASAdWithBidIsNotSentForScoringWhenFeatureDisabled) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+  config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
 
   // Setup BFE to return a PAS bid -- though this will be an error in itself
   // since the feature is disabled but we still cover this possible error case.
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -802,7 +802,7 @@ TEST_F(SelectAdReactorPASTest, PASOnlyBuyerInputIsAllowed) {
 
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -848,7 +848,7 @@ TEST_F(SelectAdReactorPASTest, BothPASAndPAInputsMissingIsAnError) {
 
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -918,7 +918,7 @@ TEST_F(SelectAdReactorPASTest,
   auto mock_get_bids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
              get_bids_raw_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout,
          RequestConfig request_config) {  // Expect PAS buyer inputs to not be
                                           // be populated in GetBids.
@@ -961,7 +961,7 @@ TEST_F(SelectAdReactorPASTest,
   auto mock_get_bids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
              get_bids_raw_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout,
          RequestConfig request_config) {  // Expect PAS buyer inputs to not be
                                           // be populated in GetBids.
@@ -1000,7 +1000,7 @@ TEST_F(SelectAdReactorPASTest,
 
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
@@ -1043,14 +1043,14 @@ TEST_F(SelectAdReactorPASTest,
 
 TEST_F(SelectAdReactorPASTest,
        ProtectedAudienceAdWithBidIsNotSentForScoringWhenFeatureDisabled) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
+  config_.SetOverride(kFalse, ENABLE_PROTECTED_AUDIENCE);
   auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
 
   // Setup BFE to return a PA bid and no PAS bid.
   auto mock_get_bids =
       [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                  get_bids_raw_request,
-             const RequestMetadata& metadata, GetBidDoneCallback on_done,
+             grpc::ClientContext* context, GetBidDoneCallback on_done,
              absl::Duration timeout, RequestConfig request_config) {
         auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         response->mutable_bids()->Add(GetTestPAAdWithBid());
@@ -1079,13 +1079,13 @@ TEST_F(SelectAdReactorPASTest,
 
 TEST_F(SelectAdReactorPASTest,
        InterestGroupsRemovedIfProtectedAudienceDisabled) {
-  config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_AUDIENCE);
+  config_.SetOverride(kFalse, ENABLE_PROTECTED_AUDIENCE);
   auto request_with_context =
       CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/true);
 
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                                   get_bids_raw_request,
-                              const RequestMetadata& metadata,
+                              grpc::ClientContext* context,
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {

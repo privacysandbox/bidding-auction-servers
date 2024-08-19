@@ -47,8 +47,109 @@ constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
     }
 )JS_CODE";
 
+constexpr absl::string_view kSellerBaseCodeWithPrivateAggregation = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd");
+      console.error("Logging error from ScoreAd");
+      console.warn("Logging warn from ScoreAd");
+      const contribution = {
+        bucket: 100,
+        value: 200,
+      };
+      privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+      return {
+        desirability: score,
+        allow_component_auction: false
+      };
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner);
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller);
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"});
+        return {"testSignal":"testValue"};
+    }
+)JS_CODE";
+
+constexpr absl::string_view kSellerBaseCodeForComponentAuction = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
+      return {
+        ad: "adMetadata",
+        desirability: score,
+        bid: 2.0,
+        bidCurrency: "EUR",
+        incomingBidInSellerCurrency: "EUR",
+        allowComponentAuction: true
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+        } else {
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner+"&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&modifiedBid="+sellerReportingSignals.modifiedBid)
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return {"testSignal":"testValue"}
+    }
+)JS_CODE";
+
+constexpr absl::string_view kSellerBaseCodeWithNoSignalsForWinner = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+      console.log("Logging from ScoreAd")
+      console.error("Logging error from ScoreAd")
+      console.warn("Logging warn from ScoreAd")
+      return {
+        desirability: score,
+        allow_component_auction: false
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+        } else {
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"})
+    }
+)JS_CODE";
+
 constexpr absl::string_view kExpectedSellerCodeWithScoreAdAndReportResult =
     R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -62,19 +163,16 @@ constexpr absl::string_view kExpectedSellerCodeWithScoreAdAndReportResult =
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -82,18 +180,13 @@ constexpr absl::string_view kExpectedSellerCodeWithScoreAdAndReportResult =
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 
     //Handler method to call adTech provided reportResult method and wrap the
@@ -173,6 +266,12 @@ constexpr absl::string_view kExpectedSellerCodeWithScoreAdAndReportResult =
 )JS_CODE";
 
 constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -186,19 +285,16 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -206,18 +302,13 @@ constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 
     function fibonacci(num) {

@@ -16,6 +16,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/strings/string_view.h"
@@ -25,6 +26,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+inline constexpr absl::string_view kCddlSpec100Path =
+    "services/bidding_service/egress_cddl_spec/1.0.0";
 inline constexpr absl::string_view kTestCddlSpec = R"""(
 schema = {
   features: [* feature_types],
@@ -56,7 +59,7 @@ boolean-feature = {
 ; Type for `bucket-feature`.
 bucket-feature-type = {
   name: text .regexp "^bucket-feature$"
-  buckets: uint,  ; number of buckets.
+  size: uint,  ; number of buckets.
 }
 
 ; A `feature` representing a bucketized value.
@@ -81,7 +84,7 @@ TEST(ValidateAdtechSchema, SucceedsWithConformingSchema) {
         },
         {
           "name": "bucket-feature",
-          "buckets": 2
+          "size": 2
         }
       ]
     }
@@ -100,7 +103,7 @@ TEST(ValidateAdtechSchema, SucceedsWithOptionalFeatureMissing) {
       "features": [
         {
           "name": "bucket-feature",
-          "buckets": 2
+          "size": 2
         }
       ]
     }
@@ -165,9 +168,6 @@ TEST(ValidateAdtechSchema, FailsWithUnsupportedSchemaVersion) {
       << kTestCddlSpec;
 }
 
-constexpr absl::string_view kCddlSpec100Path =
-    "services/bidding_service/egress_cddl_spec/1.0.0";
-
 class CddlSpecTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -201,7 +201,7 @@ TEST_F(CddlSpecTest, SucceedsWithValidAdtechSchema) {
         },
         {
           "name": "bucket-feature",
-          "buckets": 2
+          "size": 2
         },
         {
           "name": "histogram-feature",
@@ -319,6 +319,27 @@ TEST_F(CddlSpecTest, FailsIfCddlVersionMismatches) {
       << "Adtech provided schema:\n"
       << adtech_schema << "\n is unexpectedly conformant with spec:\n"
       << CddlSpec();
+}
+
+TEST(UnsignedNumberSerialization, CorrectlySerialiesUnsignedInt) {
+  std::vector<bool> bit_representation1(3, 0);
+  UnsignedIntToBits(7, bit_representation1);
+  EXPECT_EQ(bit_representation1, std::vector<bool>({true, true, true}));
+
+  std::vector<bool> bit_representation2(4, 0);
+  UnsignedIntToBits(8, bit_representation2);
+  EXPECT_EQ(bit_representation2,
+            std::vector<bool>({true, false, false, false}));
+}
+
+TEST(DebugStringTest, PrintsOutCorrectValueForBoolVector) {
+  std::vector<bool> bit_representation{true, false};
+  EXPECT_EQ(DebugString(bit_representation), "10");
+}
+
+TEST(DebugStringTest, PrintsOutCorrectValueForByteArray) {
+  std::vector<uint8_t> byte_array{8, 3};
+  EXPECT_EQ(DebugString(byte_array), "0000100000000011");
 }
 
 }  // namespace

@@ -228,7 +228,7 @@ static void BM_ProtectedAudience(benchmark::State& state) {
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
 
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
 
@@ -240,6 +240,7 @@ static void BM_ProtectedAudience(benchmark::State& state) {
 
   GenerateBidsResponse response;
   CodeDispatchClientStub dispatcher;
+  grpc::CallbackServerContext context;
   BiddingServiceRuntimeConfig runtime_config = {
       .enable_buyer_debug_url_generation = true};
   for (auto _ : state) {
@@ -247,9 +248,10 @@ static void BM_ProtectedAudience(benchmark::State& state) {
     metric::MetricContextMap<GenerateBidsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&request);
-    GenerateBidsReactor reactor(
-        dispatcher, &request, &response, std::make_unique<BiddingNoOpLogger>(),
-        key_fetcher_manager.get(), &crypto_client, runtime_config);
+    GenerateBidsReactor reactor(&context, dispatcher, &request, &response,
+                                std::make_unique<BiddingNoOpLogger>(),
+                                key_fetcher_manager.get(), &crypto_client,
+                                runtime_config);
     reactor.Execute();
   }
 }

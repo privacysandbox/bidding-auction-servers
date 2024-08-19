@@ -27,7 +27,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
+using ::testing::_;
 using ::testing::An;
 
 // Seller Experiment Group ID.
@@ -45,7 +45,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, IncludesClientTypeInRequest) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetSellerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&notification, &test_client_type](
               std::unique_ptr<GetSellerValuesInput> input,
@@ -53,7 +53,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, IncludesClientTypeInRequest) {
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             EXPECT_EQ(input->client_type, test_client_type);
             notification.Notify();
             return absl::OkStatus();
@@ -123,7 +123,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetSellerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&ad_render_urls, &ad_component_render_urls, &notification](
               std::unique_ptr<GetSellerValuesInput> input,
@@ -131,7 +131,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAdKeysToSellerValuesInput) {
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             // All ads from all responses were sent to KV client.
             EXPECT_EQ(input->render_urls, ad_render_urls);
             EXPECT_EQ(input->ad_component_render_urls,
@@ -165,14 +165,14 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetSellerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [](std::unique_ptr<GetSellerValuesInput> input,
              const RequestMetadata& metadata,
              absl::AnyInvocable<void(
                  absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>)&&>
                  callback,
-             absl::Duration timeout) {
+             absl::Duration timeout, RequestContext context) {
             EXPECT_EQ(input->seller_kv_experiment_group_id, "");
             (std::move(callback))(absl::InternalError(""));
             return absl::OkStatus();
@@ -207,7 +207,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetSellerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&expected_output](
               std::unique_ptr<GetSellerValuesInput> input,
@@ -215,7 +215,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             auto output = std::make_unique<GetSellerValuesOutput>();
             output->result = expected_output;
             (std::move(callback))(std::move(output));

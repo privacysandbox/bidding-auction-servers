@@ -159,8 +159,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  server_common::log::PS_VLOG_IS_ON(
-      0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::SetGlobalPSVLogLevel(
+      config_client.GetIntParameter(PS_VERBOSITY));
 
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << config_client.GetBooleanParameter(
@@ -174,6 +174,10 @@ absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+  // InitTelemetry right after config_client being initialized
+  InitTelemetry<ScoreAdsRequest>(config_util, config_client, metric::kAs);
+  PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
+                                   << config_client.DebugString();
 
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
@@ -229,6 +233,11 @@ absl::Status RunServer() {
       MultiCurlHttpFetcherAsync(executor.get());
   HttpFetcherAsync* seller_udf_fetcher = &http_fetcher;
   HttpFetcherAsync* buyer_reporting_udf_fetcher = &http_fetcher;
+  // If protected app signals are not enabled, we will not score any PAS
+  // bids, so it would not be required to fetch the PAS UDF.
+  if (!enable_protected_app_signals) {
+    code_fetch_proto.clear_protected_app_signals_buyer_report_win_js_urls();
+  }
   SellerUdfFetchManager code_fetch_manager(
       BlobStorageClientFactory::Create(), executor.get(), seller_udf_fetcher,
       buyer_reporting_udf_fetcher, &dispatcher, code_fetch_proto,
@@ -239,8 +248,6 @@ absl::Status RunServer() {
   bool enable_auction_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
 
-  InitTelemetry<ScoreAdsRequest>(config_util, config_client, metric::kAs);
-
   // TODO(b/334909636) : AsyncReporter should not own HttpFetcher,
   // this needs to be decoupled so we can test different configurations.
   std::unique_ptr<AsyncReporter> async_reporter =
@@ -248,7 +255,8 @@ absl::Status RunServer() {
           std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
   auto score_ads_reactor_factory =
       [&client, &async_reporter, enable_auction_service_benchmark](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
           const AuctionServiceRuntimeConfig& runtime_config) {
@@ -260,7 +268,7 @@ absl::Status RunServer() {
           benchmarkingLogger = std::make_unique<ScoreAdsNoOpLogger>();
         }
         return std::make_unique<ScoreAdsReactor>(
-            client, request, response, std::move(benchmarkingLogger),
+            context, client, request, response, std::move(benchmarkingLogger),
             key_fetcher_manager, crypto_client, async_reporter.get(),
             runtime_config);
       };
@@ -324,7 +332,7 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  PS_LOG(INFO) << "Server listening on " << server_address;
+  PS_LOG(INFO, SystemLogContext()) << "Server listening on " << server_address;
   server->Wait();
   // Ends periodic code blob fetching from an arbitrary url.
   PS_RETURN_IF_ERROR(code_fetch_manager.End())

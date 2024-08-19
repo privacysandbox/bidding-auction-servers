@@ -47,8 +47,8 @@ cc_library(
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/common/blob_fetch:fetch_mode_cc_proto",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
-        "//services/common/code_fetch:periodic_bucket_fetcher",
-        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/data_fetch:periodic_bucket_code_fetcher",
+        "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/loggers:request_log_context",
         "//services/common/util:file_util",
         "@com_google_absl//absl/status",
@@ -72,9 +72,10 @@ cc_test(
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
         "//services/common/clients/http:http_fetcher_async",
-        "//services/common/code_fetch:periodic_bucket_fetcher",
-        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/data_fetch:periodic_bucket_code_fetcher",
+        "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/test:mocks",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -101,16 +102,21 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
+        "//services/bidding_service/utils:egress",
         "//services/common:feature_flags",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/clients/kv_server:kv_async_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/loggers:request_log_context",
         "//services/common/metric:server_definition",
+        "//services/common/util:cancellation_wrapper",
+        "//services/common/util:client_contexts",
+        "//services/common/util:error_categories",
         "//services/common/util:json_util",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",
@@ -138,6 +144,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
@@ -153,6 +160,9 @@ cc_test(
     name = "bidding_service_test",
     size = "small",
     srcs = ["bidding_service_test.cc"],
+    data = [
+        ":packaged_cddl_specs",
+    ],
     deps = [
         ":bidding_service",
         ":generate_bids_reactor",
@@ -163,6 +173,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test/utils:service_utils",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
@@ -192,7 +203,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
-        "@com_google_absl//absl/debugging:failure_signal_handler",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
@@ -215,6 +226,7 @@ cc_library(
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
+        "//services/bidding_service:egress_schema_cache",
         "//services/common/clients/config:config_client",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/metric:server_definition",
@@ -241,6 +253,20 @@ cc_proto_library(
     deps = [":bidding_code_fetch_config_proto"],
 )
 
+proto_library(
+    name = "egress_schema_fetch_config_proto",
+    srcs = ["egress_schema_fetch_config.proto"],
+    deps = [
+        "//services/common/blob_fetch:fetch_mode_proto",
+        "@com_google_googleapis//google/api:annotations_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "egress_schema_fetch_config_cc_proto",
+    deps = [":egress_schema_fetch_config_proto"],
+)
+
 cc_binary(
     name = "server",
     srcs = ["bidding_main.cc"],
@@ -254,18 +280,24 @@ cc_binary(
         ":bidding_code_fetch_config_cc_proto",
         ":bidding_service",
         ":buyer_code_fetch_manager",
+        ":egress_schema_fetch_config_cc_proto",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:cddl_spec_cache",
+        "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
+        "//services/bidding_service/egress_features:adtech_schema_fetcher",
         "//services/bidding_service/inference:inference_utils",
+        "//services/bidding_service/inference:periodic_model_fetcher",
+        "//services/common:feature_flags",
         "//services/common/blob_fetch:blob_fetcher",
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
-        "//services/common/code_fetch:periodic_code_fetcher",
+        "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
@@ -301,6 +333,9 @@ cc_test(
     name = "protected_app_signals_generate_bids_reactor_test",
     size = "small",
     srcs = ["protected_app_signals_generate_bids_reactor_test.cc"],
+    data = [
+        ":packaged_cddl_specs",
+    ],
     deps = [
         "//services/bidding_service:generate_bids_reactor",
         "//services/bidding_service:generate_bids_reactor_test_utils",
@@ -311,6 +346,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
@@ -356,6 +392,74 @@ pkg_files(
     name = "packaged_cddl_specs",
     srcs = ["//services/bidding_service/egress_cddl_spec:1.0.0"],
     attributes = pkg_attributes(mode = "0555"),
-    prefix = "/egress_cddl_spec/",
+    prefix = "/services/bidding_service/egress_cddl_spec/",
     visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "cddl_spec_cache",
+    srcs = ["cddl_spec_cache.cc"],
+    hdrs = ["cddl_spec_cache.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//services/common/loggers:request_log_context",
+        "//services/common/util:file_util",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "cddl_spec_cache_test",
+    size = "small",
+    srcs = ["cddl_spec_cache_test.cc"],
+    data = [
+        ":packaged_cddl_specs",
+    ],
+    deps = [
+        ":cddl_spec_cache",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "egress_schema_cache",
+    srcs = ["egress_schema_cache.cc"],
+    hdrs = ["egress_schema_cache.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//services/bidding_service:cddl_spec_cache",
+        "//services/bidding_service/egress_features:egress_feature",
+        "//services/bidding_service/egress_features:feature_factory",
+        "//services/bidding_service/utils:egress",
+        "//services/common/loggers:request_log_context",
+        "//services/common/util:file_util",
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "egress_schema_cache_test",
+    size = "small",
+    srcs = ["egress_schema_cache_test.cc"],
+    data = [
+        ":packaged_cddl_specs",
+    ],
+    deps = [
+        ":cddl_spec_cache",
+        ":egress_schema_cache",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+    ],
 )

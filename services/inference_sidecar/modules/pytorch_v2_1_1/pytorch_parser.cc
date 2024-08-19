@@ -23,6 +23,7 @@
 
 #include "rapidjson/document.h"
 #include "src/util/status_macro/status_macros.h"
+#include "utils/error.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -246,17 +247,22 @@ absl::StatusOr<std::string> ConvertBatchOutputsToJson(
   rapidjson::Value batch(rapidjson::kArrayType);
   for (const PerModelOutput& output : batch_outputs) {
     const std::string model_path = output.model_path;
-    const torch::IValue tensors = output.inference_output;
 
     rapidjson::Value nested_object(rapidjson::kObjectType);
     rapidjson::Value model_path_value;
     model_path_value.SetString(model_path.c_str(), allocator);
     nested_object.AddMember("model_path", model_path_value, allocator);
 
-    PS_ASSIGN_OR_RETURN(rapidjson::Value tensors_value,
-                        IValueToJsonValue(model_path, tensors, allocator));
+    if (output.inference_output) {
+      PS_ASSIGN_OR_RETURN(
+          rapidjson::Value tensors_value,
+          IValueToJsonValue(model_path, *output.inference_output, allocator));
 
-    nested_object.AddMember("tensors", tensors_value.Move(), allocator);
+      nested_object.AddMember("tensors", tensors_value.Move(), allocator);
+    } else if (output.error) {
+      nested_object.AddMember(
+          "error", CreateSingleError(allocator, *output.error), allocator);
+    }
     batch.PushBack(nested_object.Move(), allocator);
   }
   document.AddMember("response", batch.Move(), allocator);

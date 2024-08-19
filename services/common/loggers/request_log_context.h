@@ -19,11 +19,15 @@
 
 #include <utility>
 
+#include "absl/base/no_destructor.h"
+#include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "src/logger/request_context_impl.h"
 
-#define EVENT_MESSAGE_PROVIDER_SET(T, field) \
-  void Set(const T& _##field) { *event_message_.mutable_##field() = _##field; }
+#define EVENT_MESSAGE_PROVIDER_SET(T, field)                 \
+  void Set(T _##field) {                                     \
+    *event_message_.mutable_##field() = std::move(_##field); \
+  }
 
 #define EVENT_MESSAGE_PROVIDER_SET_RESPONSE(T, field)        \
   void Set(T _##field) {                                     \
@@ -32,6 +36,10 @@
   }
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+inline server_common::log::SystemLogContext& SystemLogContext() {
+  return server_common::log::SystemLogContext::Get();
+}
 
 class EventMessageProvider {
  public:
@@ -72,11 +80,26 @@ class EventMessageProvider {
 
   void Set(absl::string_view udf_log) { event_message_.add_udf_log(udf_log); }
 
+  EVENT_MESSAGE_PROVIDER_SET(EventMessage::KvSignal, kv_signal);
+
  private:
   EventMessage event_message_;
 };
 
 using RequestLogContext = server_common::log::ContextImpl<EventMessageProvider>;
+
+struct RequestContext {
+  RequestLogContext& log;
+};
+
+inline RequestContext NoOpContext() {
+  static absl::NoDestructor<RequestLogContext> log_context(
+      RequestLogContext{{}, server_common::ConsentedDebugConfiguration()});
+  return {*log_context};
+}
+
+// use single ']' as separator
+constexpr absl::string_view kFailCurl = "Failed to curl]";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

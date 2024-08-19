@@ -629,35 +629,35 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
 }
 
 AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
-    std::string generation_id, std::string top_level_seller,
-    std::string test_component_event,
-    std::string test_component_win_reporting_url,
-    std::string test_component_interaction_reporting_url,
-    std::string test_component_seller, std::vector<std::string> buyer_list) {
-  AuctionResult result =
-      MakeARandomSingleSellerAuctionResult(std::move(buyer_list));
+    const TestComponentAuctionResultData& component_auction_result_data) {
+  AuctionResult result = MakeARandomSingleSellerAuctionResult(
+      component_auction_result_data.buyer_list);
+  result.set_interest_group_owner(component_auction_result_data.test_ig_owner);
   result.mutable_win_reporting_urls()
       ->mutable_component_seller_reporting_urls()
-      ->set_reporting_url(test_component_win_reporting_url);
+      ->set_reporting_url(
+          component_auction_result_data.test_component_report_result_url);
   result.mutable_win_reporting_urls()
       ->mutable_component_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
-      ->try_emplace(test_component_event,
-                    test_component_interaction_reporting_url);
+      ->try_emplace(component_auction_result_data.test_component_event,
+                    component_auction_result_data
+                        .test_component_interaction_reporting_url);
   result.mutable_win_reporting_urls()
       ->mutable_buyer_reporting_urls()
-      ->set_reporting_url(std::move(test_component_win_reporting_url));
+      ->set_reporting_url(
+          component_auction_result_data.test_component_win_reporting_url);
   result.mutable_win_reporting_urls()
       ->mutable_buyer_reporting_urls()
       ->mutable_interaction_reporting_urls()
-      ->try_emplace(std::move(test_component_event),
-                    std::move(test_component_interaction_reporting_url));
-  result.set_top_level_seller(std::move(top_level_seller));
+      ->try_emplace(component_auction_result_data.test_component_event,
+                    component_auction_result_data
+                        .test_component_interaction_reporting_url);
   result.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
   result.mutable_auction_params()->set_ciphertext_generation_id(
-      std::move(generation_id));
+      component_auction_result_data.test_ig_owner);
   result.mutable_auction_params()->set_component_seller(
-      std::move(test_component_seller));
+      component_auction_result_data.test_component_seller);
   result.mutable_ad_component_render_urls()->Add(MakeARandomString());
   result.mutable_ad_component_render_urls()->Add(MakeARandomString());
   result.set_bid(1);

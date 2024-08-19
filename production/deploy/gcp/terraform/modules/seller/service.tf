@@ -74,6 +74,7 @@ module "load_balancing" {
   frontend_domain_name               = var.frontend_domain_name
   frontend_dns_zone                  = var.frontend_dns_zone
   frontend_domain_ssl_certificate_id = var.frontend_domain_ssl_certificate_id
+  frontend_certificate_map_id        = var.frontend_certificate_map_id
   frontend_instance_group_managers   = module.autoscaling.frontend_instance_group_managers
   frontend_service_name              = "sfe"
   frontend_service_port              = var.envoy_port

@@ -47,6 +47,7 @@ declare -i PRECOMMIT_ONLY=0
 declare -i SKIP_PRECOMMIT=0
 declare -i NO_TESTS=0
 declare -i NO_PLATFORM_BUILD=0
+declare -i REBUILD_INFERENCE_SIDECAR=0
 declare -a AMI_REGIONS
 declare AWS_IMAGE_TAG
 declare GCP_IMAGE_TAG
@@ -70,13 +71,14 @@ usage:
     --instance                   [REQUIRED] Recognized values: local, gcp, aws
     --platform                   [REQUIRED] Recognized values: gcp, aws
     --e2e                        Run e2e mode
-    --build-flavor               Recognized values: prod, non_prod, inference_non_prod. Default: prod
+    --build-flavor               Recognized values: prod, non_prod. Default: prod
                                    Use non_prod to enable verbose logging.
     --precommit-only             Run precommit then exit
     --no-precommit               Skip precommit checks
     --no-tests                   Skip tests
     --no-platform-build          Skip platform-specific building and testing
     --verbose                    Enable verbose output
+    --skip-rebuild-inference-sidecar  Skip rebuild all inference sidecar binary
 
 If platform is aws:
     --with-ami                   AMI region in which to build and store AWS AMIs.
@@ -118,6 +120,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-platform-build)
       NO_PLATFORM_BUILD=1
+      shift
+      ;;
+    --skip-rebuild-inference-sidecar)
+      SKIP_REBUILD_INFERENCE_SIDECAR=1
       shift
       ;;
     --no-precommit)
@@ -200,13 +206,39 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   fi
 fi
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+readonly SCRIPT_DIR
+
+if [[ ${SKIP_REBUILD_INFERENCE_SIDECAR} -eq 0 ]]; then
+  (
+    cd "${SCRIPT_DIR}"/../../services/inference_sidecar/modules/tensorflow_v2_14_0
+    builders/tools/bazel-debian run //:generate_artifacts
+  )
+  (
+    cd "${SCRIPT_DIR}"/../../services/inference_sidecar/modules/pytorch_v2_1_1
+    builders/tools/bazel-debian run //:generate_artifacts
+  )
+else
+  (
+    if [ ! -f "${SCRIPT_DIR}/../../services/inference_sidecar/modules/tensorflow_v2_14_0/artifacts/inference_sidecar_tensorflow_v2_14_0" ]; then
+      cd "${SCRIPT_DIR}"/../../services/inference_sidecar/modules/tensorflow_v2_14_0
+      builders/tools/bazel-debian run //:generate_artifacts
+    fi
+  )
+  (
+    if [ ! -f "${SCRIPT_DIR}/../../services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar_pytorch_v2_1_1" ]; then
+      cd "${SCRIPT_DIR}"/../../services/inference_sidecar/modules/pytorch_v2_1_1
+      builders/tools/bazel-debian run //:generate_artifacts
+    fi
+  )
+fi
+
 BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --config=${BUILD_FLAVOR}"
 if [[ ${E2E} -eq 1 ]]; then
   BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --//:build_for_test=e2e"
 fi
 CBUILD_ARGS="${CBUILD_ARGS} --seccomp-unconfined"
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-readonly SCRIPT_DIR
+
 
 # shellcheck source=builders/tools/builder.sh
 source "${SCRIPT_DIR}"/../../builders/tools/builder.sh

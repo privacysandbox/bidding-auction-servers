@@ -76,6 +76,47 @@ void HandleSingleBidCompletion(
   std::move(on_successful_response)(std::move(response));
 }
 
+void LogIgMetric(const GetBidsRequest::GetBidsRawRequest& raw_request,
+                 metric::BfeContext& metric_context) {
+  int user_bidding_signals = 0;
+  int bidding_signals_keys = 0;
+  int device_signals = 0;
+  int ad_render_ids = 0;
+  int component_ads = 0;
+  int igs_count = 0;
+  for (const BuyerInput::InterestGroup& interest_group :
+       raw_request.buyer_input().interest_groups()) {
+    igs_count += 1;
+    user_bidding_signals += interest_group.user_bidding_signals().size();
+    for (const auto& bidding_signal_key :
+         interest_group.bidding_signals_keys()) {
+      bidding_signals_keys += bidding_signal_key.size();
+    }
+    for (const auto& ad_render_id : interest_group.ad_render_ids()) {
+      ad_render_ids += ad_render_id.size();
+    }
+    for (const auto& component_ad : interest_group.component_ads()) {
+      component_ads += component_ad.size();
+    }
+    if (raw_request.client_type() == CLIENT_TYPE_BROWSER) {
+      device_signals += interest_group.browser_signals().ByteSizeLong();
+    } else if (raw_request.client_type() == CLIENT_TYPE_ANDROID) {
+      device_signals += interest_group.android_signals().ByteSizeLong();
+    }
+  }
+  LogIfError(metric_context.LogHistogram<metric::kUserBiddingSignalsSize>(
+      user_bidding_signals));
+  LogIfError(metric_context.LogHistogram<metric::kBiddingSignalKeysSize>(
+      bidding_signals_keys));
+  LogIfError(
+      metric_context.LogHistogram<metric::kAdRenderIDsSize>(ad_render_ids));
+  LogIfError(
+      metric_context.LogHistogram<metric::kComponentAdsSize>(component_ads));
+  LogIfError(metric_context.LogHistogram<metric::kIGCount>(igs_count));
+  LogIfError(
+      metric_context.LogHistogram<metric::kDeviceSignalsSize>(device_signals));
+}
+
 }  // namespace
 
 GetBidsUnaryReactor::GetBidsUnaryReactor(
@@ -102,7 +143,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       config_(config),
       key_fetcher_manager_(key_fetcher_manager),
       crypto_client_(crypto_client),
-      chaffing_enabled_(absl::GetFlag(FLAGS_enable_chaffing)),
+      chaffing_enabled_(config_.is_chaffing_enabled),
       log_context_([this]() {
         decrypt_status_ = DecryptRequest();
         return RequestLogContext(
@@ -112,7 +153,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       async_task_tracker_(kNumDefaultOutboundBiddingCalls, log_context_,
                           [this](bool any_successful_bid) {
                             OnAllBidsDone(any_successful_bid);
-                          }) {
+                          }),
+      enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)) {
   if (enable_benchmarking) {
     std::string request_id = FormatTime(absl::Now());
     benchmarking_logger_ =
@@ -156,9 +198,20 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                           enable_benchmarking) {}
 
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
-  if (context_->IsCancelled()) {
+  if (enable_cancellation_ && context_->IsCancelled()) {
     benchmarking_logger_->End();
-    FinishWithStatus(grpc::Status(grpc::ABORTED, kRequestCancelled));
+    FinishWithStatus(
+        grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+    return;
+  }
+
+  if (!any_successful_bids) {
+    PS_LOG(WARNING, log_context_)
+        << "Finishing the GetBids RPC with an error, since there are "
+           "no successful bids returned by the bidding service";
+    benchmarking_logger_->End();
+    FinishWithStatus(
+        grpc::Status(grpc::INTERNAL, absl::StrJoin(bid_errors_, "; ")));
     return;
   }
 
@@ -177,16 +230,6 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsResponse:\n"
                                     << get_bids_response_->ShortDebugString();
-
-  if (!any_successful_bids) {
-    PS_LOG(WARNING, log_context_)
-        << "Finishing the GetBids RPC with an error, since there are "
-           "no successful bids returned by the bidding service";
-    benchmarking_logger_->End();
-    FinishWithStatus(
-        grpc::Status(grpc::INTERNAL, absl::StrJoin(bid_errors_, "; ")));
-    return;
-  }
 
   benchmarking_logger_->End();
   FinishWithStatus(grpc::Status::OK);
@@ -257,7 +300,7 @@ int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
   return num_expected_calls;
 }
 
-void GetBidsUnaryReactor::Execute() {
+void GetBidsUnaryReactor::CancellableExecute() {
   benchmarking_logger_->Begin();
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
                                     << request_->ShortDebugString();
@@ -278,6 +321,8 @@ void GetBidsUnaryReactor::Execute() {
   PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest:\n"
                                 << raw_request_.ShortDebugString();
   log_context_.SetEventMessageField(raw_request_);
+
+  LogIgMetric(raw_request_, *metric_context_);
 
   if (chaffing_enabled_ && raw_request_.is_chaff()) {
     ExecuteChaffRequest();
@@ -300,7 +345,7 @@ void GetBidsUnaryReactor::Execute() {
   MayGetProtectedSignalsBids();
 }
 
-void GetBidsUnaryReactor::ExecuteChaffRequest() {
+void GetBidsUnaryReactor::CancellableExecuteChaffRequest() {
   // Sleep to make it seem (from the client's perspective) that the BFE is
   // processing the request.
   size_t chaff_request_duration = 0;
@@ -364,9 +409,11 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   auto protected_app_signals_bid_request =
       CreateGenerateProtectedAppSignalsBidsRawRequest(raw_request_);
 
+  grpc::ClientContext* client_context = client_contexts_.Add(bidding_metadata_);
+
   absl::Status execute_result =
       protected_app_signals_bidding_async_client_->ExecuteInternal(
-          std::move(protected_app_signals_bid_request), bidding_metadata_,
+          std::move(protected_app_signals_bid_request), client_context,
           [this](
               absl::StatusOr<
                   std::unique_ptr<GenerateProtectedAppSignalsBidsRawResponse>>
@@ -379,10 +426,12 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                 [this](const absl::Status& status) {
                   LogIfError(metric_context_->AccumulateMetric<
                              metric::kBfeErrorCountByErrorCode>(
-                      1, metric::
-                             kBfeGenerateProtectedAppSignalsBidsResponseError));
+                      1,
+                      metric::
+                          kBfeGenerateProtectedAppSignalsBidsResponseError));  // NOLINT
                   PS_LOG(ERROR, log_context_)
-                      << "Execution of GenerateProtectedAppSignalsBids request "
+                      << "Execution of GenerateProtectedAppSignalsBids "
+                         "request "
                          "failed with status: "
                       << status;
                   async_task_tracker_.TaskCompleted(
@@ -399,15 +448,21 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                       });
                 },
                 // Successful response handler
-                [this](auto response) {
-                  async_task_tracker_.TaskCompleted(
-                      TaskStatus::SUCCESS,
-                      [this, response = std::move(response)]() {
-                        get_bids_raw_response_
-                            ->mutable_protected_app_signals_bids()
-                            ->Swap(response->mutable_bids());
-                      });
-                },
+                CancellationWrapper(
+                    context_, enable_cancellation_,
+                    [this](auto response) {
+                      async_task_tracker_.TaskCompleted(
+                          TaskStatus::SUCCESS,
+                          [this, response = std::move(response)]() {
+                            get_bids_raw_response_
+                                ->mutable_protected_app_signals_bids()
+                                ->Swap(response->mutable_bids());
+                          });
+                    },
+                    [&async_task_tracker_ =
+                         async_task_tracker_]() {  // OnCancel
+                      async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
+                    }),
                 *get_bids_raw_response_);
           },
           absl::Milliseconds(
@@ -441,43 +496,52 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
   auto kv_request =
-      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get());
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
+          .release();
 
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
-      [this, kv_request = std::move(kv_request)](
-          absl::StatusOr<std::unique_ptr<BiddingSignals>> response,
-          GetByteSize get_byte_size) mutable {
-        {
-          // Only logs KV request and response sizes if fetching signals
-          // succeeds.
-          if (response.ok()) {
-            kv_request->SetRequestSize(get_byte_size.request);
-            kv_request->SetResponseSize(get_byte_size.response);
-          }
-          // destruct kv_request, destructor measures request time
-          auto not_used = std::move(kv_request);
-        }
-        if (!response.ok()) {
-          LogIfError(metric_context_
-                         ->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
-                             1, metric::kBfeBiddingSignalsResponseError));
-          LogInitiatedRequestErrorMetrics(metric::kKv, response.status());
-          // Return error to client.
-          PS_LOG(ERROR, log_context_)
-              << "GetBiddingSignals request failed with status:"
-              << response.status();
-          async_task_tracker_.TaskCompleted(
-              TaskStatus::ERROR, [this, &response]() {
-                bid_errors_.push_back(response.status().ToString());
-              });
-          return;
-        }
-        // Sends protected audience bid request to bidding service.
-        PrepareAndGenerateProtectedAudienceBid(*std::move(response));
-      },
-      absl::Milliseconds(config_.bidding_signals_load_timeout_ms));
+      CancellationWrapper(
+          context_, enable_cancellation_,
+          [this, kv_request](
+              absl::StatusOr<std::unique_ptr<BiddingSignals>> response,
+              GetByteSize get_byte_size) mutable {
+            {
+              // Only logs KV request and response sizes if fetching signals
+              // succeeds.
+              if (response.ok()) {
+                kv_request->SetRequestSize(get_byte_size.request);
+                kv_request->SetResponseSize(get_byte_size.response);
+              }
+              // destruct kv_request, destructor measures request time
+              delete kv_request;
+            }
+            if (!response.ok()) {
+              LogIfError(
+                  metric_context_
+                      ->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+                          1, metric::kBfeBiddingSignalsResponseError));
+              LogInitiatedRequestErrorMetrics(metric::kKv, response.status());
+              // Return error to client.
+              PS_LOG(ERROR, log_context_)
+                  << "GetBiddingSignals request failed with status:"
+                  << response.status();
+              async_task_tracker_.TaskCompleted(
+                  TaskStatus::ERROR, [this, &response]() {
+                    bid_errors_.push_back(response.status().ToString());
+                  });
+              return;
+            }
+            // Sends protected audience bid request to bidding service.
+            PrepareAndGenerateProtectedAudienceBid(*std::move(response));
+          },
+          [this, kv_request]() {
+            delete kv_request;
+            async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
+          }),
+      absl::Milliseconds(config_.bidding_signals_load_timeout_ms),
+      {log_context_});
 }
 
 // Process Outputs from Actions to prepare bidding request.
@@ -500,11 +564,15 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
   PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"
                                      << raw_bidding_input->ShortDebugString();
   auto bidding_request =
-      metric::MakeInitiatedRequest(metric::kBs, metric_context_.get());
+      metric::MakeInitiatedRequest(metric::kBs, metric_context_.get())
+          .release();
   bidding_request->SetRequestSize((int)raw_bidding_input->ByteSizeLong());
+
+  grpc::ClientContext* client_context = client_contexts_.Add();
+
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
-      std::move(raw_bidding_input), {},
-      [this, bidding_request = std::move(bidding_request)](
+      std::move(raw_bidding_input), client_context,
+      [this, bidding_request](
           absl::StatusOr<
               std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>>
               raw_response,
@@ -514,7 +582,7 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
               raw_response.ok() ? (int)raw_response->get()->ByteSizeLong() : 0;
           bidding_request->SetResponseSize(response_size);
           // destruct bidding_request, destructor measures request time
-          auto not_used = std::move(bidding_request);
+          delete bidding_request;
         }
         HandleSingleBidCompletion<
             GenerateBidsResponse::GenerateBidsRawResponse>(
@@ -526,9 +594,9 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
                       ->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
                           1, metric::kBfeGenerateBidsResponseError));
               LogInitiatedRequestErrorMetrics(metric::kBs, status);
-              PS_LOG(ERROR, log_context_)
-                  << "Execution of GenerateBids request failed with status: "
-                  << status;
+              PS_LOG(ERROR, log_context_) << "Execution of GenerateBids "
+                                             "request failed with status: "
+                                          << status;
               async_task_tracker_.TaskCompleted(
                   TaskStatus::ERROR, [this, &status]() {
                     bid_errors_.push_back(status.ToString());
@@ -539,14 +607,19 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
               async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
             },
             // Successful response handler
-            [this](auto response) {
-              async_task_tracker_.TaskCompleted(
-                  TaskStatus::SUCCESS,
-                  [this, response = std::move(response)]() {
-                    get_bids_raw_response_->mutable_bids()->Swap(
-                        response->mutable_bids());
-                  });
-            },
+            CancellationWrapper(
+                context_, enable_cancellation_,
+                [this](auto response) {
+                  async_task_tracker_.TaskCompleted(
+                      TaskStatus::SUCCESS,
+                      [this, response = std::move(response)]() {
+                        get_bids_raw_response_->mutable_bids()->Swap(
+                            response->mutable_bids());
+                      });
+                },
+                [&async_task_tracker_ = async_task_tracker_]() {  // OnCancel
+                  async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
+                }),
             *get_bids_raw_response_);
       },
       absl::Milliseconds(config_.generate_bid_timeout_ms));

@@ -22,9 +22,9 @@
 
 #include "absl/status/statusor.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/communication/ohttp_utils.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
-#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

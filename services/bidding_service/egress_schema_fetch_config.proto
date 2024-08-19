@@ -1,0 +1,70 @@
+/*
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.bidding_service;
+
+import "services/common/blob_fetch/fetch_mode.proto";
+
+message EgressSchemaFetchConfig {
+  // Sepcifies whether the egress schema should be fetched from a URL or a
+  // bucket. Currently only supports a fetch from a URL.
+  blob_fetch.FetchMode fetch_mode = 1;
+
+  // Path to local egres schema file -- usable only in development environment
+  // when FETCH_MODE_LOCAL is used.
+  string egress_schema_path = 2;
+
+  // Public URL where the adtech egress schema JSON can loaded from.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_URL.
+  string egress_schema_url = 3;
+
+  // The name of a bucket from which to fetch egress schemas from.
+  // All schemas will be fetched from this bucket.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_BUCKET.
+  string egress_schema_bucket = 4;
+
+  // The name of the bucket's default egress schema to use.
+  // The default will be used if the bid request does not specify a version.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_BUCKET.
+  string egress_default_schema_in_bucket = 5;
+
+  // Period of how often to fetch egress schema from the URL endpoint.
+  int64 url_fetch_period_ms = 6;
+
+  // A timeout limit for fetcher client to stop fetching if the fetch didn't
+  // complete in the specified timeout.
+  int64 url_fetch_timeout_ms = 7;
+
+  // Path to local egres schema file -- usable only in development environment
+  // when FETCH_MODE_LOCAL is used.
+  string temporary_unlimited_egress_schema_path = 8;
+
+  // Public URL where the adtech egress schema JSON can loaded from.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_URL.
+  string temporary_unlimited_egress_schema_url = 9;
+
+  // The name of a bucket from which to fetch egress schemas from.
+  // All schemas will be fetched from this bucket.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_BUCKET.
+  string temporary_unlimited_egress_schema_bucket = 10;
+
+  // The name of the bucket's default egress schema to use.
+  // The default will be used if the bid request does not specify a version.
+  // Note: This is used when the fetch mode is set to FETCH_MODE_BUCKET.
+  string temporary_unlimited_egress_default_schema_in_bucket = 11;
+}

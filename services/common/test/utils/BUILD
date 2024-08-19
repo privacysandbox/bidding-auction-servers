@@ -78,6 +78,17 @@ cc_library(
 )
 
 cc_library(
+    name = "test_init",
+    testonly = True,
+    hdrs = ["test_init.h"],
+    deps = [
+        "//services/common/telemetry:configure_telemetry",
+        "//services/common/test:random",
+        "@com_google_absl//absl/debugging:failure_signal_handler",
+    ],
+)
+
+cc_library(
     name = "proto_utils",
     testonly = True,
     hdrs = ["proto_utils.h"],

@@ -22,6 +22,7 @@ cc_library(
     # header only library for interface
     linkstatic = True,
     deps = [
+        "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

@@ -38,10 +38,15 @@
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/buyer_code_fetch_manager.h"
+#include "services/bidding_service/cddl_spec_cache.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/bidding_service/egress_features/adtech_schema_fetcher.h"
+#include "services/bidding_service/egress_schema_cache.h"
+#include "services/bidding_service/egress_schema_fetch_config.pb.h"
 #include "services/bidding_service/inference/inference_utils.h"
+#include "services/bidding_service/inference/periodic_model_fetcher.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/bidding_service/runtime_flags.h"
 #include "services/common/blob_fetch/blob_fetcher.h"
@@ -49,9 +54,10 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/feature_flags.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -77,6 +83,9 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::optional<std::string>, buyer_code_fetch_config, std::nullopt,
     "The JSON string for config fields necessary for AdTech code fetching.");
+ABSL_FLAG(std::optional<std::string>, egress_schema_fetch_config, std::nullopt,
+          "The JSON string for config fields necessary for AdTech egress "
+          "schema fetching.");
 ABSL_FLAG(
     std::optional<std::int64_t>, js_num_workers, std::nullopt,
     "The number of workers/threads for executing AdTech code in parallel.");
@@ -118,6 +127,40 @@ using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
+// Collection of objects required for egress to work
+struct EgressInfo {
+  // A cache of adtech provided schemas. This is updated once the adtech
+  // schema fetcher fetches a schema from adtech provided URL. This is later
+  // used to serialize the adtech provided features.
+  std::unique_ptr<EgressSchemaCache> egress_schema_cache;
+  // An HTTP fetcher object that is used to fetch egress schema from adtech
+  // provided URL.
+  std::unique_ptr<AdtechSchemaFetcher> adtech_schema_fetcher;
+};
+
+absl::StatusOr<EgressInfo> StartEgressSchemaFetch(
+    const TrustedServersConfigClient& config_client,
+    const std::string& egress_schema_url,
+    const bidding_service::EgressSchemaFetchConfig& egress_schema_fetch_config,
+    server_common::Executor* executor,
+    MultiCurlHttpFetcherAsync* http_fetcher_async) {
+  auto cddl_spec_cache = std::make_unique<CddlSpecCache>(
+      "services/bidding_service/egress_cddl_spec/");
+  cddl_spec_cache->Init();
+  auto egress_schema_cache =
+      std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
+  PS_LOG(INFO) << "Loading the adtech schema from: " << egress_schema_url;
+  auto adtech_schema_fetcher = std::make_unique<AdtechSchemaFetcher>(
+      std::vector<std::string>{egress_schema_url},
+      absl::Milliseconds(egress_schema_fetch_config.url_fetch_period_ms()),
+      absl::Milliseconds(egress_schema_fetch_config.url_fetch_timeout_ms()),
+      http_fetcher_async, executor, egress_schema_cache.get());
+  PS_RETURN_IF_ERROR(adtech_schema_fetcher->Start())
+      << "Unable to start fetching the adtech egress schema";
+  return EgressInfo{.egress_schema_cache = std::move(egress_schema_cache),
+                    .adtech_schema_fetcher = std::move(adtech_schema_fetcher)};
+}
+
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
@@ -155,6 +198,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
   config_client.SetFlag(FLAGS_buyer_code_fetch_config, BUYER_CODE_FETCH_CONFIG);
+  config_client.SetFlag(FLAGS_egress_schema_fetch_config,
+                        EGRESS_SCHEMA_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
@@ -187,6 +232,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         INFERENCE_MODEL_BUCKET_NAME);
   config_client.SetFlag(FLAGS_inference_model_bucket_paths,
                         INFERENCE_MODEL_BUCKET_PATHS);
+  config_client.SetFlag(FLAGS_inference_model_config_path,
+                        INFERENCE_MODEL_CONFIG_PATH);
   config_client.SetFlag(FLAGS_inference_sidecar_runtime_config,
                         INFERENCE_SIDECAR_RUNTIME_CONFIG);
   config_client.SetFlag(
@@ -199,8 +246,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  server_common::log::PS_VLOG_IS_ON(
-      0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::SetGlobalPSVLogLevel(
+      config_client.GetIntParameter(PS_VERBOSITY));
 
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -232,6 +279,10 @@ absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+  // InitTelemetry right after config_client being initialized
+  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs);
+  PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
+                                   << config_client.DebugString();
 
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
@@ -257,7 +308,7 @@ absl::Status RunServer() {
       PS_LOG(INFO) << "Register runInference API.";
       auto run_inference_function_object =
           std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContext>>();
+              RomaRequestSharedContextBidding>>();
       run_inference_function_object->function_name =
           std::string(inference::kInferenceFunctionName);
       run_inference_function_object->function = inference::RunInference;
@@ -267,7 +318,7 @@ absl::Status RunServer() {
       PS_LOG(INFO) << "Register getModelPaths API.";
       auto get_model_paths_function_object =
           std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContext>>();
+              RomaRequestSharedContextBidding>>();
       get_model_paths_function_object->function_name =
           std::string(inference::kGetModelPathsFunctionName);
       get_model_paths_function_object->function = inference::GetModelPaths;
@@ -317,6 +368,8 @@ absl::Status RunServer() {
   const bool enable_protected_app_signals =
       config_client.HasParameter(ENABLE_PROTECTED_APP_SIGNALS) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  const bool enable_private_aggregate_reporting =
+      udf_config.enable_private_aggregate_reporting();
 
   auto http_fetcher_async =
       std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
@@ -327,16 +380,20 @@ absl::Status RunServer() {
   PS_RETURN_IF_ERROR(udf_fetcher.Init()) << "Failed to initialize UDF fetch.";
 
   bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
+
+  std::unique_ptr<inference::PeriodicModelFetcher> model_fetcher;
   if (enable_inference) {
     if (init_config_client) {
-      PS_LOG(INFO) << "Start blob fetcher to read from a cloud bucket.";
       std::string_view bucket_name =
           GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_NAME);
       std::string_view bucket_paths =
           GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_PATHS);
-      std::vector<std::string> models = absl::StrSplit(bucket_paths, ',');
+      std::string_view model_config_path =
+          GetStringParameterSafe(config_client, INFERENCE_MODEL_CONFIG_PATH);
 
+      // TODO(b/356153749): Deprecate static model fetcher.
       if (!bucket_name.empty() && !bucket_paths.empty()) {
+        std::vector<std::string> models = absl::StrSplit(bucket_paths, ',');
         std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
             BlobStorageClientFactory::Create();
         auto blob_fetcher = std::make_unique<BlobFetcher>(
@@ -350,6 +407,16 @@ absl::Status RunServer() {
           PS_LOG(INFO) << "Skip registering models from bucket: "
                        << status.message();
         }
+      } else if (!bucket_name.empty() && !model_config_path.empty()) {
+        model_fetcher = std::make_unique<inference::PeriodicModelFetcher>(
+            model_config_path,
+            std::make_unique<BlobFetcher>(bucket_name, executor.get(),
+                                          BlobStorageClientFactory::Create()),
+            inference::CreateInferenceStub(), executor.get(),
+            absl::Milliseconds(config_client.GetInt64Parameter(
+                INFERENCE_MODEL_FETCH_PERIOD_MS)));
+        PS_RETURN_IF_ERROR(model_fetcher->Start())
+            << "Failed to start periodic model fetcher.";
       } else {
         PS_LOG(INFO)
             << "Skip blob fetcher read from a cloud bucket due to empty "
@@ -373,10 +440,9 @@ absl::Status RunServer() {
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
 
-  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs);
-
   auto generate_bids_reactor_factory =
       [&client, enable_bidding_service_benchmark](
+          grpc::CallbackServerContext* context,
           const GenerateBidsRequest* request, GenerateBidsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
@@ -390,7 +456,7 @@ absl::Status RunServer() {
           benchmarkingLogger = std::make_unique<BiddingNoOpLogger>();
         }
         auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-            client, request, response, std::move(benchmarkingLogger),
+            context, client, request, response, std::move(benchmarkingLogger),
             key_fetcher_manager, crypto_client, runtime_config);
         return generate_bids_reactor.release();
       };
@@ -437,7 +503,8 @@ absl::Status RunServer() {
       .ad_retrieval_kv_server_egress_tls =
           config_client.GetBooleanParameter(AD_RETRIEVAL_KV_SERVER_EGRESS_TLS),
       .kv_server_egress_tls =
-          config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS)};
+          config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS),
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
 
   if (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     if (enable_protected_audience) {
@@ -452,24 +519,70 @@ absl::Status RunServer() {
     }
   }
 
+  PS_VLOG(5) << "Fetching egress schema fetch config";
+  bidding_service::EgressSchemaFetchConfig egress_schema_fetch_config;
+  PS_RETURN_IF_ERROR(google::protobuf::util::JsonStringToMessage(
+      config_client.GetStringParameter(EGRESS_SCHEMA_FETCH_CONFIG).data(),
+      &egress_schema_fetch_config))
+      << "Unable to convert EGRESS_SCHEMA_FETCH_CONFIG from JSON to proto"
+         " (Invalid JSON provided?)";
+  PS_VLOG(5) << "Fetched egress schema fetch config: "
+             << egress_schema_fetch_config.DebugString();
+  const bool enable_temporary_unlimited_egress =
+      absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
+  absl::StatusOr<EgressInfo> egress_info = absl::UnimplementedError("");
+  if (enable_temporary_unlimited_egress) {
+    PS_LOG(INFO) << "Temporary egress feature is enabled in the binary";
+    if (egress_info = StartEgressSchemaFetch(
+            config_client,
+            egress_schema_fetch_config.temporary_unlimited_egress_schema_url(),
+            egress_schema_fetch_config, executor.get(),
+            http_fetcher_async.get());
+        !egress_info.ok()) {
+      PS_LOG(WARNING) << "Unable to load temporary unlimited egress schema: "
+                      << egress_info.status();
+    }
+  } else {
+    PS_LOG(INFO) << "Temporary egress feature is not enabled in the binary";
+  }
+  const int limited_egress_bits = absl::GetFlag(FLAGS_limited_egress_bits);
+  PS_LOG(INFO) << "Allowed limited egress bits: " << limited_egress_bits;
+  absl::StatusOr<EgressInfo> limited_egress_info = absl::UnimplementedError("");
+  const bool egress_enabled = limited_egress_bits > 0;
+  if (egress_enabled) {
+    PS_LOG(INFO) << "Limited egress feature is enabled in the binary";
+    if (limited_egress_info = StartEgressSchemaFetch(
+            config_client, egress_schema_fetch_config.egress_schema_url(),
+            egress_schema_fetch_config, executor.get(),
+            http_fetcher_async.get());
+        !limited_egress_info.ok()) {
+      PS_LOG(WARNING) << "Unable to load limited egress schema: "
+                      << limited_egress_info.status();
+    }
+  } else {
+    PS_LOG(INFO) << "Limited egress feature is not enabled in the binary";
+  }
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         DCHECK(runtime_config.is_protected_app_signals_enabled);
         auto generate_bids_reactor =
             std::make_unique<ProtectedAppSignalsGenerateBidsReactor>(
                 context, client, runtime_config, request, response,
                 key_fetcher_manager, crypto_client, ad_retrieval_client,
-                kv_async_client);
+                kv_async_client, egress_schema_cache,
+                limited_egress_schema_cache);
         return generate_bids_reactor.release();
       };
-
+  PS_VLOG(5) << "Creating bidding service instance";
   BiddingService bidding_service(
       std::move(generate_bids_reactor_factory),
       CreateKeyFetcherManager(config_client,
@@ -477,8 +590,16 @@ absl::Status RunServer() {
                                   ? CreatePublicKeyFetcher(config_client)
                                   : nullptr),
       CreateCryptoClient(), std::move(runtime_config),
-      std::move(protected_app_signals_generate_bids_reactor_factory));
+      std::move(protected_app_signals_generate_bids_reactor_factory),
+      /*ad_retrieval_async_client=*/nullptr, /*kv_async_client=*/nullptr,
+      enable_temporary_unlimited_egress && egress_info.ok()
+          ? std::move(egress_info->egress_schema_cache)
+          : nullptr,
+      egress_enabled && limited_egress_info.ok()
+          ? std::move(limited_egress_info->egress_schema_cache)
+          : nullptr);
 
+  PS_VLOG(5) << "Done creating bidding service instance";
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
@@ -508,7 +629,7 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  PS_LOG(INFO) << "Server listening on " << server_address;
+  PS_LOG(INFO, SystemLogContext()) << "Server listening on " << server_address;
   server->Wait();
   return absl::OkStatus();
 }

@@ -487,6 +487,7 @@ cc_library(
     name = "cancellation_wrapper",
     hdrs = ["cancellation_wrapper.h"],
     deps = [
+        ":error_categories",
         "//services/common:feature_flags",
         "@com_github_grpc_grpc//:grpc++",
     ],
@@ -508,5 +509,23 @@ cc_test(
     deps = [
         ":thread_safe_set",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "client_contexts",
+    srcs = ["client_contexts.cc"],
+    hdrs = ["client_contexts.h"],
+    deps = [
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_map",
+    ],
+)
+
+cc_library(
+    name = "client_context_util",
+    hdrs = ["client_context_util.h"],
+    deps = [
+        "@com_google_absl//absl/time",
     ],
 )

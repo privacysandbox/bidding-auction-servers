@@ -40,23 +40,49 @@ constexpr absl::string_view kBuyerBaseCode_template = R"JS_CODE(
       };
     }
 )JS_CODE";
+constexpr absl::string_view kBuyerBaseCodeForPrivateAggregation = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+    function generateBid(interest_group, auction_signals,buyer_signals,
+                          trusted_bidding_signals,
+                          device_signals){
+    const bid = fibonacci(Math.floor(Math.random() * 30 + 1));
+    console.log("Logging from generateBid");
+    const contribution = {
+      bucket: 100,
+      value: 200,
+    };
+    privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+    return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+)JS_CODE";
 constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
+    var ps_response = {
+          response: {},
+          logs: [],
+          errors: [],
+          warnings: []
+        };
     async function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
       if(featureFlags.enable_logging){
         console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
+          ps_response.logs.push(JSON.stringify(args))
         }
         console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
+          ps_response.errors.push(JSON.stringify(args))
         }
         console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
+          ps_response.warnings.push(JSON.stringify(args))
         }
       }
       device_signals.wasmHelper = globalWasmHelper;
@@ -71,13 +97,18 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       }
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
-      var generateBidResponse = {};
       try {
-        generateBidResponse = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
+      generate_bid_response = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
+      //Add private aggregate contributions to the response.
+      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      if(ps_response.paapicontributions){
+        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+      }
+      ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          generateBidResponse.debug_report_urls = {
+          ps_response.response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
@@ -87,16 +118,10 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      var result = generateBidResponse !== undefined ? generateBidResponse : {};
       if (featureFlags.enable_logging) {
-        return {
-          response: result,
-          logs: ps_logs,
-          errors: ps_errors,
-          warnings: ps_warns
-        };
+        return ps_response;
       }
-      return result;
+      return ps_response.response;
     }
 
     function fibonacci(num) {
@@ -121,19 +146,22 @@ constexpr absl::string_view
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
+    var ps_response = {
+          response: {},
+          logs: [],
+          errors: [],
+          warnings: []
+        };
     async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
       if(featureFlags.enable_logging){
         console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
+          ps_response.logs.push(JSON.stringify(args))
         }
         console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
+          ps_response.errors.push(JSON.stringify(args))
         }
         console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
+          ps_response.warnings.push(JSON.stringify(args))
         }
       }
       if (encodedOnDeviceSignals) {
@@ -156,13 +184,18 @@ constexpr absl::string_view
       }
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
-      var generateBidResponse = {};
       try {
-        generateBidResponse = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion);
+      generate_bid_response = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion);
+      //Add private aggregate contributions to the response.
+      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      if(ps_response.paapicontributions){
+        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+      }
+      ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          generateBidResponse.debug_report_urls = {
+          ps_response.response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
@@ -172,16 +205,10 @@ constexpr absl::string_view
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      var result = generateBidResponse !== undefined ? generateBidResponse : {};
       if (featureFlags.enable_logging) {
-        return {
-          response: result,
-          logs: ps_logs,
-          errors: ps_errors,
-          warnings: ps_warns
-        };
+        return ps_response;
       }
-      return result;
+      return ps_response.response;
     }
 
     function fibonacci(num) {

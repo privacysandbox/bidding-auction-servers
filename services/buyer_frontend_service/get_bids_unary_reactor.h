@@ -40,6 +40,8 @@
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
+#include "services/common/util/cancellation_wrapper.h"
+#include "services/common/util/client_contexts.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -91,17 +93,24 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   GetBidsUnaryReactor& operator=(const GetBidsUnaryReactor&) = delete;
 
   // Starts the execution the request.
-  void Execute();
+  void CancellableExecute();
 
   // Handles the execution of chaff requests.
-  void ExecuteChaffRequest();
+  void CancellableExecuteChaffRequest();
 
   // Runs once the request has finished execution and deletes current instance.
   void OnDone() override;
   // Runs if the request is cancelled in the middle of execution.
   void OnCancel() override {
-    // TODO(b/249183477): Figure out how to cancel request
+    if (enable_cancellation_) {
+      client_contexts_.CancelAll();
+    }
   }
+
+  CLASS_CANCELLATION_WRAPPER(Execute, enable_cancellation_, context_,
+                             FinishWithStatus)
+  CLASS_CANCELLATION_WRAPPER(ExecuteChaffRequest, enable_cancellation_,
+                             context_, FinishWithStatus)
 
  private:
   // Process Outputs from Actions to prepare bidding request.
@@ -177,6 +186,11 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Maintains the errors observed during Protected Audience or Protected App
   // Signals bid generation.
   std::vector<std::string> bid_errors_;
+
+  // Keeps track of the client contexts used for RPC calls
+  ClientContexts client_contexts_;
+
+  const bool enable_cancellation_;
 
   // Logs GetBidsRawRequest if the consented debugging is enabled.
   void MayLogRawRequest();

@@ -24,8 +24,8 @@
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/code_fetch/periodic_bucket_fetcher.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -47,7 +47,7 @@ constexpr char kFailedBucketFetchStartup[] = "Failed bucket fetch startup for ";
 // BuyerCodeFetchManager acts as a wrapper for all logic related to fetching
 // bidding service UDFs. This class consumes a BuyerCodeFetchConfig and uses it,
 // along with various other dependencies, to create and own all instances of
-// CodeFetcherInterface in the bidding service.
+// FetcherInterface in the bidding service.
 class BuyerCodeFetchManager {
  public:
   // All raw pointers indicate that we are borrowing a reference and MUST
@@ -92,7 +92,7 @@ class BuyerCodeFetchManager {
   absl::Status InitializeBucketCodeFetchForPA();
   absl::Status InitializeBucketCodeFetchForPAS();
 
-  absl::StatusOr<std::unique_ptr<CodeFetcherInterface>> StartBucketFetch(
+  absl::StatusOr<std::unique_ptr<FetcherInterface>> StartBucketFetch(
       const std::string& bucket_name, const std::string& default_version,
       absl::string_view script_logging_name, absl::Duration url_fetch_period_ms,
       absl::AnyInvocable<std::string(const std::vector<std::string>&)>
@@ -102,7 +102,7 @@ class BuyerCodeFetchManager {
   absl::Status InitializeUrlCodeFetchForPA();
   absl::Status InitializeUrlCodeFetchForPAS();
 
-  absl::StatusOr<std::unique_ptr<CodeFetcherInterface>> StartUrlFetch(
+  absl::StatusOr<std::unique_ptr<FetcherInterface>> StartUrlFetch(
       const std::string& js_url, const std::string& wasm_helper_url,
       const std::string& roma_version, absl::string_view script_logging_name,
       absl::Duration url_fetch_period_ms, absl::Duration url_fetch_timeout_ms,
@@ -118,9 +118,9 @@ class BuyerCodeFetchManager {
   const bool enable_protected_audience_;
   const bool enable_protected_app_signals_;
 
-  std::unique_ptr<CodeFetcherInterface> pa_udf_fetcher_;
-  std::unique_ptr<CodeFetcherInterface> pas_bidding_udf_fetcher_;
-  std::unique_ptr<CodeFetcherInterface> pas_ads_retrieval_udf_fetcher_;
+  std::unique_ptr<FetcherInterface> pa_udf_fetcher_;
+  std::unique_ptr<FetcherInterface> pas_bidding_udf_fetcher_;
+  std::unique_ptr<FetcherInterface> pas_ads_retrieval_udf_fetcher_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

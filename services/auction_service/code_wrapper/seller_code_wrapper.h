@@ -42,7 +42,7 @@ inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
 // execution
 //- Exporting console.logs from the AdTech script execution
 inline constexpr absl::string_view kReportingEntryFunction =
-    R"JSCODE(
+    R"JS_CODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction$suffix(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, $extraArgs) {
@@ -129,10 +129,10 @@ inline constexpr absl::string_view kReportingEntryFunction =
         sellerWarnings: ps_warns,
       }
     }
-)JSCODE";
+)JS_CODE";
 
 inline constexpr absl::string_view kReportingWinWrapperTemplate =
-    R"JSCODE(
+    R"JS_CODE(
     // Handler method to call adTech provided reportWin method and wrap the
     // response with reportWin url and interaction reporting urls.
     function $reportWinWrapperName(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
@@ -183,7 +183,7 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
         buyerWarnings: ps_buyer_warning_logs
       }
     }
-)JSCODE";
+)JS_CODE";
 
 // Returns the complete wrapped code for Seller.
 // The function adds wrappers to the Seller provided script. This enables:

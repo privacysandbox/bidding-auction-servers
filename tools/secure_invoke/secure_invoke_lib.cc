@@ -43,14 +43,12 @@ namespace {
 
 constexpr char kJsonFormat[] = "JSON";
 
-absl::StatusOr<std::string> SortAuctionResultBiddingGroups(
+absl::StatusOr<rapidjson::Document> SortAuctionResultBiddingGroups(
     absl::string_view auction_result_json) {
+  PS_ASSIGN_OR_RETURN(rapidjson::Document d,
+                      ParseJsonString(auction_result_json));
+
   std::string key_name = "biddingGroups";
-  auto document = ParseJsonString(auction_result_json);
-  if (!document.ok()) {
-    return document.status();
-  }
-  auto& d = *document;
   absl::btree_map<std::string, rapidjson::Value> sorted_map;
   if (d.HasMember(key_name.c_str())) {
     for (auto& m : d[key_name.c_str()].GetObject()) {
@@ -70,7 +68,7 @@ absl::StatusOr<std::string> SortAuctionResultBiddingGroups(
   d.AddMember(rapidjson::Value().SetString(key_name.c_str(), d.GetAllocator()),
               sorted_val, d.GetAllocator());  // add new sorted map
 
-  return SerializeJsonDoc(d);
+  return d;
 }
 
 absl::StatusOr<std::string> ParseSelectAdResponse(
@@ -96,24 +94,35 @@ absl::StatusOr<std::string> ParseSelectAdResponse(
     return auction_result_json_status;
   }
   // Sort bidding groups for easy comparison.
-  auto sorted_auction_result_json_status =
-      SortAuctionResultBiddingGroups(auction_result_json);
-  std::string debug_info_json = resp->debug_info().DebugString();
-  if (!debug_info_json.empty() && sorted_auction_result_json_status.ok()) {
-    return absl::StrCat(R"JSON({"debug_info":")JSON", debug_info_json,
-                        R"JSON(", "auction_result":")JSON",
-                        *sorted_auction_result_json_status, R"JSON("})JSON");
+  PS_ASSIGN_OR_RETURN(rapidjson::Document auction_result_doc,
+                      SortAuctionResultBiddingGroups(auction_result_json));
+  if (!resp->has_debug_info()) {
+    return SerializeJsonDoc(auction_result_doc);
   }
-  return sorted_auction_result_json_status;
-}
 
+  std::string debug_info_json;
+  CHECK_OK(google::protobuf::util::MessageToJsonString(resp->debug_info(),
+                                                       &debug_info_json));
+  absl::StatusOr<rapidjson::Document> debug_info_document =
+      ParseJsonString(debug_info_json);
+  CHECK_OK(debug_info_document);
+  rapidjson::Document output_doc;
+  output_doc.SetObject();
+  rapidjson::Document::AllocatorType& allocator = output_doc.GetAllocator();
+  output_doc.AddMember("auctionResult", std::move(auction_result_doc),
+                       allocator);
+  output_doc.AddMember("debugInfo", std::move(*debug_info_document), allocator);
+  absl::StatusOr<std::string> json_output = SerializeJsonDoc(output_doc);
+  CHECK_OK(json_output);
+  return *json_output;
+}
 }  // namespace
 
 absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
     const HpkeKeyset& keyset, bool enable_debug_reporting,
-    bool enable_unlimited_egress,
+    std::optional<bool> enable_debug_info, bool enable_unlimited_egress,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -137,8 +146,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
           raw_select_ad_request_json, client_type, keyset,
-          enable_debug_reporting, absl::GetFlag(FLAGS_pas_buyer_input_json),
-          enable_unlimited_egress);
+          enable_debug_reporting, enable_debug_info,
+          absl::GetFlag(FLAGS_pas_buyer_input_json), enable_unlimited_egress);
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -210,9 +219,15 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
       key_fetcher_manager.get(), crypto_client.get(), service_client_config,
       std::move(stub));
   absl::Notification notification;
+
+  grpc::ClientContext context;
+  for (const auto& it : request_metadata) {
+    context.AddMetadata(it.first, it.second);
+  }
+
   auto call_status = bfe_client.ExecuteInternal(
       std::make_unique<GetBidsRequest::GetBidsRawRequest>(get_bids_raw_request),
-      request_metadata,
+      &context,
       [onDone = std::move(on_done), &notification, start = absl::Now()](
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               raw_response,
@@ -249,6 +264,7 @@ std::string LoadFile(absl::string_view file_path) {
 
 absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting,
+                              std::optional<bool> enable_debug_info,
                               bool enable_unlimited_egress) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
@@ -264,7 +280,7 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
           raw_select_ad_request_json, options, client_type, keyset,
-          enable_debug_reporting, enable_unlimited_egress,
+          enable_debug_reporting, enable_debug_info, enable_unlimited_egress,
           [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response

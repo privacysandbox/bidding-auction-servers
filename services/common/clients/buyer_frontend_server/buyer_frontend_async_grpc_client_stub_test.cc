@@ -63,7 +63,7 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       .chaffing_enabled = true};
 
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);
@@ -162,7 +162,7 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       .chaffing_enabled = true};
 
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(false);

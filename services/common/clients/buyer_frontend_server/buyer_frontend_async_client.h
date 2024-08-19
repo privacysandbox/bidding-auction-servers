@@ -63,7 +63,7 @@ class BuyerFrontEndAsyncGrpcClient
 
   absl::Status ExecuteInternal(
       std::unique_ptr<GetBidsRequest::GetBidsRawRequest> raw_request,
-      const RequestMetadata& metadata,
+      grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                   GetBidsResponse::GetBidsRawResponse>>,
                               ResponseMetadata) &&>
@@ -76,7 +76,7 @@ class BuyerFrontEndAsyncGrpcClient
   //
   // params: a pointer to the RawClientParams object which carries data used
   // by the grpc stub.
-  void SendRpc(const std::string& hpke_secret,
+  void SendRpc(const std::string& hpke_secret, grpc::ClientContext* context,
                RawClientParams<GetBidsRequest, GetBidsResponse,
                                GetBidsResponse::GetBidsRawResponse>* params)
       const override;

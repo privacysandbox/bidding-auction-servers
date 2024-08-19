@@ -83,6 +83,10 @@ inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
     "interactionReportingUrls";
 inline constexpr char kBidTag[] = "bid";
 inline constexpr char kInterestGroupOwnerTag[] = "interestGroupOwner";
+inline constexpr char kInterestGroupNameTag[] = "interestGroupName";
+inline constexpr char kJoinCountTag[] = "joinCount";
+inline constexpr char kRecencyTag[] = "recency";
+constexpr int kStochasticalRoundingBits = 8;
 
 enum class ReportingArgs : int {
   kAuctionConfig = 0,
@@ -112,6 +116,7 @@ struct BuyerReportingMetadata {
 struct ComponentReportingMetadata {
   std::string top_level_seller;
   std::string component_seller;
+  // Todo(b/353771714): Remove modified_bid_currency
   std::string modified_bid_currency;
   float modified_bid;
 };
@@ -166,6 +171,23 @@ struct SellerReportingDispatchRequestData {
   RequestLogContext& log_context;
 };
 
+struct BuyerReportingDispatchRequestData {
+  std::shared_ptr<std::string> auction_config;
+  std::string buyer_signals;
+  std::optional<int> join_count;
+  std::optional<long> recency;
+  std::optional<int> modeling_signals;
+  std::string seller;
+  std::string interest_group_name;
+  double ad_cost;
+  std::optional<std::string> buyer_reporting_id;
+  bool made_highest_scoring_other_bid;
+  RequestLogContext& log_context;
+  std::string buyer_origin;
+  std::string signals_for_winner = "null";
+  std::string winning_ad_render_url;
+};
+
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(
     R"JSON(
         {
@@ -202,7 +224,14 @@ DispatchRequest GetReportingDispatchRequest(
 // bit exponent. If there is an error while generating the rounded
 // number, -1 will be returned.
 double GetEightBitRoundedValue(double value);
-
+// Handles AdTech logs exported from Roma.
+// - Parses document for "logs", "errors" and "warnings" keys and gets array
+// values for each of them.
+// - Logs the parsed strings along with a message that includes log_type,
+// udf_name using PS_VLOG and log_context.
+void HandleUdfLogs(const rapidjson::Document& document,
+                   const std::string& log_type, absl::string_view udf_name,
+                   RequestLogContext& log_context);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_H_

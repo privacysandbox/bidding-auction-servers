@@ -50,6 +50,7 @@ cc_test(
         "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "//services/seller_frontend_service:runtime_flags",
         "@com_github_google_quiche//quiche:quiche_unstable_api",
         "@com_github_grpc_grpc//:grpc++",

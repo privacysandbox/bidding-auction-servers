@@ -53,7 +53,8 @@ class FakeBuyerKeyValueAsyncHttpClient
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout,
+      RequestContext context = NoOpContext()) const override;
 
  private:
   const std::string kv_server_base_address_;

@@ -56,23 +56,29 @@ module "buyer" {
     KV_SERVER_EGRESS_TLS              = "false"          # Do not change unless you are modifying the default GCP architecture.
     TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
-    ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
-    TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
-    TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
-    AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
-    GENERATE_BID_TIMEOUT_MS                       = "" # Example: "60000"
-    PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
-    BIDDING_SIGNALS_LOAD_TIMEOUT_MS               = "" # Example: "60000"
-    ENABLE_BUYER_FRONTEND_BENCHMARKING            = "" # Example: "false"
-    CREATE_NEW_EVENT_ENGINE                       = "" # Example: "false"
-    ENABLE_BIDDING_COMPRESSION                    = "" # Example: "true"
+    ENABLE_BIDDING_SERVICE_BENCHMARK   = "" # Example: "false"
+    BUYER_KV_SERVER_ADDR               = "" # Example: "https://kvserver.com/trusted-signals"
+    TEE_AD_RETRIEVAL_KV_SERVER_ADDR    = "" # Example: "xds:///ad-retrieval-host"
+    TEE_KV_SERVER_ADDR                 = "" # Example: "xds:///kv-service-host"
+    AD_RETRIEVAL_TIMEOUT_MS            = "" # Example: "60000"
+    GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
+    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
+    ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
+    CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
+    ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
+    ENABLE_PROTECTED_AUDIENCE          = "" # Example: "true"
+    PS_VERBOSITY                       = "" # Example: "10"
+    # [BEGIN] PAS related params
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE                     = "" # Example: "true"
-    PS_VERBOSITY                                  = "" # Example: "10"
-    # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
-    # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
-    # and additional latency for parsing the logs.
+    PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
+    EGRESS_SCHEMA_FETCH_CONFIG                    = "" # Example:
+    # "{
+    #   "fetchMode": 0,
+    #   "egressSchemaUrl": "https://example.com/egressSchema.json",
+    #   "urlFetchPeriodMs": 130000,
+    #   "urlFetchTimeoutMs": 30000
+    # }"
+    # [END] PAS related params
     BUYER_CODE_FETCH_CONFIG = "" # Example:
     # "{
     #    "fetchMode": 0,
@@ -86,6 +92,7 @@ module "buyer" {
     #    "enableBuyerDebugUrlGeneration": true,
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
+    #    "enablePrivateAggregateReporting": false,
     #  }"
     JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
     JS_WORKER_QUEUE_LEN       = "" # Example: "200".
@@ -118,7 +125,7 @@ module "buyer" {
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = ""                      # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = ""                      # Example: "3000"
 
-    INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar_<module_name>"
     INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
     INFERENCE_MODEL_BUCKET_PATHS     = "" # Example: "<model_path1>,<model_path2>"
     INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:

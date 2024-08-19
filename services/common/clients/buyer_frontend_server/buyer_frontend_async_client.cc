@@ -41,7 +41,7 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
 
 absl::Status BuyerFrontEndAsyncGrpcClient::ExecuteInternal(
     std::unique_ptr<GetBidsRequest::GetBidsRawRequest> raw_request,
-    const RequestMetadata& metadata,
+    grpc::ClientContext* context,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                 GetBidsResponse::GetBidsRawResponse>>,
                             ResponseMetadata) &&>
@@ -49,7 +49,7 @@ absl::Status BuyerFrontEndAsyncGrpcClient::ExecuteInternal(
     absl::Duration timeout, RequestConfig request_config) {
   if (!chaffing_enabled_) {
     return DefaultAsyncGrpcClient::ExecuteInternal(std::move(raw_request),
-                                                   metadata, std::move(on_done),
+                                                   context, std::move(on_done),
                                                    timeout, request_config);
   }
 
@@ -59,7 +59,7 @@ absl::Status BuyerFrontEndAsyncGrpcClient::ExecuteInternal(
   std::string encoded_req_payload =
       EncodeGetBidsPayload(*raw_request, request_config.chaff_request_size);
 
-  return EncryptPayloadAndSendRpc(encoded_req_payload, metadata,
+  return EncryptPayloadAndSendRpc(encoded_req_payload, context,
                                   std::move(on_done), timeout, request_config);
 }
 
@@ -117,12 +117,12 @@ void BuyerFrontEndAsyncGrpcClient::OnGetBidsDoneChaffingEnabled(
 }
 
 void BuyerFrontEndAsyncGrpcClient::SendRpc(
-    const std::string& hpke_secret,
+    const std::string& hpke_secret, grpc::ClientContext* context,
     RawClientParams<GetBidsRequest, GetBidsResponse,
                     GetBidsResponse::GetBidsRawResponse>* params) const {
   PS_VLOG(5) << "BuyerFrontEndAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GetBids(
-      params->ContextRef(), params->RequestRef(), params->ResponseRef(),
+      context, params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](const grpc::Status& status) {
         if (!status.ok()) {
           PS_LOG(ERROR) << "SendRPC completion status not ok: "
@@ -141,7 +141,7 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
             decrypt_response = crypto_client_->AeadDecrypt(
                 params->ResponseRef()->response_ciphertext(), hpke_secret);
         if (!decrypt_response.ok()) {
-          PS_LOG(ERROR)
+          PS_LOG(ERROR, SystemLogContext())
               << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                       decrypt_response.status().ToString()));

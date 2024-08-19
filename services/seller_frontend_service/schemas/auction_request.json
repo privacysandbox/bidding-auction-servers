@@ -18,7 +18,8 @@
       "type": "string",
       "format": "uuid"
     },
-    "enableDebugReporting": { "type": "boolean" }
+    "enableDebugReporting": { "type": "boolean" },
+    "requestTimestampMs": { "type": "number" }
   },
   "required": ["version", "interestGroups", "publisher", "generationId"],
   "additionalProperties": false

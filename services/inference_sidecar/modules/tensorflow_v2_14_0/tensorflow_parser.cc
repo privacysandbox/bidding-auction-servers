@@ -25,6 +25,7 @@
 #include "src/util/status_macro/status_macros.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
+#include "utils/error.h"
 #include "utils/request_parser.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -238,35 +239,40 @@ absl::StatusOr<rapidjson::Value> TensorToJsonValue(
   return json_tensor;
 }
 
-absl::StatusOr<std::string> ConvertTensorsToJson(
-    const std::vector<std::pair<std::string, std::vector<TensorWithName>>>&
-        batch_outputs) {
+absl::StatusOr<std::string> ConvertTensorsOrErrorToJson(
+    const std::vector<TensorsOrError>& batch_outputs) {
   rapidjson::Document document;
   document.SetObject();
   rapidjson::MemoryPoolAllocator<>& allocator = document.GetAllocator();
 
   rapidjson::Value batch(rapidjson::kArrayType);
-  for (const auto& [model_path, tensors] : batch_outputs) {
+  for (const auto& output : batch_outputs) {
     rapidjson::Value nested_object(rapidjson::kObjectType);
-    rapidjson::Value model_path_value;
-    model_path_value.SetString(model_path.c_str(), allocator);
-    nested_object.AddMember("model_path", model_path_value, allocator);
+    nested_object.AddMember("model_path",
+                            rapidjson::Value().SetString(
+                                rapidjson::StringRef(output.model_path.data())),
+                            allocator);
 
-    rapidjson::Value tensors_value(rapidjson::kArrayType);
-    for (const auto& [tensor_name, tensor] : tensors) {
-      absl::StatusOr<rapidjson::Value> json =
-          TensorToJsonValue(tensor_name, tensor, allocator);
-      if (json.ok()) {
-        tensors_value.PushBack(json.value(), allocator);
-      } else {
-        return json.status();
+    if (output.tensors) {
+      rapidjson::Value tensors_value(rapidjson::kArrayType);
+      for (const auto& [tensor_name, tensor] : output.tensors.value()) {
+        absl::StatusOr<rapidjson::Value> json =
+            TensorToJsonValue(tensor_name, tensor, allocator);
+        if (json.ok()) {
+          tensors_value.PushBack(json.value(), allocator);
+        } else {
+          return json.status();
+        }
       }
+      nested_object.AddMember("tensors", tensors_value.Move(), allocator);
+    } else if (output.error) {
+      nested_object.AddMember(
+          "error", CreateSingleError(allocator, *output.error), allocator);
     }
-    nested_object.AddMember("tensors", tensors_value.Move(), allocator);
     batch.PushBack(nested_object.Move(), allocator);
   }
-  document.AddMember("response", batch.Move(), allocator);
 
+  document.AddMember("response", batch.Move(), allocator);
   return SerializeJsonDoc(document);
 }
 

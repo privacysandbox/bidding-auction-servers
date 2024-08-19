@@ -36,14 +36,39 @@ cc_library(
 
 cc_library(
     name = "component_seller_reporting_manager",
+    srcs = [
+        "component_seller_reporting_manager.cc",
+    ],
     hdrs = ["component_seller_reporting_manager.h"],
     visibility = ["//visibility:public"],
     deps = [
         ":seller_reporting_manager",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/reporting:noiser_and_bucketer",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
         "@com_google_absl//absl/status:statusor",
+        "@rapidjson",
+    ],
+)
+
+cc_library(
+    name = "top_level_seller_reporting_manager",
+    srcs = [
+        "top_level_seller_reporting_manager.cc",
+    ],
+    hdrs = ["top_level_seller_reporting_manager.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/reporting:noiser_and_bucketer",
+        "//services/auction_service/reporting:reporting_helper",
+        "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/udf_fetcher:adtech_code_version_util",
+        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/status:statusor",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
     ],
 )
@@ -57,6 +82,55 @@ cc_test(
     visibility = ["//visibility:public"],
     deps = [
         ":seller_reporting_manager",
+        "//services/auction_service/reporting:reporting_helper",
+        "//services/auction_service/reporting:reporting_helper_test",
+        "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/reporting:reporting_test_util",
+        "//services/auction_service/udf_fetcher:adtech_code_version_util",
+        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/code_dispatch:code_dispatch_reactor",
+        "//services/common/test:mocks",
+        "//services/common/test/utils:test_init",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "component_seller_reporting_manager_test",
+    size = "small",
+    srcs = [
+        "component_seller_reporting_manager_test.cc",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":component_seller_reporting_manager",
+        ":seller_reporting_manager",
+        "//services/auction_service/reporting:reporting_helper",
+        "//services/auction_service/reporting:reporting_helper_test",
+        "//services/auction_service/reporting:reporting_response",
+        "//services/auction_service/reporting:reporting_test_util",
+        "//services/common/test:mocks",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "top_level_seller_reporting_manager_test",
+    size = "small",
+    srcs = [
+        "top_level_seller_reporting_manager_test.cc",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":top_level_seller_reporting_manager",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_helper_test",
         "//services/auction_service/reporting:reporting_response",

@@ -90,7 +90,7 @@ class BaseGenerateBidsReactor
 
   bool enable_buyer_debug_url_generation_;
   std::string roma_timeout_ms_;
-  RomaRequestContextFactory roma_request_context_factory_;
+  RomaRequestContextFactoryBidding roma_request_context_factory_;
   RequestLogContext log_context_;
   bool enable_adtech_code_logging_;
   int max_allowed_size_debug_url_chars_;
