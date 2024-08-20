@@ -49,6 +49,7 @@ declare -i SKIP_PRECOMMIT=0
 declare -i NO_TESTS=0
 declare -i NO_PLATFORM_BUILD=0
 declare -a AMI_REGIONS
+declare AWS_IMAGE_TAG
 declare GCP_IMAGE_TAG
 declare GCP_IMAGE_REPO
 declare -i GCP_SKIP_IMAGE_UPLOAD=0
@@ -70,7 +71,7 @@ usage:
   $0 <options>
     --service-path               [REQUIRED] Recognized values: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service.
                                    Use multiple times to specify more than one service.
-    --instance                   [REQUIRED] Recognized values: local, aws
+    --instance                   [REQUIRED] Recognized values: local, gcp, aws, azure
     --platform                   [REQUIRED] Recognized values: gcp, aws, azure
     --e2e                        Run e2e mode
     --build-flavor               Recognized values: prod, non_prod, inference_non_prod. Default: prod
@@ -141,6 +142,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-ami)
       AMI_REGIONS+=("$2")
+      shift 2 || usage
+      ;;
+    --aws-image-tag)
+      AWS_IMAGE_TAG+=("$2")
       shift 2 || usage
       ;;
     --service-path)
