@@ -65,6 +65,8 @@ struct BiddingServiceRuntimeConfig {
       kProtectedAppSignalsGenerateBidBlobVersion;
   std::string default_ad_retrieval_version =
       kPrepareDataForAdRetrievalBlobVersion;
+  // Enables private aggregate reporting.
+  bool enable_private_aggregate_reporting = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

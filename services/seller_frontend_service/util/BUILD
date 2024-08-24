@@ -163,6 +163,7 @@ cc_library(
         "//services/common:public_key_url_allowlist",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/seller_frontend_service:runtime_flags",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
@@ -199,12 +200,12 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/encryption:key_fetcher_factory",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:oblivious_http_utils",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/communication:ohttp_utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )

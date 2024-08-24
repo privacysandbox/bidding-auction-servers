@@ -333,7 +333,7 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
@@ -348,12 +348,13 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
 
   ScoreAdsResponse response;
   CodeDispatchClientStub dispatcher;
+  grpc::CallbackServerContext context;
   for (auto _ : state) {
     // This code gets timed.
     metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&score_ads_request);
-    ScoreAdsReactor reactor(dispatcher, &score_ads_request, &response,
+    ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),
                             key_fetcher_manager.get(), &crypto_client,
                             async_reporter.get(), runtime_config);
@@ -378,7 +379,7 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
       /*http_fetcher_async=*/nullptr);
   auto crypto_client = CryptoClientStub(&score_ads_raw_request);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig runtime_config = {
@@ -394,12 +395,13 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
 
   ScoreAdsResponse response;
   CodeDispatchClientStub dispatcher;
+  grpc::CallbackServerContext context;
   for (auto _ : state) {
     // This code gets timed.
     metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto))
         ->Get(&score_ads_request);
-    ScoreAdsReactor reactor(dispatcher, &score_ads_request, &response,
+    ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),
                             key_fetcher_manager.get(), &crypto_client,
                             async_reporter.get(), runtime_config);

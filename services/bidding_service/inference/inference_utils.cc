@@ -16,6 +16,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,15 +40,47 @@
 #include "rapidjson/writer.h"
 #include "services/bidding_service/inference/inference_flags.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/logger/request_context_logger.h"
 #include "src/roma/interface/roma.h"
 #include "src/util/status_macro/status_macros.h"
 #include "src/util/status_macro/status_util.h"
+#include "utils/error.h"
 #include "utils/file_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
+
+void LogMetrics(
+    const google::protobuf::Map<std::string, MetricValue>& metrics_map,
+    metric::BiddingContext* metric_context, RequestLogContext& log_context) {
+  for (const auto& [key, metric_value] : metrics_map) {
+    absl::Status log_status;
+    if (key == "kInferenceRequestCount") {
+      log_status =
+          metric_context->AccumulateMetric<metric::kInferenceRequestCount>(
+              metric_value.value());
+    } else if (key == "kInferenceRequestDuration") {
+      log_status =
+          metric_context->AccumulateMetric<metric::kInferenceRequestDuration>(
+              metric_value.value());
+    } else if (key == "kInferenceRequestSize") {
+      log_status =
+          metric_context->AccumulateMetric<metric::kInferenceRequestSize>(
+              metric_value.value());
+    } else if (key == "kInferenceResponseSize") {
+      log_status =
+          metric_context->AccumulateMetric<metric::kInferenceResponseSize>(
+              metric_value.value());
+    } else {
+      log_status = absl::NotFoundError("Unrecognized metric key: " + key);
+    }
+    if (!log_status.ok()) {
+      PS_LOG(ERROR, log_context)
+          << "Failed to log metric for " << key << ": " << log_status.message();
+    }
+  }
+}
 
 SandboxExecutor& Executor() {
   // TODO(b/314976301): Use absl::NoDestructor<T> when it becomes available.
@@ -70,6 +103,10 @@ std::shared_ptr<grpc::Channel> InferenceChannel(
       grpc::CreateInsecureChannelFromFd("GrpcChannel",
                                         executor.FileDescriptor());
   return client_channel;
+}
+
+std::unique_ptr<InferenceService::StubInterface> CreateInferenceStub() {
+  return InferenceService::NewStub(InferenceChannel(Executor()));
 }
 
 absl::Status RegisterModelsFromLocal(const std::vector<std::string>& paths) {
@@ -137,7 +174,7 @@ absl::Status RegisterModelsFromBucket(
 }
 
 void RunInference(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
         wrapper) {
   absl::Time start_inference_execution_time = absl::Now();
   const std::string& payload = wrapper.io_proto.input_string();
@@ -150,9 +187,8 @@ void RunInference(
   PredictRequest predict_request;
   predict_request.set_input(payload);
 
-  absl::StatusOr<std::shared_ptr<RomaRequestContext>> roma_request_context =
-      wrapper.metadata.GetRomaRequestContext();
-  metric::BiddingContext* metric_context = nullptr;
+  absl::StatusOr<std::shared_ptr<RomaRequestContextBidding>>
+      roma_request_context = wrapper.metadata.GetRomaRequestContext();
 
   if (roma_request_context.ok()) {
     // Check if it is a Protected Audience request and the build flavor is prod
@@ -163,9 +199,6 @@ void RunInference(
              "production build.";
       return;
     }
-    // Retrieve the metric context from the RomaRequestContext
-    CHECK_OK((*roma_request_context)->GetMetricContext());
-    metric_context = (*roma_request_context)->GetMetricContext().value();
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
   }
 
@@ -178,25 +211,46 @@ void RunInference(
     PS_VLOG(10) << "Inference response received: "
                 << predict_response.DebugString();
     if (roma_request_context.ok()) {
-      PS_VLOG(kNoisyInfo, (*roma_request_context)->GetLogContext())
+      RequestLogContext& log_context = (*roma_request_context)->GetLogContext();
+      PS_VLOG(kNoisyInfo, log_context)
           << "Inference sidecar consented debugging log: "
           << predict_response.debug_info();
-    }
-    if (metric_context) {
-      int inference_execution_time_ms =
-          (absl::Now() - start_inference_execution_time) /
-          absl::Milliseconds(1);
-      LogIfError(metric_context
-                     ->LogHistogram<metric::kBiddingInferenceRequestDuration>(
-                         inference_execution_time_ms));
+
+      if (auto inference_metric_context =
+              (*roma_request_context)->GetMetricContext();
+          inference_metric_context.ok()) {
+        auto metric_context = inference_metric_context.value();
+        LogMetrics(predict_response.metrics(), metric_context, log_context);
+
+        int inference_execution_time_ms =
+            (absl::Now() - start_inference_execution_time) /
+            absl::Milliseconds(1);
+        LogIfError(
+            metric_context
+                ->AccumulateMetric<metric::kBiddingInferenceRequestDuration>(
+                    inference_execution_time_ms));
+      }
     }
     return;
   }
   absl::Status status = server_common::ToAbslStatus(rpc_status);
-  // TODO(b/321284008): Communicate inference failure with JS caller.
+  wrapper.io_proto.set_output_string(CreateBatchErrorString(
+      {.error_type = Error::GRPC,
+       .description = absl::StrCat("Code: ", status.code(),
+                                   ", Message: ", status.message())}));
   if (roma_request_context.ok()) {
     PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
         << "Response error: " << status.message();
+
+    if (auto inference_metric_context =
+            (*roma_request_context)->GetMetricContext();
+        inference_metric_context.ok()) {
+      auto metric_context = inference_metric_context.value();
+      LogIfError(
+          metric_context
+              ->AccumulateMetric<metric::kInferenceRequestFailedCountByStatus>(
+                  1, StatusCodeToString(status.code())));
+    }
   }
 }
 
@@ -220,7 +274,7 @@ std::string GetModelResponseToJson(const GetModelPathsResponse& response) {
 }
 
 void GetModelPaths(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
         wrapper) {
   SandboxExecutor& executor = Executor();
   std::unique_ptr<InferenceService::StubInterface> stub =
@@ -242,7 +296,8 @@ void GetModelPaths(
   }
 
   absl::Status status = server_common::ToAbslStatus(rpc_status);
-  PS_LOG(ERROR) << "GetModelPaths response error: " << status.message();
+  PS_LOG(ERROR, SystemLogContext())
+      << "GetModelPaths response error: " << status.message();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

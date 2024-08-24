@@ -25,7 +25,7 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "src/logger/request_context_logger.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -77,7 +77,8 @@ void BuyerReportingFetcher::PeriodicBuyerReportingFetchSync() {
   }
 
   if (requests.empty()) {
-    PS_LOG(ERROR) << "No buyer reporting UDFs to fetch in config.";
+    PS_LOG(ERROR, SystemLogContext())
+        << "No buyer reporting UDFs to fetch in config.";
     return;
   }
 
@@ -89,9 +90,9 @@ void BuyerReportingFetcher::PeriodicBuyerReportingFetchSync() {
         for (int i = 0; i < results.size(); i++) {
           auto& result = results[i];
           if (!result.ok()) {
-            PS_LOG(ERROR) << "Failed origin " << buyer_origins[i]
-                          << " fetch at " << requests[i].url
-                          << " with status: " << result.status();
+            PS_LOG(ERROR, SystemLogContext())
+                << "Failed origin " << buyer_origins[i] << " fetch at "
+                << requests[i].url << " with status: " << result.status();
           } else {
             if (i < config_.buyer_report_win_js_urls().size()) {
               protected_auction_code_blob_per_origin_[buyer_origins[i]] =

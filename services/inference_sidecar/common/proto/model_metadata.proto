@@ -1,0 +1,47 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.inference;
+
+// Schema for dynamic model loading configuration.
+// This configuration is stored as a JSON file in the cloud bucket. Updating
+// this file triggers the dynamic loading of models from the same bucket.
+// TODO(b/358611067): Add a script to generate a model config JSON file.
+message ModelConfig {
+  repeated ModelMetadata model_metadata = 1;
+}
+
+message ModelMetadata {
+  // Path to the model in the cloud bucket.
+  string model_path = 1;
+  // Validates model content integrity.
+  // To compute model checksum:
+  // 1. Compute checksum on each model file using SHA256,
+  // 2. Order file checksums by file paths in an ascending order,
+  // 3. Concatenate all file checksums,
+  // 4. Compute a final checksum on the concatenated file checksum using SHA256.
+  // You can achieve the above by running:
+  // find <model_path> -type f -exec sha256sum {} \; | sort -k 2 | awk '{print $1}' | tr -d '\n' | sha256sum
+  // Note that we don't compute SHA256 on the concatenation of all model files
+  // directly because bash could break if the model consists of multiple files
+  // each of size in the order of GBs.
+  string checksum = 2;
+  // Batch inference requests used to perform warm up for target model during model
+  // registration, schema should follow BatchInferenceRequest in inference_payload.proto
+  // request text should be in json format.
+  bytes warm_up_batch_request_json = 3;
+  // TODO(b/346816785): Add metadata for model prewarming.
+}

@@ -50,8 +50,10 @@ constexpr char kTestProtectedAppSignals[] = "test_protected_app_signals";
 constexpr char kTestRetrievalData[] = "test_retrieval_data";
 constexpr double kTestWinningBid = 1.25;
 constexpr int kTestAdRetrievalTimeoutMs = 100000;
-constexpr char kTestEgressPayloadHex[] = "bccd";
-constexpr char kTestTemporaryEgressPayloadHex[] = "abcdefabcedfe";
+constexpr char kTestEgressPayload[] =
+    R"JSON({\"features\": [{\"name\": \"boolean-feature\", \"value\": true}]})JSON";
+constexpr char kTestTemporaryEgressPayload[] =
+    R"JSON({\"features\": [{\"name\": \"boolean-feature\", \"value\": false}]})JSON";
 constexpr char kTestEgressPayloadBiggerThan3Bytes[] = "deadbeef";
 constexpr char kTestEgressPayloadBiggerThan23bits[] = "f01020";
 constexpr char kTestAdsRetrievalAdsResponse[] = "Ads Data And Metadata";
@@ -72,6 +74,10 @@ constexpr char kTestDebugReportingUrls[] = R"JSON(
   "auction_debug_win_url": "test.com/debugWin"
 }
 )JSON";
+
+// Creates a test PrivateAggregationContribution object.
+PrivateAggregateContribution CreateTestPAggContribution(
+    EventType event_type, absl::string_view event_name);
 
 // Sets up the provided mock so that it could be use to mock the encryption
 // decryption required for TEE communication.
@@ -105,10 +111,10 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 // Creates a mock response from `generateBid` UDF.
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render = kTestRenderUrl, double bid = kTestWinningBid,
-    absl::string_view egress_payload_hex_string = kTestEgressPayloadHex,
+    absl::string_view egress_payload_string = kTestEgressPayload,
     absl::string_view debug_reporting_urls = kTestDebugReportingUrls,
-    absl::string_view temporary_egress_payload_hex_string =
-        kTestTemporaryEgressPayloadHex);
+    absl::string_view temporary_egress_payload_string =
+        kTestTemporaryEgressPayload);
 
 // Creates a mock response from ads retrieval service.
 absl::StatusOr<kv_server::v2::GetValuesResponse>
@@ -128,9 +134,10 @@ absl::Status MockRomaExecution(std::vector<DispatchRequest>& batch,
 // Roma for Protected App Signals workflow.
 void SetupProtectedAppSignalsRomaExpectations(
     MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
-    absl::optional<std::string> prepare_data_for_ad_retrieval_udf_response =
-        absl::nullopt,
-    absl::optional<std::string> generate_bid_udf_response = absl::nullopt);
+    const absl::optional<std::string>&
+        prepare_data_for_ad_retrieval_udf_response = absl::nullopt,
+    const absl::optional<std::string>& generate_bid_udf_response =
+        absl::nullopt);
 
 // Sets up expectations for the batch requests for UDFs that are to be run in
 // Roma for Protected App Signals contextual ads workflow.

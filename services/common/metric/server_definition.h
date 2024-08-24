@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/error_code.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/reporting_util.h"
@@ -190,7 +191,7 @@ inline constexpr server_common::metrics::Definition<
     kBiddingInferenceRequestDuration(
         "bidding.inference.request.duration_ms",
         "Time taken by Roma callback to execute inference",
-        server_common::metrics::kTimeHistogram, 300, 10);
+        server_common::metrics::kTimeHistogram, 300, 0);
 
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
@@ -461,39 +462,84 @@ inline constexpr server_common::metrics::Definition<
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kDeviceSignalsSize("device_signals.size_bytes",
+    kDeviceSignalsSize("bfe.device_signals.size_bytes",
                        "Cumulative size of device_signals in Bytes",
                        server_common::metrics::kSizeHistogram);
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kAdRenderIDsSize("ad_render_ids.size_bytes",
+    kAdRenderIDsSize("bfe.ad_render_ids.size_bytes",
                      "Cumulative size of ad_render_ids in Bytes",
                      server_common::metrics::kSizeHistogram);
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kBiddingSignalKeysSize("bidding_signal_keys.size_bytes",
+    kBiddingSignalKeysSize("bfe.bidding_signal_keys.size_bytes",
                            "Cumulative size of bidding_signal_keys in Bytes",
                            server_common::metrics::kSizeHistogram);
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kUserBiddingSignalsSize("user_bidding_signals.size_bytes",
+    kUserBiddingSignalsSize("bfe.user_bidding_signals.size_bytes",
                             "Cumulative size of user_bidding_signals in Bytes",
                             server_common::metrics::kSizeHistogram);
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kComponentAdsSize("component_ads.size_bytes",
+    kComponentAdsSize("bfe.component_ads.size_bytes",
                       "Cumulative size of component_ads in Bytes",
                       server_common::metrics::kSizeHistogram);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kNonImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kIGCount("interest_groups_count", "Total number of interest groups",
+    kIGCount("bfe.interest_groups.count", "Total number of interest groups",
              kCountHistogram);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kUpDownCounter>
+    kInferenceRequestCount(
+        /*name*/ "inference.request.count",
+        /*description*/
+        "Total number of inference requests received by the inference sidecar",
+        1, 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kInferenceRequestDuration(
+        "inference.request.duration_ms",
+        "Time taken by inference sidecar to execute inference",
+        server_common::metrics::kTimeHistogram, 300, 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kInferenceRequestSize("inference.request.size_bytes",
+                          "Size of the inference request coming to sidecar",
+                          server_common::metrics::kSizeHistogram, 100'000, 100);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceRequestFailedCountByStatus(
+        /*name*/ "inference.request.failed_count_by_status",
+        /*description*/
+        "Total number of inference requests resulted in failure partitioned by "
+        "status code",
+        /*partition_type*/ "status_code",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kInferenceResponseSize(
+        "inference.response.size_bytes",
+        "Size of the inference response going out of the sidecar",
+        server_common::metrics::kSizeHistogram, 100'000, 100);
 
 template <typename RequestT>
 struct RequestMetric;
@@ -525,6 +571,11 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kJSExecutionErrorCount,
         &kBiddingErrorCountByErrorCode,
         &kBiddingInferenceRequestDuration,
+        &kInferenceRequestCount,
+        &kInferenceRequestDuration,
+        &kInferenceRequestSize,
+        &kInferenceResponseSize,
+        &kInferenceRequestFailedCountByStatus,
 };
 
 template <>
@@ -557,6 +608,12 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kBfeInitiatedResponseKVSize,
         &kInitiatedResponseBiddingSize,
         &kBfeErrorCountByErrorCode,
+        &kDeviceSignalsSize,
+        &kAdRenderIDsSize,
+        &kBiddingSignalKeysSize,
+        &kUserBiddingSignalsSize,
+        &kComponentAdsSize,
+        &kIGCount,
 };
 
 template <>
@@ -598,12 +655,6 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kProtectedCiphertextSize,
         &kAuctionConfigSize,
         &kAuctionBidRejectedCount,
-        &kDeviceSignalsSize,
-        &kAdRenderIDsSize,
-        &kBiddingSignalKeysSize,
-        &kUserBiddingSignalsSize,
-        &kComponentAdsSize,
-        &kIGCount,
 };
 
 template <>
@@ -830,6 +881,10 @@ inline void AddErrorTypePartition(
         metric::kInitiatedRequestAuctionErrorCountByStatus.name_,
         error_list_view);
   }
+  if (server_name == metric::kBs) {
+    telemetry_config.SetPartition(
+        metric::kInferenceRequestFailedCountByStatus.name_, error_list_view);
+  }
 }
 
 template <typename RequestT, typename ResponseT>
@@ -858,7 +913,14 @@ void LogCommonMetric(const RequestT* request, const ResponseT* response) {
         if (result.ok()) {
           return {};
         }
-        return {{result.ToString(), 1}};
+        std::string failure_string = result.ToString();
+        if (!absl::StrContains(failure_string, kFailCurl)) {
+          return {{std::move(failure_string), 1}};
+        }
+        // split at "?" to remove url parameter
+        std::vector<absl::string_view> substr =
+            absl::StrSplit(failure_string, '?');
+        return {{std::string(substr[0]), 1}};
       }));
 }
 

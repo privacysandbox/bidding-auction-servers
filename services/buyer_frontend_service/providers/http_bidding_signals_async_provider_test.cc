@@ -25,7 +25,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-
+using ::testing::_;
 using ::testing::An;
 
 // Experiment Group ID.
@@ -56,7 +56,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetBuyerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&request, &notification](
               std::unique_ptr<GetBuyerValuesInput> input,
@@ -64,7 +64,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsMissingClientTypeToUnknown) {
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_UNKNOWN);
 
             EXPECT_TRUE(request.has_buyer_kv_experiment_group_id());
@@ -99,7 +99,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetBuyerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&request, &notification](
               std::unique_ptr<GetBuyerValuesInput> input,
@@ -107,7 +107,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsGetBidKeysToBuyerValuesInput) {
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             // Check that keys received in input are from buyer_input
             EXPECT_EQ(input->hostname, request.publisher_name());
             EXPECT_EQ(input->client_type, ClientType::CLIENT_TYPE_BROWSER);
@@ -165,13 +165,13 @@ TEST(HttpBiddingSignalsAsyncProviderTest, MapsBuyerValuesAsyncClientError) {
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetBuyerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce([](std::unique_ptr<GetBuyerValuesInput> input,
                    const RequestMetadata& metadata,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
                        callback,
-                   absl::Duration timeout) {
+                   absl::Duration timeout, RequestContext context) {
         (std::move(callback))(absl::InternalError(""));
         return absl::OkStatus();
       });
@@ -206,7 +206,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
               An<const RequestMetadata&>(),
               An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                              GetBuyerValuesOutput>>) &&>>(),
-              An<absl::Duration>()))
+              An<absl::Duration>(), _))
       .WillOnce(
           [&expected_output](
               std::unique_ptr<GetBuyerValuesInput> input,
@@ -214,7 +214,7 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
               absl::AnyInvocable<void(
                   absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
                   callback,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestContext context) {
             auto output = std::make_unique<GetBuyerValuesOutput>();
             output->result = expected_output;
             (std::move(callback))(std::move(output));

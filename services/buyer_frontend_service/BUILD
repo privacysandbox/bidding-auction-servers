@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -47,6 +47,8 @@ cc_library(
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/metric:server_definition",
         "//services/common/util:async_task_tracker",
+        "//services/common/util:cancellation_wrapper",
+        "//services/common/util:client_contexts",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
@@ -111,7 +113,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
-    local_defines = ENABLE_CORE_DUMPS_DEFINES,
+    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES,
     malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [

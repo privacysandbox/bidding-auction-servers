@@ -35,6 +35,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -43,7 +44,7 @@ constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
 constexpr bool kEnableReportResultUrlGenerationFalse = false;
 constexpr bool kEnableReportResultWinGenerationFalse = false;
-constexpr char kTestSeller[] = "http://seller.com";
+constexpr absl::string_view kTestSeller = "http://seller.com";
 constexpr char kTestTopLevelSeller[] = "topLevelSeller";
 constexpr char kTestInterestGroupName[] = "testInterestGroupName";
 constexpr double kTestAdCost = 2.0;
@@ -83,7 +84,9 @@ constexpr char kTestComponentWinReportingUrl[] =
 constexpr char kTestComponentEvent[] = "click";
 constexpr char kTestComponentInteractionReportingUrl[] =
     "http://componentInteraction.com";
-constexpr char kTestComponentSeller[] = "http://componentSeller.com";
+constexpr absl::string_view kTestComponentSeller = "http://componentSeller.com";
+constexpr char kTestGenerationId[] = "testGenerationId";
+constexpr char kTestComponentIgOwner[] = "http://componentIgOwner.com";
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -290,7 +293,7 @@ constexpr absl::string_view js_code_with_reject_reasons = R"JS_CODE(
   )JS_CODE";
 
 struct TestBuyerReportingSignals {
-  std::string seller = kTestSeller;
+  absl::string_view seller = kTestSeller;
   std::string interest_group_name = kTestInterestGroupName;
   double ad_cost = kTestAdCost;
   long recency = kTestRecency;
@@ -350,15 +353,14 @@ void BuildScoreAdsRequest(
 }
 
 void BuildTopLevelAuctionScoreAdsRequest(
+    const TestComponentAuctionResultData& component_auction_result_data,
     ScoreAdsRequest* request, bool enable_debug_reporting = false,
     int desired_ad_count = 20, absl::string_view seller = kTestSeller) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string generation_id = MakeARandomString();
   for (int i = 0; i < desired_ad_count; i++) {
     auto auction_result = MakeARandomComponentAuctionResultWithReportingUrls(
-        generation_id, absl::StrCat(seller), kTestComponentEvent,
-        kTestComponentWinReportingUrl, kTestComponentInteractionReportingUrl,
-        kTestComponentSeller);
+        component_auction_result_data);
     *raw_request.mutable_component_auction_results()->Add() = auction_result;
   }
   if (enable_debug_reporting) {
@@ -474,6 +476,7 @@ void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
 class AuctionServiceIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<ScoreAdsRequest>(
@@ -498,7 +501,8 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
           std::make_unique<MockHttpFetcherAsync>());
   auto score_ads_reactor_factory =
       [&client, async_reporter_ = std::move(async_reporter_)](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
           const AuctionServiceRuntimeConfig& runtime_config) {
@@ -513,14 +517,14 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
           benchmarking_logger = std::make_unique<ScoreAdsNoOpLogger>();
         }
         return std::make_unique<ScoreAdsReactor>(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, async_reporter_.get(),
             runtime_config);
       };
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -541,7 +545,7 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
 
     // This line may NOT break if the ad_score() object is empty.
     ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-    raw_response.ParseFromString(response.response_ciphertext());
+    ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
     const auto& scoredAd = raw_response.ad_score();
     // If no object was returned, the following two lines SHOULD fail.
     EXPECT_GT(scoredAd.desirability(), 0);
@@ -589,7 +593,8 @@ void SellerCodeWrappingTestHelper(
 
   auto score_ads_reactor_factory =
       [&client, async_reporter_ = std::move(async_reporter_)](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
           const AuctionServiceRuntimeConfig& runtime_config) {
@@ -604,7 +609,7 @@ void SellerCodeWrappingTestHelper(
           benchmarking_logger = std::make_unique<ScoreAdsNoOpLogger>();
         }
         return std::make_unique<ScoreAdsReactor>(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, async_reporter_.get(),
             runtime_config);
       };
@@ -612,7 +617,7 @@ void SellerCodeWrappingTestHelper(
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config = {
@@ -1042,7 +1047,16 @@ TEST_F(AuctionServiceIntegrationTest,
 
   ScoreAdsRequest request;
   absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildTopLevelAuctionScoreAdsRequest(&request);
+  TestComponentAuctionResultData component_auction_result_data = {
+      .test_component_seller = kTestComponentSeller,
+      .generation_id = kTestGenerationId,
+      .test_ig_owner = kTestComponentIgOwner,
+      .test_component_win_reporting_url = kTestComponentWinReportingUrl,
+      .test_component_report_result_url = kTestComponentWinReportingUrl,
+      .test_component_event = kTestComponentEvent,
+      .test_component_interaction_reporting_url =
+          kTestComponentInteractionReportingUrl};
+  BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data, &request);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kTopLevelSellerCode,
@@ -1291,7 +1305,16 @@ TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
 TEST_F(AuctionServiceIntegrationTest,
        ProcessTopLevelAuctionInputAndReturnWinner) {
   ScoreAdsRequest request;
-  BuildTopLevelAuctionScoreAdsRequest(&request);
+  TestComponentAuctionResultData component_auction_result_data = {
+      .test_component_seller = kTestComponentSeller,
+      .generation_id = kTestGenerationId,
+      .test_ig_owner = kTestComponentIgOwner,
+      .test_component_win_reporting_url = kTestComponentWinReportingUrl,
+      .test_component_report_result_url = kTestComponentWinReportingUrl,
+      .test_component_event = kTestComponentEvent,
+      .test_component_interaction_reporting_url =
+          kTestComponentInteractionReportingUrl};
+  BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data, &request);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, kTopLevelAuctionCode,
                                /*enable_seller_debug_url_generation=*/false,

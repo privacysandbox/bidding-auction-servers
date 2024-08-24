@@ -32,7 +32,11 @@ fileExistenceTests:
     shouldExist: true
 
   - name: egress_cddl_spec_v1.0.0
-    path: /egress_cddl_spec/1.0.0
+    path: /services/bidding_service/egress_cddl_spec/1.0.0
+    shouldExist: true
+
+  - name: libcddl_so
+    path: /lib/libcddl.so
     shouldExist: true
 
 licenseTests:

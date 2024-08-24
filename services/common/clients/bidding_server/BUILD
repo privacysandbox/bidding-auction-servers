@@ -59,6 +59,7 @@ cc_test(
         "//services/common/clients/async_grpc:bidding_async_grpc_client_integration_test_utils",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",

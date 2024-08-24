@@ -25,7 +25,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "event2/thread.h"
-#include "src/logger/request_context_logger.h"
+#include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
@@ -448,11 +448,8 @@ std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
           char* request_url = nullptr;
           curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL,
                             &request_url);
-          auto request_data = static_cast<CurlRequestData*>(output);
-          status = absl::InternalError(
-              absl::StrCat("Failed to curl ", request_url,
-                           "\nHTTP Code: ", http_code, "\nEndpoint returned: ",
-                           request_data->response_with_metadata.body));
+          status = absl::InternalError(absl::StrCat(
+              kFailCurl, " HTTP Code: ", http_code, "; ", request_url));
         } else {
           status = absl::OkStatus();
         }

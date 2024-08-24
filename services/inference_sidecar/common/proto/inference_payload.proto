@@ -19,7 +19,8 @@ package privacy_sandbox.bidding_auction_servers.inference;
 // A BatchInferenceRequest can run across multiple models. Each InferenceRequest
 // request is for a single model.
 // WARNING: this proto is not used now, it's used to guide the conversion from
-// a JS request to C++, see services/inference_sidecar/common/utils/request_parser.h.
+// a JS request to C++, see
+// services/inference_sidecar/common/utils/request_parser.h.
 message BatchInferenceRequest {
   repeated InferenceRequest request = 1;
 }
@@ -38,6 +39,30 @@ message InferenceResponse {
   // Required servable model path; e.g. "my_bucket/models/pcvr/1".
   string model_path = 1;
   repeated Tensor tensors = 2;
+  Error error = 3;
+}
+
+// Represents error during inference. To be propagated back to the JS caller.
+message Error {
+  // Possible types of errors that inference execution could encounter.
+  enum ErrorType {
+    UNKNOWN = 0;
+    // Error when parsing batched inference request from JS to C++ representation.
+    INPUT_PARSING = 1;
+    // Error when the model is not found in the inference sidecar.
+    MODEL_NOT_FOUND = 2;
+    // Error when the model execution fails for the provided input.
+    MODEL_EXECUTION = 3;
+    // Error when parsing from C++ to JS representation.
+    OUTPUT_PARSING = 4;
+    // Error during GRPC communication, e.g., inference sidecar is not reachable.
+    GRPC = 5;
+  }
+
+  // The type of error that occurred.
+  ErrorType error_type = 1;
+  // Error description.
+  string description = 2;
 }
 
 message Tensor {
@@ -65,10 +90,10 @@ message Tensor {
 
 // Supported tensor data types.
 enum DataType {
-  FLOAT = 0;  // 32-bit floating point
+  FLOAT = 0;   // 32-bit floating point
   DOUBLE = 1;  // 64-bit floating point
-  INT8= 2;  // 8-bit integer (signed)
-  INT16 = 3;  // 16-bit integer (signed)
-  INT32 = 4;  // 32-bit integer (signed)
-  INT64 = 5;  // 64-bit integer (signed)
+  INT8 = 2;    // 8-bit integer (signed)
+  INT16 = 3;   // 16-bit integer (signed)
+  INT32 = 4;   // 32-bit integer (signed)
+  INT64 = 5;   // 64-bit integer (signed)
 }

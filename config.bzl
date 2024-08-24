@@ -20,6 +20,6 @@ ENABLE_CORE_DUMPS_DEFINES = select({
 })
 
 IS_PROD_BUILD_DEFINES = select({
-    "//:prod_build": ["PS_IS_PROD_BUILD=true"],
-    "//conditions:default": ["PS_IS_PROD_BUILD=false"],
+    "//:non_prod_build": ["PS_IS_PROD_BUILD=false"],
+    "//conditions:default": ["PS_IS_PROD_BUILD=true"],
 })

@@ -26,7 +26,7 @@
 #include "absl/synchronization/mutex.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/code_fetch/code_fetcher_interface.h"
+#include "services/common/data_fetch/fetcher_interface.h"
 #include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,7 +34,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Periodically fetch all code at buyer reporting urls.
 // Provide an API to allow callers to retrieve the content
 // of the urls.
-class BuyerReportingFetcher : public CodeFetcherInterface {
+class BuyerReportingFetcher : public FetcherInterface {
  public:
   explicit BuyerReportingFetcher(
       const auction_service::SellerCodeFetchConfig& config,

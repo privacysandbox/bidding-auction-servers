@@ -20,6 +20,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "services/bidding_service/code_wrapper/generated_private_aggregation_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/reporting_util.h"
@@ -47,23 +48,28 @@ absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
     case AuctionType::kProtectedAppSignals:
       return kProtectedAppSignalsGenerateBidsArgs;
     default:
-      PS_LOG(ERROR) << "Unsupported auction type: "
-                    << absl::StrCat(auction_type);
+      PS_LOG(ERROR, SystemLogContext())
+          << "Unsupported auction type: " << absl::StrCat(auction_type);
       return "";
   }
 }
 
 }  // namespace
 
-std::string GetBuyerWrappedCode(absl::string_view ad_tech_js,
-                                absl::string_view ad_tech_wasm,
-                                AuctionType auction_type,
-                                absl::string_view auction_specific_setup) {
-  absl::string_view args = GetGenerateBidArgs(auction_type);
+std::string GetBuyerWrappedCode(
+    absl::string_view ad_tech_js,
+    const BuyerCodeWrapperConfig& buyer_code_wrapper_config) {
+  std::string private_aggregation_wrapper = "";
+  if (buyer_code_wrapper_config.enable_private_aggregate_reporting) {
+    private_aggregation_wrapper = kPrivateAggregationWrapperFunction;
+  }
+  absl::string_view args =
+      GetGenerateBidArgs(buyer_code_wrapper_config.auction_type);
   return absl::StrCat(
-      WasmBytesToJavascript(ad_tech_wasm),
-      absl::Substitute(kEntryFunction, args, auction_specific_setup),
-      ad_tech_js);
+      WasmBytesToJavascript(buyer_code_wrapper_config.ad_tech_wasm),
+      absl::Substitute(kEntryFunction, args,
+                       buyer_code_wrapper_config.auction_specific_setup),
+      ad_tech_js, private_aggregation_wrapper);
 }
 
 std::string GetProtectedAppSignalsGenericBuyerWrappedCode(

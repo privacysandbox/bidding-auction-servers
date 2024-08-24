@@ -29,8 +29,8 @@ grpc::ServerUnaryReactor* BiddingService::GenerateBids(
   LogCommonMetric(request, response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = generate_bids_reactor_factory_(
-      request, response, key_fetcher_manager_.get(), crypto_client_.get(),
-      runtime_config_);
+      context, request, response, key_fetcher_manager_.get(),
+      crypto_client_.get(), runtime_config_);
   reactor->Execute();
   return reactor;
 }
@@ -43,7 +43,11 @@ grpc::ServerUnaryReactor* BiddingService::GenerateProtectedAppSignalsBids(
   auto* reactor = protected_app_signals_generate_bids_reactor_factory_(
       context, request, runtime_config_, response, key_fetcher_manager_.get(),
       crypto_client_.get(), ad_retrieval_async_client_.get(),
-      kv_async_client_.get());
+      kv_async_client_.get(),
+      egress_schema_cache_ != nullptr ? egress_schema_cache_.get() : nullptr,
+      limited_egress_schema_cache_ != nullptr
+          ? limited_egress_schema_cache_.get()
+          : nullptr);
   reactor->Execute();
   return reactor;
 }

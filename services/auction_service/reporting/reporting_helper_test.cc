@@ -291,7 +291,7 @@ void TestArgs(std::vector<std::shared_ptr<std::string>> response_vector,
   if (dispatch_request_config.enable_protected_app_signals) {
     EXPECT_EQ(
         *(response_vector[ReportingArgIndex(ReportingArgs::kEgressPayload)]),
-        expected_egress_payload);
+        absl::StrCat("\"", expected_egress_payload, "\""));
   }
 }
 
@@ -301,21 +301,18 @@ absl::StatusOr<BuyerReportingMetadata> ParseBuyerReportingMetadata(
   PS_ASSIGN_OR_RETURN(rapidjson::Document document,
                       ParseJsonString(buyer_reporting_metadata_json));
   rapidjson::Value buyer_signals;
-  PS_ASSIGN_IF_PRESENT(buyer_signals, document, kBuyerSignals, GetObject);
+  PS_ASSIGN_IF_PRESENT(buyer_signals, document, kBuyerSignals, Object);
   PS_ASSIGN_OR_RETURN(reporting_metadata.buyer_signals,
                       SerializeJsonDoc(buyer_signals));
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.seller, document, kSellerTag,
-                       GetString);
+  PS_ASSIGN_IF_PRESENT(reporting_metadata.seller, document, kSellerTag, String);
   PS_ASSIGN_IF_PRESENT(reporting_metadata.interest_group_name, document,
-                       kInterestGroupName, GetString);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.ad_cost, document, kAdCostTag,
-                       GetFloat);
+                       kInterestGroupName, String);
+  PS_ASSIGN_IF_PRESENT(reporting_metadata.ad_cost, document, kAdCostTag, Float);
   PS_ASSIGN_IF_PRESENT(reporting_metadata.join_count, document, kJoinCount,
-                       GetInt);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.recency, document, kRecency,
-                       GetInt64);
+                       Int);
+  PS_ASSIGN_IF_PRESENT(reporting_metadata.recency, document, kRecency, Int64);
   PS_ASSIGN_IF_PRESENT(reporting_metadata.modeling_signals, document,
-                       kModelingSignalsTag, GetInt);
+                       kModelingSignalsTag, Int);
   return reporting_metadata;
 }
 

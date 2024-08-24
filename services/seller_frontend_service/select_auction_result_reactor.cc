@@ -17,6 +17,7 @@
 #include "services/seller_frontend_service/select_auction_result_reactor.h"
 
 #include "services/common/constants/user_error_strings.h"
+#include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/validation_utils.h"
 #include "src/util/status_macro/status_util.h"
@@ -69,16 +70,26 @@ void SelectAuctionResultReactor::LogRequestMetrics() {
 
 void SelectAuctionResultReactor::ScoreAds(
     std::vector<AuctionResult>& component_auction_results) {
+  if (enable_cancellation_ && request_context_->IsCancelled()) {
+    // TODO(b/359969718): update class cancellation wrapper to handle non-const
+    // lvalue reference arguments
+    FinishWithStatus(
+        grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+    return;
+  }
+
   auto raw_request = CreateTopLevelScoreAdsRawRequest(
       request_->auction_config(), protected_auction_input_,
       component_auction_results);
   PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
                                      << raw_request->DebugString();
   auto auction_request_metric =
-      metric::MakeInitiatedRequest(metric::kAs, metric_context_.get());
+      metric::MakeInitiatedRequest(metric::kAs, metric_context_.get())
+          .release();
   auction_request_metric->SetRequestSize((int)raw_request->ByteSizeLong());
-  auto on_scoring_done =
-      [this, auction_request_metric = std::move(auction_request_metric)](
+  auto on_scoring_done = CancellationWrapper(
+      request_context_, enable_cancellation_,
+      [this, auction_request_metric](
           absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
               result,
           ResponseMetadata response_metadata) mutable {
@@ -87,13 +98,20 @@ void SelectAuctionResultReactor::ScoreAds(
               result.ok() ? (int)result->get()->ByteSizeLong() : 0;
           auction_request_metric->SetResponseSize(response_size);
           // destruct auction_request, destructor measures request time
-          auto not_used = std::move(auction_request_metric);
+          delete auction_request_metric;
         }
         OnScoreAdsDone(std::move(result));
-      };
+      },  // OnCancel
+      [this, auction_request_metric]() {
+        delete auction_request_metric;
+        FinishWithStatus(
+            grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+      });
+
+  grpc::ClientContext* client_context = client_contexts_.Add();
 
   absl::Status execute_result = clients_.scoring.ExecuteInternal(
-      std::move(raw_request), {}, std::move(on_scoring_done),
+      std::move(raw_request), client_context, std::move(on_scoring_done),
       absl::Milliseconds(
           config_client_.GetIntParameter(SCORE_ADS_RPC_TIMEOUT_MS)));
   if (!execute_result.ok()) {
@@ -300,15 +318,14 @@ void SelectAuctionResultReactor::Execute() {
 
 void SelectAuctionResultReactor::OnDone() { delete this; }
 
-void SelectAuctionResultReactor::OnCancel() {
-  // TODO(b/245982466): Handle early abort and errors.
-}
+void SelectAuctionResultReactor::OnCancel() { client_contexts_.CancelAll(); }
 
 SelectAuctionResultReactor::SelectAuctionResultReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client)
-    : request_(request),
+    : request_context_(context),
+      request_(request),
       response_(response),
       is_protected_auction_request_(
           !request_->protected_auction_ciphertext().empty()),
@@ -316,7 +333,8 @@ SelectAuctionResultReactor::SelectAuctionResultReactor(
       config_client_(config_client),
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
-      error_accumulator_(&log_context_) {
+      error_accumulator_(&log_context_),
+      enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)) {
   seller_domain_ = config_client_.GetStringParameter(SELLER_ORIGIN_DOMAIN);
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,

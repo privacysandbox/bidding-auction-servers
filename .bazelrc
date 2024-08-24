@@ -2,7 +2,7 @@ build --announce_rc
 build --verbose_failures
 build --config=clang
 build --compilation_mode=opt
-build --output_filter='^//((?!(third_party):).)*$'`
+build --output_filter='^//((?!(third_party):).)*$'
 build --color=yes
 build --workspace_status_command="bash tools/get_workspace_status"
 
@@ -86,14 +86,11 @@ build:aws_aws --config=instance_aws
 build:aws_aws --config=platform_aws
 
 build:non_prod --//:build_flavor=non_prod
+build:non_prod --//:inference_build=yes
+build:non_prod --//:inference_runtime=all
 build:non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
 build:prod --//:build_flavor=prod
 build:prod --@google_privacysandbox_servers_common//:build_flavor=prod
-
-build:inference_non_prod --//:build_flavor=non_prod
-build:inference_non_prod --//:inference_build=yes
-build:inference_non_prod --//:inference_runtime=all
-build:inference_non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
 
 # Address sanitizer, set action_env to segregate cache entries
 build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1

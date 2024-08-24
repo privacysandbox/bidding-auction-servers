@@ -37,6 +37,7 @@
 #include "services/common/test/random.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/test/utils/service_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
@@ -94,20 +95,21 @@ class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
+    CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
-    config_.SetFlagForTest(kEmptyValue, SELLER_ORIGIN_DOMAIN);
-    config_.SetFlagForTest("0", GET_BID_RPC_TIMEOUT_MS);
-    config_.SetFlagForTest("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
-    config_.SetFlagForTest("0", SCORE_ADS_RPC_TIMEOUT_MS);
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-    config_.SetFlagForTest("{}", SELLER_CLOUD_PLATFORMS_MAP);
-    absl::SetFlag(&FLAGS_enable_chaffing, false);
+    config_.SetOverride(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
+    config_.SetOverride(kEmptyValue, SELLER_ORIGIN_DOMAIN);
+    config_.SetOverride("0", GET_BID_RPC_TIMEOUT_MS);
+    config_.SetOverride("0", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
+    config_.SetOverride("0", SCORE_ADS_RPC_TIMEOUT_MS);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride("{}", SELLER_CLOUD_PLATFORMS_MAP);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING);
   }
 
   ClientRegistry CreateValidClientRegistry() {
@@ -160,7 +162,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
   SelectAdRequest request =
@@ -274,7 +276,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyRequest) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -322,7 +324,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            ReturnsInvalidInputOnInvalidSellerCurrency) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -362,7 +364,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
 TYPED_TEST(SellerFrontEndServiceTest,
            ReturnsInvalidInputOnInvalidBuyerCurrency) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -423,7 +425,7 @@ std::vector<AuctionResult> SetupComponentAuctionResults(
 
 TYPED_TEST(SellerFrontEndServiceTest,
            ReturnsInvalidInputOnInvalidExpectedComponentSellerCurrency) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -480,7 +482,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   // and only a subset have missing inputs, the request should continue
   // with pending bids decreased by the amount of missing inputs.
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
@@ -536,11 +538,9 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   // and only a subset have missing clients, the request should continue
   // with pending bids decreased by the amount of missing clients.
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerFrontEndAsyncClientFactoryMock client_factory_mock;
-  EXPECT_CALL(client_factory_mock, Get)
-      .WillOnce([](absl::string_view buyer_ig_owner) { return nullptr; });
   EXPECT_CALL(client_factory_mock, Entries).WillRepeatedly([]() {
     return std::vector<std::pair<absl::string_view,
                                  std::shared_ptr<BuyerFrontEndAsyncClient>>>();
@@ -581,7 +581,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -670,7 +670,7 @@ void SetupFailingBuyerClientMock(
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients) {
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
         return absl::InvalidArgumentError("Some Error");
       };
@@ -691,7 +691,7 @@ void SetupBuyerClientMock(
   // Setup a buyer that returns a success.
   auto MockGetBids = [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                             get_values_request,
-                        const RequestMetadata& metadata,
+                        grpc::ClientContext* context,
                         GetBidDoneCallback on_done, absl::Duration timeout,
                         RequestConfig request_config) {
     ABSL_LOG(INFO) << "Getting mock bids returning mocked response to callback";
@@ -712,7 +712,7 @@ void SetupBuyerClientMock(
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -783,7 +783,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
           [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-             const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
              absl::Duration timeout, RequestConfig request_config) {
             auto response =
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
@@ -816,7 +816,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -888,7 +888,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
           [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-             const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
              absl::Duration timeout, RequestConfig request_config) {
             auto response =
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
@@ -923,7 +923,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            BuyerClientFailsWithCorrectOverallStatus) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
@@ -1002,7 +1002,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   auto protected_auction_input = MakeARandomProtectedAuctionInput<TypeParam>();
@@ -1065,7 +1065,7 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            OneBogusAndOneLegitBuyerWaitsForAllBuyerBids) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   TypeParam protected_auction_input =
@@ -1124,9 +1124,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillOnce([&scoring_done, &winner](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -1182,7 +1181,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   const int num_buyers = 3;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   TypeParam protected_auction_input =
@@ -1238,9 +1237,8 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
       .WillOnce([&notification, &winner](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -1298,7 +1296,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
 TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   const int num_buyers = 1;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   TypeParam protected_auction_input =
@@ -1347,9 +1345,8 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
       .Times(1)
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                        score_ads_request,
-                   const RequestMetadata& metadata,
-                   ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                   RequestConfig request_config) {
+                   grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(absl::InternalError(""),
                            /* response_metadata= */ {});
         return absl::OkStatus();
@@ -1387,7 +1384,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
            NonInternalErrorsFromScoringSentToAdService) {
   const int num_buyers = 1;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   TypeParam protected_auction_input =
@@ -1436,9 +1433,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .Times(1)
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                        score_ads_request,
-                   const RequestMetadata& metadata,
-                   ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                   RequestConfig request_config) {
+                   grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(
             absl::ResourceExhaustedError(kErrorIntendedForAdServer),
             /* response_metadata= */ {});
@@ -1472,7 +1468,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
   // Setup a valid SelectAdRequest with the aforementioned buyer inputs.
   TypeParam protected_auction_input =
@@ -1535,7 +1531,7 @@ TYPED_TEST(
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1554,9 +1550,9 @@ TYPED_TEST(
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
-  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
-                               SELLER_CLOUD_PLATFORMS_MAP);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleCloudPlatformMap,
+                            SELLER_CLOUD_PLATFORMS_MAP);
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1575,9 +1571,9 @@ TYPED_TEST(
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
-  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
-                               SELLER_CLOUD_PLATFORMS_MAP);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleCloudPlatformMap,
+                            SELLER_CLOUD_PLATFORMS_MAP);
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1597,9 +1593,9 @@ TYPED_TEST(
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
-  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
-                               SELLER_CLOUD_PLATFORMS_MAP);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleCloudPlatformMap,
+                            SELLER_CLOUD_PLATFORMS_MAP);
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1625,9 +1621,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
-  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
-                               SELLER_CLOUD_PLATFORMS_MAP);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleCloudPlatformMap,
+                            SELLER_CLOUD_PLATFORMS_MAP);
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
 
@@ -1656,9 +1652,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
   GetComponentAuctionCiphertextsResponse response;
   grpc::ClientContext context;
 
-  this->config_.SetFlagForTest(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
-  this->config_.SetFlagForTest(kSampleCloudPlatformMap,
-                               SELLER_CLOUD_PLATFORMS_MAP);
+  this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  this->config_.SetOverride(kSampleCloudPlatformMap,
+                            SELLER_CLOUD_PLATFORMS_MAP);
 
   // Key fetcher manager does not serve public key.
   server_common::MockKeyFetcherManager key_fetcher_manager;

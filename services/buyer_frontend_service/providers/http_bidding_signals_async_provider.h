@@ -50,7 +50,8 @@ class HttpBiddingSignalsAsyncProvider final
                                        BiddingSignals>>,
                                    GetByteSize) &&>
                on_done,
-           absl::Duration timeout) const override;
+           absl::Duration timeout,
+           RequestContext context = NoOpContext()) const override;
 
  private:
   std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>

@@ -45,7 +45,7 @@ constexpr int kNormalTimeoutMs = 5000;
 class MultiCurlHttpFetcherAsyncTest : public ::testing::Test {
  protected:
   MultiCurlHttpFetcherAsyncTest() {
-    server_common::log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::SetGlobalPSVLogLevel(10);
     executor_ = std::make_unique<server_common::EventEngineExecutor>(
         grpc_event_engine::experimental::CreateEventEngine());
     fetcher_ = std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get());
@@ -212,8 +212,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
   // NOLINTNEXTLINE
   auto done_cb = [&notification](absl::StatusOr<std::string> result) {
     EXPECT_FALSE(result.ok()) << result.status();
-    EXPECT_THAT(result.status().message(),
-                HasSubstr("The method is not allowed"));
+    EXPECT_THAT(result.status().message(), HasSubstr("HTTP Code: 405"));
     notification.Notify();
   };
   fetcher_->PutUrl({"http://httpbin.org", {}, "{}"}, kNormalTimeoutMs, done_cb);
@@ -244,7 +243,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest,
   absl::Notification done;
   HTTPRequest request;
   request.url = "httpbin.org/gzip";
-  // request.headers = {{"Accept-Encoding", "gzip"}, {"abc", "def"}};
   request.include_headers = {"Content-Encoding"};
   auto done_cb =
       [&done](const std::vector<absl::StatusOr<HTTPResponse>>& results) {

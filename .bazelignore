@@ -4,3 +4,4 @@ services/inference_sidecar/modules
 google_internal/tools/cost
 production/aws/terraform
 scp
+node_modules

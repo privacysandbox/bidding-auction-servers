@@ -29,6 +29,7 @@ cc_library(
         ":inference_flags",
         "//services/common/blob_fetch:blob_fetcher",
         "//services/common/clients/code_dispatcher:request_context",
+        "//services/common/loggers:request_log_context",
         "//services/common/metric:server_definition",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
@@ -36,13 +37,13 @@ cc_library(
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/roma/roma_service",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@inference_common//proto:inference_sidecar_cc_grpc_proto",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//sandbox:sandbox_executor",
+        "@inference_common//utils:error",
         "@inference_common//utils:file_util",
         "@rapidjson",
     ],
@@ -82,5 +83,45 @@ cc_library(
     ],
     deps = [
         "@com_google_absl//absl/flags:flag",
+    ],
+)
+
+cc_library(
+    name = "periodic_model_fetcher",
+    srcs = ["periodic_model_fetcher.cc"],
+    hdrs = ["periodic_model_fetcher.h"],
+    visibility = ["//services/bidding_service:__subpackages__"],
+    deps = [
+        ":inference_utils",
+        "//services/common/blob_fetch:blob_fetcher_base",
+        "//services/common/data_fetch:fetcher_interface",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@inference_common//proto:inference_sidecar_cc_grpc_proto",
+        "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//proto:model_metadata_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "periodic_model_fetcher_test",
+    size = "small",
+    srcs = ["periodic_model_fetcher_test.cc"],
+    deps = [
+        ":periodic_model_fetcher",
+        "//services/common/blob_fetch:blob_fetcher_mock",
+        "//services/common/test:mocks",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+        "@inference_common//proto:inference_sidecar_cc_grpc_proto",
     ],
 )

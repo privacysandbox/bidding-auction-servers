@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/util/file_util.h"
 #include "src/core/interface/async_context.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
@@ -53,6 +54,7 @@ using ::testing::Return;
 class BuyerCodeFetchManagerTest : public testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     executor_ = std::make_unique<MockExecutor>();
     http_fetcher_ = std::make_unique<MockHttpFetcherAsync>();
     dispatcher_ = std::make_unique<MockV8Dispatcher>();
@@ -219,15 +221,14 @@ TEST_F(BuyerCodeFetchManagerTest,
 
             return absl::OkStatus();
           });
-
+  BuyerCodeWrapperConfig wrapper_config = {
+      .auction_type = AuctionType::kProtectedAppSignals,
+      .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
   EXPECT_CALL(*dispatcher_, LoadSync)
-      .WillOnce([&pas_object, &pas_data](std::string_view version,
-                                         absl::string_view blob_data) {
+      .WillOnce([&pas_object, &pas_data, &wrapper_config](
+                    std::string_view version, absl::string_view blob_data) {
         EXPECT_EQ(version, pas_object);
-        EXPECT_EQ(
-            blob_data,
-            GetBuyerWrappedCode(pas_data, "", AuctionType::kProtectedAppSignals,
-                                kEncodedProtectedAppSignalsHandler));
+        EXPECT_EQ(blob_data, GetBuyerWrappedCode(pas_data, wrapper_config));
         return absl::OkStatus();
       });
 

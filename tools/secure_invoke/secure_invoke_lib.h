@@ -40,6 +40,7 @@ struct RequestOptions {
 // from absl flags that are used to run the script.
 absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting,
+                              std::optional<bool> enable_debug_info,
                               bool enable_unlimited_egress);
 
 // Sends a request to BFE. The parameters used for the request are retrieved

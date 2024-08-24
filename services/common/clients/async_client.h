@@ -18,11 +18,14 @@
 #include <memory>
 #include <string>
 
+#include <grpcpp/grpcpp.h>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "services/common/clients/async_grpc/request_config.h"
+#include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -57,13 +60,13 @@ class AsyncClient {
       std::unique_ptr<Request> request, const RequestMetadata& metadata,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
           on_done,
-      absl::Duration timeout) const {
+      absl::Duration timeout, RequestContext context = NoOpContext()) const {
     return absl::NotFoundError("Method not implemented.");
   }
 
   // Executes the inter service GRPC request asynchronously.
   virtual absl::Status ExecuteInternal(
-      std::unique_ptr<RawRequest> request, const RequestMetadata& metadata,
+      std::unique_ptr<RawRequest> request, grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,

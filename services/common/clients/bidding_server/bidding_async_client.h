@@ -66,7 +66,7 @@ class BiddingAsyncGrpcClient
   //
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
-  void SendRpc(const std::string& hpke_secret,
+  void SendRpc(const std::string& hpke_secret, grpc::ClientContext* context,
                RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
                                GenerateBidsResponse::GenerateBidsRawResponse>*
                    params) const override;
@@ -93,7 +93,7 @@ class ProtectedAppSignalsBiddingAsyncGrpcClient
   //
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
-  void SendRpc(const std::string& hpke_secret,
+  void SendRpc(const std::string& hpke_secret, grpc::ClientContext* context,
                RawClientParams<GenerateProtectedAppSignalsBidsRequest,
                                GenerateProtectedAppSignalsBidsResponse,
                                GenerateProtectedAppSignalsBidsResponse::

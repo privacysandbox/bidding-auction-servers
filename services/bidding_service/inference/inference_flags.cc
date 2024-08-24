@@ -33,6 +33,10 @@ ABSL_FLAG(std::optional<std::string>, inference_model_bucket_paths,
           std::nullopt,
           "Comma separated list of bucket paths. Used to specify a list of "
           "directories to fetch the blobs from.");
+ABSL_FLAG(std::optional<std::string>, inference_model_config_path, std::nullopt,
+          "Path to the model config file stored in the cloud bucket.");
+ABSL_FLAG(std::optional<int64_t>, inference_model_fetch_period_ms, std::nullopt,
+          "Period to fetch new models from the cloud bucket in milliseconds");
 // The JSON string should adhere to the following format:
 // {
 //    "num_interop_threads": <integer_value>,

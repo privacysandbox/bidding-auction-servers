@@ -320,8 +320,126 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
   EXPECT_TRUE(actual.value().enable_debug_reporting());
 }
 
+TEST(PaylodPackagingTest, SetEnableDebugInfo) {
+  server_common::log::SetGlobalPSVLogLevel(10);
+
+  auto test_debug_info_value_in_output =
+      [](std::optional<absl::string_view> json_value,
+         std::optional<bool> enable_debug_info, bool expected_package_value) {
+        std::string input = R"JSON(
+    {
+       "auction_config" : {
+          "auction_signals" : "{\"a\":\"1\"}",
+          "buyer_list" : [
+             "ad_tech_A"
+          ],
+          "seller" : "ad_tech_B"
+       },
+       "client_type" : "CLIENT_TYPE_ANDROID",
+       "raw_protected_audience_input" : {
+          "publisher_name" : "test.com",
+          $0
+          "raw_buyer_input" : {
+            "ad_tech_A": {
+            "interest_groups": [
+               {
+                "name": "3"
+               }
+              ]
+            }
+          }
+       }
+    })JSON";
+
+        std::string consent_config;
+        if (json_value.has_value()) {
+          consent_config = absl::Substitute(R"JSON(
+          "consented_debug_config": {
+            "is_debug_info_in_response": $0
+          },
+      )JSON",
+                                            *json_value);
+        }
+
+        HpkeKeyset keyset;
+        auto select_ad_req =
+            std::move(PackagePlainTextSelectAdRequest(
+                          absl::Substitute(input, consent_config),
+                          CLIENT_TYPE_ANDROID, keyset,
+                          /*enable_debug_reporting=*/true,
+                          /*enable_debug_info=*/enable_debug_info,
+                          kTestProtectedAppSignals)
+                          .first);
+
+        auto parsed_encapsulated_request =
+            server_common::ParseEncapsulatedRequest(
+                select_ad_req->protected_auction_ciphertext());
+        ASSERT_TRUE(parsed_encapsulated_request.ok())
+            << parsed_encapsulated_request.status();
+
+        // Decrypt.
+        server_common::PrivateKey private_key;
+        private_key.key_id = std::to_string(keyset.key_id);
+        private_key.private_key = GetHpkePrivateKey(keyset.private_key);
+        auto decrypted_request = server_common::DecryptEncapsulatedRequest(
+            private_key, *parsed_encapsulated_request);
+        ASSERT_TRUE(decrypted_request.ok()) << decrypted_request.status();
+
+        absl::StatusOr<server_common::DecodedRequest> decoded_request =
+            server_common::DecodeRequestPayload(
+                decrypted_request->GetPlaintextData());
+        ASSERT_TRUE(decoded_request.ok()) << decoded_request.status();
+
+        // Decode.
+        ProtectedAuctionInput protected_auction_input;
+        ASSERT_TRUE(protected_auction_input.ParseFromArray(
+            decoded_request->compressed_data.data(),
+            decoded_request->compressed_data.size()));
+        if (!json_value.has_value() && !enable_debug_info.has_value()) {
+          ASSERT_FALSE(protected_auction_input.has_consented_debug_config())
+              << protected_auction_input.DebugString();
+        } else {
+          ASSERT_TRUE(protected_auction_input.has_consented_debug_config())
+              << protected_auction_input.DebugString();
+        }
+        EXPECT_EQ(protected_auction_input.consented_debug_config()
+                      .is_debug_info_in_response(),
+                  expected_package_value);
+      };
+
+  test_debug_info_value_in_output(/*json_value*/ std::nullopt,
+                                  /*enable_debug_info*/ std::nullopt,
+                                  /*expected_package_value*/ false);
+  test_debug_info_value_in_output(/*json_value*/ "true",
+                                  /*enable_debug_info*/ std::nullopt,
+                                  /*expected_package_value*/ true);
+  test_debug_info_value_in_output(/*json_value*/ "false",
+                                  /*enable_debug_info*/ std::nullopt,
+                                  /*expected_package_value*/ false);
+
+  test_debug_info_value_in_output(/*json_value*/ std::nullopt,
+                                  /*enable_debug_info*/ true,
+                                  /*expected_package_value*/ true);
+  test_debug_info_value_in_output(/*json_value*/ "true",
+                                  /*enable_debug_info*/ true,
+                                  /*expected_package_value*/ true);
+  test_debug_info_value_in_output(/*json_value*/ "false",
+                                  /*enable_debug_info*/ true,
+                                  /*expected_package_value*/ true);
+
+  test_debug_info_value_in_output(/*json_value*/ std::nullopt,
+                                  /*enable_debug_info*/ false,
+                                  /*expected_package_value*/ false);
+  test_debug_info_value_in_output(/*json_value*/ "true",
+                                  /*enable_debug_info*/ false,
+                                  /*expected_package_value*/ false);
+  test_debug_info_value_in_output(/*json_value*/ "false",
+                                  /*enable_debug_info*/ false,
+                                  /*expected_package_value*/ false);
+}
+
 TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
-  server_common::log::PS_VLOG_IS_ON(0, 10);
+  server_common::log::SetGlobalPSVLogLevel(10);
   auto input = R"JSON(
     {
        "auction_config" : {
@@ -364,11 +482,12 @@ TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
        }
     })JSON";
   HpkeKeyset keyset;
-  auto select_ad_req =
-      std::move(PackagePlainTextSelectAdRequest(
-                    input, CLIENT_TYPE_ANDROID, keyset,
-                    /*enable_debug_reporting=*/true, kTestProtectedAppSignals)
-                    .first);
+  auto select_ad_req = std::move(
+      PackagePlainTextSelectAdRequest(input, CLIENT_TYPE_ANDROID, keyset,
+                                      /*enable_debug_reporting=*/true,
+                                      /*enable_debug_info=*/std::nullopt,
+                                      kTestProtectedAppSignals)
+          .first);
 
   auto parsed_encapsulated_request = server_common::ParseEncapsulatedRequest(
       select_ad_req->protected_auction_ciphertext());
@@ -562,6 +681,7 @@ TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
   auto select_ad_req = std::move(PackagePlainTextSelectAdRequest(
                                      input, CLIENT_TYPE_ANDROID, keyset,
                                      /*enable_debug_reporting=*/false,
+                                     /*enable_debug_info=*/std::nullopt,
                                      /*protected_app_signals_json=*/"",
                                      /*enable_unlimited_egress=*/true))
                            .first;

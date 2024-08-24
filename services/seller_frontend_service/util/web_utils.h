@@ -252,6 +252,17 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
         RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
         break;
       }
+      case 6: {  // Request timestamp ms.
+        bool is_valid_timestamp_type =
+            IsTypeValid(&cbor_is_int, entry.value, kRequestTimestampMs, kInt,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_timestamp_type) {
+          output.set_request_timestamp_ms(cbor_get_uint64(entry.value));
+        }
+        break;
+      }
       default:
         break;
     }

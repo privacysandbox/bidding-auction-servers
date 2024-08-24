@@ -30,6 +30,9 @@
 #include "public/query/v2/get_values_v2.grpc.pb.h"
 #include "public/query/v2/get_values_v2.pb.h"
 #include "services/auction_service/score_ads_reactor.h"
+#include "services/bidding_service/cddl_spec_cache.h"
+#include "services/bidding_service/egress_features/egress_feature.h"
+#include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/generate_bids_reactor.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/common/clients/auction_server/scoring_async_client.h"
@@ -107,6 +110,17 @@ class MockEventEngine : public grpc_event_engine::experimental::EventEngine {
               (override));
 };
 
+class EgressSchemaCacheMock : public EgressSchemaCache {
+ public:
+  explicit EgressSchemaCacheMock(
+      std::unique_ptr<const CddlSpecCache> cddl_spec_cache)
+      : EgressSchemaCache(std::move(cddl_spec_cache)) {}
+  MOCK_METHOD(absl::Status, Update, (absl::string_view), (override));
+
+  MOCK_METHOD(absl::StatusOr<std::vector<std::unique_ptr<EgressFeature>>>, Get,
+              (int), (override));
+};
+
 class MockExecutor : public server_common::Executor {
  public:
   MOCK_METHOD(void, Run, (absl::AnyInvocable<void()> closure), (override));
@@ -126,7 +140,7 @@ class AsyncClientMock
       (std::unique_ptr<Request> request, const RequestMetadata& metadata,
        absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Response>>) &&>
            on_done,
-       absl::Duration timeout),
+       absl::Duration timeout, RequestContext context),
       (const, override));
 
   using OnDoneCallbackType =
@@ -134,7 +148,7 @@ class AsyncClientMock
                               ResponseMetadata) &&>;
   MOCK_METHOD(absl::Status, ExecuteInternal,
               (std::unique_ptr<RawRequest> raw_request,
-               const RequestMetadata& metadata, OnDoneCallbackType on_done,
+               grpc::ClientContext* context, OnDoneCallbackType on_done,
                absl::Duration timeout, RequestConfig request_config),
               (override));
 };
@@ -377,14 +391,14 @@ class LocalCacheMock : public LocalCache<Key, Value> {
 class MockScoreAdsReactor : public ScoreAdsReactor {
  public:
   MockScoreAdsReactor(
-      CodeDispatchClient& dispatcher, const ScoreAdsRequest* request,
-      ScoreAdsResponse* response,
+      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      const ScoreAdsRequest* request, ScoreAdsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       const AuctionServiceRuntimeConfig& runtime_config,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       const AsyncReporter* async_reporter, absl::string_view js)
-      : ScoreAdsReactor(dispatcher, request, response,
+      : ScoreAdsReactor(context, dispatcher, request, response,
                         std::move(benchmarking_logger), key_fetcher_manager,
                         crypto_client, async_reporter, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
@@ -393,13 +407,14 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
 class MockGenerateBidsReactor : public GenerateBidsReactor {
  public:
   MockGenerateBidsReactor(
-      CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
-      GenerateBidsResponse* response, absl::string_view js,
+      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      const GenerateBidsRequest* request, GenerateBidsResponse* response,
+      absl::string_view js,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       const BiddingServiceRuntimeConfig& runtime_config)
-      : GenerateBidsReactor(dispatcher, request, response,
+      : GenerateBidsReactor(context, dispatcher, request, response,
                             std::move(benchmarkingLogger), key_fetcher_manager,
                             crypto_client_, runtime_config) {}
   MOCK_METHOD(void, Execute, (), (override));
@@ -409,18 +424,20 @@ class GenerateProtectedAppSignalsMockBidsReactor
     : public ProtectedAppSignalsGenerateBidsReactor {
  public:
   GenerateProtectedAppSignalsMockBidsReactor(
-      const grpc::CallbackServerContext* context,
-      CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config,
       const GenerateProtectedAppSignalsBidsRequest* request,
       GenerateProtectedAppSignalsBidsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      KVAsyncClient* ads_retrieval_client, KVAsyncClient* kv_async_client)
+      KVAsyncClient* ads_retrieval_client, KVAsyncClient* kv_async_client,
+      EgressSchemaCache* egress_schema_cache,
+      EgressSchemaCache* limited_egress_schema_cache)
       : ProtectedAppSignalsGenerateBidsReactor(
             context, dispatcher, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ads_retrieval_client,
-            kv_async_client) {}
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache) {
+  }
   MOCK_METHOD(void, Execute, (), (override));
 };
 
@@ -502,7 +519,7 @@ class MockAsyncProvider : public AsyncProvider<Params, Provision> {
        absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>,
                                GetByteSize) &&>
            on_done,
-       absl::Duration timeout),
+       absl::Duration timeout, RequestContext context),
       (const, override));
 };
 

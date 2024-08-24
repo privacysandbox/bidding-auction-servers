@@ -19,8 +19,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 TEST(GetBuyerWrappedCode, GeneratesCompleteFinalCode) {
-  std::string observed = GetBuyerWrappedCode(kBuyerBaseCode);
-  std::cerr << "Code:\n" << observed << "\n";
+  std::string observed = GetBuyerWrappedCode(kTestReportWinUdfWithValidation);
   EXPECT_EQ(observed, kExpectedBuyerCodeWithReportWin)
       << "Observed:\n"
       << observed << "\n\n"

@@ -113,3 +113,56 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "inference_metric_util",
+    srcs = ["inference_metric_util.cc"],
+    hdrs = ["inference_metric_util.h"],
+    deps = [
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "inference_metric_util_test",
+    size = "small",
+    srcs = ["inference_metric_util_test.cc"],
+    deps = [
+        ":inference_metric_util",
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "error",
+    srcs = ["error.cc"],
+    hdrs = ["error.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/strings",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "error_test",
+    size = "small",
+    srcs = ["error_test.cc"],
+    deps = [
+        ":error",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "test_util",
+    hdrs = ["test_util.h"],
+    deps = [
+        "//proto:inference_sidecar_cc_proto",
+        "@com_google_googletest//:gtest",
+    ],
+)

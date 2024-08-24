@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "proto/inference_sidecar.grpc.pb.h"
 #include "proto/inference_sidecar.pb.h"
 #include "sandbox/sandbox_executor.h"
 #include "services/common/blob_fetch/blob_fetcher.h"
@@ -34,6 +35,9 @@ constexpr absl::string_view kGetModelPathsFunctionName = "getModelPaths";
 // Accesses a sandbox exectuor that uses static storage.
 SandboxExecutor& Executor();
 
+// Creates a new stub for inference.
+std::unique_ptr<InferenceService::StubInterface> CreateInferenceStub();
+
 // Registers AdTech models with the inference sidecar. These models are
 // downloaded to the bidding server and sent to the inference sidecar via IPC.
 absl::Status RegisterModelsFromLocal(const std::vector<std::string>& paths);
@@ -46,13 +50,13 @@ absl::Status RegisterModelsFromBucket(
 //
 // wrapper: Inference request backed by JS string.
 void RunInference(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
         wrapper);
 
 // Registered with Roma to provide an API to query the currently available
 // models from JS code.
 void GetModelPaths(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
         wrapper);
 
 // Converts a GetModelPaths response to Json string

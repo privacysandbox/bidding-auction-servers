@@ -18,8 +18,11 @@ locals {
   region      = "" # Example: ["us-central1", "us-west1"]
   environment = "" # Must be <= 3 characters. Example: "abc"
 
+  seller_root_domain = "" # Example: "seller.com"
+  seller_operator    = "" # Example: "seller1"
+
   # Set to true for service mesh, false for Load balancers
-  use_service_mesh = false
+  use_service_mesh = true
   # Whether to use TLS-encrypted communication between service mesh envoy sidecars. Defaults to false, as comms take place within a VPC and the critical payload is HPKE-encrypted, and said encryption is terminated inside a TEE.
   use_tls_with_mesh = false
 }
@@ -33,10 +36,10 @@ module "seller" {
   environment                          = local.environment
   region                               = local.region
   enclave_debug_mode                   = false # Example: false, set to true for extended logs
-  root_domain                          = ""    # Example: "seller-frontend.com"
-  root_domain_zone_id                  = ""    # Example: "Z010286721PKVM00UYU50"
-  certificate_arn                      = ""    # Example: "arn:aws:acm:us-west-1:574738241422:certificate/b8b0a33f-0821-1111-8464-bc8da130a7fe"
-  operator                             = ""    # Example: "seller1"
+  root_domain                          = local.seller_root_domain
+  root_domain_zone_id                  = "" # Example: "Z010286721PKVM00UYU50"
+  certificate_arn                      = "" # Example: "arn:aws:acm:us-west-1:574738241422:certificate/b8b0a33f-0821-1111-8464-bc8da130a7fe"
+  operator                             = local.seller_operator
   sfe_instance_ami_id                  = ""    # Example: "ami-0ff8ad2fa8512a078"
   auction_instance_ami_id              = ""    # Example: "ami-0ea85f493f16aba3c"
   sfe_instance_type                    = ""    # Example: "c6i.2xlarge"
@@ -72,23 +75,23 @@ module "seller" {
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS = "" # Example: "60000"
     SCORE_ADS_RPC_TIMEOUT_MS               = "" # Example: "60000"
     SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://sellerorigin.com"
-    AUCTION_SERVER_HOST                    = local.use_service_mesh ? "" /* Example for Mesh: "dns:///auction-seller1-prod-appmesh-virtual-service.seller-frontend.com:50051" */ : "" /* Example for internal Load Balancers: "dns:///auction-seller1-prod.seller-frontend.com:443" */
-    GRPC_ARG_DEFAULT_AUTHORITY             = local.use_service_mesh ? "" /* Example for Mesh: "auction-seller1-${local.environment}-appmesh-virtual-service.seller1-frontend.com" */ : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
-    KEY_VALUE_SIGNALS_HOST                 = ""                                                                                                                                                      # Example: "https://keyvaluesignals.com/trusted-signals"
-    BUYER_SERVER_HOSTS                     = ""                                                                                                                                                      # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
-    SELLER_CLOUD_PLATFORMS_MAP             = ""                                                                                                                                                      # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
-    ENABLE_SELLER_FRONTEND_BENCHMARKING    = ""                                                                                                                                                      # Example: "false"
-    ENABLE_AUCTION_COMPRESSION             = ""                                                                                                                                                      # Example: "false"
-    ENABLE_BUYER_COMPRESSION               = ""                                                                                                                                                      # Example: "false"
-    ENABLE_PROTECTED_APP_SIGNALS           = ""                                                                                                                                                      # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE              = ""                                                                                                                                                      # Example: "true"
-    PS_VERBOSITY                           = ""                                                                                                                                                      # Example: "10"
-    CREATE_NEW_EVENT_ENGINE                = ""                                                                                                                                                      # Example: "false"
-    TELEMETRY_CONFIG                       = ""                                                                                                                                                      # Example: "mode: EXPERIMENT"
-    ENABLE_OTEL_BASED_LOGGING              = ""                                                                                                                                                      # Example: "true"
-    CONSENTED_DEBUG_TOKEN                  = ""                                                                                                                                                      # Example: "123456"
-    TEST_MODE                              = ""                                                                                                                                                      # Example: "false"
-    SELLER_CODE_FETCH_CONFIG               = ""                                                                                                                                                      # Example:
+    AUCTION_SERVER_HOST                    = local.use_service_mesh ? "dns:///auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}:50051" : "dns:///auction-${local.environment}.${local.seller_root_domain}:443"
+    GRPC_ARG_DEFAULT_AUTHORITY             = local.use_service_mesh ? "auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
+    KEY_VALUE_SIGNALS_HOST                 = ""                                                                                                                                                   # Example: "https://keyvaluesignals.com/trusted-signals"
+    BUYER_SERVER_HOSTS                     = ""                                                                                                                                                   # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
+    SELLER_CLOUD_PLATFORMS_MAP             = ""                                                                                                                                                   # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
+    ENABLE_SELLER_FRONTEND_BENCHMARKING    = ""                                                                                                                                                   # Example: "false"
+    ENABLE_AUCTION_COMPRESSION             = ""                                                                                                                                                   # Example: "false"
+    ENABLE_BUYER_COMPRESSION               = ""                                                                                                                                                   # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS           = ""                                                                                                                                                   # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE              = ""                                                                                                                                                   # Example: "true"
+    PS_VERBOSITY                           = ""                                                                                                                                                   # Example: "10"
+    CREATE_NEW_EVENT_ENGINE                = ""                                                                                                                                                   # Example: "false"
+    TELEMETRY_CONFIG                       = ""                                                                                                                                                   # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING              = ""                                                                                                                                                   # Example: "true"
+    CONSENTED_DEBUG_TOKEN                  = ""                                                                                                                                                   # Example: "123456"
+    TEST_MODE                              = ""                                                                                                                                                   # Example: "false"
+    SELLER_CODE_FETCH_CONFIG               = ""                                                                                                                                                   # Example:
     # "{
     #     "fetchMode": 0,
     #     "auctionJsPath": "",

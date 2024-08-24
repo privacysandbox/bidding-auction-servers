@@ -20,6 +20,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "gtest/gtest.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -60,7 +61,12 @@ void CheckResponses(
   }
 }
 
-TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
+class CodeDispatchClientTest : public ::testing::Test {
+ protected:
+  void SetUp() override { CommonTestInit(); }
+};
+
+TEST_F(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
   V8Dispatcher dispatcher;
   ASSERT_TRUE(dispatcher.Init().ok());
   const std::string version = "v1";
@@ -81,7 +87,7 @@ TEST(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
   done.Wait();
 }
 
-TEST(CodeDispatchClientTest, RunsLatestCodeVersion) {
+TEST_F(CodeDispatchClientTest, RunsLatestCodeVersion) {
   V8Dispatcher dispatcher;
   ASSERT_TRUE(dispatcher.Init().ok());
   CodeDispatchClient client(dispatcher);

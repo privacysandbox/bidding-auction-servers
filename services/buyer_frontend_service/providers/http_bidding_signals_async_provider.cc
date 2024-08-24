@@ -26,7 +26,7 @@ void HttpBiddingSignalsAsyncProvider::Get(
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
                             GetByteSize) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   auto request = std::make_unique<GetBuyerValuesInput>();
   request->hostname =
       bidding_signals_request.get_bids_raw_request_.publisher_name();
@@ -66,7 +66,7 @@ void HttpBiddingSignalsAsyncProvider::Get(
         }
         std::move(on_done)(std::move(res), get_byte_size);
       },
-      timeout);
+      timeout, context);
   if (!status.ok()) {
     PS_LOG(ERROR) << "Unable to fetch bidding signals";
   }

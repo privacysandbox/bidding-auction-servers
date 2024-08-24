@@ -34,6 +34,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/ohttp_utils.h"
 #include "services/common/test/utils/service_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "tools/secure_invoke/flags.h"
 
 using ::privacy_sandbox::bidding_auction_servers::HpkeKeyset;
@@ -118,6 +119,7 @@ using ::testing::HasSubstr;
 class SecureInvokeLib : public testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     absl::SetFlag(&FLAGS_json_input_str, "{}");
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
@@ -126,8 +128,8 @@ class SecureInvokeLib : public testing::Test {
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
-    config_client.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_client.SetOverride(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, CreatePublicKeyFetcher(config_client));
 

@@ -62,7 +62,7 @@ signed-integer-feature = {
 
 bucket-feature-type = {
   name: text .regexp "^bucket-feature$"
-  buckets: uint,  ; number of buckets.
+  size: uint,  ; number of buckets.
 }
 
 bucket-feature = {

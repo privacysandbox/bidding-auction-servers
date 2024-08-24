@@ -49,7 +49,7 @@ absl::Status FakeSellerKeyValueAsyncHttpClient::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   HTTPRequest request =
       SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
           kv_server_base_address_, metadata, std::move(keys));

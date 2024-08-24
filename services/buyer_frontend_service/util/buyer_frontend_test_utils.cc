@@ -51,7 +51,7 @@ void SetupBiddingProviderMock(
           absl::AnyInvocable<void(
               absl::StatusOr<std::unique_ptr<BiddingSignals>>, GetByteSize)&&>
               on_done,
-          absl::Duration timeout) {
+          absl::Duration timeout, RequestContext context) {
         GetByteSize get_byte_size;
         if (server_error_to_return.has_value()) {
           std::move(on_done)(*server_error_to_return, get_byte_size);
@@ -65,7 +65,7 @@ void SetupBiddingProviderMock(
         }
       };
   if (match_any_params_any_times) {
-    EXPECT_CALL(provider, Get(_, _, _))
+    EXPECT_CALL(provider, Get(_, _, _, _))
         .Times(AnyNumber())
         .WillOnce(MockBiddingSignalsProvider);
   } else if (repeated_get_allowed) {
@@ -74,7 +74,7 @@ void SetupBiddingProviderMock(
                     An<absl::AnyInvocable<
                         void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
                              GetByteSize) &&>>(),
-                    An<absl::Duration>()))
+                    An<absl::Duration>(), _))
         .WillRepeatedly(MockBiddingSignalsProvider);
   } else {
     EXPECT_CALL(provider,
@@ -82,7 +82,7 @@ void SetupBiddingProviderMock(
                     An<absl::AnyInvocable<
                         void(absl::StatusOr<std::unique_ptr<BiddingSignals>>,
                              GetByteSize) &&>>(),
-                    An<absl::Duration>()))
+                    An<absl::Duration>(), _))
         .WillOnce(MockBiddingSignalsProvider);
   }
 }

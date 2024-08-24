@@ -31,7 +31,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using ScoreAdsReactorFactory =
     absl::AnyInvocable<std::unique_ptr<ScoreAdsReactor>(
-        const ScoreAdsRequest* request, ScoreAdsResponse* response,
+        grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+        ScoreAdsResponse* response,
         server_common::KeyFetcherManagerInterface* key_fetcher_manager,
         CryptoClientWrapperInterface* crypto_client,
         const AuctionServiceRuntimeConfig& runtime_config)>;

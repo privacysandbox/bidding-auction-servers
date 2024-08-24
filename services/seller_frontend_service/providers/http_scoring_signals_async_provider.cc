@@ -31,7 +31,7 @@ void HttpScoringSignalsAsyncProvider::Get(
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                             GetByteSize) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   auto request = std::make_unique<GetSellerValuesInput>();
   for (const auto& [unused_buyer, get_bids_response] :
        scoring_signals_request.buyer_bids_map_) {
@@ -67,7 +67,7 @@ void HttpScoringSignalsAsyncProvider::Get(
         }
         std::move(on_done)(std::move(res), get_byte_size);
       },
-      timeout);
+      timeout, context);
   if (!status.ok()) {
     PS_LOG(ERROR) << "Unable to get seller KV signals: " << status;
   }

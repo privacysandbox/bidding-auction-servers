@@ -25,11 +25,14 @@
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "utils/file_util.h"
+#include "utils/inference_metric_util.h"
+#include "utils/test_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
 using ::testing::HasSubstr;
+using ::testing::StartsWith;
 constexpr absl::string_view kModel1Dir = "./benchmark_models/pcvr";
 constexpr absl::string_view kModel2Dir = "./benchmark_models/pctr";
 constexpr absl::string_view kEmbeddingModelDir = "./benchmark_models/embedding";
@@ -106,7 +109,7 @@ TEST(TensorflowModuleTest, Success_RegisterModel) {
   ASSERT_TRUE(status_or.ok());
 }
 
-TEST(TensorflowModuleTest, Failure_PredictInvalidJson) {
+TEST(TensorflowModuleTest, JsonError_PredictInvalidJson) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
@@ -116,9 +119,11 @@ TEST(TensorflowModuleTest, Failure_PredictInvalidJson) {
   absl::StatusOr<PredictResponse> predict_response =
       tensorflow_module->Predict(predict_request);
 
-  ASSERT_FALSE(predict_response.ok());
-  EXPECT_EQ(predict_response.status().code(),
-            absl::StatusCode::kInvalidArgument);
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"error":{"error_type":"INPUT_PARSING","description")"));
 }
 
 constexpr char kPcvrJsonRequest[] = R"json({
@@ -191,7 +196,7 @@ constexpr absl::string_view kPcvrResponse =
     "0\",\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_"
     "content\":[0.019116628915071489]}]}]}";
 
-TEST(TensorflowModuleTest, Failure_PredictModelNotRegistered) {
+TEST(TensorflowModuleTest, JsonError_PredictModelNotRegistered) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
@@ -202,8 +207,11 @@ TEST(TensorflowModuleTest, Failure_PredictModelNotRegistered) {
   absl::StatusOr<PredictResponse> predict_response =
       tensorflow_module->Predict(predict_request);
 
-  ASSERT_FALSE(predict_response.ok());
-  EXPECT_EQ(predict_response.status().code(), absl::StatusCode::kNotFound);
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"MODEL_NOT_FOUND","description")"));
 }
 
 TEST(TensorflowModuleTest, Success_Predict) {
@@ -221,6 +229,36 @@ TEST(TensorflowModuleTest, Success_Predict) {
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
   ASSERT_EQ(response.output(), kPcvrResponse);
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
+}
+
+TEST(TensorflowModuleTest, Success_Predict_ValidateMetrics) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kPcvrJsonRequest);
+  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_status.ok());
+  PredictResponse response = predict_status.value();
+  ASSERT_FALSE(response.output().empty());
+  ASSERT_EQ(response.output(), kPcvrResponse);
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
+  CheckMetric(response.metrics(), "kInferenceRequestCount", 1);
+  CheckMetric(response.metrics(), "kInferenceRequestSize", 1435);
+  CheckMetric(response.metrics(), "kInferenceResponseSize", 288);
+
+  auto it = response.metrics().find("kInferenceRequestDuration");
+  ASSERT_NE(it, response.metrics().end())
+      << "kInferenceRequestDuration metric is missing.";
+  EXPECT_GT(it->second.value(), 0)
+      << "kInferenceRequestDuration should be greater than zero.";
 }
 
 TEST(TensorflowModuleTest, Success_PredictWithConsentedRequest) {
@@ -239,6 +277,8 @@ TEST(TensorflowModuleTest, Success_PredictWithConsentedRequest) {
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
   ASSERT_EQ(response.output(), kPcvrResponse);
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 }
 
 TEST(TensorflowModuleTest, Success_ResetModels_NoModel) {
@@ -265,6 +305,8 @@ TEST(TensorflowModuleTest, Success_ResetModels) {
   PredictResponse response = predict_status.value();
   ASSERT_FALSE(response.output().empty());
   ASSERT_EQ(response.output(), kPcvrResponse);
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 
   tensorflow_module->ResetModels();
 }
@@ -352,6 +394,8 @@ TEST(TensorflowModuleTest, Success_PredictBatchSize2) {
             "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
             "content\":[0.019116630777716638,0.1847093403339386]}]}]}");
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 }
 
 constexpr char kPcvrJsonRequestMissingTensorName[] = R"json({
@@ -369,7 +413,7 @@ constexpr char kPcvrJsonRequestMissingTensorName[] = R"json({
 }]
     })json";
 
-TEST(TensorflowModuleTest, Failure_PredictMissingTensorName) {
+TEST(TensorflowModuleTest, JsonError_PredictMissingTensorName) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
@@ -379,12 +423,86 @@ TEST(TensorflowModuleTest, Failure_PredictMissingTensorName) {
 
   PredictRequest predict_request;
   predict_request.set_input(kPcvrJsonRequestMissingTensorName);
-  absl::StatusOr<PredictResponse> predict_status =
+  absl::StatusOr<PredictResponse> predict_response =
       tensorflow_module->Predict(predict_request);
-  ASSERT_FALSE(predict_status.ok());
-  EXPECT_EQ(predict_status.status().code(), absl::StatusCode::kInvalidArgument);
-  EXPECT_THAT(predict_status.status().message(),
-              HasSubstr("Name is required for each TensorFlow tensor input"));
+
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"INPUT_PARSING","description")"));
+}
+
+constexpr char kPcvrJsonRequestInvalidTensor[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_double1:0",
+      "data_type": "FLOAT",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["seven"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, JsonError_PredictInvalidTensor) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kPcvrJsonRequestInvalidTensor);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"INPUT_PARSING","description")"));
+}
+
+constexpr char kPcvrJsonRequestWrongInputTensor[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_double1:0",
+      "data_type": "FLOAT",
+      "tensor_shape": [
+        2, 2
+      ],
+      "tensor_content": ["1.1", "1.1", "1.1", "1.1"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, JsonError_PredictModelExecutionError) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kPcvrJsonRequestWrongInputTensor);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"MODEL_EXECUTION","description")"));
 }
 
 constexpr char kPcvrJsonRequestWith2Model[] = R"json({
@@ -541,6 +659,8 @@ TEST(TensorflowModuleTest, Success_PredictWith2Models) {
             "pctr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
             "content\":[0.14649735391139985,0.2522672712802887]}]}]}");
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 }
 
 constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
@@ -694,6 +814,8 @@ TEST(TensorflowModuleTest,
             "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
             "0\",\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_"
             "content\":[0.010360434651374817]}]}]}");
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 }
 
 constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
@@ -787,9 +909,11 @@ TEST(TensorflowModuleTest, Success_PredictEmbed) {
       response.output(),
       "{\"tensor_name\":\"StatefulPartitionedCall:1\",\"tensor_shape\":[1,1],"
       "\"data_type\":\"INT32\",\"tensor_content\":[0]}"));
+  ASSERT_FALSE(response.metrics().empty());
+  EXPECT_EQ(response.metrics().size(), 4);
 }
 
-constexpr char kPcvrJsonRequestWithMultipleInvalidInputs[] = R"json({
+constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
   "request" : [{
     "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
@@ -804,7 +928,20 @@ constexpr char kPcvrJsonRequestWithMultipleInvalidInputs[] = R"json({
   ]
 },
 {
-    "model_path" : "./benchmark_models/pctr",
+    "model_path" : "./non-existent",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},
+{
+    "model_path" : "./benchmark_models/pcvr",
     "tensors" : [
     {
       "tensor_name": "serving_default_double1:0",
@@ -813,12 +950,60 @@ constexpr char kPcvrJsonRequestWithMultipleInvalidInputs[] = R"json({
         1, 10
       ],
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+    },
+    {
+      "tensor_name": "serving_default_double2:0",
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+    },
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_int_input2:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_int_input3:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_int_input4:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
     }
   ]
 }]
     })json";
 
-TEST(TensorflowModuleTest, PredictMultipleInvalidInputsReturnsFirstError) {
+TEST(TensorflowModuleTest, CanReturnPartialBatchOutputWithError) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
@@ -834,13 +1019,12 @@ TEST(TensorflowModuleTest, PredictMultipleInvalidInputsReturnsFirstError) {
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
 
   PredictRequest predict_request;
-  predict_request.set_input(kPcvrJsonRequestWithMultipleInvalidInputs);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_FALSE(predict_status.ok());
-  EXPECT_EQ(predict_status.status().code(), absl::StatusCode::kInternal);
-  EXPECT_THAT(
-      predict_status.status().message(),
-      HasSubstr("Error during inference for model './benchmark_models/pcvr'"));
+  predict_request.set_input(kMixedValidInvalidBatchJsonRequest);
+  absl::StatusOr predict_output = tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_output.ok());
+  EXPECT_THAT(predict_output->output(),
+              AllOf(HasSubstr("MODEL_EXECUTION"), HasSubstr("MODEL_NOT_FOUND"),
+                    HasSubstr("\"tensors\":")));
 }
 
 constexpr char kJsonRequestStatefulModel[] = R"json({

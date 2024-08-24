@@ -18,6 +18,7 @@
 
 #include "include/grpcpp/support/status_code_enum.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
+#include "services/common/util/client_context_util.h"
 #include "src/communication/encoding_utils.h"
 #include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "src/public/cpio/proto/public_key_service/v1/public_key_service.pb.h"
@@ -44,11 +45,12 @@ KVAsyncGrpcClient::KVAsyncGrpcClient(
 
 void KVAsyncGrpcClient::SendRpc(
     ObliviousHttpRequestUptr oblivious_http_context,
+    grpc::ClientContext* context,
     RawClientParams<ObliviousGetValuesRequest, google::api::HttpBody,
                     GetValuesResponse>* params) const {
   PS_VLOG(5) << "KVAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->ObliviousGetValues(
-      params->ContextRef(), params->RequestRef(), params->ResponseRef(),
+      context, params->RequestRef(), params->ResponseRef(),
       [captured_oblivious_http_context = oblivious_http_context.release(),
        params](const grpc::Status& status) {
         auto oblivious_http_request_uptr =
@@ -64,7 +66,7 @@ void KVAsyncGrpcClient::SendRpc(
             FromObliviousHTTPResponse(*params->ResponseRef()->mutable_data(),
                                       *captured_oblivious_http_context);
         if (!plain_text_binary_http_response.ok()) {
-          PS_LOG(ERROR)
+          PS_LOG(ERROR, SystemLogContext())
               << "KVAsyncGrpcClient failed to get binary HTTP response";
           params->OnDone(grpc::Status(
               grpc::StatusCode::INVALID_ARGUMENT,
@@ -75,8 +77,8 @@ void KVAsyncGrpcClient::SendRpc(
             privacy_sandbox::server_common::DecodeRequestPayload(
                 *plain_text_binary_http_response);
         if (!deframed_req.ok()) {
-          PS_LOG(ERROR) << "Unpadding response failed: "
-                        << deframed_req.status();
+          PS_LOG(ERROR, SystemLogContext())
+              << "Unpadding response failed: " << deframed_req.status();
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                       deframed_req.status().ToString()));
           return;
@@ -101,8 +103,7 @@ void KVAsyncGrpcClient::SendRpc(
 }
 
 absl::Status KVAsyncGrpcClient::ExecuteInternal(
-    std::unique_ptr<GetValuesRequest> raw_request,
-    const RequestMetadata& metadata,
+    std::unique_ptr<GetValuesRequest> raw_request, grpc::ClientContext* context,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                             ResponseMetadata) &&>
         on_done,
@@ -138,12 +139,12 @@ absl::Status KVAsyncGrpcClient::ExecuteInternal(
   *request->mutable_raw_body() = std::move(body);
   auto params = std::make_unique<RawClientParams<
       ObliviousGetValuesRequest, google::api::HttpBody, GetValuesResponse>>(
-      std::move(request), std::move(on_done), metadata);
-  params->SetDeadline(std::min(timeout, kMaxTimeout));
+      std::move(request), std::move(on_done));
+  context->set_deadline(GetClientContextDeadline(timeout, kMaxClientTimeout));
   PS_VLOG(5) << "Sending RPC ...";
   SendRpc(std::make_unique<quiche::ObliviousHttpRequest::Context>(
               std::move(oblivious_http_request).ReleaseContext()),
-          params.release());
+          context, params.release());
   return absl::OkStatus();
 }
 

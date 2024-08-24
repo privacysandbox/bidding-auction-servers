@@ -135,7 +135,7 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     get_bids_config_.is_protected_audience_enabled = true;
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
@@ -174,7 +174,7 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -183,7 +183,7 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
       .WillOnce([&notification](
                     std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                         get_values_raw_request,
-                    const RequestMetadata& metadata, auto on_done,
+                    grpc::ClientContext* context, auto on_done,
                     absl::Duration timeout, RequestConfig request_config) {
         std::move(on_done)(
             std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>(),
@@ -214,7 +214,7 @@ TEST_F(GetBidUnaryReactorTest,
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -223,7 +223,7 @@ TEST_F(GetBidUnaryReactorTest,
       .WillOnce([&notification](
                     std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                         get_values_request,
-                    const RequestMetadata& metadata, auto on_done,
+                    grpc::ClientContext* context, auto on_done,
                     absl::Duration timeout, RequestConfig request_config) {
         auto raw_response =
             std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>();
@@ -291,7 +291,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
 }
 
 TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
-  absl::SetFlag(&FLAGS_enable_chaffing, true);
+  get_bids_config_.is_chaffing_enabled = true;
 
   EXPECT_CALL(bidding_client_mock_, ExecuteInternal).Times(0);
 
@@ -343,13 +343,13 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
     get_bids_config_.is_protected_audience_enabled = true;
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, TEST_MODE);
     key_fetcher_manager_ =
         CreateKeyFetcherManager(config_client,
                                 /*public_key_fetcher=*/nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
 
-    server_common::log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::SetGlobalPSVLogLevel(10);
   }
 
   grpc::CallbackServerContext context_;
@@ -429,7 +429,7 @@ TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(Pointee(EqGenerateProtectedAppSignalsBidsRawRequest(
                           expected_request)),
-                      An<const RequestMetadata&>(),
+                      An<grpc::ClientContext*>(),
                       An<absl::AnyInvocable<
                           void(absl::StatusOr<std::unique_ptr<
                                    GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -458,7 +458,7 @@ TEST_F(GetProtectedAppSignalsTest, TimeoutIsRespected) {
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -485,7 +485,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -496,7 +496,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -524,7 +524,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -535,7 +535,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -565,7 +565,7 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -574,7 +574,7 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
       .WillOnce([&bids_counter](
                     std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
                         get_values_request,
-                    const RequestMetadata& metadata, auto on_done,
+                    grpc::ClientContext* context, auto on_done,
                     absl::Duration timeout, RequestConfig request_config) {
         auto raw_response =
             std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>();
@@ -589,7 +589,7 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -598,7 +598,7 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
       .WillOnce([&bids_counter](
                     std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
                         get_values_raw_request,
-                    const RequestMetadata& metadata, auto on_done,
+                    grpc::ClientContext* context, auto on_done,
                     absl::Duration timeout, RequestConfig request_config) {
         auto raw_response =
             std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>();
@@ -671,12 +671,12 @@ TEST_F(GetProtectedAppSignalsTest,
                                   /*add_protected_audience_input=*/false);
   absl::BlockingCounter bids_counter(1);
 
-  EXPECT_CALL(bidding_signals_provider_, Get(_, _, _)).Times(0);
+  EXPECT_CALL(bidding_signals_provider_, Get(_, _, _, _)).Times(0);
   EXPECT_CALL(
       bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateBidsResponse::GenerateBidsRawResponse>>,
@@ -688,7 +688,7 @@ TEST_F(GetProtectedAppSignalsTest,
       protected_app_signals_bidding_client_mock_,
       ExecuteInternal(
           An<std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>>(),
-          An<const RequestMetadata&>(),
+          An<grpc::ClientContext*>(),
           An<absl::AnyInvocable<
               void(absl::StatusOr<std::unique_ptr<
                        GenerateProtectedAppSignalsBidsRawResponse>>,
@@ -697,7 +697,7 @@ TEST_F(GetProtectedAppSignalsTest,
       .WillOnce([&bids_counter](
                     std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
                         get_values_raw_request,
-                    const RequestMetadata& metadata, auto on_done,
+                    grpc::ClientContext* context, auto on_done,
                     absl::Duration timeout, RequestConfig request_config) {
         auto raw_response =
             std::make_unique<GenerateProtectedAppSignalsBidsRawResponse>();

@@ -32,12 +32,12 @@ ScoringAsyncGrpcClient::ScoringAsyncGrpcClient(
 }
 
 void ScoringAsyncGrpcClient::SendRpc(
-    const std::string& hpke_secret,
+    const std::string& hpke_secret, grpc::ClientContext* context,
     RawClientParams<ScoreAdsRequest, ScoreAdsResponse,
                     ScoreAdsResponse::ScoreAdsRawResponse>* params) const {
   PS_VLOG(5) << "ScoringAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->ScoreAds(
-      params->ContextRef(), params->RequestRef(), params->ResponseRef(),
+      context, params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](const grpc::Status& status) {
         if (!status.ok()) {
           PS_LOG(ERROR) << "SendRPC completion status not ok: "

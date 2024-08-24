@@ -17,30 +17,31 @@
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-constexpr absl::string_view kBuyerBaseCode =
+constexpr absl::string_view kTestReportWinUdfWithValidation =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
-        var test_render_url = buyerReportingSignals.renderUrl
-        var test_render_url = buyerReportingSignals.renderURL
-        if(buyerReportingSignals.seller==null || buyerReportingSignals.seller == undefined || buyerReportingSignals.seller == ""){
+        if(!buyerReportingSignals.seller){
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
-            || buyerReportingSignals.adCost == undefined
-            || buyerReportingSignals.adCost == null){
+        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId){
+          console.error("Missing both interestGroupName and buyerReportingId in input to reportWin")
+          return
+        }
+        if(!buyerReportingSignals.adCost || buyerReportingSignals.adCost < 1){
           console.error("Missing adCost in input to reportWin")
           return
         }
-        var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
+        var reportWinUrl = "Invalid buyerReportingSignals"
+        if(validateInputs(buyerReportingSignals)){
+        reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
-                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
-                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&buyerReportingId="+buyerReportingSignals.buyerReportingId+
+                    "&adCost="+buyerReportingSignals.adCost+
+                    "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
-        if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
-            reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability+"&topLevelSeller="+buyerReportingSignals.topLevelSeller+"&modifiedBid="+buyerReportingSignals.modifiedBid;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -48,18 +49,30 @@ constexpr absl::string_view kBuyerBaseCode =
         sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
+  function validateInputs(buyerReportingSignals){
+    if(buyerReportingSignals.modelingSignals === undefined || buyerReportingSignals.modelingSignals<0 || buyerReportingSignals.modelingSignals>65535){
+      return false
+    }
+    if(buyerReportingSignals.recency===undefined || buyerReportingSignals.recency<0){
+      return false
+    }
+    if(buyerReportingSignals.joinCount===undefined || buyerReportingSignals.joinCount<0){
+      return false
+    }
+    return true
+  }
 )JS_CODE";
 
 constexpr absl::string_view kExpectedBuyerCodeWithReportWin = R"JS_CODE(
 
 function reportWinEntryFunction(
-    auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+    auctionConfig, perBuyerSignals, signalsForWinner, buyerReportingSignals,
     directFromSellerSignals, enable_logging, $extraArgs) {
+  ps_sendReportToInvoked = false
+  ps_registerAdBeaconInvoked = false
   const ps_report_win_response = {
     reportWinUrl: '',
     interactionReportingUrls: {},
-    sendReportToInvoked: false,
-    registerAdBeaconInvoked: false,
   };
   const ps_logs = [];
   const ps_errors = [];
@@ -72,57 +85,58 @@ function reportWinEntryFunction(
     console.log = console.warn = console.error = function() {};
   }
   globalThis.sendReportTo = function sendReportTo(url) {
-    if (ps_report_win_response.sendReportToInvoked) {
+    if (ps_sendReportToInvoked) {
       throw new Error('sendReportTo function invoked more than once');
     }
     ps_report_win_response.reportWinUrl = url;
-    ps_report_win_response.sendReportToInvoked = true;
+    ps_sendReportToInvoked = true;
   };
   globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap) {
-    if (ps_report_win_response.registerAdBeaconInvoked) {
+    if (ps_registerAdBeaconInvoked) {
       throw new Error(
           'registerAdBeaconInvoked function invoked more than once');
     }
     ps_report_win_response.interactionReportingUrls = eventUrlMap;
-    ps_report_win_response.registerAdBeaconInvoked = true;
+    ps_registerAdBeaconInvoked = true;
   };
   try {
     reportWin(
-        auctionSignals, perBuyerSignals, signalsForWinner,
+        auctionConfig.auctionSignals, perBuyerSignals, signalsForWinner,
         buyerReportingSignals, directFromSellerSignals, $extraArgs);
   } catch (ex) {
     console.error(ex.message);
   }
   return {
     response: ps_report_win_response,
-    buyerLogs: ps_logs,
-    buyerErrors: ps_errors,
-    buyerWarnings: ps_warns
+    logs: ps_logs,
+    errors: ps_errors,
+    warnings: ps_warns
   };
 }
 reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
-        var test_render_url = buyerReportingSignals.renderUrl
-        var test_render_url = buyerReportingSignals.renderURL
-        if(buyerReportingSignals.seller==null || buyerReportingSignals.seller == undefined || buyerReportingSignals.seller == ""){
+        if(!buyerReportingSignals.seller){
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
-            || buyerReportingSignals.adCost == undefined
-            || buyerReportingSignals.adCost == null){
+        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId){
+          console.error("Missing both interestGroupName and buyerReportingId in input to reportWin")
+          return
+        }
+        if(!buyerReportingSignals.adCost || buyerReportingSignals.adCost < 1){
           console.error("Missing adCost in input to reportWin")
           return
         }
-        var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
+        var reportWinUrl = "Invalid buyerReportingSignals"
+        if(validateInputs(buyerReportingSignals)){
+        reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
-                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
-                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&buyerReportingId="+buyerReportingSignals.buyerReportingId+
+                    "&adCost="+buyerReportingSignals.adCost+
+                    "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
-        if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
-            reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability+"&topLevelSeller="+buyerReportingSignals.topLevelSeller+"&modifiedBid="+buyerReportingSignals.modifiedBid;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -130,6 +144,18 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         sendReportTo(reportWinUrl)
         registerAdBeacon({"clickEvent":"http://click.com"})
     }
+  function validateInputs(buyerReportingSignals){
+    if(buyerReportingSignals.modelingSignals === undefined || buyerReportingSignals.modelingSignals<0 || buyerReportingSignals.modelingSignals>65535){
+      return false
+    }
+    if(buyerReportingSignals.recency===undefined || buyerReportingSignals.recency<0){
+      return false
+    }
+    if(buyerReportingSignals.joinCount===undefined || buyerReportingSignals.joinCount<0){
+      return false
+    }
+    return true
+  }
 )JS_CODE";
 
 }  // namespace privacy_sandbox::bidding_auction_servers

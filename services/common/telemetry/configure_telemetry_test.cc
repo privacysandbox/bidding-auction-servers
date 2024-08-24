@@ -29,10 +29,10 @@ namespace {
 TEST(InitTelemetry, _) {
   TrustedServersConfigClient config_client({});
 
-  config_client.SetFlagForTest("mode: OFF", TELEMETRY_CONFIG);
-  config_client.SetFlagForTest(kTrue, ENABLE_OTEL_BASED_LOGGING);
-  config_client.SetFlagForTest("", COLLECTOR_ENDPOINT);
-  config_client.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
+  config_client.SetOverride("mode: OFF", TELEMETRY_CONFIG);
+  config_client.SetOverride(kTrue, ENABLE_OTEL_BASED_LOGGING);
+  config_client.SetOverride("", COLLECTOR_ENDPOINT);
+  config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
 
   InitTelemetry<SelectAdRequest>(
       TrustedServerConfigUtil(/*init_config_client*/ false), config_client,

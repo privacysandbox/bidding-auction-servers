@@ -68,10 +68,10 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-    absl::SetFlag(&FLAGS_enable_chaffing, false);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING);
   }
 
   void SetProtectedAuctionCipherText(const T& protected_auction_input,
@@ -274,7 +274,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
@@ -305,7 +305,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   // proceed to Ad Scoring.
   auto MockScoringSignalsProvider =
       [](const ScoringSignalsRequest& scoring_signals_request,
-         ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+         ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+         RequestContext context) {
         auto scoring_signals = std::make_unique<ScoringSignals>();
         scoring_signals->scoring_signals =
             std::make_unique<std::string>(kSampleScoringSignals);
@@ -618,7 +619,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
 
   auto MockGetBids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
@@ -650,7 +651,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   // proceed to Ad Scoring.
   auto MockScoringSignalsProvider =
       [](const ScoringSignalsRequest& scoring_signals_request,
-         ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+         ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+         RequestContext context) {
         auto scoring_signals = std::make_unique<ScoringSignals>();
         scoring_signals->scoring_signals =
             std::make_unique<std::string>(kSampleScoringSignals);

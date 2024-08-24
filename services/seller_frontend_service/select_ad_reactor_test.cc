@@ -96,10 +96,10 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     request_ = std::move(request);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(context));
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
-    absl::SetFlag(&FLAGS_enable_chaffing, false);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
         .WillRepeatedly(
@@ -187,9 +187,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
         .WillOnce([this, &buyer_input, buyer_ig_owner](
                       std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                           get_bids_request,
-                      const RequestMetadata& metadata,
-                      GetBidDoneCallback on_done, absl::Duration timeout,
-                      RequestConfig request_config) {
+                      grpc::ClientContext* context, GetBidDoneCallback on_done,
+                      absl::Duration timeout, RequestConfig request_config) {
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
@@ -221,6 +220,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           EXPECT_FALSE(this->request_.auction_config().seller().empty());
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_bids_request->seller());
+          EXPECT_EQ(request_config.chaff_request_size, 0);
           return absl::OkStatus();
         });
     return buyer;
@@ -297,9 +297,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
         .WillOnce([this, &buyer_input, buyer_ig_owner](
                       std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                           get_bids_request,
-                      const RequestMetadata& metadata,
-                      GetBidDoneCallback on_done, absl::Duration timeout,
-                      RequestConfig request_config) {
+                      grpc::ClientContext* context, GetBidDoneCallback on_done,
+                      absl::Duration timeout, RequestConfig request_config) {
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
@@ -330,9 +329,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
                         .per_buyer_config()
                         .at(buyer_ig_owner)
                         .buyer_signals());
-
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_bids_request->seller());
+          EXPECT_EQ(request_config.chaff_request_size, 0);
           return absl::OkStatus();
         });
     return buyer;
@@ -409,9 +408,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
         .WillOnce([this, &buyer_input](
                       std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                           get_values_request,
-                      const RequestMetadata& metadata,
-                      GetBidDoneCallback on_done, absl::Duration timeout,
-                      RequestConfig request_config) {
+                      grpc::ClientContext* context, GetBidDoneCallback on_done,
+                      absl::Duration timeout, RequestConfig request_config) {
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
@@ -426,6 +424,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
           EXPECT_FALSE(this->request_.auction_config().seller().empty());
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_values_request->seller());
+          EXPECT_EQ(request_config.chaff_request_size, 0);
           return absl::OkStatus();
         });
     return buyer;
@@ -503,9 +502,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
         .WillOnce([this, &buyer_input](
                       std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
                           get_values_request,
-                      const RequestMetadata& metadata,
-                      GetBidDoneCallback on_done, absl::Duration timeout,
-                      RequestConfig request_config) {
+                      grpc::ClientContext* context, GetBidDoneCallback on_done,
+                      absl::Duration timeout, RequestConfig request_config) {
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
@@ -513,6 +511,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
               diff.Compare(buyer_input, get_values_request->buyer_input()));
           EXPECT_EQ(this->protected_auction_input_.enable_debug_reporting(),
                     get_values_request->enable_debug_reporting());
+          EXPECT_EQ(request_config.chaff_request_size, 0);
           return absl::OkStatus();
         });
     return buyer;
@@ -677,9 +676,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
                  scoring_signals_value, bids, buyer_reporting_id](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_raw_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
         google::protobuf::util::MessageDifferencer diff;
         std::string diff_output;
         diff.ReportDifferencesToString(&diff_output);
@@ -706,6 +704,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
         EXPECT_EQ(diff_output, "");
         EXPECT_EQ(score_ads_raw_request->seller(),
                   select_ad_req.auction_config().seller());
+        EXPECT_EQ(request_config.chaff_request_size, 0);
         return absl::OkStatus();
       });
 
@@ -824,9 +823,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
       .WillOnce([decision_logic, &scoring_done, &winner, this](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -853,6 +851,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
                             60000));  // recency in minutes
             }
           }
+          EXPECT_EQ(request_config.chaff_request_size, 0);
 
           EXPECT_EQ(bid.modeling_signals(), kModelingSignals);
           AdScore score;
@@ -1093,9 +1092,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillOnce([decision_logic, &scoring_done, &winner, this](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
@@ -1125,6 +1123,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
             }
           }
           EXPECT_EQ(ad_with_bid_metadata.modeling_signals(), kModelingSignals);
+          EXPECT_EQ(request_config.chaff_request_size, 0);
 
           AdScore score;
           score.set_render(ad_with_bid_metadata.render());
@@ -1258,10 +1257,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-                   const RequestMetadata& metadata,
-                   ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                   RequestConfig request_config) {
+                   grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
         EXPECT_EQ(request->ad_bids_size(), 3);
+        EXPECT_EQ(request_config.chaff_request_size, 0);
         // We can return only one score as a winner, so we arbitrarily
         // choose the first.
         const auto& winning_ad_with_bid = request->ad_bids(0);
@@ -1365,12 +1364,13 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
       .WillOnce(
           [decision_logic, &scoring_done, &winner](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
             ScoreAdsResponse::ScoreAdsRawResponse response;
             float i = 1;
             // Last bid wins.
             for (const auto& bid : request->ad_bids()) {
+              EXPECT_EQ(request_config.chaff_request_size, 0);
               EXPECT_EQ(bid.ad_cost(), kAdCost);
               EXPECT_EQ(bid.modeling_signals(), kModelingSignals);
               AdScore score;
@@ -1462,8 +1462,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillOnce(
           [&scoring_done](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
+            EXPECT_EQ(request_config.chaff_request_size, 0);
             std::move(on_done)(
                 absl::Status(absl::StatusCode::kInternal, "No Ads found"),
                 /* response_metadata= */ {});
@@ -1534,9 +1535,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillOnce([&scoring_done, &top_level_seller](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(request_config.chaff_request_size, 0);
         EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
@@ -1608,9 +1609,9 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
       .WillOnce([&top_level_seller, &scoring_done](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
-                    const RequestMetadata& metadata,
-                    ScoreAdsDoneCallback on_done, absl::Duration timeout,
-                    RequestConfig request_config) {
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(request_config.chaff_request_size, 0);
         EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
@@ -1676,8 +1677,9 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyUnlimitedEgressFlagPropagates) {
 
   auto mock_get_bids =
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         const RequestMetadata& metadata, GetBidDoneCallback on_done,
+         grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(request_config.chaff_request_size, 0);
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         auto* bid = get_bids_response->mutable_bids()->Add();
@@ -1725,7 +1727,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyUnlimitedEgressFlagPropagates) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
-  absl::SetFlag(&FLAGS_enable_chaffing, true);
+  this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
 
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -1751,11 +1753,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   auto MockGetBids =
       [response](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
-          const RequestMetadata& metadata, GetBidDoneCallback on_done,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
           absl::Duration timeout, RequestConfig request_config) {
         // Verify this is a chaff request by validating the is_chaff and
         // generation_id fields.
         EXPECT_TRUE(get_bids_request->is_chaff());
+        EXPECT_GT(request_config.chaff_request_size, 0);
         EXPECT_FALSE(get_bids_request->log_context().generation_id().empty());
         ABSL_LOG(INFO) << "Returning mock bids";
         std::move(on_done)(

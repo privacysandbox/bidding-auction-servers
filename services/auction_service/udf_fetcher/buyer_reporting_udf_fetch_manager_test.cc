@@ -23,8 +23,9 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -80,8 +81,13 @@ absl::StatusOr<HTTPResponse> GetValidUdfResponse(std::string body,
   });
 }
 
-TEST(BuyerReportingUdfFetchManagerTest,
-     LoadsHttpFetcherResultIntoV8Dispatcher) {
+class BuyerReportingUdfFetchManagerTest : public ::testing::Test {
+ protected:
+  void SetUp() override { CommonTestInit(); }
+};
+
+TEST_F(BuyerReportingUdfFetchManagerTest,
+       LoadsHttpFetcherResultIntoV8Dispatcher) {
   BuyerConfig buyer_config;
   std::string expected_pa_version = "pa_foo.com";
   std::string expected_pas_version = "pas_bar.com";
@@ -166,7 +172,7 @@ TEST(BuyerReportingUdfFetchManagerTest,
             expected_wrapped_code);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest, StripsUrlBeforeFetching) {
+TEST_F(BuyerReportingUdfFetchManagerTest, StripsUrlBeforeFetching) {
   BuyerConfig buyer_config;
   std::string expected_pa_url = "foo.com/foo.js";
   buyer_config.pa_buyer_udf_url = "foo.com/foo.js?foo=bar#reportPA";
@@ -207,7 +213,7 @@ TEST(BuyerReportingUdfFetchManagerTest, StripsUrlBeforeFetching) {
   done.Wait();
 }
 
-TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenFlagsTurnedOff) {
+TEST_F(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenFlagsTurnedOff) {
   BuyerConfig buyer_config = {.enable_report_win_url_generation = false};
   auction_service::SellerCodeFetchConfig udf_config =
       GetTestSellerUdfConfig(buyer_config);
@@ -240,7 +246,8 @@ TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenFlagsTurnedOff) {
   EXPECT_EQ(protected_app_signals_code_blob_per_origin.size(), 0);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenNoFetchUrlConfigured) {
+TEST_F(BuyerReportingUdfFetchManagerTest,
+       NoCodeLoadedWhenNoFetchUrlConfigured) {
   std::string expected_wrapped_code =
       R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
@@ -274,7 +281,7 @@ TEST(BuyerReportingUdfFetchManagerTest, NoCodeLoadedWhenNoFetchUrlConfigured) {
   EXPECT_EQ(protected_app_signals_code_blob_per_origin.size(), 0);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
+TEST_F(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
   std::string expected_pa_version = "pa_PABuyerOrigin.com";
   std::string expected_pas_version = "pas_PASBuyerOrigin.com";
   std::vector<absl::StatusOr<HTTPResponse>> url_response = {
@@ -340,7 +347,7 @@ TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeUponFetchError) {
       expected_wrapped_code);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeForEmptyResponse) {
+TEST_F(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeForEmptyResponse) {
   BuyerConfig buyer_config;
   absl::StatusOr<HTTPResponse> expected_pa_response =
       GetValidUdfResponse("", buyer_config.pa_buyer_origin);
@@ -377,8 +384,8 @@ TEST(BuyerReportingUdfFetchManagerTest, SkipsBuyerCodeForEmptyResponse) {
   EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest,
-     SkipsBuyerCodeForMissingResponseHeader) {
+TEST_F(BuyerReportingUdfFetchManagerTest,
+       SkipsBuyerCodeForMissingResponseHeader) {
   BuyerConfig buyer_config;
   absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
       "function reportWin(){}", buyer_config.pa_buyer_origin);
@@ -416,8 +423,8 @@ TEST(BuyerReportingUdfFetchManagerTest,
   EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 0);
 }
 
-TEST(BuyerReportingUdfFetchManagerTest,
-     SkipsBuyerCodeForIncorrectResponseHeader) {
+TEST_F(BuyerReportingUdfFetchManagerTest,
+       SkipsBuyerCodeForIncorrectResponseHeader) {
   BuyerConfig buyer_config;
   absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
       "function reportWin(){}", buyer_config.pa_buyer_origin);

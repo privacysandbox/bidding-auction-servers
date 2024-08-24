@@ -44,9 +44,9 @@ class SelectAuctionResultReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     SetupRequest();
-    config_.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-    config_.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
-    config_.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
+    config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
 
     // Return hard coded key for decryption.
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
@@ -122,7 +122,7 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
           [this, &scoring_done](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                   score_ads_request,
-              const RequestMetadata& metadata,
+              grpc::ClientContext* context,
               absl::AnyInvocable<void(
                   absl::StatusOr<
                       std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
@@ -218,7 +218,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
           [&scoring_done, &winner](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                   score_ads_request,
-              const RequestMetadata& metadata,
+              grpc::ClientContext* context,
               absl::AnyInvocable<void(
                   absl::StatusOr<
                       std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
@@ -258,7 +258,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
           [&scoring_done](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                   score_ads_request,
-              const RequestMetadata& metadata,
+              grpc::ClientContext* context,
               absl::AnyInvocable<void(
                   absl::StatusOr<
                       std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
@@ -296,7 +296,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>())};
   auto config = CreateConfig();
-  config.SetFlagForTest("", SELLER_ORIGIN_DOMAIN);
+  config.SetOverride("", SELLER_ORIGIN_DOMAIN);
   auto response = RunRequest(config, clients, this->request_);
   // Conversion from ad score to auction result ciphertext will be
   // unit tested in util function unit tests.
@@ -313,7 +313,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
           [&scoring_done](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                   score_ads_request,
-              const RequestMetadata& metadata,
+              grpc::ClientContext* context,
               absl::AnyInvocable<void(
                   absl::StatusOr<
                       std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
@@ -349,7 +349,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
           [&scoring_done](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                   score_ads_request,
-              const RequestMetadata& metadata,
+              grpc::ClientContext* context,
               absl::AnyInvocable<void(
                   absl::StatusOr<
                       std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,

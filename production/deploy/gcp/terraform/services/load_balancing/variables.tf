@@ -54,8 +54,15 @@ variable "frontend_ip_address" {
   type        = string
 }
 variable "frontend_domain_ssl_certificate_id" {
-  description = "A GCP ssl certificate id. Example: projects/bas-dev-383721/global/sslCertificates/dev. Used to terminate client-to-external-LB connections."
+  description = "A GCP ssl certificate id. Example: projects/test-project/global/sslCertificates/dev. Used to terminate client-to-external-LB connections. Unused if frontend_certificate_map_id is specified."
   type        = string
+  default     = ""
+}
+
+variable "frontend_certificate_map_id" {
+  description = "A certificate manager certificate map resource id. Example: projects/test-project/locations/global/certificateMaps/wildcard-cert-map. Takes precedence over frontend_domain_ssl_certificate_id."
+  type        = string
+  default     = ""
 }
 
 variable "frontend_instance_group_managers" {

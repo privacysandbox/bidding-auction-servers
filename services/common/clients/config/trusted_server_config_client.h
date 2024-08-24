@@ -20,11 +20,12 @@
 #include <string>
 #include <utility>
 
-#include "absl/container/flat_hash_map.h"
+#include "absl/container/btree_map.h"
 #include "absl/flags/flag.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/core/interface/type_def.h"
 #include "src/public/cpio/interface/parameter_client/parameter_client_interface.h"
 #include "src/telemetry/flag/telemetry_flag.h"
@@ -123,14 +124,24 @@ class TrustedServersConfigClient {
     }
   }
 
-  void SetFlagForTest(absl::string_view flag_value,
-                      absl::string_view config_name) {
+  // For overriding flag values, regardless of their value on the command line
+  // or Terraform. Call this method after Init(), else the value set via this
+  // method may be overriden.
+  void SetOverride(absl::string_view flag_value,
+                   absl::string_view config_name) {
+    PS_LOG(INFO) << absl::StrFormat(
+        "Overriding flag (flag name: %s, overriden value: %s)", config_name,
+        flag_value);
     config_entries_map_[config_name] = flag_value;
+  }
+
+  std::string DebugString() {
+    return absl::StrJoin(config_entries_map_, "\n", absl::PairFormatter("="));
   }
 
  private:
   std::unique_ptr<google::scp::cpio::ParameterClientInterface> config_client_;
-  absl::flat_hash_map<std::string, std::string> config_entries_map_;
+  absl::btree_map<std::string, std::string> config_entries_map_;
   absl::AnyInvocable<
       std::unique_ptr<google::scp::cpio::ParameterClientInterface>(
           google::scp::cpio::ParameterClientOptions) &&>

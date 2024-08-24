@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,7 +35,12 @@ using ::google::protobuf::util::MessageDifferencer;
 
 namespace {
 
-TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
+class ScoringAsyncClientTest : public ::testing::Test {
+ protected:
+  void SetUp() override { CommonTestInit(); }
+};
+
+TEST_F(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
   using ServiceThread =
       MockServerThread<AuctionServiceMock, ScoreAdsRequest, ScoreAdsResponse>;
   // Hold onto a copy of the request that the server gets; we'll validate the
@@ -119,8 +125,8 @@ TEST(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
       expected, received_request));
 }
 
-TEST(ScoringAsyncClientTest,
-     CallServerWithEncryptionEnabled_EncryptionFailure) {
+TEST_F(ScoringAsyncClientTest,
+       CallServerWithEncryptionEnabled_EncryptionFailure) {
   using ServiceThread =
       MockServerThread<AuctionServiceMock, ScoreAdsRequest, ScoreAdsResponse>;
   ScoreAdsResponse mock_server_response;
@@ -151,8 +157,8 @@ TEST(ScoringAsyncClientTest,
   EXPECT_FALSE(execute_result.ok());
 }
 
-TEST(ScoringAsyncClientTest,
-     CallServerWithEncryptionEnabled_DecryptionFailure) {
+TEST_F(ScoringAsyncClientTest,
+       CallServerWithEncryptionEnabled_DecryptionFailure) {
   using ServiceThread =
       MockServerThread<AuctionServiceMock, ScoreAdsRequest, ScoreAdsResponse>;
   // Hold onto a copy of the request that the server gets; we'll validate the

@@ -21,6 +21,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/generate_bids_reactor.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
@@ -35,20 +36,23 @@ namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr char kGenerateBids[] = "GenerateBids";
 
 using GenerateBidsReactorFactory = absl::AnyInvocable<GenerateBidsReactor*(
-    const GenerateBidsRequest* request, GenerateBidsResponse* response,
+    grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
+    GenerateBidsResponse* response,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceRuntimeConfig& runtime_config)>;
 
 using ProtectedAppSignalsGenerateBidsReactorFactory =
     absl::AnyInvocable<ProtectedAppSignalsGenerateBidsReactor*(
-        const grpc::CallbackServerContext* context,
+        grpc::CallbackServerContext* context,
         const GenerateProtectedAppSignalsBidsRequest* request,
         const BiddingServiceRuntimeConfig& runtime_config,
         GenerateProtectedAppSignalsBidsResponse* response,
         server_common::KeyFetcherManagerInterface* key_fetcher_manager,
         CryptoClientWrapperInterface* crypto_client,
-        KVAsyncClient* ad_retrieval_client, KVAsyncClient* kv_async_client)>;
+        KVAsyncClient* ad_retrieval_client, KVAsyncClient* kv_async_client,
+        EgressSchemaCache* egress_schema_cache,
+        EgressSchemaCache* limted_egress_schema_cache)>;
 
 // BiddingService implements business logic for generating a bid. It takes
 // input from the BuyerFrontEndService.
@@ -66,7 +70,9 @@ class BiddingService final : public Bidding::CallbackService {
       ProtectedAppSignalsGenerateBidsReactorFactory
           protected_app_signals_generate_bids_reactor_factory,
       std::unique_ptr<KVAsyncClient> ad_retrieval_async_client = nullptr,
-      std::unique_ptr<KVAsyncClient> kv_async_client = nullptr)
+      std::unique_ptr<KVAsyncClient> kv_async_client = nullptr,
+      std::unique_ptr<EgressSchemaCache> egress_schema_cache = nullptr,
+      std::unique_ptr<EgressSchemaCache> limited_egress_schema_cache = nullptr)
       : generate_bids_reactor_factory_(
             std::move(generate_bids_reactor_factory)),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
@@ -75,7 +81,9 @@ class BiddingService final : public Bidding::CallbackService {
         protected_app_signals_generate_bids_reactor_factory_(
             std::move(protected_app_signals_generate_bids_reactor_factory)),
         ad_retrieval_async_client_(std::move(ad_retrieval_async_client)),
-        kv_async_client_(std::move(kv_async_client)) {
+        kv_async_client_(std::move(kv_async_client)),
+        egress_schema_cache_(std::move(egress_schema_cache)),
+        limited_egress_schema_cache_(std::move(limited_egress_schema_cache)) {
     if (ad_retrieval_async_client_ == nullptr &&
         !runtime_config_.tee_ad_retrieval_kv_server_addr.empty()) {
       auto ad_retrieval_stub =
@@ -136,6 +144,8 @@ class BiddingService final : public Bidding::CallbackService {
       protected_app_signals_generate_bids_reactor_factory_;
   std::unique_ptr<KVAsyncClient> ad_retrieval_async_client_;
   std::unique_ptr<KVAsyncClient> kv_async_client_;
+  std::unique_ptr<EgressSchemaCache> egress_schema_cache_;
+  std::unique_ptr<EgressSchemaCache> limited_egress_schema_cache_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

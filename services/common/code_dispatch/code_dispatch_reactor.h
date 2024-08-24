@@ -22,14 +22,18 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/common/clients/async_client.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/feature_flags.h"
+#include "services/common/loggers/request_log_context.h"
+#include "services/common/util/client_contexts.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -50,12 +54,13 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         request_(request),
         response_(response),
         key_fetcher_manager_(key_fetcher_manager),
-        crypto_client_(crypto_client) {
+        crypto_client_(crypto_client),
+        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)) {
     PS_VLOG(5) << "Encryption is enabled, decrypting request now";
     if (DecryptRequest()) {
       PS_VLOG(5) << "Decrypted request: " << raw_request_.DebugString();
     } else {
-      PS_LOG(ERROR) << "Failed to decrypt the request";
+      PS_LOG(ERROR, SystemLogContext()) << "Failed to decrypt the request";
     }
   }
 
@@ -75,19 +80,21 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
 
   // Handles early-cancellation by the client.
   void OnCancel() override {
-    // TODO(b/245982466): error handling design
-  };
+    if (enable_cancellation_) {
+      client_contexts_.CancelAll();
+    }
+  }
 
   // Decrypts the request ciphertext in and returns whether decryption was
   // successful. If successful, the result is written into 'raw_request_'.
   bool DecryptRequest() {
     if (request_->key_id().empty()) {
-      PS_LOG(ERROR) << "No key ID found in the request";
+      PS_LOG(ERROR, SystemLogContext()) << "No key ID found in the request";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kEmptyKeyIdError));
       return false;
     } else if (request_->request_ciphertext().empty()) {
-      PS_LOG(ERROR) << "No ciphertext found in the request";
+      PS_LOG(ERROR, SystemLogContext()) << "No ciphertext found in the request";
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kEmptyCiphertextError));
       return false;
@@ -96,7 +103,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     std::optional<server_common::PrivateKey> private_key =
         key_fetcher_manager_->GetPrivateKey(request_->key_id());
     if (!private_key.has_value()) {
-      PS_LOG(ERROR)
+      PS_LOG(ERROR, SystemLogContext())
           << "Unable to fetch private key from the key fetcher manager";
       Finish(
           grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError));
@@ -107,8 +114,9 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
         decrypt_response = crypto_client_->HpkeDecrypt(
             *private_key, request_->request_ciphertext());
     if (!decrypt_response.ok()) {
-      PS_LOG(ERROR) << "Unable to decrypt the request ciphertext: "
-                    << decrypt_response.status();
+      PS_LOG(ERROR, SystemLogContext())
+          << "Unable to decrypt the request ciphertext: "
+          << decrypt_response.status();
       Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                           kMalformedCiphertext));
       return false;
@@ -125,7 +133,8 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     absl::StatusOr<google::cmrt::sdk::crypto_service::v1::AeadEncryptResponse>
         aead_encrypt = crypto_client_->AeadEncrypt(payload, hpke_secret_);
     if (!aead_encrypt.ok()) {
-      PS_LOG(ERROR) << "AEAD encrypt failed: " << aead_encrypt.status();
+      PS_LOG(ERROR, SystemLogContext())
+          << "AEAD encrypt failed: " << aead_encrypt.status();
       Finish(grpc::Status(grpc::StatusCode::INTERNAL,
                           aead_encrypt.status().ToString()));
       return false;
@@ -151,6 +160,11 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;
   std::string hpke_secret_;
+
+  // Keeps track of the client contexts used for RPC calls
+  ClientContexts client_contexts_;
+
+  const bool enable_cancellation_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

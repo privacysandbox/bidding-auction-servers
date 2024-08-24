@@ -36,9 +36,10 @@
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
-#define PS_ASSIGN_IF_PRESENT(dst, src, key, getter)           \
-  if (auto it = src.FindMember(key); it != src.MemberEnd()) { \
-    dst = it->value.getter();                                 \
+#define PS_ASSIGN_IF_PRESENT(dst, src, key, type)        \
+  if (auto it = (src).FindMember(key);                   \
+      it != (src).MemberEnd() && it->value.Is##type()) { \
+    (dst) = it->value.Get##type();                       \
   }
 
 inline constexpr char kMissingMember[] = "Missing %s in the JSON document";

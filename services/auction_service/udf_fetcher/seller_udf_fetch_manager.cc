@@ -27,9 +27,9 @@
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
-#include "services/common/code_fetch/code_fetcher_interface.h"
-#include "services/common/code_fetch/periodic_bucket_fetcher.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/fetcher_interface.h"
+#include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/util/file_util.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/interface/errors.h"
@@ -101,7 +101,8 @@ WrapCodeForDispatch SellerUdfFetchManager::GetUdfWrapper() {
     return [this](const std::vector<std::string>& ad_tech_code_blobs) {
       return GetSellerWrappedCode(
           ad_tech_code_blobs[kJsBlobIndex],
-          udf_config_.enable_report_result_url_generation());
+          udf_config_.enable_report_result_url_generation(),
+          udf_config_.enable_private_aggregate_reporting());
     };
   }
   return [this](const std::vector<std::string>& ad_tech_code_blobs) {
@@ -135,7 +136,7 @@ absl::Status SellerUdfFetchManager::InitializeLocalCodeFetch() {
   return dispatcher_.LoadSync(kScoreAdBlobVersion, adtech_code_blob);
 }
 
-absl::StatusOr<std::unique_ptr<PeriodicBucketFetcher>>
+absl::StatusOr<std::unique_ptr<PeriodicBucketCodeFetcher>>
 SellerUdfFetchManager::InitializeBucketCodeFetch() {
   PS_RETURN_IF_ERROR(InitBucketClient());
 
@@ -148,7 +149,7 @@ SellerUdfFetchManager::InitializeBucketCodeFetch() {
         "Bucket fetch mode requires a non-empty bucket default object "
         "name.");
   }
-  auto seller_code_fetcher = std::make_unique<PeriodicBucketFetcher>(
+  auto seller_code_fetcher = std::make_unique<PeriodicBucketCodeFetcher>(
       udf_config_.auction_js_bucket(),
       absl::Milliseconds(udf_config_.url_fetch_period_ms()), &dispatcher_,
       &executor_, GetUdfWrapper(), blob_storage_client_.get());

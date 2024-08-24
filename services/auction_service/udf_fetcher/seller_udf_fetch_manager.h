@@ -26,9 +26,9 @@
 #include "services/auction_service/udf_fetcher/buyer_reporting_udf_fetch_manager.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/code_fetch/code_fetcher_interface.h"
-#include "services/common/code_fetch/periodic_bucket_fetcher.h"
-#include "services/common/code_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/fetcher_interface.h"
+#include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
+#include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -41,7 +41,7 @@ constexpr char kSellerUDFLoadFailedStartup[] =
 // SellerUdfFetchManager acts as a wrapper for all logic related to fetching
 // auction service UDFs. This class consumes a SellerCodeFetchConfig and uses
 // it, along with various other dependencies, to create and own all instances of
-// CodeFetcherInterface in the auction service.
+// FetcherInterface in the auction service.
 class SellerUdfFetchManager {
  public:
   SellerUdfFetchManager(
@@ -79,7 +79,7 @@ class SellerUdfFetchManager {
 
   absl::Status InitBucketClient();
 
-  absl::StatusOr<std::unique_ptr<PeriodicBucketFetcher>>
+  absl::StatusOr<std::unique_ptr<PeriodicBucketCodeFetcher>>
   InitializeBucketCodeFetch();
 
   absl::StatusOr<std::unique_ptr<PeriodicCodeFetcher>> InitializeUrlCodeFetch();
@@ -96,7 +96,7 @@ class SellerUdfFetchManager {
   std::unique_ptr<BuyerReportingFetcher> buyer_reporting_fetcher_;
   std::unique_ptr<BuyerReportingUdfFetchManager>
       buyer_reporting_udf_fetch_manager_;
-  std::unique_ptr<CodeFetcherInterface> seller_code_fetcher_;
+  std::unique_ptr<FetcherInterface> seller_code_fetcher_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
