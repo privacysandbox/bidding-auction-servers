@@ -101,10 +101,35 @@ resource "azurerm_kubernetes_cluster" "aks" {
     type = "SystemAssigned"
   }
 
-
-
   depends_on = [
     azurerm_subnet.aks,
     azurerm_virtual_network.vnet,
   ]
+}
+
+resource "azurerm_private_dns_zone" "this" {
+  name                = "privacysandbox.com"
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_user_assigned_identity" "externaldns" {
+  name                = "externaldns-identity"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_federated_identity_credential" "this" {
+  name                = "${azurerm_kubernetes_cluster.aks.name}-ServiceAccount-externaldns-external-dns"
+  resource_group_name = azurerm_resource_group.rg.name
+  audience            = ["api://AzureADTokenExchange"]
+  issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
+  parent_id           = azurerm_user_assigned_identity.externaldns.id
+  subject             = "system:serviceaccount:externaldns:external-dns"
+}
+
+resource "azurerm_role_assignment" "private_dns_zone_contributor" {
+  principal_id                     = azurerm_user_assigned_identity.externaldns.principal_id
+  role_definition_name             = "Private DNS Zone Contributor"
+  scope                            = azurerm_private_dns_zone.this.id
+  skip_service_principal_aad_check = true
 }
