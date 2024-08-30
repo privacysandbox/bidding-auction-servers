@@ -107,6 +107,28 @@ resource "azurerm_kubernetes_cluster" "aks" {
   ]
 }
 
+resource "azurerm_role_assignment" "aks_identity_rg_contributor" {
+  principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+  role_definition_name             = "Contributor"
+  scope                            = azurerm_resource_group.rg.id
+  skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks,
+  ]
+}
+
+resource "azurerm_role_assignment" "aks_identity_mcrg_contributor" {
+  principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+  role_definition_name             = "Contributor"
+  scope                            = azurerm_kubernetes_cluster.aks.node_resource_group_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks,
+  ]
+}
+
 resource "azurerm_private_dns_zone" "this" {
   name                = "adsapi.microsoft"
   resource_group_name = azurerm_resource_group.rg.name
@@ -116,20 +138,32 @@ resource "azurerm_user_assigned_identity" "externaldns" {
   name                = "externaldns-identity"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+
 }
 
-resource "azurerm_federated_identity_credential" "this" {
-  name                = "${azurerm_kubernetes_cluster.aks.name}-ServiceAccount-externaldns-external-dns"
-  resource_group_name = azurerm_resource_group.rg.name
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
-  parent_id           = azurerm_user_assigned_identity.externaldns.id
-  subject             = "system:serviceaccount:externaldns:external-dns"
-}
+# TODO: Uncomment when we've filed for exception for the policy
+# resource "azurerm_federated_identity_credential" "this" {
+#   name                = "${azurerm_kubernetes_cluster.aks.name}-ServiceAccount-externaldns-external-dns"
+#   resource_group_name = azurerm_resource_group.rg.name
+#   audience            = ["api://AzureADTokenExchange"]
+#   issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
+#   parent_id           = azurerm_user_assigned_identity.externaldns.id
+#   subject             = "system:serviceaccount:externaldns:external-dns"
+
+#   depends_on = [
+#     azurerm_user_assigned_identity.externaldns,
+#     azurerm_kubernetes_cluster.aks,
+#   ]
+# }
 
 resource "azurerm_role_assignment" "private_dns_zone_contributor" {
   principal_id                     = azurerm_user_assigned_identity.externaldns.principal_id
   role_definition_name             = "Private DNS Zone Contributor"
   scope                            = azurerm_private_dns_zone.this.id
   skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_private_dns_zone.this,
+    azurerm_user_assigned_identity.externaldns,
+  ]
 }
