@@ -108,7 +108,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 resource "azurerm_private_dns_zone" "this" {
-  name                = "privacysandbox.com"
+  name                = "adsapi.microsoft"
   resource_group_name = azurerm_resource_group.rg.name
 }
 
