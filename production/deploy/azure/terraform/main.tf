@@ -141,20 +141,19 @@ resource "azurerm_user_assigned_identity" "externaldns" {
 
 }
 
-# TODO: Uncomment when we've filed for exception for the policy
-# resource "azurerm_federated_identity_credential" "this" {
-#   name                = "${azurerm_kubernetes_cluster.aks.name}-ServiceAccount-externaldns-external-dns"
-#   resource_group_name = azurerm_resource_group.rg.name
-#   audience            = ["api://AzureADTokenExchange"]
-#   issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
-#   parent_id           = azurerm_user_assigned_identity.externaldns.id
-#   subject             = "system:serviceaccount:externaldns:external-dns"
+resource "azurerm_federated_identity_credential" "this" {
+  name                = "${azurerm_kubernetes_cluster.aks.name}-ServiceAccount-externaldns-external-dns"
+  resource_group_name = azurerm_resource_group.rg.name
+  audience            = ["api://AzureADTokenExchange"]
+  issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
+  parent_id           = azurerm_user_assigned_identity.externaldns.id
+  subject             = "system:serviceaccount:externaldns:external-dns"
 
-#   depends_on = [
-#     azurerm_user_assigned_identity.externaldns,
-#     azurerm_kubernetes_cluster.aks,
-#   ]
-# }
+  depends_on = [
+    azurerm_user_assigned_identity.externaldns,
+    azurerm_kubernetes_cluster.aks,
+  ]
+}
 
 resource "azurerm_role_assignment" "private_dns_zone_contributor" {
   principal_id                     = azurerm_user_assigned_identity.externaldns.principal_id
