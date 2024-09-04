@@ -72,11 +72,13 @@ resource "azurerm_subnet" "cg" {
 }
 
 resource "azurerm_kubernetes_cluster" "aks" {
-  name                = "terraform-test-aks"
-  location            = "Central India"
-  resource_group_name = azurerm_resource_group.rg.name
-  dns_prefix          = "terraform-test-aks-dns"
-  kubernetes_version  = "1.28.12"
+  name                      = "terraform-test-aks"
+  location                  = "Central India"
+  resource_group_name       = azurerm_resource_group.rg.name
+  dns_prefix                = "terraform-test-aks-dns"
+  kubernetes_version        = "1.28.12"
+  workload_identity_enabled = true
+  oidc_issuer_enabled       = true
 
   network_profile {
     network_plugin     = "azure"
@@ -165,4 +167,9 @@ resource "azurerm_role_assignment" "private_dns_zone_contributor" {
     azurerm_private_dns_zone.this,
     azurerm_user_assigned_identity.externaldns,
   ]
+}
+
+output "externaldns_identity_client_id" {
+  description = "The client ID of the created managed identity to use for the annotation 'azure.workload.identity/client-id' on your service account"
+  value       = azurerm_user_assigned_identity.externaldns.client_id
 }
