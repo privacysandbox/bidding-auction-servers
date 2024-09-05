@@ -33,7 +33,7 @@ inline constexpr absl::string_view kGCPProdPublicKeyEndpoint =
 inline constexpr absl::string_view kAWSProdPublicKeyEndpoint =
     "https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys";  // NOLINT(whitespace/line_length)
 inline constexpr absl::string_view kAzureProdPublicKeyEndpoint =
-    "https://publickeyservice.pa.azure.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys";  // NOLINT(whitespace/line_length)
+    "https://azure.microsoftbrowsertrust.com/app/listpubkeys";  // NOLINT(whitespace/line_length)
 // clang-format on
 
 // Checks if the url is in the public key allowlist.
@@ -48,6 +48,7 @@ inline bool IsAllowedPublicKeyUrl(absl::string_view url, bool is_prod_build) {
           // clang-format off
             kGCPProdPublicKeyEndpoint,
             kAWSProdPublicKeyEndpoint,
+            kAzureProdPublicKeyEndpoint,
           // clang-format on
       });
 
