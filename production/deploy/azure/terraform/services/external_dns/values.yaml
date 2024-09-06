@@ -1,0 +1,24 @@
+provider: azure-private-dns
+
+policy: sync
+
+azure:
+  useWorkloadIdentityExtension: true
+
+txtOwnerId: external-dns
+
+extraArgs:
+  txt-wildcard-replacement: "wildcard"
+
+podLabels:
+  azure.workload.identity/use: "true"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 50m
+    memory: 64Mi
+
+logLevel: debug

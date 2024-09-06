@@ -24,17 +24,21 @@ terraform {
   required_version = ">= 1.1.0"
 }
 
+provider "azuread" {
+  use_cli = true
+}
+
 provider "azurerm" {
   features {}
 }
 
 resource "azurerm_resource_group" "rg" {
-  name     = "terraform-test-rg"
+  name     = "takuro-test-rg"
   location = "centralindia"
 }
 
 resource "azurerm_virtual_network" "vnet" {
-  name                = "terraform-test-vnet"
+  name                = "takuro-test-vnet"
   address_space       = ["10.0.0.0/14"]
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
@@ -86,13 +90,14 @@ resource "azurerm_subnet" "cg" {
 }
 
 resource "azurerm_kubernetes_cluster" "aks" {
-  name                      = "terraform-test-aks"
+  name                      = "takuro-test-aks"
   location                  = "Central India"
   resource_group_name       = azurerm_resource_group.rg.name
-  dns_prefix                = "terraform-test-aks-dns"
+  dns_prefix                = "takuro-test-aks-dns"
   kubernetes_version        = "1.28.12"
   workload_identity_enabled = true
   oidc_issuer_enabled       = true
+  automatic_upgrade_channel = "patch"
 
   network_profile {
     network_plugin     = "azure"
@@ -124,6 +129,28 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 resource "azurerm_role_assignment" "aks_identity_rg_contributor" {
+  principal_id                     = azurerm_kubernetes_cluster.aks.identity[0].principal_id
+  role_definition_name             = "Contributor"
+  scope                            = azurerm_resource_group.rg.id
+  skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks,
+  ]
+}
+
+resource "azurerm_role_assignment" "aks_identity_vnet_reader" {
+  principal_id                     = azurerm_kubernetes_cluster.aks.identity[0].principal_id
+  role_definition_name             = "Reader"
+  scope                            = azurerm_virtual_network.vnet.id
+  skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_virtual_network.vnet,
+  ]
+}
+
+resource "azurerm_role_assignment" "aks_kubeidentity_rg_contributor" {
   principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
   role_definition_name             = "Contributor"
   scope                            = azurerm_resource_group.rg.id
@@ -134,7 +161,7 @@ resource "azurerm_role_assignment" "aks_identity_rg_contributor" {
   ]
 }
 
-resource "azurerm_role_assignment" "aks_identity_mcrg_contributor" {
+resource "azurerm_role_assignment" "aks_kubeidentity_mcrg_contributor" {
   principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
   role_definition_name             = "Contributor"
   scope                            = azurerm_kubernetes_cluster.aks.node_resource_group_id
@@ -150,8 +177,20 @@ resource "azurerm_private_dns_zone" "this" {
   resource_group_name = azurerm_resource_group.rg.name
 }
 
+resource "azurerm_private_dns_zone_virtual_network_link" "this" {
+  name                  = "takuro-test-vnet-link"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.this.name
+  virtual_network_id    = azurerm_virtual_network.vnet.id
+
+  depends_on = [
+    azurerm_private_dns_zone.this,
+    azurerm_virtual_network.vnet,
+  ]
+}
+
 resource "azurerm_user_assigned_identity" "externaldns" {
-  name                = "externaldns-identity"
+  name                = "takuro-externaldns-identity"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
@@ -163,11 +202,23 @@ resource "azurerm_federated_identity_credential" "this" {
   audience            = ["api://AzureADTokenExchange"]
   issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
   parent_id           = azurerm_user_assigned_identity.externaldns.id
-  subject             = "system:serviceaccount:externaldns:external-dns"
+  subject             = "system:serviceaccount:external-dns:external-dns"
 
   depends_on = [
     azurerm_user_assigned_identity.externaldns,
     azurerm_kubernetes_cluster.aks,
+  ]
+}
+
+resource "azurerm_role_assignment" "reader" {
+  principal_id                     = azurerm_user_assigned_identity.externaldns.principal_id
+  role_definition_name             = "Reader"
+  scope                            = azurerm_resource_group.rg.id
+  skip_service_principal_aad_check = true
+
+  depends_on = [
+    azurerm_resource_group.rg,
+    azurerm_user_assigned_identity.externaldns,
   ]
 }
 
