@@ -21,7 +21,7 @@
 
 #include "absl/status/status.h"
 #include "absl/synchronization/notification.h"
-#include "src/logger/request_context_logger.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/roma/interface/roma.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,9 +34,10 @@ V8Dispatcher::V8Dispatcher(DispatchConfig&& config)
     : roma_service_(std::move(config)) {}
 
 V8Dispatcher::~V8Dispatcher() {
-  PS_LOG(ERROR) << "Stopping roma service...";
+  PS_LOG(ERROR, SystemLogContext()) << "Stopping roma service...";
   absl::Status stop_status = roma_service_.Stop();
-  PS_LOG(ERROR) << "Roma service stop status: " << stop_status;
+  PS_LOG(ERROR, SystemLogContext())
+      << "Roma service stop status: " << stop_status;
 }
 
 absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }

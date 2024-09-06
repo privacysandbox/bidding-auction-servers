@@ -76,8 +76,7 @@ absl::StatusOr<DataType> StringToDataType(std::string data_type) {
 absl::StatusOr<Tensor> ParseTensor(const rapidjson::Value& tensor_value) {
   Tensor tensor;
   // Tensor name is optional.
-  PS_ASSIGN_IF_PRESENT(tensor.tensor_name, tensor_value, "tensor_name",
-                       GetString);
+  PS_ASSIGN_IF_PRESENT(tensor.tensor_name, tensor_value, "tensor_name", String);
 
   std::string data_type;
   PS_ASSIGN_OR_RETURN(data_type, GetStringMember(tensor_value, "data_type"));

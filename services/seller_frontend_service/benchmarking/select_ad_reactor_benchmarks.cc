@@ -66,12 +66,12 @@ class BuyerFrontEndAsyncClientStub : public BuyerFrontEndAsyncClient {
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<GetBidsResponse>>) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout, RequestContext context) const override;
 
   // Executes the inter service GRPC request asynchronously.
   absl::Status ExecuteInternal(
       std::unique_ptr<GetBidsRequest::GetBidsRawRequest> request,
-      const RequestMetadata& metadata,
+      grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                   GetBidsResponse::GetBidsRawResponse>>,
                               ResponseMetadata) &&>
@@ -92,13 +92,13 @@ absl::Status BuyerFrontEndAsyncClientStub::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<GetBidsResponse>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   return absl::NotFoundError("Not implemented");
 }
 
 absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
     std::unique_ptr<GetBidsRequest::GetBidsRawRequest> request,
-    const RequestMetadata& metadata,
+    grpc::ClientContext* context,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                 GetBidsResponse::GetBidsRawResponse>>,
                             ResponseMetadata) &&>
@@ -145,11 +145,11 @@ class ScoringClientStub
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse>>) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout, RequestContext context) const override;
 
   absl::Status ExecuteInternal(
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-      const RequestMetadata& metadata,
+      grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                   ScoreAdsResponse::ScoreAdsRawResponse>>,
                               ResponseMetadata) &&>
@@ -162,13 +162,13 @@ absl::Status ScoringClientStub::Execute(
     absl::AnyInvocable<
         void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse>>) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   return absl::OkStatus();
 }
 
 absl::Status ScoringClientStub::ExecuteInternal(
     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-    const RequestMetadata& metadata,
+    grpc::ClientContext* context,
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
                                 ScoreAdsResponse::ScoreAdsRawResponse>>,
                             ResponseMetadata) &&>
@@ -299,7 +299,7 @@ class ScoringSignalsProviderStub
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                               GetByteSize) &&>
           on_done,
-      absl::Duration timeout) const override;
+      absl::Duration timeout, RequestContext context) const override;
 
  private:
   const SelectAdRequest& request_;
@@ -325,7 +325,7 @@ void ScoringSignalsProviderStub::Get(
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                             GetByteSize) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestContext context) const {
   std::move(on_done)(
       std::make_unique<ScoringSignals>(ScoringSignals{
           .scoring_signals = std::make_unique<std::string>(scoring_signals_)}),
@@ -356,8 +356,8 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
       request, protected_auction_input, BuyerMockType::DEBUG_REPORTING);
   KeyFetcherManagerStub key_fetcher_manager;
   TrustedServersConfigClient config_client = CreateConfig();
-  config_client.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-  config_client.SetFlagForTest(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
+  config_client.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,
@@ -408,8 +408,8 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
       request, protected_auction_input, BuyerMockType::BID_CURRENCY);
   KeyFetcherManagerStub key_fetcher_manager;
   TrustedServersConfigClient config_client = CreateConfig();
-  config_client.SetFlagForTest("", CONSENTED_DEBUG_TOKEN);
-  config_client.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
+  config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,

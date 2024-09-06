@@ -60,13 +60,13 @@ BiddingAsyncGrpcClient::BiddingAsyncGrpcClient(
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void BiddingAsyncGrpcClient::SendRpc(
-    const std::string& hpke_secret,
+    const std::string& hpke_secret, grpc::ClientContext* context,
     RawClientParams<GenerateBidsRequest, GenerateBidsResponse,
                     GenerateBidsResponse::GenerateBidsRawResponse>* params)
     const {
   PS_VLOG(5) << "BiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateBids(
-      params->ContextRef(), params->RequestRef(), params->ResponseRef(),
+      context, params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateBidsRequest, GenerateBidsResponse,
                   GenerateBidsResponse::GenerateBidsRawResponse>(
@@ -85,13 +85,13 @@ ProtectedAppSignalsBiddingAsyncGrpcClient::
     : DefaultAsyncGrpcClient(key_fetcher_manager, crypto_client), stub_(stub) {}
 
 void ProtectedAppSignalsBiddingAsyncGrpcClient::SendRpc(
-    const std::string& hpke_secret,
+    const std::string& hpke_secret, grpc::ClientContext* context,
     RawClientParams<GenerateProtectedAppSignalsBidsRequest,
                     GenerateProtectedAppSignalsBidsResponse,
                     GenerateProtectedAppSignalsBidsRawResponse>* params) const {
   PS_VLOG(5) << "ProtectedAppSignalsBiddingAsyncGrpcClient SendRpc invoked ...";
   stub_->async()->GenerateProtectedAppSignalsBids(
-      params->ContextRef(), params->RequestRef(), params->ResponseRef(),
+      context, params->RequestRef(), params->ResponseRef(),
       [this, params, hpke_secret](const grpc::Status& status) {
         OnRpcDone<GenerateProtectedAppSignalsBidsRequest,
                   GenerateProtectedAppSignalsBidsResponse,

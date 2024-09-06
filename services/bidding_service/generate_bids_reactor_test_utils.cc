@@ -35,6 +35,14 @@ namespace privacy_sandbox::bidding_auction_servers {
 using ::google::protobuf::util::JsonStringToMessage;
 using ::testing::AnyNumber;
 
+PrivateAggregateContribution CreateTestPAggContribution(
+    EventType event_type, absl::string_view event_name) {
+  PrivateAggregateContribution contribution;
+  contribution.mutable_event()->set_event_type(event_type);
+  contribution.mutable_event()->set_event_name(event_name);
+  return contribution;
+}
+
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
       .Times(AnyNumber())
@@ -149,16 +157,10 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render, double bid,
-    absl::string_view egress_payload_hex_string,
+    absl::string_view egress_payload_string,
     absl::string_view debug_reporting_urls,
-    absl::string_view temporary_egress_payload_hex_string) {
+    absl::string_view temporary_egress_payload_string) {
   std::string base64_encoded_features_bytes;
-  absl::Base64Escape(absl::HexStringToBytes(egress_payload_hex_string),
-                     &base64_encoded_features_bytes);
-  std::string base64_encoded_temporary_features_bytes;
-  absl::Base64Escape(
-      absl::HexStringToBytes(temporary_egress_payload_hex_string),
-      &base64_encoded_temporary_features_bytes);
   return absl::Substitute(R"JSON(
     {
       "render": "$0",
@@ -168,9 +170,9 @@ std::string CreateGenerateBidsUdfResponse(
       "temporaryUnlimitedEgressPayload": "$4"
     }
   )JSON",
-                          render, bid, base64_encoded_features_bytes,
+                          render, bid, egress_payload_string,
                           debug_reporting_urls,
-                          base64_encoded_temporary_features_bytes);
+                          temporary_egress_payload_string);
 }
 
 void SetupContextualProtectedAppSignalsRomaExpectations(
@@ -192,16 +194,18 @@ void SetupContextualProtectedAppSignalsRomaExpectations(
 
 void SetupProtectedAppSignalsRomaExpectations(
     MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
-    absl::optional<std::string> prepare_data_for_ad_retrieval_udf_response,
-    absl::optional<std::string> generate_bid_udf_response) {
+    const absl::optional<std::string>&
+        prepare_data_for_ad_retrieval_udf_response,
+    const absl::optional<std::string>& generate_bid_udf_response) {
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([&num_roma_dispatches,
-                       &prepare_data_for_ad_retrieval_udf_response,
-                       &generate_bid_udf_response](
+                       prepare_data_for_ad_retrieval_udf_response,
+                       generate_bid_udf_response](
                           std::vector<DispatchRequest>& batch,
                           BatchDispatchDoneCallback batch_callback) {
         ++num_roma_dispatches;
-
+        PS_VLOG(5) << "generate_bid_udf_response has value: "
+                   << generate_bid_udf_response.has_value();
         if (num_roma_dispatches == 1) {
           // First dispatch happens for `prepareDataForAdRetrieval` UDF.
           return MockRomaExecution(
@@ -244,7 +248,7 @@ void SetupAdRetrievalClientExpectations(
   EXPECT_CALL(ad_retrieval_client, ExecuteInternal)
       .WillOnce([&ads_retrieval_response](
                     std::unique_ptr<GetValuesRequest> raw_request,
-                    const RequestMetadata& metadata,
+                    grpc::ClientContext* context,
                     absl::AnyInvocable<void(
                         absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                         ResponseMetadata)&&>

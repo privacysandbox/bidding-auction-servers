@@ -38,8 +38,29 @@ cc_proto_library(
 cc_grpc_library(
     name = "inference_sidecar_cc_grpc_proto",
     srcs = [":inference_sidecar_proto"],
+    generate_mocks = True,
     grpc_only = True,
     deps = [":inference_sidecar_cc_proto"],
+)
+
+proto_library(
+    name = "inference_payload_proto",
+    srcs = ["inference_payload.proto"],
+)
+
+cc_proto_library(
+    name = "inference_payload_cc_proto",
+    deps = [":inference_payload_proto"],
+)
+
+proto_library(
+    name = "model_metadata_proto",
+    srcs = ["model_metadata.proto"],
+)
+
+cc_proto_library(
+    name = "model_metadata_cc_proto",
+    deps = [":model_metadata_proto"],
 )
 
 proto_library(

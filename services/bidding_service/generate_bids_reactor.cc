@@ -27,6 +27,8 @@
 #include "absl/strings/str_format.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
+#include "services/common/util/cancellation_wrapper.h"
+#include "services/common/util/error_categories.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/util/status_macro/status_macros.h"
@@ -218,7 +220,8 @@ absl::StatusOr<std::string> SerializeIG(const IGForBidding& ig) {
 // Creates a map of Interest Group names -> trusted bidding signals json
 // strings. Parses the trusted bidding signals string and calls GetSignalsForIG
 // in a loop for all Interest Groups.
-absl::StatusOr<TrustedBiddingSignalsByIg> SerializeTrustedBiddingSignalsPerIG(
+absl::StatusOr<TrustedBiddingSignalsByIg>
+DeserializeAndGetTrustedBiddingSignalsPerIG(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
     RequestLogContext& log_context) {
   // Parse into JSON.
@@ -414,8 +417,8 @@ long SetAndReturnDebugUrlSize(AdWithBid* ad_with_bid,
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
-    CodeDispatchClient& dispatcher, const GenerateBidsRequest* request,
-    GenerateBidsResponse* response,
+    grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+    const GenerateBidsRequest* request, GenerateBidsResponse* response,
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
@@ -425,6 +428,7 @@ GenerateBidsReactor::GenerateBidsReactor(
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>(
           dispatcher, runtime_config, request, response, key_fetcher_manager,
           crypto_client),
+      context_(context),
       benchmarking_logger_(std::move(benchmarking_logger)),
       auction_scope_(raw_request_.top_level_seller().empty()
                          ? AuctionScope::kSingleSeller
@@ -442,6 +446,11 @@ GenerateBidsReactor::GenerateBidsReactor(
 }
 
 void GenerateBidsReactor::Execute() {
+  if (enable_cancellation_ && context_->IsCancelled()) {
+    EncryptResponseAndFinish(
+        grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+    return;
+  }
   benchmarking_logger_->BuildInputBegin();
 
   PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsRequest:\n"
@@ -455,7 +464,7 @@ void GenerateBidsReactor::Execute() {
 
   // Parse trusted bidding signals
   absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
-      SerializeTrustedBiddingSignalsPerIG(raw_request_, log_context_);
+      DeserializeAndGetTrustedBiddingSignalsPerIG(raw_request_, log_context_);
   if (!ig_trusted_signals_map.ok()) {
     PS_LOG(ERROR, log_context_)
         << "Request failed while parsing bidding signals: "
@@ -491,18 +500,19 @@ void GenerateBidsReactor::Execute() {
       CHECK_OK(metric_context);
       auto dispatch_request = generate_bid_request.value();
       dispatch_request.tags[kTimeoutMs] = roma_timeout_ms_;
-      RomaRequestSharedContext shared_context =
+      RomaRequestSharedContextBidding shared_context =
           roma_request_context_factory_.Create();
       auto roma_shared_context = shared_context.GetRomaRequestContext();
       if (roma_shared_context.ok()) {
-        std::shared_ptr<RomaRequestContext> roma_request_context =
+        std::shared_ptr<RomaRequestContextBidding> roma_request_context =
             roma_shared_context.value();
         roma_request_context->SetIsProtectedAudienceRequest(true);
         roma_request_context->SetMetricContext(
             std::move(metric_context.value()));
       } else {
-        PS_LOG(ERROR, log_context_) << "Failed to retrieve RomaRequestContext: "
-                                    << roma_shared_context.status();
+        PS_LOG(ERROR, log_context_)
+            << "Failed to retrieve RomaRequestContextBidding: "
+            << roma_shared_context.status();
       }
       dispatch_request.metadata = shared_context;
       dispatch_requests_.push_back(dispatch_request);
@@ -518,15 +528,22 @@ void GenerateBidsReactor::Execute() {
   absl::Time start_js_execution_time = absl::Now();
   auto status = dispatcher_.BatchExecute(
       dispatch_requests_,
-      [this, start_js_execution_time](
-          const std::vector<absl::StatusOr<DispatchResponse>>& result) {
-        int js_execution_time_ms =
-            (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
-        LogIfError(metric_context_->LogHistogram<metric::kJSExecutionDuration>(
-            js_execution_time_ms));
-        GenerateBidsCallback(result);
-        EncryptResponseAndFinish(grpc::Status::OK);
-      });
+      CancellationWrapper(
+          context_, enable_cancellation_,
+          [this, start_js_execution_time](
+              const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+            int js_execution_time_ms =
+                (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
+            LogIfError(
+                metric_context_->LogHistogram<metric::kJSExecutionDuration>(
+                    js_execution_time_ms));
+            GenerateBidsCallback(result);
+            EncryptResponseAndFinish(grpc::Status::OK);
+          },
+          [this]() {
+            EncryptResponseAndFinish(
+                grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+          }));
 
   if (!status.ok()) {
     LogIfError(metric_context_

@@ -28,9 +28,10 @@
 #include "services/common/clients/client_params.h"
 #include "services/common/constants/common_constants.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_log_context.h"
+#include "services/common/util/client_context_util.h"
 #include "services/common/util/error_categories.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
-#include "src/logger/request_context_logger.h"
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -76,7 +77,7 @@ class DefaultAsyncGrpcClient
   DefaultAsyncGrpcClient& operator=(const DefaultAsyncGrpcClient&) = delete;
 
   absl::Status ExecuteInternal(
-      std::unique_ptr<RawRequest> raw_request, const RequestMetadata& metadata,
+      std::unique_ptr<RawRequest> raw_request, grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,
@@ -85,7 +86,7 @@ class DefaultAsyncGrpcClient
     PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
     PS_VLOG(5) << "Encrypting request ...";
 
-    return EncryptPayloadAndSendRpc(raw_request->SerializeAsString(), metadata,
+    return EncryptPayloadAndSendRpc(raw_request->SerializeAsString(), context,
                                     std::move(on_done), timeout,
                                     request_config);
   }
@@ -94,7 +95,7 @@ class DefaultAsyncGrpcClient
   using SecretRequest = std::pair<std::string, std::unique_ptr<Request>>;
 
   absl::Status EncryptPayloadAndSendRpc(
-      const std::string& plaintext, const RequestMetadata& metadata,
+      const std::string& plaintext, grpc::ClientContext* context,
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           on_done,
@@ -102,8 +103,8 @@ class DefaultAsyncGrpcClient
     auto secret_request = EncryptRequestWithHpke<Request>(
         plaintext, *crypto_client_, *key_fetcher_manager_, cloud_platform_);
     if (!secret_request.ok()) {
-      PS_LOG(ERROR) << "Failed to encrypt the request: "
-                    << secret_request.status();
+      PS_LOG(ERROR, SystemLogContext())
+          << "Failed to encrypt the request: " << secret_request.status();
       return absl::InternalError(kEncryptionFailed);
     }
     auto& [hpke_secret, request] = *secret_request;
@@ -111,10 +112,10 @@ class DefaultAsyncGrpcClient
 
     auto params =
         std::make_unique<RawClientParams<Request, Response, RawResponse>>(
-            std::move(request), std::move(on_done), metadata, request_config);
-    params->SetDeadline(std::min(kMaxClientTimeout, timeout));
+            std::move(request), std::move(on_done), request_config);
+    context->set_deadline(GetClientContextDeadline(timeout, kMaxClientTimeout));
     PS_VLOG(5) << "Sending RPC ...";
-    SendRpc(hpke_secret, params.release());
+    SendRpc(hpke_secret, context, params.release());
     return absl::OkStatus();
   }
 
@@ -126,7 +127,7 @@ class DefaultAsyncGrpcClient
   // hpke_secret: secret generated during HPKE encryption used during
   // AeadDecryption
   virtual void SendRpc(
-      const std::string& hpke_secret,
+      const std::string& hpke_secret, grpc::ClientContext* context,
       RawClientParams<Request, Response, RawResponse>* params) const {
     PS_VLOG(5) << "Stub SendRpc invoked ...";
   }

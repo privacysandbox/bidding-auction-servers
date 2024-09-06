@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load(
-    "@io_bazel_rules_docker//container:container.bzl",
-    "container_image",
-    "container_layer",
-)
-load("@io_bazel_rules_docker//contrib:test.bzl", "container_test")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@container_structure_test//:defs.bzl", "container_structure_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
 load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
@@ -74,19 +71,6 @@ pkg_tar(
     srcs = server_binaries,
 )
 
-container_layer(
-    name = "server_binary_layer",
-    directory = "/",
-    env = {
-        "GLOG_logtostderr": "1",
-        "GLOG_stderrthreshold": "0",
-        "GRPC_DNS_RESOLVER": "native",
-    },
-    tars = [
-        ":server_binaries_tar",
-    ],
-)
-
 cddl_specs = [
     "//services/bidding_service:packaged_cddl_specs",
 ]
@@ -101,21 +85,33 @@ pkg_tar(
     srcs = cddl_specs,
 )
 
-container_layer(
-    name = "cddl_specs_layer",
-    directory = "/",
-    tars = [
-        ":cddl_specs_tar",
-    ],
+copy_file(
+    name = "libcddl_so_lib",
+    src = "@cddl_lib//:cddl",
+    out = "libcddl.so",
+    is_executable = False,
+    visibility = ["//visibility:private"],
+)
+
+pkg_zip(
+    name = "cddl_lib_artifacts",
+    srcs = [":libcddl_so_lib"],
+)
+
+pkg_tar(
+    name = "cddl_lib_artifacts_tar",
+    srcs = [":libcddl_so_lib"],
+    package_dir = "/usr/lib/x86_64-linux-gnu/",
 )
 
 # This image target is meant for testing running the server in an enclave using
 # aws proxy to abstract vsock communication.
-container_image(
+oci_image(
+    # Name must be server_docker_image to be compatible with build scripts.
     name = "server_docker_image",
     base = select({
-        "@platforms//cpu:arm64": "@runtime-cc-debian-arm64//image",
-        "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
+        "@platforms//cpu:arm64": "@runtime-debian-debug-root-arm64//:runtime-debian-debug-root-arm64",
+        "@platforms//cpu:x86_64": "@runtime-debian-debug-root-amd64//:runtime-debian-debug-root-amd64",
     }),
     cmd = [
         "/proxify",
@@ -126,29 +122,33 @@ container_image(
     entrypoint = [
         "/busybox/sh",
     ],
-    layers = [
-        ":cddl_specs_layer",
-        ":server_binary_layer",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
+    tars = [
+        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
+        ":cddl_lib_artifacts_tar",
+        ":cddl_specs_tar",
+        ":server_binaries_tar",
     ] + select({
         "//:e2e_build": [
         ],
         "//conditions:default": [],
     }),
-    tars = [
-        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
-    ],
 )
 
-container_test(
+container_structure_test(
     name = "structure_test",
     size = "large",
     configs = ["test/structure.yaml"],
     driver = "tar",
-    image = ":server_docker_image",
+    image = ":server_docker_tarball",
 )
 
-container_test(
+container_structure_test(
     name = "commands_test",
     size = "large",
     configs = ["test/commands.yaml"],
@@ -162,18 +162,24 @@ pkg_zip(
     srcs = server_binaries,
 )
 
+oci_tarball(
+    name = "server_docker_tarball",
+    image = ":server_docker_image",
+    repo_tags = ["bazel/production/packaging/aws/bidding_service:server_docker_image"],
+)
+
 genrule(
     name = "copy_to_dist",
     srcs = [
         ":server_artifacts",
-        ":server_docker_image.tar",
+        ":server_docker_tarball",
         "//api:bidding_auction_servers_descriptor_set",
     ],
     outs = ["copy_to_dist.bin"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p dist/debian
 cp $(execpath :server_artifacts) dist/debian/$$(basename $(RULEDIR))_artifacts.zip
-cp $(execpath :server_docker_image.tar) dist/debian/$$(basename $(RULEDIR))_image.tar
+cp $(execpath :server_docker_tarball) dist/debian/$$(basename $(RULEDIR))_image.tar
 cp $(execpath //api:bidding_auction_servers_descriptor_set) dist
 builders/tools/normalize-dist
 EOF""",

@@ -115,7 +115,7 @@ bool AsyncTaskTracker::AnyTaskSuccessfullyCompleted() {
   const bool possible_chaff =
       empty_tasks_count_ > 0 || skipped_tasks_count_ > 0;
   return successful_tasks_count_ > 0 || possible_chaff ||
-         error_tasks_count_ == 0;
+         error_tasks_count_ == 0;  // true if all tasks were cancelled
 }
 
 std::string AsyncTaskTracker::ToString() {

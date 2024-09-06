@@ -29,6 +29,12 @@ constexpr char kReportResultEntryFunction[] = "reportResultEntryFunction";
 // This wrapper supports the features below:
 //- Exporting logs to Auction Service using console.log
 constexpr absl::string_view kEntryFunction = R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -42,19 +48,16 @@ constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -62,23 +65,18 @@ constexpr absl::string_view kEntryFunction = R"JS_CODE(
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 )JS_CODE";
 
 inline constexpr absl::string_view kReportResultWrapperFunction =
-    R"JSCODE(
+    R"JS_CODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportResultEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging) {
@@ -126,7 +124,7 @@ inline constexpr absl::string_view kReportResultWrapperFunction =
         warnings: ps_warns
       }
     }
-)JSCODE";
+)JS_CODE";
 
 // Returns the complete wrapped code for Seller.
 // The function adds wrappers to the Seller provided scoreAd and reportResult
@@ -135,7 +133,8 @@ inline constexpr absl::string_view kReportResultWrapperFunction =
 // - Generation of event level debug reporting
 // - Exporting console.logs from the AdTech execution.
 std::string GetSellerWrappedCode(absl::string_view seller_js_code,
-                                 bool enable_report_result_url_generation);
+                                 bool enable_report_result_url_generation,
+                                 bool enable_private_aggregate_reporting);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_SELLER_UDF_WRAPPER_H_

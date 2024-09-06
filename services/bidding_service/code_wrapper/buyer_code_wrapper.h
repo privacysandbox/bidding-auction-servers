@@ -18,10 +18,18 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "services/bidding_service/code_wrapper/generated_private_aggregation_wrapper.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+struct BuyerCodeWrapperConfig {
+  std::string ad_tech_wasm;
+  AuctionType auction_type = AuctionType::kProtectedAudience;
+  absl::string_view auction_specific_setup =
+      "device_signals.wasmHelper = globalWasmHelper;";
+  bool enable_private_aggregate_reporting = false;
+};
 
 // Returns the complete wrapped code for Buyer.
 // The function adds wrappers to the Buyer provided generateBid function.
@@ -30,10 +38,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // - Exporting console.logs from the AdTech execution.
 // - wasmHelper added to device_signals
 std::string GetBuyerWrappedCode(
-    absl::string_view ad_tech_js, absl::string_view ad_tech_wasm = "",
-    AuctionType auction_type = AuctionType::kProtectedAudience,
-    absl::string_view auction_specific_setup =
-        "device_signals.wasmHelper = globalWasmHelper;");
+    absl::string_view ad_tech_js,
+    const BuyerCodeWrapperConfig& buyer_code_wrapper_config);
 
 // Returns the complete wrapped code for Buyer.
 // The function adds wrappers to the Buyer provided generateBid function.
@@ -49,19 +55,22 @@ std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
+    var ps_response = {
+          response: {},
+          logs: [],
+          errors: [],
+          warnings: []
+        };
     async function generateBidEntryFunction($0, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
       if(featureFlags.enable_logging){
         console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
+          ps_response.logs.push(JSON.stringify(args))
         }
         console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
+          ps_response.errors.push(JSON.stringify(args))
         }
         console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
+          ps_response.warnings.push(JSON.stringify(args))
         }
       }
       $1
@@ -76,13 +85,18 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       }
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
-      var generateBidResponse = {};
       try {
-        generateBidResponse = await generateBid($0);
+      generate_bid_response = await generateBid($0);
+      //Add private aggregate contributions to the response.
+      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      if(ps_response.paapicontributions){
+        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+      }
+      ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&
              (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          generateBidResponse.debug_report_urls = {
+          ps_response.response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
           }
@@ -92,16 +106,10 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
           console.error("[Error: " + error + "; Message: " + message + "]");
         }
       }
-      var result = generateBidResponse !== undefined ? generateBidResponse : {};
       if (featureFlags.enable_logging) {
-        return {
-          response: result,
-          logs: ps_logs,
-          errors: ps_errors,
-          warnings: ps_warns
-        };
+        return ps_response;
       }
-      return result;
+      return ps_response.response;
     }
 )JS_CODE";
 

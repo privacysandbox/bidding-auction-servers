@@ -112,7 +112,7 @@ void SetupBuyerClientMock(
   auto MockGetBids =
       [bid, num_buyers_solicited, top_level_seller](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-          const RequestMetadata& metadata, GetBidDoneCallback on_done,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
           absl::Duration timeout, RequestConfig request_config) {
         ABSL_LOG(INFO) << "Returning mock bids";
         // Check top level seller is populated for component auctions.
@@ -250,9 +250,10 @@ void SetupScoringProviderMock(
     int expected_num_bids, const std::string& seller_egid) {
   auto MockScoringSignalsProvider =
       [&expected_buyer_bids, scoring_signals_value, server_error_to_return,
-       expected_num_bids, seller_egid](
-          const ScoringSignalsRequest& scoring_signals_request,
-          ScoringSignalsDoneCallback on_done, absl::Duration timeout) {
+       expected_num_bids,
+       seller_egid](const ScoringSignalsRequest& scoring_signals_request,
+                    ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+                    RequestContext context) {
         if (expected_num_bids > -1) {
           EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
                     expected_num_bids);
@@ -302,16 +303,16 @@ void SetupScoringProviderMock(
 
 TrustedServersConfigClient CreateConfig() {
   TrustedServersConfigClient config({});
-  config.SetFlagForTest("1", GET_BID_RPC_TIMEOUT_MS);
-  config.SetFlagForTest("2", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
-  config.SetFlagForTest("3", SCORE_ADS_RPC_TIMEOUT_MS);
-  config.SetFlagForTest(kAuctionHost, AUCTION_SERVER_HOST);
-  config.SetFlagForTest(
+  config.SetOverride("1", GET_BID_RPC_TIMEOUT_MS);
+  config.SetOverride("2", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
+  config.SetOverride("3", SCORE_ADS_RPC_TIMEOUT_MS);
+  config.SetOverride(kAuctionHost, AUCTION_SERVER_HOST);
+  config.SetOverride(
       "auction-seller1-tjs-appmesh-virtual-server.seller1-frontend.com",
       GRPC_ARG_DEFAULT_AUTHORITY_VAL);
-  config.SetFlagForTest(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
-  config.SetFlagForTest(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
-  config.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
+  config.SetOverride(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
+  config.SetOverride(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
+  config.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
   return config;
 }
 

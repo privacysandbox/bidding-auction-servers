@@ -26,9 +26,10 @@ SelectAdReactorInvalid::SelectAdReactorInvalid(
       client_type_(request->client_type()) {}
 
 void SelectAdReactorInvalid::Execute() {
-  PS_VLOG(5) << "SelectAdRequest received:\n"
-             << request_->DebugString()
-             << ", request size: " << request_->ByteSizeLong();
+  PS_VLOG(5, SystemLogContext())
+      << "SelectAdRequest received:\n"
+      << request_->DebugString()
+      << ", request size: " << request_->ByteSizeLong();
   // This reactor is invoked in only following two cases: 1) When request is
   // empty. 2) When the client type is not set appropriately.
   if (request_->ByteSizeLong() == 0) {
@@ -41,7 +42,7 @@ void SelectAdReactorInvalid::Execute() {
   LogIfError(
       metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
           1, metric::kSfeSelectAdRequestBadInput));
-  PS_LOG(WARNING, log_context_)
+  PS_LOG(WARNING, SystemLogContext())
       << "Finishing the SelectAdRequest RPC with ad server visible error";
 
   FinishWithStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,

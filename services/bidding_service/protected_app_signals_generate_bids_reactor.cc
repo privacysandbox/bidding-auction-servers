@@ -28,7 +28,10 @@
 #include "public/applications/pas/retrieval_response_parser.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
+#include "services/bidding_service/utils/egress.h"
 #include "services/common/feature_flags.h"
+#include "services/common/util/cancellation_wrapper.h"
+#include "services/common/util/error_categories.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_metadata.h"
@@ -47,6 +50,12 @@ inline constexpr char kAcceptLanguageKey[] = "x-accept-language";
 inline constexpr char kUserAgent[] = "X-User-Agent";
 inline constexpr char kClientIp[] = "X-BnA-Client-IP";
 inline constexpr char kAcceptLanguage[] = "X-Accept-Language";
+// The egress protocol version should be in: [0, 31]
+inline constexpr uint32_t kDefaultEgressProtocol = 0;
+inline constexpr uint32_t kEgressProtocolBitWidth = 5;
+// Hardcoded egress schema version till we support multi-version model for
+// egress schema.
+inline constexpr uint32_t kDefaultEgressSchemaVersion = 2;
 
 inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
     kBuyerMetadataKeysMap = {{{kAcceptLanguageKey, kAcceptLanguageKey},
@@ -66,16 +75,118 @@ inline std::string GetBidDebugInfo(const ProtectedAppSignalsAdWithBid& bid) {
                       ", has debug report urls: ", bid.has_debug_report_urls());
 }
 
+absl::Status PopulateValuesForEgressFeatures(
+    rapidjson::Value&& values,
+    std::vector<std::unique_ptr<EgressFeature>>& egress_features) {
+  PS_ASSIGN_OR_RETURN(auto feature_array, GetArrayMember(values, "features"));
+  if (feature_array.Size() != egress_features.size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Number of values in the egress payload: ", feature_array.Size(),
+        " doesn't match with egress "
+        "schema: ",
+        egress_features.size(), " (note: nullability is not supported yet)"));
+  }
+  int idx = 0;
+  for (rapidjson::Value& feat : feature_array) {
+    if (!feat.IsObject()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Feature in egress payload at index ", idx,
+                       " is not an object, expected object"));
+    }
+    PS_VLOG(5) << "Setting the value using payload for feature at idx: " << idx;
+    PS_RETURN_IF_ERROR(egress_features[idx]->SetValue(std::move(feat)))
+        << "Failed to set value for feature at idx: " << idx;
+    ++idx;
+  }
+  return absl::OkStatus();
+}
+
+uint8_t GetEgressVectorHeader(uint32_t schema_version) {
+  DCHECK_LE(schema_version, 7) << "Only 8 schema versions are supported";
+  uint8_t header = schema_version << kEgressProtocolBitWidth;
+  header |= kDefaultEgressProtocol;
+  return header;
+}
+
+// Returns all serialized features as a Base64 encoded byte string.
+absl::StatusOr<std::string> SerializeEgressFeatures(
+    uint32_t schema_version,
+    const std::vector<std::unique_ptr<EgressFeature>>& egress_features,
+    uint32_t egress_bit_limit) {
+  uint32_t total_size = 0;
+  for (const auto& egress_feature : egress_features) {
+    PS_VLOG(5) << "Size of feature: " << egress_feature->Size();
+    total_size += egress_feature->Size();
+  }
+  PS_VLOG(5) << "Total size (without padding) in bits for egress features is: "
+             << total_size;
+  if (total_size == 0) {
+    return "";
+  }
+  if (total_size > egress_bit_limit) {
+    PS_VLOG(5) << "Total size required for egress payload serialization ("
+               << total_size << ")"
+               << " is greater than the system limit: " << egress_bit_limit;
+    return "";
+  }
+  // Round up to the nearest byte, if needed.
+  if (total_size % 8 != 0) {
+    PS_VLOG(5) << "Rounding up the total size to nearest byte";
+    total_size = (total_size / 8 + 1) * 8;
+  }
+  PS_VLOG(5) << "Total size (including any padding) in bits for egress "
+             << "features is: " << total_size;
+  std::vector<uint8_t> bytes_array(total_size / 8, 0);
+  int bytes_array_idx = bytes_array.size() - 1;
+  int feat_idx = 0;
+  int bit_position = 0;
+  for (const auto& egress_feature : egress_features) {
+    PS_VLOG(5) << "Serializing feature at index: " << feat_idx;
+    // TODO: Check if this returns NotFound and use a default value instead.
+    PS_ASSIGN_OR_RETURN(auto serialized_feature, egress_feature->Serialize());
+    PS_VLOG(5) << "Successfully serialized feature at index: " << feat_idx
+               << " to: " << DebugString(serialized_feature);
+    // Copy the serialized feature to the final byte array.
+    for (auto feat_val_it = serialized_feature.rbegin();
+         feat_val_it != serialized_feature.rend(); ++feat_val_it) {
+      if (bit_position > 0 && bit_position % 8 == 0) {
+        PS_VLOG(10) << "Resetting the bit position and advancing to next byte";
+        bit_position = 0;
+        --bytes_array_idx;
+      }
+      if (*feat_val_it) {
+        bytes_array[bytes_array_idx] |= (*feat_val_it << bit_position);
+      }
+      ++bit_position;
+      PS_VLOG(10) << "New bit position:, " << bit_position
+                  << " byte array idx: " << bytes_array_idx;
+    }
+    PS_VLOG(5) << "Successfully copied feature at index: " << feat_idx
+               << ", new overall vector: " << DebugString(bytes_array);
+    ++feat_idx;
+  }
+  bytes_array.emplace_back(GetEgressVectorHeader(schema_version));
+  std::string bytes_string(bytes_array.begin(), bytes_array.end());
+  std::string base64_encoded_string;
+  absl::Base64Escape(bytes_string, &base64_encoded_string);
+  PS_VLOG(5) << "Done serializing features to bit string: "
+             << DebugString(bytes_array)
+             << ", base64 encoded string: " << base64_encoded_string;
+  return base64_encoded_string;
+}
+
 }  // namespace
 
 ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
-    const grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+    grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
     const BiddingServiceRuntimeConfig& runtime_config,
     const GenerateProtectedAppSignalsBidsRequest* request,
     GenerateProtectedAppSignalsBidsResponse* response,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
-    KVAsyncClient* ad_retrieval_async_client, KVAsyncClient* kv_async_client)
+    KVAsyncClient* ad_retrieval_async_client, KVAsyncClient* kv_async_client,
+    EgressSchemaCache* egress_schema_cache,
+    EgressSchemaCache* limited_egress_schema_cache)
     : BaseGenerateBidsReactor<GenerateProtectedAppSignalsBidsRequest,
                               GenerateProtectedAppSignalsBidsRequest::
                                   GenerateProtectedAppSignalsBidsRawRequest,
@@ -84,6 +195,7 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
                                   GenerateProtectedAppSignalsBidsRawResponse>(
           dispatcher, runtime_config, request, response, key_fetcher_manager,
           crypto_client),
+      context_(context),
       ad_retrieval_async_client_(ad_retrieval_async_client),
       kv_async_client_(kv_async_client),
       ad_bids_retrieval_timeout_ms_(runtime_config.ad_retrieval_timeout_ms),
@@ -91,12 +203,15 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
                                               kBuyerMetadataKeysMap)),
       protected_app_signals_generate_bid_version_(
           runtime_config.default_protected_app_signals_generate_bid_version),
-      ad_retrieval_version_(runtime_config.default_ad_retrieval_version) {
+      ad_retrieval_version_(runtime_config.default_ad_retrieval_version),
+      egress_schema_cache_(egress_schema_cache),
+      limited_egress_schema_cache_(limited_egress_schema_cache) {
   DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
 }
 
 absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
     const std::vector<absl::StatusOr<DispatchResponse>>& result) {
+  PS_VLOG(5) << "Validating Roma response";
   if (result.size() != 1) {
     return absl::InvalidArgumentError(kUnexpectedNumberOfRomaResponses);
   }
@@ -143,26 +258,36 @@ ProtectedAppSignalsGenerateBidsReactor::CreateKVLookupRequest(
   return request;
 }
 
-void ProtectedAppSignalsGenerateBidsReactor::FetchAds(
+void ProtectedAppSignalsGenerateBidsReactor::CancellableFetchAds(
     const std::string& prepare_data_for_ads_retrieval_response) {
   PS_VLOG(8, log_context_) << __func__;
+
+  grpc::ClientContext* client_context = client_contexts_.Add();
+
   auto status = ad_retrieval_async_client_->ExecuteInternal(
       CreateAdsRetrievalRequest(prepare_data_for_ads_retrieval_response),
-      /* metadata= */ {},
-      [this, prepare_data_for_ads_retrieval_response](
-          KVLookUpResult ad_retrieval_result,
-          ResponseMetadata response_metadata) {
-        if (!ad_retrieval_result.ok()) {
-          PS_VLOG(kNoisyWarn, log_context_) << "Ad retrieval request failed: "
-                                            << ad_retrieval_result.status();
-          EncryptResponseAndFinish(grpc::Status(
-              grpc::INTERNAL, ad_retrieval_result.status().ToString()));
-          return;
-        }
+      client_context,
+      CancellationWrapper(
+          context_, enable_cancellation_,
+          [this, prepare_data_for_ads_retrieval_response](
+              KVLookUpResult ad_retrieval_result,
+              ResponseMetadata response_metadata) {
+            if (!ad_retrieval_result.ok()) {
+              PS_VLOG(kNoisyWarn, log_context_)
+                  << "Ad retrieval request failed: "
+                  << ad_retrieval_result.status();
+              EncryptResponseAndFinish(grpc::Status(
+                  grpc::INTERNAL, ad_retrieval_result.status().ToString()));
+              return;
+            }
 
-        OnFetchAdsDataDone(*std::move(ad_retrieval_result),
-                           prepare_data_for_ads_retrieval_response);
-      },
+            OnFetchAdsDataDone(*std::move(ad_retrieval_result),
+                               prepare_data_for_ads_retrieval_response);
+          },
+          [this]() {
+            EncryptResponseAndFinish(
+                grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+          }),
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
   if (!status.ok()) {
@@ -241,6 +366,52 @@ ProtectedAppSignalsGenerateBidsReactor::
   return bid;
 }
 
+absl::StatusOr<std::string>
+ProtectedAppSignalsGenerateBidsReactor::GetSerializedEgressPayload(
+    uint32_t schema_version, absl::string_view egress_payload,
+    const EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
+  PS_VLOG(5) << "Fetching egress schema from cache";
+  PS_ASSIGN_OR_RETURN(auto egress_features,
+                      egress_schema_cache_->Get(schema_version));
+  PS_VLOG(5) << "Fetched egress schema successfully from cache, retreiving "
+                "features in egress payload: "
+             << egress_payload;
+  PS_ASSIGN_OR_RETURN(auto egress_values_doc, ParseJsonString(egress_payload));
+  PS_VLOG(5) << "Retrieved features from egress payload, setting them on the "
+                "egress features object next";
+  PS_RETURN_IF_ERROR(PopulateValuesForEgressFeatures(
+      std::move(egress_values_doc.Move()), egress_features));
+  PS_VLOG(5) << "Succeeded in setting features from egress payload to the "
+                "egress feature object, serializing the features next";
+  return SerializeEgressFeatures(schema_version, egress_features,
+                                 egress_bit_limit);
+}
+
+void ProtectedAppSignalsGenerateBidsReactor::PopulateSerializedEgressPayload(
+    uint32_t schema_version, std::string& egress_payload_in_proto,
+    const EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
+  PS_VLOG(5) << "Egress payload from generateBid: " << egress_payload_in_proto;
+  if (egress_payload_in_proto.empty()) {
+    PS_VLOG(5) << "Egress payload received from generateBid is empty, "
+               << "skipping serialization";
+    return;
+  }
+
+  if (auto serialized_payload =
+          GetSerializedEgressPayload(schema_version, egress_payload_in_proto,
+                                     egress_schema_cache, egress_bit_limit);
+      serialized_payload.ok()) {
+    PS_VLOG(5) << "Populating the serialized payload into proto";
+    egress_payload_in_proto = *std::move(serialized_payload);
+    PS_VLOG(5) << "Populated the serialized payload into proto "
+                  "successfully";
+  } else {
+    PS_VLOG(5) << "Failed to serialize egress payload: "
+               << serialized_payload.status();
+    egress_payload_in_proto.clear();
+  }
+}
+
 void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
     std::unique_ptr<kv_server::v2::GetValuesResponse> result,
     const std::string& prepare_data_for_ads_retrieval_response) {
@@ -271,10 +442,28 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
               << "Successful non-zero protected app signals bid received";
           auto* added_bid = raw_response_.add_bids();
           *added_bid = bid;
-          added_bid->clear_egress_payload();
+          const int limited_egress_bits =
+              absl::GetFlag(FLAGS_limited_egress_bits);
+          if (limited_egress_bits <= 0) {
+            PS_VLOG(5) << "Allowed limited egress bits: " << limited_egress_bits
+                       << ", skipping it";
+            added_bid->clear_egress_payload();
+          } else {
+            PopulateSerializedEgressPayload(
+                kDefaultEgressSchemaVersion,
+                *added_bid->mutable_egress_payload(),
+                *limited_egress_schema_cache_, limited_egress_bits);
+          }
           if (!raw_request_.enable_unlimited_egress() ||
               !absl::GetFlag(FLAGS_enable_temporary_unlimited_egress)) {
+            PS_VLOG(5) << "Either request doesn't allow unlimited egress or "
+                       << "feature is disabled by the platform";
             added_bid->clear_temporary_unlimited_egress_payload();
+          } else {
+            PopulateSerializedEgressPayload(
+                kDefaultEgressSchemaVersion,
+                *added_bid->mutable_temporary_unlimited_egress_payload(),
+                *egress_schema_cache_);
           }
         }
         EncryptResponseAndFinish(grpc::Status::OK);
@@ -367,7 +556,7 @@ bool ProtectedAppSignalsGenerateBidsReactor::IsContextualRetrievalRequest() {
   return false;
 }
 
-void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
+void ProtectedAppSignalsGenerateBidsReactor::CancellableFetchAdsMetadata(
     const std::string& prepare_data_for_ads_retrieval_response) {
   const auto& ad_render_ids =
       raw_request_.contextual_protected_app_signals_data().ad_render_ids();
@@ -377,23 +566,33 @@ void ProtectedAppSignalsGenerateBidsReactor::FetchAdsMetadata(
                                       .contextual_protected_app_signals_data()
                                       .ad_render_ids(),
                                   ", ");
-  auto status = kv_async_client_->ExecuteInternal(
-      CreateKVLookupRequest(ad_render_ids), /* metadata= */ {},
-      [this, prepare_data_for_ads_retrieval_response](
-          KVLookUpResult kv_look_up_result,
-          ResponseMetadata response_metadata) {
-        PS_VLOG(8) << "On KV response";
-        if (!kv_look_up_result.ok()) {
-          PS_VLOG(kNoisyWarn, log_context_)
-              << "KV metadata request failed: " << kv_look_up_result.status();
-          EncryptResponseAndFinish(grpc::Status(
-              grpc::INTERNAL, kv_look_up_result.status().ToString()));
-          return;
-        }
 
-        OnFetchAdsDataDone(*std::move(kv_look_up_result),
-                           prepare_data_for_ads_retrieval_response);
-      },
+  grpc::ClientContext* client_context = client_contexts_.Add();
+
+  auto status = kv_async_client_->ExecuteInternal(
+      CreateKVLookupRequest(ad_render_ids), client_context,
+      CancellationWrapper(
+          context_, enable_cancellation_,
+          [this, prepare_data_for_ads_retrieval_response](
+              KVLookUpResult kv_look_up_result,
+              ResponseMetadata response_metadata) {
+            PS_VLOG(8) << "On KV response";
+            if (!kv_look_up_result.ok()) {
+              PS_VLOG(kNoisyWarn, log_context_)
+                  << "KV metadata request failed: "
+                  << kv_look_up_result.status();
+              EncryptResponseAndFinish(grpc::Status(
+                  grpc::INTERNAL, kv_look_up_result.status().ToString()));
+              return;
+            }
+
+            OnFetchAdsDataDone(*std::move(kv_look_up_result),
+                               prepare_data_for_ads_retrieval_response);
+          },
+          [this]() {
+            EncryptResponseAndFinish(
+                grpc::Status(grpc::CANCELLED, kRequestCancelled));
+          }),
       absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
 
   if (!status.ok()) {
@@ -410,6 +609,12 @@ void ProtectedAppSignalsGenerateBidsReactor::StartContextualAdsRetrieval() {
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::Execute() {
+  if (enable_cancellation_ && context_->IsCancelled()) {
+    EncryptResponseAndFinish(
+        grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+    return;
+  }
+
   PS_VLOG(8, log_context_) << __func__;
   PS_VLOG(kEncrypted, log_context_) << "GenerateBidsRequest:\n"
                                     << request_->ShortDebugString();
@@ -431,8 +636,6 @@ void ProtectedAppSignalsGenerateBidsReactor::Execute() {
 }
 
 void ProtectedAppSignalsGenerateBidsReactor::OnDone() { delete this; }
-
-void ProtectedAppSignalsGenerateBidsReactor::OnCancel() {}
 
 void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
     grpc::Status status) {

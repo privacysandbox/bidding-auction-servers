@@ -55,6 +55,20 @@ message ProtectedAudienceInput {
   // A boolean value which indicates whether temporary unlimited egress should
   // be enabled.
   bool enable_unlimited_egress = 6;
+
+  // Optional field (note: this will become a required field in 2025).
+  // The request timestamp represents when the SSP requests an ad auction to be run.
+  // For Chrome, the request timestamp will be passed to the browser by the SSP
+  // when it requests the browser to run an auction. For Android, the request
+  // timestamp will come from the system clock on the device.
+  int64 request_timestamp_ms = 7;
+
+  // Maximum number of ghost winners for K-Anonymity controlled by platform (Chrome,
+  // Android) for experimentation.
+  // By default this is set to 1 on the server side, hence client should
+  // populate the field if and only if they want to override for
+  //experimentation.
+  optional int32 num_k_anon_ghost_winners = 8;
 }
 
 // ProtectedAuctionInput is generated and encrypted by the client,
@@ -98,6 +112,13 @@ message ProtectedAuctionInput {
   // when it requests the browser to run an auction. For Android, the request
   // timestamp will come from the system clock on the device.
   int64 request_timestamp_ms = 7;
+
+  // Maximum number of ghost winners for K-Anonymity controlled by platform (Chrome,
+  // Android) for experimentation.
+  // By default this is set to 1 on the server side, hence client should
+  // populate the field if and only if they want to override for
+  //experimentation.
+  optional int32 num_k_anon_ghost_winners = 8;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -161,7 +182,9 @@ message BuyerInput {
       BrowserSignals browser_signals = 7;
     }
 
-    // Owner of the IG.
+    // Owner of the IG (only required for Android app). If present, this info
+    // will be relayed back to the client as part of AuctionResult and reduces
+    // the IG lookup latency on the client.
     string origin = 8;
   }
   // The Interest Groups (a.k.a Custom Audiences) owned by the buyer.
@@ -628,6 +651,12 @@ message SelectAdRequest {
 
       // Contextual data related to PAS ads.
       ContextualProtectedAppSignalsData contextual_protected_app_signals_data = 8;
+
+      // A limit by sellers on total number of bids that can be passed by a
+      // buyer to seller with multi-bid generation required for K-Anonymity.
+      // Multi bid generation refers to generateBid() returning more than one
+      // bid, in case of web more than one bid per IG.
+      int32 per_buyer_multi_bid_limit = 9;
     }
 
     // The key in the map corresponds to Interest Group Owner (IGOwner), a
@@ -871,6 +900,73 @@ message GetBidsResponse {
   bytes response_ciphertext = 1;
 }
 
+message Bucket128Bit {
+  // Bucket should support 128 bit int value. The 1st 64 bits
+  // are pushed into the array followed by 2nd 64 bits.
+  repeated uint64 bucket_128_bits = 1;
+}
+
+message BucketOffset {
+  // Optional offset to add to the auction result value. Default value for
+  // offset will be 0. This can be a 128 bit number. The 1st 64 bits are pushed
+  // into the array followed by 2nd 64 bits.
+  repeated uint64 value = 1;
+  bool is_negative = 2;
+}
+
+message SignalBucket {
+  BaseValue base_value = 1;
+  // Optional scale factor for the bucket. Default value will be 1.0
+  double scale = 2;
+  BucketOffset offset = 3;
+}
+
+message PrivateAggregationBucket {
+  oneof bucket {
+    // The name of the auction result value we want to report.
+    // For instance, /winning-bid.
+    SignalBucket signal_bucket = 1;
+    Bucket128Bit bucket_128_bit = 2;
+  }
+}
+
+// Event types to indicate the event for which contribution was made.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  // Event type for contributions made via reserved.win event type.
+  EVENT_TYPE_WIN = 1;
+  // Event type for contributions made via reserved.loss event type.
+  EVENT_TYPE_LOSS = 2;
+  // Event type for contributions made via reserved.always event type.
+  EVENT_TYPE_ALWAYS = 3;
+  // Event type for contributions made with a custom event name.
+  EVENT_TYPE_CUSTOM = 4;
+}
+
+message PrivateAggregationEvent {
+  EventType event_type = 1;
+  // Only populated in case of CUSTOM events.
+  string event_name = 2;
+}
+
+message PrivateAggregateContribution {
+  PrivateAggregationBucket bucket = 1;
+  PrivateAggregationValue value = 2;
+  // Populated only for component multi seller auctions and response from BFE.
+  // This is not expected to be sent to the client for single seller and
+  // server orchestrated multi seller auctions.
+  PrivateAggregationEvent event = 3;
+}
+
+message PrivateAggregateReportingResponse {
+  repeated PrivateAggregateContribution contributions = 1;
+  // Identifier for the AdTech. Ex: seller's origin.
+  string adtech_origin = 2;
+  // Coordinator url populated only for top_level_seller and component_seller.
+  // Client is expected to have access to only the buyer coordinator url.
+  string coordinator = 3;
+}
+
 // Bid for an ad candidate.
 message AdWithBid {
   // Metadata of the ad, this will be passed to Seller's scoring function.
@@ -916,6 +1012,9 @@ message AdWithBid {
 
   // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
   string buyer_reporting_id = 11;
+
+  // Private aggregation object.
+  repeated PrivateAggregateContribution private_aggregation_contributions = 12;
 }
 
 // Bidding service operated by buyer.
@@ -1525,6 +1624,9 @@ message ScoreAdsResponse {
     // Owner of the IG to which the winning ad belongs (applicable for
     // Protected Audience only).
     string interest_group_origin = 20;
+
+    // Private Aggregate contributions to be sent to the client
+    PrivateAggregateReportingResponse private_aggregate_reporting_response = 21;
   }
 
   // The response includes the top scored ad along with other related data.
@@ -1580,6 +1682,13 @@ message DebugReportUrls {
 
 // message to store the server request/ response
 message EventMessage {
+  message KvSignal {
+    string request = 1;
+    repeated string request_header = 2;
+    string response = 3;
+    repeated string response_header = 4;
+  }
+
   repeated string udf_log = 1;
 
   // sfe
@@ -1608,4 +1717,39 @@ message EventMessage {
   ScoreAdsRequest score_ad_request = 31;
   ScoreAdsRequest.ScoreAdsRawRequest score_ad_raw_request = 32;
   ScoreAdsResponse.ScoreAdsRawResponse score_ad_raw_response = 33;
+
+  KvSignal kv_signal = 41;
+}
+
+// The message to store Private Aggregation Value that has final value dependent
+// on post auction information. For more information, see
+// https://github.com/WICG/turtledove/blob/main/FLEDGE_extended_PA_reporting.md#example-2-getting-the-average-bid-gap-for-an-ad.
+message SignalValue {
+  BaseValue base_value = 1;
+  int32 offset = 2;
+  // Optional scale factor by which we want to
+  // multiply the auction result value.
+  // Default value will be 1.0
+  double scale = 3;
+}
+
+// The message to store either
+// numerical or signalValue Private Aggregation Value.
+message PrivateAggregationValue {
+  oneof value {
+    int32 int_value = 1;
+    SignalValue extended_value = 2;
+  }
+}
+
+// Available base values for signalBucket and signalValue.
+// For more information, see
+// https://github.com/WICG/turtledove/blob/44a00e4e8f02ec03c05075fd994a8abad7b2a6cd/FLEDGE_extended_PA_reporting.md?plain=1#L192
+enum BaseValue {
+  BASE_VALUE_UNSPECIFIED = 0;
+  BASE_VALUE_WINNING_BID = 1;
+  BASE_VALUE_HIGHEST_SCORING_OTHER_BID = 2;
+  BASE_VALUE_SCRIPT_RUN_TIME = 3;
+  BASE_VALUE_SIGNALS_FETCH_TIME = 4;
+  BASE_VALUE_BID_REJECTION_REASON = 5;
 }

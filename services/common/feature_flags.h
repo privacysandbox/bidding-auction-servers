@@ -19,7 +19,8 @@
 
 #include "absl/flags/declare.h"
 
+ABSL_DECLARE_FLAG(int, limited_egress_bits);
 ABSL_DECLARE_FLAG(bool, enable_temporary_unlimited_egress);
-ABSL_DECLARE_FLAG(bool, enable_chaffing);
+ABSL_DECLARE_FLAG(bool, enable_cancellation);
 
 #endif  // SERVICES_COMMON_FEATURE_FLAGS_H_

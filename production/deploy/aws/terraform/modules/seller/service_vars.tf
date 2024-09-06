@@ -178,6 +178,7 @@ variable "healthcheck_grace_period_sec" {
   type        = number
   default     = 60
 }
+
 variable "healthcheck_healthy_threshold" {
   description = "Consecutive health check successes required to be considered healthy."
   type        = number
@@ -244,6 +245,12 @@ variable "use_tls_with_mesh" {
 }
 
 variable "kv_server_virtual_service_name" {
+<<<<<<< HEAD
   description = "Full name of the virtual service for the KV server."
   type        = string
+=======
+  description = "Full name of the virtual service for the KV server. Unused for seller module for now; may be used in future."
+  type        = string
+  default     = "unused"
+>>>>>>> upstream-v3.11.0
 }

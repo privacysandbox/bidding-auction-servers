@@ -31,6 +31,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // RomaRequestContext holds B&A server level request context, which can be used
 // for logging and metrics in roma callbacks.
+// `MetricContextT` match the server metric context type
+template <typename MetricContextT>
 class RomaRequestContext {
  public:
   RomaRequestContext(
@@ -38,9 +40,11 @@ class RomaRequestContext {
       const privacy_sandbox::server_common::ConsentedDebugConfiguration&
           debug_config,
       absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()>
-          debug_info);
+          debug_info)
+      : request_logging_context_(context_map, debug_config,
+                                 std::move(debug_info)) {}
 
-  RequestLogContext& GetLogContext();
+  RequestLogContext& GetLogContext() { return request_logging_context_; }
 
   // Set if it is a protected audience request.
   void SetIsProtectedAudienceRequest(bool is_protected_audience_request) {
@@ -51,6 +55,7 @@ class RomaRequestContext {
     return is_protected_audience_request_;
   }
   // Set the unique bidding metric context
+<<<<<<< HEAD
   void SetMetricContext(std::unique_ptr<metric::BiddingContext> context) {
     bidding_metric_context_ = std::move(context);
   }
@@ -61,6 +66,18 @@ class RomaRequestContext {
       return absl::NotFoundError("Metric context not initialized.");
     }
     return bidding_metric_context_.get();
+=======
+  void SetMetricContext(std::unique_ptr<MetricContextT> context) {
+    metric_context_ = std::move(context);
+  }
+
+  // Get the shared bidding metric context
+  absl::StatusOr<MetricContextT*> GetMetricContext() const {
+    if (!metric_context_) {
+      return absl::NotFoundError("Metric context not initialized.");
+    }
+    return metric_context_.get();
+>>>>>>> upstream-v3.11.0
   }
 
   bool IsConsented() { return request_logging_context_.is_consented(); }
@@ -68,44 +85,75 @@ class RomaRequestContext {
  private:
   RequestLogContext request_logging_context_;
   bool is_protected_audience_request_ = false;
+<<<<<<< HEAD
   // Metric context for bidding
   std::unique_ptr<metric::BiddingContext> bidding_metric_context_;
+=======
+  std::unique_ptr<MetricContextT> metric_context_;
+>>>>>>> upstream-v3.11.0
 };
 
+template <typename MetricContextT>
 class RomaRequestContextFactory;
 
 // Shared RomaRequestContext that can be used as a part of the Roma worker
 // dispatch request metadata.
+template <typename MetricContextT>
 class RomaRequestSharedContext {
  public:
+  using RomaRequestContextT = RomaRequestContext<MetricContextT>;
+
   RomaRequestSharedContext() {}
 
   // The returned status indicates if RomaRequestContext has gone out of the
   // scope. This can happen during Roma request processing timeout during which
   // the caller owning the context could have returned.
-  absl::StatusOr<std::shared_ptr<RomaRequestContext>> GetRomaRequestContext()
-      const;
+  absl::StatusOr<std::shared_ptr<RomaRequestContextT>> GetRomaRequestContext()
+      const {
+    std::shared_ptr<RomaRequestContextT> shared_context =
+        roma_request_context_.lock();
+    if (!shared_context) {
+      return absl::UnavailableError("RomaRequestContext is not available");
+    }
 
-  friend class RomaRequestContextFactory;
+    return shared_context;
+  }
+
+  absl::StatusOr<MetricContextT*> GetMetricContext() const {
+    PS_ASSIGN_OR_RETURN(std::shared_ptr<RomaRequestContextT> shared_context,
+                        GetRomaRequestContext());
+    return shared_context->GetMetricContext();
+  }
+
+  friend class RomaRequestContextFactory<MetricContextT>;
 
  private:
   explicit RomaRequestSharedContext(
-      const std::shared_ptr<RomaRequestContext>& roma_request_context);
-  std::weak_ptr<RomaRequestContext> roma_request_context_;
+      const std::shared_ptr<RomaRequestContextT>& roma_request_context)
+      : roma_request_context_(roma_request_context) {}
+  std::weak_ptr<RomaRequestContextT> roma_request_context_;
 };
 
 // RomaRequestContextFactory holds a RomaRequestContext. Shared copies of this
 // context are wrapped by RomaRequestSharedContext and then can be passed to
 // Roma workers.
+template <typename MetricContextT>
 class RomaRequestContextFactory {
  public:
+  using RomaRequestContextT = RomaRequestContext<MetricContextT>;
+
   RomaRequestContextFactory(
       const absl::btree_map<std::string, std::string>& context_map,
       const privacy_sandbox::server_common::ConsentedDebugConfiguration&
           debug_config,
       absl::AnyInvocable<privacy_sandbox::server_common::DebugInfo*()>
-          debug_info);
-  RomaRequestSharedContext Create();
+          debug_info)
+      : roma_request_context_(std::make_shared<RomaRequestContextT>(
+            context_map, debug_config, std::move(debug_info))) {}
+
+  RomaRequestSharedContext<MetricContextT> Create() {
+    return RomaRequestSharedContext(roma_request_context_);
+  }
 
   RomaRequestContextFactory(RomaRequestContextFactory&& other) = delete;
   RomaRequestContextFactory& operator=(RomaRequestContextFactory&& other) =
@@ -115,8 +163,14 @@ class RomaRequestContextFactory {
       delete;
 
  private:
-  std::shared_ptr<RomaRequestContext> roma_request_context_;
+  std::shared_ptr<RomaRequestContextT> roma_request_context_;
 };
+
+using RomaRequestContextBidding = RomaRequestContext<metric::BiddingContext>;
+using RomaRequestSharedContextBidding =
+    RomaRequestSharedContext<metric::BiddingContext>;
+using RomaRequestContextFactoryBidding =
+    RomaRequestContextFactory<metric::BiddingContext>;
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

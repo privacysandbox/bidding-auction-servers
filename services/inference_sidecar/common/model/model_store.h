@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_STORE_MODEL_STORE_H_
-#define SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_STORE_MODEL_STORE_H_
+#ifndef SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_MODEL_STORE_H_
+#define SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_MODEL_STORE_H_
 
 #include <memory>
 #include <string>
@@ -153,4 +153,4 @@ class ModelStore {
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 
-#endif  // SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_STORE_MODEL_STORE_H_
+#endif  // SERVICES_INFERENCE_SIDECAR_COMMON_MODEL_MODEL_STORE_H_

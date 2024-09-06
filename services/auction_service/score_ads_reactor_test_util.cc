@@ -14,6 +14,10 @@
 
 #include "services/auction_service/score_ads_reactor_test_util.h"
 
+<<<<<<< HEAD
+=======
+#include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
+>>>>>>> upstream-v3.11.0
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/test/random.h"
@@ -90,7 +94,7 @@ void SetupTelemetryCheck(const ScoreAdsRequest& request) {
 
 ScoreAdsReactorTestHelper::ScoreAdsReactorTestHelper() {
   SetupTelemetryCheck(request_);
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
 
   key_fetcher_manager_ =
       CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
@@ -99,14 +103,14 @@ ScoreAdsReactorTestHelper::ScoreAdsReactorTestHelper() {
 ScoreAdsResponse ScoreAdsReactorTestHelper::ExecuteScoreAds(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
     MockCodeDispatchClient& dispatcher,
-    const AuctionServiceRuntimeConfig& runtime_config,
-    bool enable_report_result_url_generation) {
+    const AuctionServiceRuntimeConfig& runtime_config) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client_);
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   request_.set_key_id(kKeyId);
 
   ScoreAdsResponse response;
-  ScoreAdsReactor reactor(dispatcher, &request_, &response,
+  grpc::CallbackServerContext context;
+  ScoreAdsReactor reactor(&context, dispatcher, &request_, &response,
                           std::move(benchmarkingLogger_),
                           key_fetcher_manager_.get(), &crypto_client_,
                           async_reporter.get(), runtime_config);
@@ -126,6 +130,11 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
     if (std::strcmp(request.handler_name.c_str(),
                     kReportingDispatchHandlerFunctionName) != 0 &&
         std::strcmp(request.handler_name.c_str(), kReportResultEntryFunction) !=
+<<<<<<< HEAD
+=======
+            0 &&
+        std::strcmp(request.handler_name.c_str(), kReportWinEntryFunction) !=
+>>>>>>> upstream-v3.11.0
             0) {
       EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
     }

@@ -19,11 +19,13 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 TEST(CodeDispatchClient, DelegatesToCodeDispatchLibrary) {
+  CommonTestInit();
   MockV8Dispatcher dispatcher;
   DispatchRequest foo{"foo"};
   DispatchRequest bar{"bar"};

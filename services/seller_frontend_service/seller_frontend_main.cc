@@ -182,14 +182,15 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_sfe_tcmalloc_max_total_thread_cache_bytes,
                         SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+  config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  server_common::log::PS_VLOG_IS_ON(
-      0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::SetGlobalPSVLogLevel(
+      config_client.GetIntParameter(PS_VERBOSITY));
 
   const bool enable_protected_audience =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
@@ -212,16 +213,18 @@ absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+  // InitTelemetry right after config_client being initialized
+  InitTelemetry<SelectAdRequest>(
+      config_util, config_client, metric::kSfe,
+      FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
+          config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
+  PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
+                                   << config_client.DebugString();
 
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
   MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
       SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
-
-  InitTelemetry<SelectAdRequest>(
-      config_util, config_client, metric::kSfe,
-      FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
-          config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
 
   std::string server_address =
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
@@ -281,7 +284,8 @@ absl::Status RunServer() {
     return absl::UnavailableError("Error starting Server.");
   }
 
-  PS_LOG(INFO) << "Server listening on " << server_address;
+  PS_LOG(INFO, SystemLogContext()) << "Server listening on " << server_address;
+
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
   server->Wait();

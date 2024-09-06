@@ -220,6 +220,17 @@ google::protobuf::Value MakeANullValue();
 google::protobuf::Value MakeAListValue(
     const std::vector<google::protobuf::Value>& vec);
 
+struct TestComponentAuctionResultData {
+  absl::string_view test_component_seller;
+  std::string generation_id;
+  std::string test_ig_owner;
+  std::string test_component_win_reporting_url;
+  std::string test_component_report_result_url;
+  std::string test_component_event;
+  std::string test_component_interaction_reporting_url;
+  std::vector<std::string> buyer_list;
+};
+
 BuyerInput MakeARandomBuyerInput();
 
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
@@ -230,12 +241,7 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
 
 // Populates fields for a auction result object for a component seller auction.
 AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
-    std::string generation_id, std::string top_level_seller,
-    std::string test_component_event,
-    std::string test_component_win_reporting_url,
-    std::string test_component_interaction_reporting_url,
-    std::string test_component_seller,
-    std::vector<std::string> buyer_list = {});
+    const TestComponentAuctionResultData& component_auction_result_data);
 
 // Populates fields for a auction result object for a component seller auction
 // without reporting urls

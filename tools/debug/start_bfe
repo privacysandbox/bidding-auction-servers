@@ -35,6 +35,7 @@ export SERVER_START_CMD=$(cat << END
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --ps_verbosity=2 \
+--enable_chaffing="false" \
 --enable_protected_audience="true" \
 --bfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \

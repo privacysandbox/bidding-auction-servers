@@ -32,10 +32,13 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
 #include "quiche/oblivious_http/oblivious_http_gateway.h"
+#include "services/common/feature_flags.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
+#include "services/common/util/cancellation_wrapper.h"
+#include "services/common/util/client_contexts.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/error_reporter.h"
 #include "services/common/util/request_metadata.h"
@@ -67,6 +70,9 @@ inline constexpr int kMaxChaffRequestSizeBytes = 95000;
 
 inline constexpr int kMinChaffRequests = 1;
 inline constexpr int kMinChaffRequestsWithNoRealRequests = 2;
+
+// Maximum number of buyers that can be sent requests when chaffing is enabled.
+inline constexpr int kMaxBuyersSolicitedChaffingEnabled = 15;
 
 struct ChaffingConfig {
   absl::flat_hash_set<std::string_view> chaff_request_candidates;
@@ -213,6 +219,18 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // whether decryption was successful.
   grpc::Status DecryptRequest();
 
+  // Computes the number of buyers that can be invoked by looking at the request
+  // and whether chaffing is enabled on the server. For servers where chaffing
+  // is disabled, the number of effective buyers is the number of buyers that
+  // are present in all 3 of the following:
+  //  1) the auction_config.buyer_list,
+  //  2) the buyer_inputs, and
+  //  3) the SFE config for which buyers it can send requests to (the
+  //  BUYER_SERVER_HOSTS flag)
+  // For servers where chaffing is disabled, an additional 'n' buyers can be
+  // invoked for sending chaff requests. See GetChaffingConfig() for the logic.
+  int GetEffectiveNumberOfBuyers(const ChaffingConfig& chaffing_config);
+
   // Dispatches the GetBids calls for both 'real' and 'fake' (AKA chaff) buyers.
   void FetchBids();
 
@@ -246,7 +264,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Initiates the asynchronous grpc request to fetch scoring signals
   // from the key value server. The ad_render_url in the GetBid response from
   // each Buyer is used as a key for the Seller Key-Value lookup.
-  void FetchScoringSignals();
+  void CancellableFetchScoringSignals();
 
   // Handles recording the fetched scoring signals to state.
   // If the code blob is already fetched, this function initiates scoring the
@@ -259,7 +277,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Initiates an asynchronous rpc to the auction service. This request includes
   // all signals and bids.
-  void ScoreAds();
+  void CancellableScoreAds();
 
   // Handles the auction result and writes the winning ad to
   // the SelectAdResponse, thus finishing the SelectAdRequest.
@@ -298,8 +316,13 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata BuildAdWithBidMetadata(
       const AdWithBid& input, absl::string_view interest_group_owner);
 
+  CLASS_CANCELLATION_WRAPPER(FetchScoringSignals, enable_cancellation_,
+                             request_context_, FinishWithStatus)
+  CLASS_CANCELLATION_WRAPPER(ScoreAds, enable_cancellation_, request_context_,
+                             FinishWithStatus)
+
   // Initialization
-  grpc::CallbackServerContext* context_;
+  grpc::CallbackServerContext* request_context_;
   const SelectAdRequest* request_;
   std::variant<ProtectedAudienceInput, ProtectedAuctionInput>
       protected_auction_input_;
@@ -358,8 +381,13 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Indicates whether or not the protected audience support is enabled.
   const bool is_protected_audience_enabled_;
 
+  // Is chaffing enabled on the server.
+  const bool chaffing_enabled_;
+
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
+
+  const bool enable_cancellation_;
 
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;
@@ -369,6 +397,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // were erroneous. If all bids ended up in an error state then that should be
   // flagged as an error eventually.
   AsyncTaskTracker async_task_tracker_;
+
+  // Keeps track of the client contexts used for RPC calls
+  ClientContexts client_contexts_;
 
   // Log metrics for the Initiated requests errors that were initiated by the
   // server

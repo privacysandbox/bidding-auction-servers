@@ -42,6 +42,7 @@ cc_library(
         "multi_curl_http_fetcher_async.h",
     ],
     deps = [
+        "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -49,7 +50,6 @@ cc_library(
         "@com_google_absl//absl/time",
         "@curl",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@libevent//:event",
     ],
 )

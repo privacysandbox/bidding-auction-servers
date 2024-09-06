@@ -239,6 +239,12 @@ constexpr absl::string_view kTopLevelAuctionCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -252,19 +258,16 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -272,18 +275,13 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 
     //Handler method to call adTech provided reportResult method and wrap the
@@ -483,6 +481,12 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -496,19 +500,16 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -516,18 +517,13 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 
     //Handler method to call adTech provided reportResult method and wrap the
@@ -844,6 +840,12 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
+    var ps_response = {
+        response: {},
+        logs: [],
+        errors: [],
+        warnings: []
+      }
     var forDebuggingOnly_auction_loss_url = undefined;
     var forDebuggingOnly_auction_win_url = undefined;
     const forDebuggingOnly = {};
@@ -857,19 +859,16 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
 
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (featureFlags.enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
       var scoreAdResponse = {};
       try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
+        ps_response.response = scoreAd(adMetadata, bid, auctionConfig,
               trustedScoringSignals, browserSignals, directFromSellerSignals);
       } catch({error, message}) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -877,18 +876,13 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         if( featureFlags.enable_debug_url_generation &&
               (forDebuggingOnly_auction_loss_url
                   || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
+          ps_response.response.debugReportUrls = {
             auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
             auctionDebugWinUrl: forDebuggingOnly_auction_win_url
           }
         }
       }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 
     //Handler method to call adTech provided reportResult method and wrap the

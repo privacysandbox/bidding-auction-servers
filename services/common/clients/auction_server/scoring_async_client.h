@@ -56,7 +56,7 @@ class ScoringAsyncGrpcClient
   //
   // params: a pointer to the ClientParams object which carries data used
   // by the grpc stub.
-  void SendRpc(const std::string& hpke_secret,
+  void SendRpc(const std::string& hpke_secret, grpc::ClientContext* context,
                RawClientParams<ScoreAdsRequest, ScoreAdsResponse,
                                ScoreAdsResponse::ScoreAdsRawResponse>* params)
       const override;

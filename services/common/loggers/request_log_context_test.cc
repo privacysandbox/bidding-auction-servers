@@ -24,4 +24,15 @@ TEST(RequestLogContext, Initialization) {
   RequestLogContext context({}, server_common::ConsentedDebugConfiguration());
 }
 
+TEST(RequestLogContext, NoOpContext) {
+  RequestContext context = NoOpContext();
+  EXPECT_FALSE(context.log.is_consented());
+  EXPECT_FALSE(context.log.is_debug_response());
+
+  PS_LOG(INFO, context.log) << "NoOpContext";
+  context.log.SetEventMessageField("NoOpContext EventMessage");
+  RequestContext context2 = NoOpContext();
+  EXPECT_EQ(&context.log, &context2.log);
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

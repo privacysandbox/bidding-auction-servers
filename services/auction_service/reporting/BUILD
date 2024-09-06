@@ -14,6 +14,8 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "reporting_response",
     hdrs = ["reporting_response.h"],
@@ -54,12 +56,29 @@ cc_library(
 
 cc_library(
     name = "reporting_test_util",
+<<<<<<< HEAD
     srcs = ["reporting_test_util.cc"],
     hdrs = ["reporting_test_util.h"],
+=======
+    srcs = [
+        "reporting_test_util.cc",
+    ],
+    hdrs = [
+        "reporting_helper_test_constants.h",
+        "reporting_test_util.cc",
+        "reporting_test_util.h",
+    ],
+>>>>>>> upstream-v3.11.0
     visibility = ["//visibility:public"],
     deps = [
         ":reporting_helper",
         ":reporting_response",
+<<<<<<< HEAD
+=======
+        "//services/auction_service/reporting/seller:seller_reporting_manager",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+>>>>>>> upstream-v3.11.0
         "@rapidjson",
     ],
 )

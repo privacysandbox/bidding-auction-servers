@@ -14,16 +14,21 @@
 
 #include "services/common/blob_fetch/blob_fetcher.h"
 
+#include <algorithm>
+#include <iostream>
 #include <memory>
 #include <utility>
+
+#include <openssl/sha.h>
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
 #include "absl/synchronization/notification.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/core/interface/async_context.h"
 #include "src/core/interface/errors.h"
-#include "src/logger/request_context_logger.h"
 #include "src/public/core/interface/execution_result.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 #include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
@@ -39,6 +44,46 @@ using ::google::scp::core::errors::GetErrorMessage;
 using ::google::scp::cpio::BlobStorageClientInterface;
 
 namespace privacy_sandbox::bidding_auction_servers {
+namespace {
+
+// Checks if the specified path should be included according to the filter
+// options. A path is included when either no included prefixes are specified or
+// when it matches one of the included prefixes.
+bool ShouldIncludePath(absl::string_view path,
+                       const BlobFetcher::FilterOptions& filter_options) {
+  if (filter_options.included_prefixes.empty()) {
+    return true;
+  }
+
+  for (const auto& prefix : filter_options.included_prefixes) {
+    if (absl::StartsWith(path, prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Wrapper around OpenSSL to compute the SHA256 hash of a given input string.
+// It converts the resulting binary hash into a hexadecimal string.
+std::string ComputeSHA256(absl::string_view data) {
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA256_CTX sha256;
+  SHA256_Init(&sha256);
+  SHA256_Update(&sha256, data.data(), data.size());
+  SHA256_Final(hash, &sha256);
+
+  char output_buf[2 * SHA256_DIGEST_LENGTH + 1];
+  output_buf[2 * SHA256_DIGEST_LENGTH] = 0;
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+    snprintf(output_buf + (i * 2), sizeof(output_buf) - (i * 2), "%02x",
+             hash[i]);
+  }
+
+  return std::string(output_buf);
+}
+
+}  // namespace
 
 BlobFetcher::BlobFetcher(
     absl::string_view bucket_name, server_common::Executor* executor,
@@ -52,18 +97,18 @@ BlobFetcher::BlobFetcher(
   CHECK(status.ok()) << "Failed to run BlobStorageClient: " << status;
 }
 
-absl::Status BlobFetcher::FetchSync() {
+absl::Status BlobFetcher::FetchSync(const FilterOptions& filter_options) {
   absl::Status status;
   absl::Notification done;
-  executor_->Run([&status, &done, this]() {
-    status = InternalFetch();
+  executor_->Run([&status, &done, &filter_options, this]() {
+    status = InternalFetch(filter_options);
     done.Notify();
   });
   done.WaitForNotification();
   return status;
 }
 
-absl::Status BlobFetcher::InternalFetch() {
+absl::Status BlobFetcher::InternalFetch(const FilterOptions& filter_options) {
   absl::Status status;
   std::vector<std::string> blob_names;
 
@@ -74,17 +119,22 @@ absl::Status BlobFetcher::InternalFetch() {
   list_blobs_request->set_exclude_directories(true);
   AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
       list_blobs_context(list_blobs_request, [&status, &blob_names,
-                                              &notification](auto& context) {
+                                              &notification,
+                                              &filter_options](auto& context) {
         if (!context.result.Successful()) {
-          PS_LOG(ERROR) << "Failed to list blobs: "
-                        << GetErrorMessage(context.result.status_code);
+          PS_LOG(ERROR, SystemLogContext())
+              << "Failed to list blobs: "
+              << GetErrorMessage(context.result.status_code);
           status = absl::InternalError("Failed to list blobs");
         } else {
           PS_VLOG(10) << "BlobStorageClient ListBlobsMetadata() Response: "
                       << context.response->DebugString();
           for (int i = 0; i < context.response->blob_metadatas_size(); i++) {
-            blob_names.push_back(
-                context.response->blob_metadatas(i).blob_name());
+            const std::string& blob_name =
+                context.response->blob_metadatas(i).blob_name();
+            if (ShouldIncludePath(blob_name, filter_options)) {
+              blob_names.push_back(blob_name);
+            }
           }
         }
 
@@ -119,8 +169,9 @@ absl::Status BlobFetcher::InternalFetch() {
         get_blob_request,
         [&status, &new_file_snapshot, &per_blob_notification](auto& context) {
           if (!context.result.Successful()) {
-            PS_LOG(ERROR) << "Failed to fetch blobs: "
-                          << GetErrorMessage(context.result.status_code);
+            PS_LOG(ERROR, SystemLogContext())
+                << "Failed to fetch blobs: "
+                << GetErrorMessage(context.result.status_code);
             status = absl::InternalError("Failed to fetch blobs");
           } else {
             // Should not log blob().data(), which can be very large bytes.
@@ -148,6 +199,28 @@ absl::Status BlobFetcher::InternalFetch() {
   // All the blobs are successfully fetched.
   snapshot_ = std::move(new_file_snapshot);
   return status;
+}
+
+absl::StatusOr<std::string> ComputeChecksumForBlobs(
+    const std::vector<BlobFetcherBase::BlobView>& blob_views) {
+  if (blob_views.empty()) {
+    return absl::InvalidArgumentError("Can't compute checksum for empty blobs");
+  }
+
+  std::vector<std::pair<std::string, std::string>> blob_hashes;
+  blob_hashes.reserve(blob_views.size());
+  for (const BlobFetcherBase::BlobView& blob_view : blob_views) {
+    blob_hashes.emplace_back(blob_view.path, ComputeSHA256(blob_view.bytes));
+  }
+
+  std::sort(blob_hashes.begin(), blob_hashes.end());
+
+  std::string top_hash;
+  for (const auto& blob_hash : blob_hashes) {
+    top_hash += blob_hash.second;
+  }
+
+  return ComputeSHA256(top_hash);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

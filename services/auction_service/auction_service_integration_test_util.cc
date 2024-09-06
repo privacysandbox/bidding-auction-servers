@@ -28,9 +28,9 @@
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
+#include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
-#include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
@@ -78,7 +78,7 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
       test_score_ads_request_config.test_buyer_reporting_signals
           .interest_group_name);
   ad.set_interest_group_owner(
-      test_score_ads_request_config.interest_group_owner);
+      test_score_ads_request_config.interest_group_owner.c_str());
   ad.set_render(absl::StrFormat(
       "%s/ads", test_score_ads_request_config.interest_group_owner));
   ad.set_recency(
@@ -119,9 +119,19 @@ ScoreAdsRequest BuildScoreAdsRequest(
   raw_request.mutable_consented_debug_config()->set_is_consented(
       test_score_ads_request_config.is_consented);
   raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  // top_level_seller is expected to be set only for component auctions
   if (!test_score_ads_request_config.top_level_seller.empty()) {
     raw_request.set_top_level_seller(
         test_score_ads_request_config.top_level_seller);
+  }
+  const auto& component_auction_data =
+      test_score_ads_request_config.component_auction_data;
+  // component_seller is expected to be set only for top level auctions.
+  if (!component_auction_data.test_component_seller.empty()) {
+    auto auction_result = MakeARandomComponentAuctionResultWithReportingUrls(
+        component_auction_data);
+    *raw_request.mutable_component_auction_results()->Add() =
+        std::move(auction_result);
   }
   ScoreAdsRequest request;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
@@ -169,12 +179,14 @@ void LoadTestSellerUdfWrapper(
     V8Dispatcher& dispatcher) {
   std::string wrapper_js_blob = GetSellerWrappedCode(
       adtech_code_blob,
-      auction_service_runtime_config.enable_report_result_url_generation);
+      auction_service_runtime_config.enable_report_result_url_generation,
+      auction_service_runtime_config.enable_private_aggregate_reporting);
   ASSERT_TRUE(dispatcher.LoadSync(kScoreAdBlobVersion, wrapper_js_blob).ok());
 }
 
 void LoadTestBuyerUdfWrapper(
     V8Dispatcher& dispatcher, const ScoreAdsRequest& request,
+    absl::string_view buyer_udf,
     const AuctionServiceRuntimeConfig& auction_service_runtime_config,
     AuctionType auction_type) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
@@ -183,12 +195,11 @@ void LoadTestBuyerUdfWrapper(
     return;
   }
   for (const auto& ad_bid : raw_request.ad_bids()) {
-    std::string wrapper_js_blob;
-    if (auction_service_runtime_config.enable_report_win_input_noising) {
-      wrapper_js_blob = GetBuyerWrappedCode(kBuyerBaseCodeWithValidation);
-    } else {
-      wrapper_js_blob = GetBuyerWrappedCode(kBuyerBaseCode);
+    if (buyer_udf.empty()) {
+      PS_VLOG(kNoisyInfo) << "No buyer code loaded";
+      break;
     }
+    std::string wrapper_js_blob = GetBuyerWrappedCode(buyer_udf);
     absl::StatusOr<std::string> version =
         GetBuyerReportWinVersion(ad_bid.interest_group_owner(), auction_type);
     ASSERT_TRUE(version.ok());
@@ -200,51 +211,69 @@ void RunTestScoreAds(
     CodeDispatchClient& client, ScoreAdsRequest& request,
     const AuctionServiceRuntimeConfig& auction_service_runtime_config,
     ScoreAdsResponse& response) {
-  grpc::CallbackServerContext context;
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   auto score_ads_reactor_factory =
       [&client, async_reporter_local = std::move(async_reporter)](
-          const ScoreAdsRequest* request, ScoreAdsResponse* response,
+          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client,
           const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            client, request, response, std::make_unique<ScoreAdsNoOpLogger>(),
-            key_fetcher_manager, crypto_client, async_reporter_local.get(),
-            runtime_config);
+            context, client, request, response,
+            std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
+            crypto_client, async_reporter_local.get(), runtime_config);
       };
 
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
-
-  service.ScoreAds(&context, &request, &response);
-  std::this_thread::sleep_for(absl::ToChronoSeconds(absl::Seconds(2)));
+  LocalAuctionStartResult result = StartLocalAuction(&service);
+  std::unique_ptr<Auction::StubInterface> stub = CreateAuctionStub(result.port);
+  grpc::ClientContext client_context;
+  grpc::Status status = stub->ScoreAds(&client_context, request, &response);
+  EXPECT_EQ(status.error_code(), grpc::StatusCode::OK)
+      << status.error_message();
 }
 
 // Loads Seller's udf containing scoreAd() and reportResult() as well as
 // buyer's udf containing reportWin() for Protected Audience into Roma.
-void LoadPABuyerAndSellerCode(
-    const ScoreAdsRequest& request, V8Dispatcher& dispatcher,
-    const AuctionServiceRuntimeConfig& runtime_config) {
+void LoadPABuyerAndSellerCode(const ScoreAdsRequest& request,
+                              V8Dispatcher& dispatcher,
+                              const AuctionServiceRuntimeConfig& runtime_config,
+                              absl::string_view buyer_udf,
+                              absl::string_view seller_udf) {
   InitV8Dispatcher(dispatcher);
-  LoadTestSellerUdfWrapper(kSellerBaseCode, runtime_config, dispatcher);
-  LoadTestBuyerUdfWrapper(dispatcher, request, runtime_config,
+  LoadTestSellerUdfWrapper(seller_udf, runtime_config, dispatcher);
+  LoadTestBuyerUdfWrapper(dispatcher, request, buyer_udf, runtime_config,
                           AuctionType::kProtectedAudience);
 }
+
 }  // namespace
+
+TestComponentAuctionResultData GenerateTestComponentAuctionResultData() {
+  return {
+      .test_component_seller = "",
+      .generation_id = kTestGenerationId,
+      .test_ig_owner = kTestIgOwner,
+      .test_component_win_reporting_url = kExpectedComponentReportWinUrl,
+      .test_component_report_result_url = kExpectedComponentReportWinUrl,
+      .test_component_event = kTestInteractionEvent,
+      .test_component_interaction_reporting_url = kTestInteractionReportingUrl};
+}
 
 void LoadAndRunScoreAdsForPA(
     const AuctionServiceRuntimeConfig& runtime_config,
     const TestScoreAdsRequestConfig& test_score_ads_request_config,
+    absl::string_view buyer_udf, absl::string_view seller_udf,
     ScoreAdsResponse& response) {
   V8Dispatcher dispatcher;
   CodeDispatchClient dispatch_client(dispatcher);
@@ -252,7 +281,8 @@ void LoadAndRunScoreAdsForPA(
       GetTestAdWithBidMetadata(test_score_ads_request_config);
   ScoreAdsRequest request =
       BuildScoreAdsRequest(test_score_ads_request_config, {test_ad});
-  LoadPABuyerAndSellerCode(request, dispatcher, runtime_config);
+  LoadPABuyerAndSellerCode(request, dispatcher, runtime_config, buyer_udf,
+                           seller_udf);
   RunTestScoreAds(dispatch_client, request, runtime_config, response);
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

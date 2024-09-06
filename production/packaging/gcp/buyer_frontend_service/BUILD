@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load(
-    "@io_bazel_rules_docker//container:container.bzl",
-    "container_image",
-    "container_layer",
-)
-load("@io_bazel_rules_docker//contrib:test.bzl", "container_test")
+load("@container_structure_test//:defs.bzl", "container_structure_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
 load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
@@ -51,48 +47,46 @@ pkg_tar(
     srcs = server_binaries,
 )
 
-container_layer(
-    name = "server_binary_layer",
-    directory = "/",
-    tars = [
-        ":server_binaries_tar",
-    ],
-)
-
-container_image(
+oci_image(
     name = "server_docker_image",
     base = select({
-        "@platforms//cpu:arm64": "@runtime-cc-debian-arm64//image",
-        "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
+        "@platforms//cpu:arm64": "@runtime-debian-debug-root-arm64//:runtime-debian-debug-root-arm64",
+        "@platforms//cpu:x86_64": "@runtime-debian-debug-root-amd64//:runtime-debian-debug-root-amd64",
     }),
     cmd = [
         "/server/bin/init_server_basic",
     ],
     entrypoint = ["sh"],
+    # BFE and BFE Non-TLS Healthcheck ports, respectively:
+    exposed_ports = [
+        "50051/tcp",
+        "50050/tcp",
+    ],
     labels = {"tee.launch_policy.log_redirect": "always"},
-    layers = [
-        ":server_binary_layer",
+    tars = [
+        ":server_binaries_tar",
     ] + select({
         "//:e2e_build": [
         ],
         "//conditions:default": [],
     }),
-    # BFE and BFE Non-TLS Healthcheck ports, respectively:
-    ports = [
-        "50051",
-        "50050",
-    ],
 )
 
-container_test(
+oci_tarball(
+    name = "server_docker_tarball",
+    image = ":server_docker_image",
+    repo_tags = ["bazel/production/packaging/gcp/buyer_frontend_service:server_docker_image"],
+)
+
+container_structure_test(
     name = "structure_test",
     size = "large",
     configs = ["test/structure.yaml"],
     driver = "tar",
-    image = ":server_docker_image",
+    image = ":server_docker_tarball",
 )
 
-container_test(
+container_structure_test(
     name = "commands_test",
     size = "large",
     configs = ["test/commands.yaml"],
@@ -110,14 +104,14 @@ genrule(
     name = "copy_to_dist",
     srcs = [
         ":server_artifacts",
-        ":server_docker_image.tar",
+        ":server_docker_tarball",
         "//api:bidding_auction_servers_descriptor_set",
     ],
     outs = ["copy_to_dist.bin"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p dist/debian
 cp $(execpath :server_artifacts) dist/debian/$$(basename $(RULEDIR))_artifacts.zip
-cp $(execpath :server_docker_image.tar) dist/debian/$$(basename $(RULEDIR))_image.tar
+cp $(execpath :server_docker_tarball) dist/debian/$$(basename $(RULEDIR))_image.tar
 cp $(execpath //api:bidding_auction_servers_descriptor_set) dist
 builders/tools/normalize-dist
 EOF""",

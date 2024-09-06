@@ -28,7 +28,9 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
+#include "services/common/util/client_contexts.h"
 #include "services/common/util/error_accumulator.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/encryption_util.h"
@@ -69,6 +71,7 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
 
  private:
   // Initialization
+  grpc::CallbackServerContext* request_context_;
   const SelectAdRequest* request_;
   SelectAdResponse* response_;
   std::variant<ProtectedAudienceInput, ProtectedAuctionInput>
@@ -89,11 +92,16 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
   // intended visibility.
   ErrorAccumulator error_accumulator_;
 
+  const bool enable_cancellation_;
+
   // Encryption context needed throughout the lifecycle of the request.
   std::unique_ptr<OhttpHpkeDecryptedMessage> decrypted_request_;
 
   // Start time of request.
   absl::Time start_ = absl::Now();
+
+  // Keeps track of the client contexts used for RPC calls
+  ClientContexts client_contexts_;
 
   // Finishes the RPC call with a status and publishes metrics.
   void FinishWithStatus(const grpc::Status& status);

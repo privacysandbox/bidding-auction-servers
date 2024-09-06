@@ -15,6 +15,9 @@
 #ifndef SERVICES_BIDDING_SERVICE_UTILS_EGRESS_H_
 #define SERVICES_BIDDING_SERVICE_UTILS_EGRESS_H_
 
+#include <string>
+#include <vector>
+
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -22,6 +25,17 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Verifies adtech provided schema conformance with the give CDDL spec.
 bool AdtechEgresSchemaValid(absl::string_view adtech_schema,
                             absl::string_view cddl_spec);
+
+// Converts the provided unsigned number to bit representation by setting the
+// right bits in the provided vector. Caller is responsible for ensuring that
+// the passed in vector is big enough to allow for conversion.
+void UnsignedIntToBits(uint num, std::vector<bool>& bit_rep);
+
+// Returns a bit-string corresponding to the passed in bit vector.
+std::string DebugString(const std::vector<bool>& bit_vector);
+
+// Returns a bit-string corresponding to the passed in byte array.
+std::string DebugString(const std::vector<uint8_t>& byte_array);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

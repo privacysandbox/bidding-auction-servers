@@ -17,16 +17,22 @@
 #include <string>
 
 #include "absl/strings/string_view.h"
+#include "services/auction_service/code_wrapper/generated_private_aggregation_wrapper.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 std::string GetSellerWrappedCode(absl::string_view seller_js_code,
-                                 bool enable_report_result_url_generation) {
+                                 bool enable_report_result_url_generation,
+                                 bool enable_private_aggregate_reporting) {
   std::string wrap_code{kEntryFunction};
   if (enable_report_result_url_generation) {
     wrap_code.append(kReportResultWrapperFunction);
   }
+
   wrap_code.append(seller_js_code);
+  if (enable_private_aggregate_reporting) {
+    wrap_code.append(kPrivateAggregationWrapperFunction);
+  }
   return wrap_code;
 }
 

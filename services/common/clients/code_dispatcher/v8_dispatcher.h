@@ -29,11 +29,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 // The following aliases are part of the exported API so the
 // user does not have to explicitly import the underlying library.
 using DispatchRequest =
-    google::scp::roma::InvocationSharedRequest<RomaRequestSharedContext>;
+    google::scp::roma::InvocationSharedRequest<RomaRequestSharedContextBidding>;
 using DispatchResponse = google::scp::roma::ResponseObject;
 using DispatchDoneCallback = google::scp::roma::Callback;
 using DispatchService = google::scp::roma::sandbox::roma_service::RomaService<
-    RomaRequestSharedContext>;
+    RomaRequestSharedContextBidding>;
 using BatchDispatchDoneCallback = google::scp::roma::BatchCallback;
 // The DispatchConfig controls the number of worker processes, the number of
 // threads per worker process, the IPC shared memory size (in bytes), and

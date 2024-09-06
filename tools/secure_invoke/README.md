@@ -205,6 +205,8 @@ CLIENT_IP=<A valid client IPv4 address>
     -client_ip=${CLIENT_IP}
 ```
 
+#### Sending ProtectedAudience [GetBidsRawRequest] to BFE as JSON
+
 Following example shows how JSON based plaintext `GetBidsRawRequest` payload can be used to send
 gRPC request to BFE:
 
@@ -268,6 +270,90 @@ A sample request is as follows:
         "token": "123456"
     }
 }
+```
+
+#### Sending ProtectedAppSignals [GetBidsRawRequest] to BFE as JSON
+
+Following example shows how json based plaintext `GetBidsRawRequest` payload can be used to send
+gRPC request to BFE:
+
+```bash
+# Setup arguments.
+INPUT_PATH=/tmp/get_bids_request.proto# Needs to be a valid GetBidsRawRequest
+INPUT_FORMAT=JSON
+BFE_HOST_ADDRESS=buyer.domain.com  # DNS name of BFE service (Example: dns:///buyer.domain.com)
+(For local runs services, use: BFE_HOST_ADDRESS=localhost:50051)
+CLIENT_IP=<A valid client IPv4 address>
+
+# Run the tool with desired arguments.
+./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
+    -- \
+    -target_service=bfe \
+    -input_file="/src/workspace/${INPUT_PATH}" \
+    -input_format=${INPUT_FORMAT} \
+    -host_addr=${BFE_HOST_ADDRESS} \
+    -client_ip=${CLIENT_IP}
+```
+
+A sample request is as follows:
+
+```json
+{
+    "client_type": "CLIENT_TYPE_ANDROID",
+    "protected_app_signals_buyer_input": {
+        "protected_app_signals": {
+            "app_install_signals": "/w=="
+        }
+    },
+    "auction_signals": "{}",
+    "buyer_signals": "{}",
+    "seller": "Placeholder-Should-Match-With-seller_origin_domain-In-SFE-Config",
+    "publisher_name": "example.com",
+    "log_context": {
+        "generation_id": "A-UUID",
+        "adtech_debug_id": "A-Debug-ID-Useful-For-Debugging"
+    },
+    "consented_debug_config": {
+        "is_consented": true,
+        "token": "123456"
+    }
+}
+```
+
+#### Sending ProtectedAppSignals [GetBidsRawRequest] to BFE as PROTO
+
+Following example shows how proto based plaintext `GetBidsRawRequest` payload can be used to send
+gRPC request to BFE:
+
+```bash
+# Setup arguments.
+INPUT_PATH=/tmp/get_bids_request.proto# Needs to be a valid GetBidsRawRequest
+INPUT_FORMAT=PROTO
+BFE_HOST_ADDRESS=buyer.domain.com  # DNS name of BFE service (Example: dns:///buyer.domain.com)
+(For local runs services, use: BFE_HOST_ADDRESS=localhost:50051)
+CLIENT_IP=<A valid client IPv4 address>
+
+# Run the tool with desired arguments.
+./builders/tools/bazel-debian run //tools/secure_invoke:invoke \
+    -- \
+    -target_service=bfe \
+    -input_file="/src/workspace/${INPUT_PATH}" \
+    -input_format=${INPUT_FORMAT} \
+    -host_addr=${BFE_HOST_ADDRESS} \
+    -client_ip=${CLIENT_IP}
+```
+
+A sample request is as follows:
+
+```proto
+buyer_input { }
+auction_signals: "{}"
+seller: "Placeholder-Should-Match-With-seller_origin_domain-In-SFE-Config"
+publisher_name: "example.com"
+log_context { generation_id: "A-UUID" adtech_debug_id: "A-Debug-ID-Useful-For-Debugging" }
+protected_app_signals_buyer_input { protected_app_signals { app_install_signals: "some-binary-string" } }
+client_type: CLIENT_TYPE_ANDROID
+consented_debug_config: { is_consented: true token: "123456" }
 ```
 
 [selectadrequest]:

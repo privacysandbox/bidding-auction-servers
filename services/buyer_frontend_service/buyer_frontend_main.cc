@@ -167,14 +167,15 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_bfe_tcmalloc_max_total_thread_cache_bytes,
                         BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+  config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
   // Set verbosity
-  server_common::log::PS_VLOG_IS_ON(
-      0, config_client.GetIntParameter(PS_VERBOSITY));
+  server_common::log::SetGlobalPSVLogLevel(
+      config_client.GetIntParameter(PS_VERBOSITY));
 
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
@@ -190,6 +191,12 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
                << enable_protected_audience;
   PS_LOG(INFO) << "Successfully constructed the config client.\n";
+
+// For security reasons, chaffing must always be enabled in a prod build.
+#if (PS_IS_PROD_BUILD)
+  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
+#endif
+
   return config_client;
 }
 
@@ -198,6 +205,10 @@ absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+  // InitTelemetry right after config_client being initialized
+  InitTelemetry<GetBidsRequest>(config_util, config_client, metric::kBfe);
+  PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
+                                   << config_client.DebugString();
 
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
@@ -240,8 +251,6 @@ absl::Status RunServer() {
         std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
   }
 
-  InitTelemetry<GetBidsRequest>(config_util, config_client, metric::kBfe);
-
   BuyerFrontEndService buyer_frontend_service(
       std::make_unique<HttpBiddingSignalsAsyncProvider>(
           std::move(buyer_kv_async_http_client)),
@@ -262,7 +271,9 @@ absl::Status RunServer() {
           config_client.GetIntParameter(
               PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS),
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
-          config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE)},
+          config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE),
+          config_client.GetBooleanParameter(ENABLE_CHAFFING),
+      },
       enable_buyer_frontend_benchmarking);
 
   grpc::EnableDefaultHealthCheckService(true);
@@ -311,7 +322,7 @@ absl::Status RunServer() {
   if (server == nullptr) {
     return absl::UnavailableError("Error starting Server.");
   }
-  PS_LOG(INFO) << "Server listening on " << server_address;
+  PS_LOG(INFO, SystemLogContext()) << "Server listening on " << server_address;
 
   // Wait for the server to shut down. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.

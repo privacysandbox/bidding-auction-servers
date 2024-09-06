@@ -90,3 +90,7 @@ ABSL_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes, 1,
 ABSL_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb, 1,
           "Max allowed size of all debug win or loss URLs summed together in "
           "kilobytes");
+ABSL_FLAG(std::optional<bool>, enable_chaffing, false,
+          "If true, chaff requests are sent out from the SFE. Chaff requests "
+          "are requests sent to buyers not participating in an auction to mask "
+          "the buyers associated with a client request.");

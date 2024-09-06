@@ -27,6 +27,7 @@ cc_library(
     deps = [
         ":client_params_template",
         "//services/common/clients/async_grpc:request_config",
+        "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",

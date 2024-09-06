@@ -28,6 +28,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/auction_service_integration_test_util.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/auction_service/score_ads_reactor.h"
@@ -38,6 +39,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -63,46 +65,16 @@ constexpr char kRomaTestError[] = "roma_test_error";
 constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";
 
-struct LocalAuctionStartResult {
-  int port;
-  std::unique_ptr<grpc::Server> server;
-
-  // Shutdown the server when the test is done.
-  ~LocalAuctionStartResult() {
-    if (server) {
-      server->Shutdown();
-    }
-  }
-};
-
-LocalAuctionStartResult StartLocalAuction(AuctionService* auction_service) {
-  grpc::ServerBuilder builder;
-  int port;
-  builder.AddListeningPort("[::]:0",
-                           grpc::experimental::LocalServerCredentials(
-                               grpc_local_connect_type::LOCAL_TCP),
-                           &port);
-  builder.RegisterService(auction_service);
-  std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
-  return {port, std::move(server)};
-}
-
-std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
-  std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-      absl::StrFormat("localhost:%d", port),
-      grpc::experimental::LocalCredentials(grpc_local_connect_type::LOCAL_TCP));
-  return Auction::NewStub(channel);
-}
-
 class AuctionServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<ScoreAdsRequest>(
         server_common::telemetry::BuildDependentConfig(config_proto));
     SetupMockCryptoClientWrapper();
-    server_common::log::PS_VLOG_IS_ON(0, 10);
+    server_common::log::SetGlobalPSVLogLevel(10);
 
     request_.set_key_id(kKeyId);
   }
@@ -151,6 +123,7 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
   absl::BlockingCounter init_pending(1);
   auto score_ads_reactor_factory =
       [this, &init_pending](
+          grpc::CallbackServerContext* context_,
           const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
           server_common::KeyFetcherManagerInterface* key_fetcher_manager,
           CryptoClientWrapperInterface* crypto_client_,
@@ -158,7 +131,7 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
         std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger =
             std::make_unique<ScoreAdsNoOpLogger>();
         auto mock = std::make_unique<MockScoreAdsReactor>(
-            dispatcher_, request_, response_, key_fetcher_manager,
+            context_, dispatcher_, request_, response_, key_fetcher_manager,
             crypto_client_, runtime_config, std::move(benchmarkingLogger),
             async_reporter_.get(), "");
         EXPECT_CALL(*mock, Execute).Times(1);
@@ -166,7 +139,7 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
         return mock;
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -238,17 +211,18 @@ TEST_F(AuctionServiceTest, SendsEmptyResponseIfNoAdIsDesirable) {
         return absl::OkStatus();
       });
   auto score_ads_reactor_factory =
-      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+      [this](grpc::CallbackServerContext* context_,
+             const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher_, request_, response_,
+            context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -279,17 +253,18 @@ TEST_F(AuctionServiceTest, RomaExecutionErrorIsPropagated) {
         return absl::InternalError(kRomaTestError);
       });
   auto score_ads_reactor_factory =
-      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+      [this](grpc::CallbackServerContext* context_,
+             const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher_, request_, response_,
+            context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /*public_key_fetcher=*/nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -316,17 +291,18 @@ TEST_F(AuctionServiceTest, RomaExecutionErrorIsPropagated) {
 
 TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
   auto score_ads_reactor_factory =
-      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+      [this](grpc::CallbackServerContext* context_,
+             const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher_, request_, response_,
+            context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -350,17 +326,18 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
 
 TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
   auto score_ads_reactor_factory =
-      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+      [this](grpc::CallbackServerContext* context_,
+             const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher_, request_, response_,
+            context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       config_client_, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
@@ -429,17 +406,18 @@ TEST_F(AuctionServiceTest, ScoresProtectedAppSignals) {
   }
 
   auto score_ads_reactor_factory =
-      [this](const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
+      [this](grpc::CallbackServerContext* context_,
+             const ScoreAdsRequest* request_, ScoreAdsResponse* response_,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client_,
              const AuctionServiceRuntimeConfig& runtime_config) {
         return std::make_unique<ScoreAdsReactor>(
-            dispatcher_, request_, response_,
+            context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
             crypto_client_, async_reporter_.get(), runtime_config);
       };
 
-  config_client_.SetFlagForTest(kTrue, TEST_MODE);
+  config_client_.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client_, /* public_key_fetcher=*/nullptr);
   AuctionService service(

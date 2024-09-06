@@ -38,12 +38,12 @@
 #include "services/common/clients/async_client.h"
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/binary_http_utils.h"
 #include "services/common/util/oblivious_http_utils.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/encryption/key_fetcher/key_fetcher_utils.h"
 #include "src/include/openssl/hpke.h"
-#include "src/logger/request_context_logger.h"
 #include "src/util/status_macro/status_macros.h"
 
 using google::protobuf::util::JsonStringToMessage;
@@ -72,7 +72,7 @@ class KVAsyncGrpcClient
 
   absl::Status ExecuteInternal(
       std::unique_ptr<GetValuesRequest> raw_request,
-      const RequestMetadata& metadata,
+      grpc::ClientContext* context,
       absl::AnyInvocable<
           void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                ResponseMetadata) &&>
@@ -82,6 +82,7 @@ class KVAsyncGrpcClient
 
  protected:
   void SendRpc(ObliviousHttpRequestUptr oblivious_http_context,
+               grpc::ClientContext* context,
                RawClientParams<ObliviousGetValuesRequest, google::api::HttpBody,
                                GetValuesResponse>* params) const;
 

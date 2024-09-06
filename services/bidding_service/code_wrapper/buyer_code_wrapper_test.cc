@@ -35,24 +35,39 @@ TEST(GetBuyerWrappedCode, GeneratesCompleteFinalJavascript) {
   EXPECT_EQ(
       GetBuyerWrappedCode(absl::StrFormat(kBuyerBaseCode_template,
                                           kAdRenderUrlPrefixForCodeWrapperTest),
-                          ""),
+                          {}),
       absl::StrFormat(kExpectedGenerateBidCode_template,
                       kAdRenderUrlPrefixForCodeWrapperTest));
 }
 
+TEST(GetBuyerWrappedCode,
+     GeneratesCompleteFinalJavascriptWithPrivateAggregationWrapper) {
+  BuyerCodeWrapperConfig wrapper_config = {.enable_private_aggregate_reporting =
+                                               true};
+  EXPECT_EQ(
+      GetBuyerWrappedCode(absl::StrFormat(kBuyerBaseCode_template,
+                                          kAdRenderUrlPrefixForCodeWrapperTest),
+                          wrapper_config),
+      absl::StrCat(absl::StrFormat(kExpectedGenerateBidCode_template,
+                                   kAdRenderUrlPrefixForCodeWrapperTest),
+                   kPrivateAggregationWrapperFunction));
+}
+
 TEST(GetBuyerWrappedCode, GeneratesCompleteFinalJavascriptWithWasm) {
+  BuyerCodeWrapperConfig wrapper_config = {.ad_tech_wasm = "test"};
   std::string expected =
       absl::StrReplaceAll(kExpectedGenerateBidCode_template,
                           {{"const globalWasmHex = [];",
                             "const globalWasmHex = [0x74,0x65,0x73,0x74,];"}});
-  EXPECT_EQ(GetBuyerWrappedCode(kBuyerBaseCode_template, "test"), expected);
+  EXPECT_EQ(GetBuyerWrappedCode(kBuyerBaseCode_template, wrapper_config),
+            expected);
 }
 
 TEST(GetBuyerWrappedCode, GeneratesCompleteProtectedAppSignalsFinalJavaScript) {
-  EXPECT_EQ(GetBuyerWrappedCode(
-                kBuyerBaseCode_template, /*ad_tech_wasm=*/"",
-                AuctionType::kProtectedAppSignals,
-                /*auction_specific_setup=*/kEncodedProtectedAppSignalsHandler),
+  BuyerCodeWrapperConfig wrapper_config = {
+      .auction_type = AuctionType::kProtectedAppSignals,
+      .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
+  EXPECT_EQ(GetBuyerWrappedCode(kBuyerBaseCode_template, wrapper_config),
             kExpectedProtectedAppSignalsGenerateBidCodeTemplate);
 }
 

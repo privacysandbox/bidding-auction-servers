@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
@@ -36,6 +37,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -91,6 +93,37 @@ std::string GetTestResponse(absl::string_view render, float bid,
     "bid": $1
   })JSON",
                           render, bid);
+}
+
+std::string GetTestResponseWithPAgg(
+    absl::string_view render, float bid,
+    const PrivateAggregateContribution& privateAggregationContribution,
+    bool enable_adtech_code_logging = false) {
+  auto options = google::protobuf::util::JsonPrintOptions();
+  options.preserve_proto_field_names = true;
+  std::string json_contribution;
+  CHECK_OK(google::protobuf::util::MessageToJsonString(
+      privateAggregationContribution, &json_contribution, options));
+
+  if (enable_adtech_code_logging) {
+    return absl::Substitute(R"JSON({
+      "response": {
+        "render": "$0",
+        "bid": $1,
+        "private_aggregation_contributions": [$2],
+      },
+      "logs": ["test log"],
+      "errors": ["test.error"],
+      "warnings":["test.warn"]
+    })JSON",
+                            render, bid, json_contribution);
+  }
+  return absl::Substitute(R"JSON({
+    "render": "$0",
+    "bid": $1,
+    "private_aggregation_contributions": [$2],
+  })JSON",
+                          render, bid, json_contribution);
 }
 
 std::string GetTestResponseWithBuyerReportingId(
@@ -176,6 +209,7 @@ class GenerateBidsReactorTest : public testing::Test {
  protected:
   void SetUp() override {
     // initialize
+    CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GenerateBidsRequest>(
@@ -184,7 +218,7 @@ class GenerateBidsReactorTest : public testing::Test {
     server_common::log::ServerToken(kTestConsentToken);
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
@@ -202,9 +236,11 @@ class GenerateBidsReactorTest : public testing::Test {
     BiddingServiceRuntimeConfig runtime_config = {
         .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
     request_.set_request_ciphertext(raw_request.SerializeAsString());
-    GenerateBidsReactor reactor(
-        dispatcher_, &request_, &response, std::move(benchmarkingLogger),
-        key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
+    grpc::CallbackServerContext context;
+    GenerateBidsReactor reactor(&context, dispatcher_, &request_, &response,
+                                std::move(benchmarkingLogger),
+                                key_fetcher_manager_.get(),
+                                crypto_client_.get(), runtime_config);
     reactor.Execute();
     google::protobuf::util::MessageDifferencer diff;
     std::string diff_output;
@@ -393,6 +429,40 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
   bid.set_interest_group_name("ig_name_Bar");
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = bid;
+  Response ads;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs;
+  igs.push_back(GetIGForBiddingBar());
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([response_json](std::vector<DispatchRequest>& batch,
+                                BatchDispatchDoneCallback batch_callback) {
+        return FakeExecute(batch, std::move(batch_callback), response_json);
+      });
+  RawRequest raw_request;
+  BuildRawRequest(igs, kTestAuctionSignals, kTestBuyerSignals,
+                  kTestBiddingSignals, raw_request, enable_debug_reporting,
+                  enable_adtech_code_logging);
+  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
+}
+
+TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
+  bool enable_debug_reporting = false;
+  bool enable_buyer_debug_url_generation = false;
+  bool enable_adtech_code_logging = false;
+  PrivateAggregateContribution pAggContribution =
+      CreateTestPAggContribution(EVENT_TYPE_WIN,
+                                 /* event_name = */ "");
+  std::string response_json =
+      GetTestResponseWithPAgg(kTestRenderUrl, /* bid = */ 1.0, pAggContribution,
+                              enable_adtech_code_logging);
+  AdWithBid bid;
+  bid.set_render(kTestRenderUrl);
+  bid.set_bid(1);
+  bid.set_interest_group_name("ig_name_Bar");
+  *bid.add_private_aggregation_contributions() = std::move(pAggContribution);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = std::move(bid);
   Response ads;
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
   std::vector<IGForBidding> igs;
@@ -1052,9 +1122,11 @@ TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {
   BiddingServiceRuntimeConfig runtime_config = {
       .enable_buyer_debug_url_generation = false,
   };
-  GenerateBidsReactor reactor(
-      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
-      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
+  grpc::CallbackServerContext context;
+  GenerateBidsReactor reactor(&context, dispatcher_, &request_, &response,
+                              std::move(benchmarkingLogger),
+                              key_fetcher_manager_.get(), crypto_client_.get(),
+                              runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 }
@@ -1094,9 +1166,11 @@ TEST_F(GenerateBidsReactorTest,
       std::make_unique<BiddingNoOpLogger>();
 
   BiddingServiceRuntimeConfig runtime_config;
-  GenerateBidsReactor reactor(
-      dispatcher_, &request_, &response, std::move(benchmarkingLogger),
-      key_fetcher_manager_.get(), crypto_client_.get(), runtime_config);
+  grpc::CallbackServerContext context;
+  GenerateBidsReactor reactor(&context, dispatcher_, &request_, &response,
+                              std::move(benchmarkingLogger),
+                              key_fetcher_manager_.get(), crypto_client_.get(),
+                              runtime_config);
   reactor.Execute();
   notification.WaitForNotification();
 

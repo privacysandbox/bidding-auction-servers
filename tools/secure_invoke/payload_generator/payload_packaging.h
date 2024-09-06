@@ -126,6 +126,7 @@ std::pair<std::unique_ptr<SelectAdRequest>,
 PackagePlainTextSelectAdRequest(
     absl::string_view input_json_str, ClientType client_type,
     const HpkeKeyset& keyset, bool enable_debug_reporting = false,
+    std::optional<bool> enable_debug_info = std::nullopt,
     absl::string_view protected_app_signals_json = "",
     bool enable_unlimited_egress = false);
 
@@ -134,6 +135,7 @@ PackagePlainTextSelectAdRequest(
 std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
     const HpkeKeyset& keyset, bool enable_debug_reporting = false,
+    std::optional<bool> enable_debug_info = std::nullopt,
     bool enable_unlimited_egress = false);
 }  // namespace privacy_sandbox::bidding_auction_servers
 

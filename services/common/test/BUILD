@@ -26,6 +26,8 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service:score_ads_reactor",
+        "//services/bidding_service:cddl_spec_cache",
+        "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service:generate_bids_reactor",
         "//services/common/clients:client_factory_template",
         "//services/common/clients/auction_server:async_client",

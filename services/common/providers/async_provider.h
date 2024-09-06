@@ -20,6 +20,7 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
+#include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -48,7 +49,7 @@ class AsyncProvider {
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<Provision>>,
                               GetByteSize) &&>
           on_done,
-      absl::Duration timeout) const = 0;
+      absl::Duration timeout, RequestContext context = NoOpContext()) const = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

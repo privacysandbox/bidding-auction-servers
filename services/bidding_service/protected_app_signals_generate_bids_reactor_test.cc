@@ -29,6 +29,7 @@
 #include "public/query/v2/get_values_v2.pb.h"
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/constants.h"
+#include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/generate_bids_reactor_test_utils.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/constants/common_service_flags.h"
@@ -38,6 +39,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/util/json_util.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
@@ -66,14 +68,52 @@ using kv_server::v2::ObliviousGetValuesRequest;
 class GenerateBidsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
-    config_client.SetFlagForTest(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-    server_common::log::PS_VLOG_IS_ON(/*verbose_level=*/0, /*max_v=*/20);
+    config_client.SetOverride(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    server_common::log::SetGlobalPSVLogLevel(20);
 
     key_fetcher_manager_ =
         CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
     SetupMockCryptoClientWrapper(crypto_client_);
+    egress_schema_cache_ = PopulateEgressSchemaCache();
+    limited_egress_schema_cache_ = PopulateEgressSchemaCache();
+  }
+
+  std::unique_ptr<EgressSchemaCache> PopulateEgressSchemaCache() {
+    std::unique_ptr<CddlSpecCache> cddl_spec_cache =
+        std::make_unique<CddlSpecCache>(
+            "services/bidding_service/egress_cddl_spec/");
+    CHECK_OK(cddl_spec_cache->Init());
+    auto egress_schema_cache =
+        std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
+    CHECK_OK(egress_schema_cache->Update(R"JSON(
+    {
+      "cddl_version": "1.0.0",
+      "version": 2,
+      "features": [
+        {
+          "name": "boolean-feature"
+        },
+        {
+          "name": "unsigned-integer-feature",
+          "size": 7
+        },
+        {
+          "name": "histogram-feature",
+          "size": 1,
+          "value": [
+            {
+              "name": "signed-integer-feature",
+              "size": 1
+            }
+          ]
+        }
+      ]
+    }
+  )JSON"));
+    return egress_schema_cache;
   }
 
   RawResponse RunReactorWithRequest(const RawRequest& raw_request,
@@ -92,7 +132,8 @@ class GenerateBidsReactorTest : public ::testing::Test {
     ProtectedAppSignalsGenerateBidsReactor reactor(
         &context_, dispatcher_, *runtime_config, &request, &response,
         key_fetcher_manager_.get(), &crypto_client_, &ad_retrieval_client_,
-        &kv_async_client_);
+        &kv_async_client_, egress_schema_cache_.get(),
+        limited_egress_schema_cache_.get());
     reactor.Execute();
     RawResponse raw_response;
     raw_response.ParseFromString(response.response_ciphertext());
@@ -106,6 +147,8 @@ class GenerateBidsReactorTest : public ::testing::Test {
   KVAsyncClientMock kv_async_client_;
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager_;
+  std::unique_ptr<EgressSchemaCache> egress_schema_cache_;
+  std::unique_ptr<EgressSchemaCache> limited_egress_schema_cache_;
 };
 
 TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
@@ -114,7 +157,7 @@ TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -152,7 +195,7 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -223,7 +266,7 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -318,7 +361,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -343,13 +386,14 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
   ASSERT_EQ(num_roma_dispatches, 2);
 }
 
-TEST_F(GenerateBidsReactorTest, egressPayloadAreNotPopulated) {
+TEST_F(GenerateBidsReactorTest, EgressPayloadAreNotPopulated) {
+  absl::SetFlag(&FLAGS_limited_egress_bits, 0);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -402,14 +446,14 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
               kProtectedAppSignalsGenerateBidBlobVersion,
               CreateGenerateBidsUdfResponse(
                   kTestRenderUrl, /*bid=*/0.0,
-                  /*egress_payload_hex_string=*/"",
+                  /*egress_payload_string=*/"",
                   /*debug_reporting_urls=*/"RJSON({})JSON"));
         }
       });
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -457,7 +501,7 @@ TEST_F(GenerateBidsReactorTest,
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -487,7 +531,7 @@ TEST_F(GenerateBidsReactorTest, NoContextualAdsMeansAdRetrievalServiceInvoked) {
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -528,7 +572,7 @@ TEST_F(GenerateBidsReactorTest, ContextualAdsMeansKVServiceInvoked) {
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal).Times(0);
   EXPECT_CALL(kv_async_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -566,7 +610,7 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
                                                      num_roma_dispatches);
   EXPECT_CALL(kv_async_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -611,11 +655,35 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
 TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
   absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
   int num_roma_dispatches = 0;
-  SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
+  SetupProtectedAppSignalsRomaExpectations(
+      dispatcher_, num_roma_dispatches,
+      /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
+      absl::Substitute(R"JSON(
+        {
+        "bid" : $0,
+        "render": "$1",
+        "temporaryUnlimitedEgressPayload" :
+          "{\"features\":
+            [
+              {\"type\": \"boolean-feature\", \"value\": true},
+              {\"type\": \"unsigned-integer-feature\", \"value\": 2},
+              {\"type\": \"histogram-feature\",
+               \"value\": [
+                  {
+                    \"type\": \"signed-integer-feature\",
+                    \"value\": -1
+                  }
+                ]
+              }
+            ]
+          }"
+        }
+      )JSON",
+                       kTestWinningBid, kTestRenderUrl));
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -656,7 +724,7 @@ TEST_F(GenerateBidsReactorTest,
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -697,7 +765,7 @@ TEST_F(GenerateBidsReactorTest,
 
   EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
       .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
-                   const RequestMetadata& metadata,
+                   grpc::ClientContext* context,
                    absl::AnyInvocable<void(
                        absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
                        ResponseMetadata)&&>
@@ -728,6 +796,242 @@ TEST_F(GenerateBidsReactorTest,
   EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
 
   EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload().size(), 0);
+}
+
+TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
+  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(
+      dispatcher_, num_roma_dispatches,
+      /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
+      absl::Substitute(R"JSON(
+        {
+        "bid" : $0,
+        "render": "$1",
+        "temporaryUnlimitedEgressPayload" :
+          "{\"features\":
+            [
+              {\"type\": \"boolean-feature\", \"value\": true},
+              {\"type\": \"unsigned-integer-feature\", \"value\": 2},
+              {\"type\": \"histogram-feature\",
+               \"value\": [
+                  {
+                    \"type\": \"signed-integer-feature\",
+                    \"value\": -1
+                  }
+                ]
+              }
+            ]
+          }"
+        }
+      )JSON",
+                       kTestWinningBid, kTestRenderUrl));
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   grpc::ClientContext* context,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
+                       on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        auto response = CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  // From LSB to MSB: Header is set (including schema version, protocol)
+  // bits for each feature are populated (if not explicitly set, then a
+  // default of 0 is used).
+  //
+  // Base64 encoded payload: AQVA
+  // Wire representation: 00000001 00000101 01000000
+  // In the wire representation, we expect the schema version (2 is used for
+  // this test by default) in 3 MSB of header and in the payload, there is a
+  // single boolean present, unsigned integer of value 2 and width 7 and a
+  // histogram feature with a signed integer of value 1.
+  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload(), "AQVA");
+}
+
+TEST_F(GenerateBidsReactorTest, SerializesMultipleFeatures) {
+  // Allow a byte of egress.
+  absl::SetFlag(&FLAGS_limited_egress_bits, 9);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(
+      dispatcher_, num_roma_dispatches,
+      /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
+      absl::Substitute(R"JSON(
+        {
+        "bid" : $0,
+        "render": "$1",
+        "egressPayload" :
+          "{\"features\": [
+              {\"type\": \"boolean-feature\", \"value\": true},
+              {\"type\": \"unsigned-integer-feature\", \"value\": 127},
+              {\"type\": \"histogram-feature\",
+               \"value\": [
+                  {
+                      \"type\": \"signed-integer-feature\",
+                      \"value\": -1
+                    }
+                  ]
+                }
+              ]
+            }"
+        }
+      )JSON",
+                       kTestWinningBid, kTestRenderUrl));
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   grpc::ClientContext* context,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
+                       on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        auto response = CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  // From LSB to MSB: Header is set (including schema version, protocol)
+  // bits for each feature are populated (if not explicitly set, then a
+  // default of 0 is used).
+  //
+  // Base64 encoded payload: Af9A
+  // Wire representation: 00000001 11111111 01000000
+  // In the wire representation, we expect the schema version (2 is used for
+  // this test by default) in 3 MSB of header and in the payload, there is a
+  // single boolean present, an unsigned integer of value 127 and a histogram
+  // feature with a value of 1.
+  EXPECT_EQ(generated_bid.egress_payload(), "Af9A");
+}
+
+TEST_F(GenerateBidsReactorTest, EgressClearedIfOverLimit) {
+  // Allow 7-bits of egress, this will cause the egress vector to be cleared up
+  // because actual agress in the test is 8 bits.
+  absl::SetFlag(&FLAGS_limited_egress_bits, 7);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(
+      dispatcher_, num_roma_dispatches,
+      /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
+      absl::Substitute(R"JSON(
+        {
+        "bid" : $0,
+        "render": "$1",
+        "egressPayload" : "{\"features\": [{\"type\": \"boolean-feature\", \"value\": true}, {\"type\": \"unsigned-integer-feature\", \"value\": 127}]}"
+        }
+      )JSON",
+                       kTestWinningBid, kTestRenderUrl));
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   grpc::ClientContext* context,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
+                       on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        auto response = CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  EXPECT_EQ(generated_bid.egress_payload(), "");
+}
+
+TEST_F(GenerateBidsReactorTest, ReturnsEmptyEgressVectorWhenNonePresent) {
+  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
+  int num_roma_dispatches = 0;
+  SetupProtectedAppSignalsRomaExpectations(
+      dispatcher_, num_roma_dispatches,
+      /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
+      absl::Substitute(R"JSON(
+        {
+        "bid" : $0,
+        "render": "$1",
+        "temporaryUnlimitedEgressPayload" : "",
+        "egressPayload": ""
+        }
+      )JSON",
+                       kTestWinningBid, kTestRenderUrl));
+
+  EXPECT_CALL(ad_retrieval_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<GetValuesRequest> raw_request,
+                   grpc::ClientContext* context,
+                   absl::AnyInvocable<void(
+                       absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                       ResponseMetadata)&&>
+                       on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        auto response = CreateAdsRetrievalOrKvLookupResponse();
+        EXPECT_TRUE(response.ok()) << response.status();
+        std::move(on_done)(
+            std::make_unique<GetValuesResponse>(*std::move(response)),
+            /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+
+  auto raw_request = CreateRawProtectedAppSignalsRequest(
+      kTestAuctionSignals, kTestBuyerSignals,
+      CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
+      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      /*enable_unlimited_egress=*/true);
+  auto raw_response = RunReactorWithRequest(raw_request);
+
+  ASSERT_EQ(raw_response.bids().size(), 1);
+  const auto& generated_bid = raw_response.bids()[0];
+  EXPECT_EQ(generated_bid.bid(), kTestWinningBid);
+  EXPECT_EQ(generated_bid.render(), kTestRenderUrl);
+
+  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload(), "");
+  EXPECT_EQ(generated_bid.egress_payload(), "");
 }
 
 }  // namespace

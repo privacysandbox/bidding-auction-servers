@@ -273,7 +273,6 @@ module "autoscaling_bfe" {
   healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
 }
 
-
 ################ Parameter Setup ################
 
 resource "aws_ssm_parameter" "runtime_flags" {

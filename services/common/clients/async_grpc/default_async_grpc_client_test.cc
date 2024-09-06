@@ -122,14 +122,14 @@ class TestDefaultAsyncGrpcClient
         req_(std::move(req)),
         expected_timeout_(expected_timeout) {}
 
-  void SendRpc(const std::string& hpke_secret,
+  void SendRpc(const std::string& hpke_secret, grpc::ClientContext* context,
                RawClientParams<MockRequest, MockResponse, MockRawResponse>*
                    params) const override {
     PS_LOG(INFO) << "SendRpc invoked";
     EXPECT_EQ(params->RequestRef()->request_ciphertext(),
               req_.request_ciphertext());
     absl::Duration actual_timeout =
-        absl::FromChrono(params->ContextRef()->deadline()) - absl::Now();
+        absl::FromChrono(context->deadline()) - absl::Now();
 
     int64_t time_difference_ms =
         ToInt64Milliseconds(actual_timeout - expected_timeout_);
@@ -157,15 +157,16 @@ TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
   SetupMockCryptoClientWrapper(*crypto_client);
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   TestDefaultAsyncGrpcClient client(key_fetcher_manager.get(),
                                     crypto_client.get(), notification, req,
                                     timeout_ms);
 
+  grpc::ClientContext context;
   auto status = client.ExecuteInternal(
-      std::make_unique<MockRawRequest>(raw_request), metadata,
+      std::make_unique<MockRawRequest>(raw_request), &context,
       [](absl::StatusOr<std::unique_ptr<MockRawResponse>> result,
          ResponseMetadata response_metadata) {},
       timeout_ms);

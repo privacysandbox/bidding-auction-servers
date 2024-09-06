@@ -22,6 +22,7 @@
 
 #include "absl/status/statusor.h"
 #include "tensorflow/core/framework/tensor.h"
+#include "utils/error.h"
 #include "utils/request_parser.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -36,6 +37,13 @@ struct TensorWithName {
       : tensor_name(tensor_name), tensor(tensor) {}
 };
 
+// Holds either a vector of tensors or an error for inference result.
+struct TensorsOrError {
+  std::string model_path;
+  std::optional<std::vector<TensorWithName>> tensors;
+  std::optional<Error> error;
+};
+
 // Transforms an internal ML framework agnostic dense tensor representation
 // into a Tensorflow tensor.
 absl::StatusOr<tensorflow::Tensor> ConvertFlatArrayToTensor(
@@ -44,9 +52,8 @@ absl::StatusOr<tensorflow::Tensor> ConvertFlatArrayToTensor(
 // Converts inference output (Tensorflow tensors) corresponding to each model to
 // a JSON string.
 // batch_outputs contains a collection of <model_path, inference_output> pairs.
-absl::StatusOr<std::string> ConvertTensorsToJson(
-    const std::vector<std::pair<std::string, std::vector<TensorWithName>>>&
-        batch_outputs);
+absl::StatusOr<std::string> ConvertTensorsOrErrorToJson(
+    const std::vector<TensorsOrError>& batch_outputs);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

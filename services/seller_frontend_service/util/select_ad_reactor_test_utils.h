@@ -368,7 +368,7 @@ GetSelectAdRequestAndClientRegistryForTest(
           [bid_value, client_type, top_level_seller, enable_reporting,
            force_set_modified_bid_to_zero](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
-              const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
             for (const auto& bid : request->ad_bids()) {
               auto response =

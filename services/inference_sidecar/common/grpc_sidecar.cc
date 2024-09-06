@@ -81,7 +81,10 @@ class InferenceServiceImpl final : public InferenceService::Service {
       ABSL_LOG(ERROR) << predict_response.status().message();
       return server_common::FromAbslStatus(predict_response.status());
     }
-    *(response->mutable_output()) = predict_response->output();
+    *(response->mutable_metrics()) =
+        std::move(*predict_response->mutable_metrics());
+    response->set_output(std::move(*predict_response->mutable_output()));
+
     return grpc::Status::OK;
   }
 

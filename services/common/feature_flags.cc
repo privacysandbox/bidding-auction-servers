@@ -18,11 +18,13 @@
 
 #include "absl/flags/flag.h"
 
-ABSL_FLAG(bool, enable_temporary_unlimited_egress, false,
+ABSL_FLAG(int, limited_egress_bits, 0,
+          "Number of egress bits allowed by the system");
+
+ABSL_FLAG(bool, enable_temporary_unlimited_egress, true,
           "If true, temporary unlimited egress is allowed (if "
           "client had also set enable_unlimited_egress flag in request)");
 
-ABSL_FLAG(bool, enable_chaffing, false,
-          "If true, chaff requests are sent out from the SFE. Chaff requests "
-          "are requests sent to buyers not participating in an auction to mask "
-          "the buyers associated with a client request.");
+ABSL_FLAG(bool, enable_cancellation, false,
+          "If true, request cancellations are allowed. This will try to cancel "
+          "downstream requests and RPC and then finish the reactor.");

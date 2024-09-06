@@ -22,13 +22,15 @@
 #include <torch/script.h>
 
 #include "absl/status/statusor.h"
+#include "utils/error.h"
 #include "utils/request_parser.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 struct PerModelOutput {
   std::string model_path;
-  torch::IValue inference_output;
+  std::optional<torch::IValue> inference_output;
+  std::optional<Error> error;
 };
 
 // Transform internal generic dense tensor representation (in the format of

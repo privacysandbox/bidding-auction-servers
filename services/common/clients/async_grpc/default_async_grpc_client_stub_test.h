@@ -35,6 +35,7 @@
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -57,7 +58,9 @@ struct AsyncGrpcClientTypeDefinitions {
 };
 
 template <class AsyncGrpcClientType>
-class AsyncGrpcClientStubTest : public ::testing::Test {};
+class AsyncGrpcClientStubTest : public ::testing::Test {
+  void SetUp() override { CommonTestInit(); }
+};
 
 TYPED_TEST_SUITE_P(AsyncGrpcClientStubTest);
 
@@ -159,7 +162,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
@@ -213,7 +216,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
@@ -224,8 +227,14 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
   absl::Notification notification;
+
+  grpc::ClientContext context;
+  for (const auto& it : sent_metadata) {
+    context.AddMetadata(it.first, it.second);
+  }
+
   auto status = class_under_test.ExecuteInternal(
-      std::make_unique<RawRequest>(), sent_metadata,
+      std::make_unique<RawRequest>(), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); });
@@ -263,7 +272,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
@@ -323,7 +332,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>(raw_request);
   MockCryptoClientWrapper crypto_client;
@@ -370,7 +379,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
@@ -419,7 +428,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;
@@ -469,7 +478,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
       .server_addr = dummy_service_thread_->GetServerAddr(),
   };
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
   auto input_request_ptr = std::make_unique<RawRequest>();
   MockCryptoClientWrapper crypto_client;

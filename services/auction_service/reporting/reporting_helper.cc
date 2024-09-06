@@ -35,8 +35,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-constexpr int kStochasticalRoundingBits = 8;
-
 // Collects log of the provided type into the output vector.
 void ParseLogs(const rapidjson::Document& document, const std::string& log_type,
                std::vector<std::string>& out) {
@@ -60,14 +58,14 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   rapidjson::Value& response_obj = document[kReportResultResponse];
   auto& report_result_response = reporting_response.report_result_response;
   PS_ASSIGN_IF_PRESENT(report_result_response.report_result_url, response_obj,
-                       kReportResultUrl, GetString);
+                       kReportResultUrl, String);
   PS_ASSIGN_IF_PRESENT(report_result_response.send_report_to_invoked,
-                       response_obj, kSendReportToInvoked, GetBool);
+                       response_obj, kSendReportToInvoked, Bool);
   PS_ASSIGN_IF_PRESENT(report_result_response.register_ad_beacon_invoked,
-                       response_obj, kRegisterAdBeaconInvoked, GetBool);
+                       response_obj, kRegisterAdBeaconInvoked, Bool);
   rapidjson::Value interaction_reporting_urls_map;
   PS_ASSIGN_IF_PRESENT(interaction_reporting_urls_map, response_obj,
-                       kInteractionReportingUrlsWrapperResponse, GetObject);
+                       kInteractionReportingUrlsWrapperResponse, Object);
   for (rapidjson::Value::MemberIterator it =
            interaction_reporting_urls_map.MemberBegin();
        it != interaction_reporting_urls_map.MemberEnd(); ++it) {
@@ -91,14 +89,14 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
   rapidjson::Value& report_win_obj = document[kReportWinResponse];
   auto& report_win_response = reporting_response.report_win_response;
   PS_ASSIGN_IF_PRESENT(report_win_response.report_win_url, report_win_obj,
-                       kReportWinUrl, GetString);
+                       kReportWinUrl, String);
   PS_ASSIGN_IF_PRESENT(report_win_response.send_report_to_invoked,
-                       report_win_obj, kSendReportToInvoked, GetBool);
+                       report_win_obj, kSendReportToInvoked, Bool);
   PS_ASSIGN_IF_PRESENT(report_win_response.register_ad_beacon_invoked,
-                       report_win_obj, kRegisterAdBeaconInvoked, GetBool);
+                       report_win_obj, kRegisterAdBeaconInvoked, Bool);
   rapidjson::Value report_win_interaction_urls_map;
   PS_ASSIGN_IF_PRESENT(report_win_interaction_urls_map, report_win_obj,
-                       kInteractionReportingUrlsWrapperResponse, GetObject);
+                       kInteractionReportingUrlsWrapperResponse, Object);
 
   for (rapidjson::Value::MemberIterator it =
            report_win_interaction_urls_map.MemberBegin();
@@ -108,6 +106,29 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
         key.GetString(), value.GetString());
   }
   return reporting_response;
+}
+
+// Collects log of the provided type into the output vector.
+void HandleUdfLogs(const rapidjson::Document& document,
+                   const std::string& log_type, absl::string_view udf_name,
+                   RequestLogContext& log_context) {
+  auto LogUdf = [&log_context,
+                 prefix(absl::StrCat(log_type, " from udf:", udf_name))](
+                    absl::string_view adtech_log) {
+    if (!server_common::log::PS_VLOG_IS_ON(kUdfLog) &&
+        !log_context.is_debug_response()) {
+      return;
+    }
+    PS_VLOG(kUdfLog, log_context) << prefix << adtech_log;
+    log_context.SetEventMessageField(absl::StrCat(prefix, adtech_log));
+  };
+  auto log_it = document.FindMember(log_type.c_str());
+  if (log_it == document.MemberEnd()) {
+    return;
+  }
+  for (const auto& log : log_it->value.GetArray()) {
+    LogUdf(log.GetString());
+  }
 }
 
 double GetEightBitRoundedValue(double value) {
@@ -402,14 +423,15 @@ std::vector<std::shared_ptr<std::string>> GetReportingInput(
       std::make_shared<std::string>(buyer_reporting_metadata_json);
   if (dispatch_request_config.enable_protected_app_signals) {
     input[ReportingArgIndex(ReportingArgs::kEgressPayload)] =
-        std::make_shared<std::string>(dispatch_request_data.egress_payload);
+        std::make_shared<std::string>(
+            absl::StrCat("\"", dispatch_request_data.egress_payload, "\""));
     if (absl::GetFlag(FLAGS_enable_temporary_unlimited_egress)) {
       input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
-          std::make_shared<std::string>(
-              dispatch_request_data.temporary_egress_payload);
+          std::make_shared<std::string>(absl::StrCat(
+              "\"", dispatch_request_data.temporary_egress_payload, "\""));
     } else {
       input[ReportingArgIndex(ReportingArgs::kTemporaryEgressPayload)] =
-          std::make_shared<std::string>("");
+          std::make_shared<std::string>("\"\"");
     }
   }
 

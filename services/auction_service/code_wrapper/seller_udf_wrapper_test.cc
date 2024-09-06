@@ -13,7 +13,10 @@
 // limitations under the License.
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 
+#include <include/gmock/gmock-matchers.h>
+
 #include "gtest/gtest.h"
+#include "services/auction_service/code_wrapper/generated_private_aggregation_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -22,19 +25,32 @@ namespace {
 
 TEST(GetSellerWrappedCode, GeneratesWrappedCodeWithScoreAdAndReportResult) {
   bool enable_report_result_url_generation = true;
-  std::string observed = GetSellerWrappedCode(
-      kSellerBaseCode, enable_report_result_url_generation);
-  EXPECT_EQ(observed, kExpectedSellerCodeWithScoreAdAndReportResult)
-      << "Observed:\n"
-      << observed << "\n\n"
-      << "Expected: " << kExpectedSellerCodeWithScoreAdAndReportResult;
+  bool enable_private_aggregate_reporting = false;
+  std::string observed =
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_private_aggregate_reporting);
+  EXPECT_THAT(observed,
+              testing::StrEq(kExpectedSellerCodeWithScoreAdAndReportResult));
+}
+
+TEST(GetSellerWrappedCode, GeneratesWrappedCodeWithPrivateAggregationWrapper) {
+  bool enable_report_result_url_generation = true;
+  bool enable_private_aggregate_reporting = true;
+  std::string observed =
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_private_aggregate_reporting);
+  EXPECT_THAT(observed, testing::StrEq(absl::StrCat(
+                            kExpectedSellerCodeWithScoreAdAndReportResult,
+                            kPrivateAggregationWrapperFunction)));
 }
 
 TEST(GetSellerWrappedCode, LoadsOnlySellerCodeWithReportResultDisabled) {
   bool enable_report_result_url_generation = false;
-  EXPECT_EQ(GetSellerWrappedCode(kSellerBaseCode,
-                                 enable_report_result_url_generation),
-            kExpectedCodeWithReportingDisabled);
+  bool enable_private_aggregate_reporting = false;
+  EXPECT_THAT(
+      GetSellerWrappedCode(kSellerBaseCode, enable_report_result_url_generation,
+                           enable_private_aggregate_reporting),
+      testing::StrEq(kExpectedCodeWithReportingDisabled));
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

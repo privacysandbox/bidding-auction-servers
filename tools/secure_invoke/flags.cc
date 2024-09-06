@@ -76,6 +76,10 @@ ABSL_FLAG(bool, enable_debug_reporting, false,
           "Set to true to send a request to an SFE server with "
           "debug reporting enabled for this request");
 
+ABSL_FLAG(std::optional<bool>, enable_debug_info, std::nullopt,
+          "Set to true to send a request to an SFE server with "
+          "DebugInfo enabled for this request");
+
 ABSL_FLAG(std::string, pas_buyer_input_json, "",
           "PAS specific buyer input for each buyer app signal proto.");
 

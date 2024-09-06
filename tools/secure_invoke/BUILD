@@ -99,6 +99,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test/utils:ohttp_test_utils",
         "//services/common/test/utils:service_utils",
+        "//services/common/test/utils:test_init",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_googletest//:gtest",

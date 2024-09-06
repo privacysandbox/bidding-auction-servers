@@ -46,6 +46,9 @@ constexpr char kTestReportingResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
 constexpr char kEmptyTestReportingResponseJson[] =
     R"({"reportResultResponse":{"reportResultUrl":"","sendReportToInvoked":false,"registerAdBeaconInvoked":false,"interactionReportingUrls":{}},"sellerLogs":[], "sellerErrors":[], "sellerWarnings":[])";
+constexpr char kTestReportResultResponseJson[] =
+    R"({"response":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","interactionReportingUrls":{"click":"http://event.com"}},"logs":["testLog"], "errors":["testLog"], "warnings":["testLog"]})";
+constexpr char kTestTopLevelReportResultUrl[] = "http://reportResultUrl.com";
 
 ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
     absl::string_view render_url, float bid = kTestBid);
@@ -60,8 +63,7 @@ class ScoreAdsReactorTestHelper {
       const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
       MockCodeDispatchClient& dispatcher,
       const AuctionServiceRuntimeConfig& runtime_config =
-          AuctionServiceRuntimeConfig(),
-      bool enable_report_result_url_generation = false);
+          AuctionServiceRuntimeConfig());
   ScoreAdsRequest request_;
   TrustedServersConfigClient config_client_{{}};
   std::unique_ptr<MockAsyncReporter> async_reporter =

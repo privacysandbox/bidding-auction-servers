@@ -118,15 +118,11 @@ class RawClientParams {
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
                               ResponseMetadata) &&>
           callback,
-      const absl::flat_hash_map<std::string, std::string>& metadata = {},
       RequestConfig request_config = {}) {
     request_ = std::move(request);
     raw_callback_ = std::move(callback);
     response_ = std::make_unique<Response>();
     request_config_ = request_config;
-    for (const auto& it : metadata) {
-      context_.AddMetadata(it.first, it.second);
-    }
   }
 
   // GrpcClientParams is neither copyable nor movable.
@@ -139,21 +135,11 @@ class RawClientParams {
   // Allows access to request param by gRPC
   Request* RequestRef() { return request_.get(); }
 
-  // Allows access to context param by gRPC
-  grpc::ClientContext* ContextRef() { return &context_; }
-
   // Allows access to response param by gRPC
   Response* ResponseRef() { return response_.get(); }
 
   void SetResponseMetadata(ResponseMetadata response_metadata) {
     response_metadata_ = response_metadata;
-  }
-
-  // Sets a deadline for the gRPC request.
-  void SetDeadline(absl::Duration timeout) {
-    context_.set_deadline(
-        std::chrono::system_clock::now() +
-        std::chrono::milliseconds(ToInt64Milliseconds(timeout)));
   }
 
   void OnDone(const grpc::Status& status) {
@@ -175,7 +161,6 @@ class RawClientParams {
  private:
   // Parameters will be accessed by the gRPC code.
   // Destructed automatically after OnDone
-  grpc::ClientContext context_;
   std::unique_ptr<Request> request_;
 
   std::unique_ptr<Response> response_;

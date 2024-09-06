@@ -14,8 +14,6 @@
 
 #include <thread>
 
-#include "absl/debugging/failure_signal_handler.h"
-#include "absl/debugging/symbolize.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
@@ -28,6 +26,7 @@
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
+#include "services/bidding_service/egress_schema_cache.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -35,6 +34,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -469,9 +469,11 @@ function generateBid( interest_group,
 )JS_CODE";
 
 void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
-                       absl::string_view adtech_wasm = "") {
+                       std::string adtech_wasm = "") {
   ASSERT_TRUE(dispatcher->Init().ok());
-  std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, adtech_wasm);
+  BuyerCodeWrapperConfig wrapper_config = {.ad_tech_wasm =
+                                               std::move(adtech_wasm)};
+  std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, wrapper_config);
   ASSERT_TRUE(
       dispatcher
           ->LoadSync(kProtectedAudienceGenerateBidBlobVersion, wrapper_blob)
@@ -508,9 +510,7 @@ BuildGenerateBidsRequestFromBrowser(
 class GenerateBidsReactorIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    absl::InitializeSymbolizer("GenerateBidsReactorIntegrationTest");
-    absl::FailureSignalHandlerOptions options;
-    absl::InstallFailureSignalHandler(options);
+    CommonTestInit();
 
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
@@ -520,7 +520,7 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
     server_common::log::ServerToken(kTestConsentToken);
 
     TrustedServersConfigClient config_client({});
-    config_client.SetFlagForTest(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, TEST_MODE);
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
@@ -550,7 +550,8 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
   GenerateBidsResponse response;
 
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -566,23 +567,25 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
           benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
         }
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
 
   BiddingService service(
@@ -640,7 +643,8 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
   GenerateBidsResponse response;
 
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -656,23 +660,25 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
           benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
         }
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
 
   BiddingService service(
@@ -713,7 +719,8 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   request.set_request_ciphertext(req->SerializeAsString());
   GenerateBidsResponse response;
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -729,23 +736,25 @@ TEST_F(GenerateBidsReactorIntegrationTest,
           benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
         }
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
 
   BiddingService service(
@@ -801,7 +810,8 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   ASSERT_GT(raw_request.bidding_signals().length(), 0);
 
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -809,23 +819,25 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
         std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger =
             std::make_unique<BiddingNoOpLogger>();
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
 
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
 
   GenerateBidsResponse response;
@@ -873,7 +885,8 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
             0);
 
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -881,23 +894,26 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
         std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger =
             std::make_unique<BiddingNoOpLogger>();
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
+
   GenerateBidsResponse response;
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
@@ -964,7 +980,8 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -980,23 +997,26 @@ TEST_F(GenerateBidsReactorIntegrationTest,
           benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
         }
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
+
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
       std::move(crypto_client_), bidding_service_runtime_config_,
@@ -1046,7 +1066,8 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   GenerateBidsResponse response;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -1062,22 +1083,24 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
           benchmarking_logger = std::make_unique<BiddingNoOpLogger>();
         }
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager_),
@@ -1115,12 +1138,12 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
 void GenerateBidCodeWrapperTestHelper(
     GenerateBidsResponse* response, absl::string_view js_blob,
     bool enable_debug_reporting, bool enable_buyer_debug_url_generation,
-    bool enable_adtech_code_logging = false, absl::string_view wasm_blob = "",
+    bool enable_adtech_code_logging = false, std::string wasm_blob = "",
     int desired_bid_count = 5, bool component_auction = false) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
-  SetupV8Dispatcher(&dispatcher, js_blob, wasm_blob);
+  SetupV8Dispatcher(&dispatcher, js_blob, std::move(wasm_blob));
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
@@ -1135,7 +1158,8 @@ void GenerateBidCodeWrapperTestHelper(
   *request.mutable_request_ciphertext() = req->SerializeAsString();
 
   auto generate_bids_reactor_factory =
-      [&client](const GenerateBidsRequest* request,
+      [&client](grpc::CallbackServerContext* context,
+                const GenerateBidsRequest* request,
                 GenerateBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
@@ -1144,29 +1168,30 @@ void GenerateBidCodeWrapperTestHelper(
         benchmarking_logger = std::make_unique<BiddingBenchmarkingLogger>(
             FormatTime(absl::Now()));
         return new GenerateBidsReactor(
-            client, request, response, std::move(benchmarking_logger),
+            context, client, request, response, std::move(benchmarking_logger),
             key_fetcher_manager, crypto_client, runtime_config);
       };
-
   auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](const grpc::CallbackServerContext* context,
+      [&client](grpc::CallbackServerContext* context,
                 const GenerateProtectedAppSignalsBidsRequest* request,
                 const BiddingServiceRuntimeConfig& runtime_config,
                 GenerateProtectedAppSignalsBidsResponse* response,
                 server_common::KeyFetcherManagerInterface* key_fetcher_manager,
                 CryptoClientWrapperInterface* crypto_client,
                 KVAsyncClient* ad_retrieval_async_client,
-                KVAsyncClient* kv_async_client) {
+                KVAsyncClient* kv_async_client,
+                EgressSchemaCache* egress_schema_cache,
+                EgressSchemaCache* limited_egress_schema_cache) {
         return new ProtectedAppSignalsGenerateBidsReactor(
             context, client, runtime_config, request, response,
             key_fetcher_manager, crypto_client, ad_retrieval_async_client,
-            kv_async_client);
+            kv_async_client, egress_schema_cache, limited_egress_schema_cache);
       };
 
   std::unique_ptr<MockCryptoClientWrapper> crypto_client =
       std::make_unique<MockCryptoClientWrapper>();
   TrustedServersConfigClient config_client({});
-  config_client.SetFlagForTest(kTrue, TEST_MODE);
+  config_client.SetOverride(kTrue, TEST_MODE);
   SetupMockCryptoClientWrapper(*crypto_client);
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager = CreateKeyFetcherManager(

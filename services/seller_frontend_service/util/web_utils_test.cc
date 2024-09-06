@@ -57,6 +57,7 @@ inline constexpr int kSampleRecencyMs = 3000;
 inline constexpr char kSampleIgOwner[] = "foo_owner";
 inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
+inline constexpr int kSampleRequestMs = 99999;
 inline constexpr char kSampleErrorMessage[] = "BadError";
 inline constexpr int32_t kSampleErrorCode = 400;
 inline constexpr char kTestEvent1[] = "click";
@@ -260,6 +261,9 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
                    BuildStringMapPair(kGenerationId, kSampleGenerationId)));
   EXPECT_TRUE(cbor_map_add(*protected_auction_input,
                            BuildBoolMapPair(kDebugReporting, true)));
+  EXPECT_TRUE(
+      cbor_map_add(*protected_auction_input,
+                   BuildIntMapPair(kRequestTimestampMs, kSampleRequestMs)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
   EXPECT_TRUE(cbor_array_push(
@@ -301,6 +305,7 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   expected.set_publisher_name(kSamplePublisher);
   expected.set_enable_debug_reporting(true);
   expected.set_generation_id(kSampleGenerationId);
+  expected.set_request_timestamp_ms(kSampleRequestMs);
 
   BuyerInput::InterestGroup expected_ig;
   expected_ig.set_name(kSampleIgName);

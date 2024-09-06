@@ -33,8 +33,9 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
       parsed_encapsulated_request =
           server_common::ParseEncapsulatedRequest(ciphertext);
   if (!parsed_encapsulated_request.ok()) {
-    PS_VLOG(kNoisyWarn) << "Error while parsing encapsulated ciphertext: "
-                        << parsed_encapsulated_request.status();
+    PS_VLOG(kNoisyWarn, SystemLogContext())
+        << "Error while parsing encapsulated ciphertext: "
+        << parsed_encapsulated_request.status();
     return absl::Status(
         absl::StatusCode::kInvalidArgument,
         absl::StrCat("Error while parsing encapsulated ciphertext: ",
@@ -46,8 +47,8 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
       ParseKeyIdFromObliviousHttpRequestPayload(
           parsed_encapsulated_request->request_payload);
   if (!key_id.ok()) {
-    PS_VLOG(kNoisyWarn) << "Parsed key id error status: "
-                        << key_id.status().message();
+    PS_VLOG(kNoisyWarn, SystemLogContext())
+        << "Parsed key id error status: " << key_id.status().message();
     return absl::Status(absl::StatusCode::kInvalidArgument,
                         kInvalidOhttpKeyIdError);
   }
@@ -58,8 +59,8 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
       key_fetcher_manager.GetPrivateKey(str_key_id);
 
   if (!private_key.has_value()) {
-    PS_VLOG(kNoisyWarn) << "Unable to retrieve private key for key ID: "
-                        << str_key_id;
+    PS_VLOG(kNoisyWarn, SystemLogContext())
+        << "Unable to retrieve private key for key ID: " << str_key_id;
     return absl::Status(absl::StatusCode::kNotFound,
                         absl::StrFormat(kMissingPrivateKey, str_key_id));
   }
@@ -72,8 +73,9 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
       server_common::DecryptEncapsulatedRequest(*private_key,
                                                 *parsed_encapsulated_request);
   if (!ohttp_request.ok()) {
-    PS_VLOG(kNoisyWarn) << "Unable to decrypt the ciphertext. Reason: "
-                        << ohttp_request.status().message();
+    PS_VLOG(kNoisyWarn, SystemLogContext())
+        << "Unable to decrypt the ciphertext. Reason: "
+        << ohttp_request.status().message();
     return absl::Status(absl::StatusCode::kInvalidArgument,
                         absl::StrFormat(kMalformedEncapsulatedRequest,
                                         ohttp_request.status().message()));
