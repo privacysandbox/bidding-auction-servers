@@ -39,6 +39,13 @@ constexpr char kKeyId[] = "keyid";
 constexpr char kSecret[] = "secret";
 constexpr float kTestBid = 1.25;
 constexpr char kTestProtectedAppSignalsAdOwner[] = "https://PAS-Ad-Owner.com";
+constexpr char kTestReportingWinResponseJson[] =
+    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
+"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
+constexpr char kTestReportingResponseJson[] =
+    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
+constexpr char kEmptyTestReportingResponseJson[] =
+    R"({"reportResultResponse":{"reportResultUrl":"","sendReportToInvoked":false,"registerAdBeaconInvoked":false,"interactionReportingUrls":{}},"sellerLogs":[], "sellerErrors":[], "sellerWarnings":[])";
 
 ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
     absl::string_view render_url, float bid = kTestBid);

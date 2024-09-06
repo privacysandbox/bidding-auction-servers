@@ -1,4 +1,5 @@
 //  Copyright 2022 Google LLC
+//  Copyright (C) Microsoft Corporation. All rights reserved.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -84,6 +85,9 @@ class TrustedServersConfigClient {
 
   // Fetches the int value for the specified config parameter.
   int GetIntParameter(absl::string_view name) const noexcept;
+
+  // Fetches the int64 value for the specified config parameter.
+  int64_t GetInt64Parameter(absl::string_view name) const noexcept;
 
   // Fetches custom flag value for the specified config parameter.
   template <typename T>

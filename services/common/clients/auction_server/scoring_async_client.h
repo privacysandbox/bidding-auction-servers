@@ -37,6 +37,7 @@ struct AuctionServiceClientConfig {
   std::string server_addr;
   bool compression = false;
   bool secure_client = true;
+  std::string grpc_arg_default_authority = "";
 };
 
 // This class is an async grpc client for the Fledge Auction (Scoring) Service.

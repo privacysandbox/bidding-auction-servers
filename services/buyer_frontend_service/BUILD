@@ -39,6 +39,8 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/buyer_frontend_service/providers:bidding_signals_providers",
         "//services/buyer_frontend_service/util:buyer_frontend_utils",
+        "//services/common:feature_flags",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:benchmarking_logger",
@@ -92,6 +94,7 @@ cc_test(
     deps = [
         ":buyer_frontend_service",
         "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
@@ -109,6 +112,7 @@ cc_binary(
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     local_defines = ENABLE_CORE_DUMPS_DEFINES,
+    malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [
         ":buyer_frontend_service",
@@ -122,6 +126,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:tcmalloc_utils",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli
@@ -147,6 +152,7 @@ cc_test(
     deps = [
         ":buyer_frontend_service",
         "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

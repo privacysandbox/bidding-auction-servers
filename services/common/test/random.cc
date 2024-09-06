@@ -22,7 +22,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kTestIgWithTwoAds[] =
     R"json({"ad_render_ids":["adg_id=134256827445&cr_id=594352291621&cv_id=4", "adg_id=134256827445&cr_id=605048329089&cv_id=2"],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
-
 std::string MakeARandomString() {
   return std::to_string(ToUnixNanos(absl::Now()));
 }
@@ -77,12 +76,10 @@ google::protobuf::Struct MakeAnAd(absl::string_view render_url,
   google::protobuf::Value ad_render_url;
   ad_render_url.set_string_value(render_url);
   ad.mutable_fields()->try_emplace("renderUrl", ad_render_url);
-
   auto metadata_obj = MakeARandomStruct(0);
   google::protobuf::Value metadata_v;
   metadata_v.set_number_value(metadata_value);
   metadata_obj->mutable_fields()->try_emplace(metadata_key, metadata_v);
-
   google::protobuf::Value metadata_obj_val;
   metadata_obj_val.set_allocated_struct_value(metadata_obj.release());
   ad.mutable_fields()->try_emplace("metadata", metadata_obj_val);
@@ -144,7 +141,8 @@ BrowserSignals MakeRandomBrowserSignalsForIG(
   BrowserSignals browser_signals;
   browser_signals.set_join_count(MakeARandomInt(0, 10));
   browser_signals.set_bid_count(MakeARandomInt(0, 50));
-  browser_signals.set_recency((unsigned long)std::time(NULL));
+  browser_signals.set_recency(60);  // secs
+  browser_signals.set_recency_ms(60000);
   browser_signals.set_prev_wins(MakeRandomPreviousWins(ad_render_ids));
   return browser_signals;
 }
@@ -344,16 +342,30 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
 
   ad_with_bid.mutable_ad()->mutable_struct_value()->MergeFrom(
       MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
-  ad_with_bid.set_interest_group_name(MakeARandomString());
-  ad_with_bid.set_render(MakeARandomString());
   ad_with_bid.set_bid(MakeARandomNumber<float>(min_bid, max_bid));
-  ad_with_bid.set_interest_group_owner(MakeARandomString());
+  ad_with_bid.set_render(
+      absl::StrCat("barStandardAds.com/ads?id=", MakeARandomString()));
 
   for (int i = 0; i < num_ad_components; i++) {
     ad_with_bid.add_ad_components(absl::StrCat("adComponent.com/id=", i));
   }
-  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+  // allow_component_auction defaults to false.
+
+  ad_with_bid.set_interest_group_name(
+      absl::StrCat("interest_group_name_", MakeARandomString()));
+  ad_with_bid.set_interest_group_owner(
+      absl::StrCat("interest_group_owner_", MakeARandomString()));
+
+  // join_count and recency left to default zeros.
+
   ad_with_bid.set_modeling_signals(MakeARandomInt(0, 100));
+  ad_with_bid.set_ad_cost(MakeARandomNumber<double>(0.0, 2.0));
+
+  // No bid currency specified.
+
+  ad_with_bid.set_interest_group_origin(
+      absl::StrCat("interest_group_origin_", MakeARandomString()));
+
   return ad_with_bid;
 }
 
@@ -448,6 +460,8 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
   ad_score.set_interest_group_name(MakeARandomString());
   ad_score.set_buyer_bid(bid);
   ad_score.set_interest_group_owner(MakeARandomString());
+  ad_score.set_interest_group_origin(
+      absl::StrCat("interest_group_origin_", MakeARandomString()));
   ad_score.set_ad_metadata(MakeARandomString());
   ad_score.set_allow_component_auction(false);
   ad_score.set_bid(MakeARandomNumber<float>(1, 2.5));
@@ -480,38 +494,47 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
 // Must manually delete/take ownership of underlying pointer
 // build_android_signals: If false, will build browser signals instead.
 std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
-    bool build_android_signals) {
+    bool for_android) {
   auto interest_group = std::make_unique<BuyerInput::InterestGroup>();
   interest_group->set_name(absl::StrCat("ig_name_", MakeARandomString()));
+
   interest_group->mutable_bidding_signals_keys()->Add(
       absl::StrCat("bidding_signal_key_", MakeARandomString()));
   interest_group->mutable_bidding_signals_keys()->Add(
       absl::StrCat("bidding_signal_key_", MakeARandomString()));
-  interest_group->set_allocated_user_bidding_signals(
-      MakeARandomStructJsonString(5).release());
+
   int ad_render_ids_to_generate = MakeARandomInt(1, 10);
   for (int i = 0; i < ad_render_ids_to_generate; i++) {
     *interest_group->mutable_ad_render_ids()->Add() =
         absl::StrCat("ad_render_id_", MakeARandomString());
   }
-  if (build_android_signals) {
+
+  // No component ads added.
+
+  interest_group->set_allocated_user_bidding_signals(
+      MakeARandomStructJsonString(5).release());
+
+  if (for_android) {
     // Empty field right now.
     interest_group->mutable_android_signals();
+    interest_group->set_origin(
+        absl::StrCat("interest_group_origin_", MakeARandomString()));
   } else {
     interest_group->mutable_browser_signals()->CopyFrom(
         MakeRandomBrowserSignalsForIG(interest_group->ad_render_ids()));
   }
+
   return interest_group;
 }
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromAndroid() {
-  return MakeARandomInterestGroup(true);
+  return MakeARandomInterestGroup(/*for_android=*/true);
 }
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromBrowser() {
-  return MakeARandomInterestGroup(false);
+  return MakeARandomInterestGroup(/*for_android=*/false);
 }
 
 GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest() {
@@ -557,7 +580,7 @@ google::protobuf::Value MakeAListValue(
 BuyerInput MakeARandomBuyerInput() {
   BuyerInput buyer_input;
   buyer_input.mutable_interest_groups()->AddAllocated(
-      MakeARandomInterestGroup(false).release());
+      MakeARandomInterestGroup(/*for_android=*/false).release());
   return buyer_input;
 }
 
@@ -605,6 +628,43 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
   return result;
 }
 
+AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
+    std::string generation_id, std::string top_level_seller,
+    std::string test_component_event,
+    std::string test_component_win_reporting_url,
+    std::string test_component_interaction_reporting_url,
+    std::string test_component_seller, std::vector<std::string> buyer_list) {
+  AuctionResult result =
+      MakeARandomSingleSellerAuctionResult(std::move(buyer_list));
+  result.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->set_reporting_url(test_component_win_reporting_url);
+  result.mutable_win_reporting_urls()
+      ->mutable_component_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(test_component_event,
+                    test_component_interaction_reporting_url);
+  result.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(std::move(test_component_win_reporting_url));
+  result.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(std::move(test_component_event),
+                    std::move(test_component_interaction_reporting_url));
+  result.set_top_level_seller(std::move(top_level_seller));
+  result.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
+  result.mutable_auction_params()->set_ciphertext_generation_id(
+      std::move(generation_id));
+  result.mutable_auction_params()->set_component_seller(
+      std::move(test_component_seller));
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.mutable_ad_component_render_urls()->Add(MakeARandomString());
+  result.set_bid(1);
+  result.set_bid_currency(MakeARandomString());
+  return result;
+}
+
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list) {
@@ -621,5 +681,4 @@ AuctionResult MakeARandomComponentAuctionResult(
   result.set_bid_currency(MakeARandomString());
   return result;
 }
-
 }  // namespace privacy_sandbox::bidding_auction_servers

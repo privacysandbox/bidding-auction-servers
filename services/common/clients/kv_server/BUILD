@@ -1,4 +1,5 @@
 # Copyright 2024 Google LLC
+# Copyright (C) Microsoft Corporation. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,6 +50,7 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
+        "@google_privacysandbox_servers_common//src/communication:encoding_utils",
         "@service_value_key_fledge_privacysandbox//public:constants",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_request_builder",
         "@service_value_key_fledge_privacysandbox//public/applications/pas:retrieval_response_parser",

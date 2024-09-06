@@ -134,7 +134,7 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
 // Must manually delete/take ownership of underlying pointer
 // build_android_signals: If false, will build browser signals instead.
 std::unique_ptr<BuyerInput::InterestGroup> MakeARandomInterestGroup(
-    bool build_android_signals);
+    bool for_android);
 
 std::unique_ptr<BuyerInput::InterestGroup>
 MakeARandomInterestGroupFromAndroid();
@@ -229,6 +229,16 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
     std::vector<std::string> buyer_list = {});
 
 // Populates fields for a auction result object for a component seller auction.
+AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
+    std::string generation_id, std::string top_level_seller,
+    std::string test_component_event,
+    std::string test_component_win_reporting_url,
+    std::string test_component_interaction_reporting_url,
+    std::string test_component_seller,
+    std::vector<std::string> buyer_list = {});
+
+// Populates fields for a auction result object for a component seller auction
+// without reporting urls
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list = {});

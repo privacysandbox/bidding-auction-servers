@@ -50,10 +50,12 @@ constexpr char kTestProtectedAppSignals[] = "test_protected_app_signals";
 constexpr char kTestRetrievalData[] = "test_retrieval_data";
 constexpr double kTestWinningBid = 1.25;
 constexpr int kTestAdRetrievalTimeoutMs = 100000;
-constexpr char kTestEgressFeaturesHex[] = "bccd";
-constexpr char kTestEgressFeaturesBiggerThan3Bytes[] = "deadbeef";
-constexpr char kTestEgressFeaturesBiggerThan23bits[] = "f01020";
+constexpr char kTestEgressPayloadHex[] = "bccd";
+constexpr char kTestTemporaryEgressPayloadHex[] = "abcdefabcedfe";
+constexpr char kTestEgressPayloadBiggerThan3Bytes[] = "deadbeef";
+constexpr char kTestEgressPayloadBiggerThan23bits[] = "f01020";
 constexpr char kTestAdsRetrievalAdsResponse[] = "Ads Data And Metadata";
+constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
 constexpr char kTestAdsRetrievalContextualEmbeddingsResponse[] = R"JSON(
 {
     "contextualEmbeddings1": {
@@ -82,7 +84,8 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const ProtectedAppSignals& protected_app_signals, const std::string& seller,
     const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data =
-        absl::nullopt);
+        absl::nullopt,
+    bool enable_unlimited_egress = false);
 
 // Creates a generate protected app signals bids request using the provided
 // raw request.
@@ -102,8 +105,10 @@ std::string CreatePrepareDataForAdsRetrievalResponse(
 // Creates a mock response from `generateBid` UDF.
 std::string CreateGenerateBidsUdfResponse(
     absl::string_view render = kTestRenderUrl, double bid = kTestWinningBid,
-    absl::string_view egress_features_hex_string = kTestEgressFeaturesHex,
-    absl::string_view debug_reporting_urls = kTestDebugReportingUrls);
+    absl::string_view egress_payload_hex_string = kTestEgressPayloadHex,
+    absl::string_view debug_reporting_urls = kTestDebugReportingUrls,
+    absl::string_view temporary_egress_payload_hex_string =
+        kTestTemporaryEgressPayloadHex);
 
 // Creates a mock response from ads retrieval service.
 absl::StatusOr<kv_server::v2::GetValuesResponse>

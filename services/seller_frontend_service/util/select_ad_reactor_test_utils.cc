@@ -38,9 +38,9 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using ::testing::Matcher;
 using ::testing::Return;
-using GetBidDoneCallback =
-    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                GetBidsResponse::GetBidsRawResponse>>) &&>;
+using GetBidDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>,
+         ResponseMetadata) &&>;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using ScoringSignalsDoneCallback =
@@ -92,11 +92,12 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-    const absl::optional<std::string>& bid_currency) {
-  AdWithBid bid =
-      BuildNewAdWithBid(ad_url, std::move(interest_group_name), bid_value,
-                        enable_event_level_debug_reporting,
-                        number_ad_component_render_urls, bid_currency);
+    const absl::optional<std::string>& bid_currency,
+    absl::string_view buyer_reporting_id) {
+  AdWithBid bid = BuildNewAdWithBid(
+      ad_url, std::move(interest_group_name), bid_value,
+      enable_event_level_debug_reporting, number_ad_component_render_urls,
+      bid_currency, buyer_reporting_id);
   GetBidsResponse::GetBidsRawResponse response;
   response.mutable_bids()->Add(std::move(bid));
   return response;
@@ -112,7 +113,7 @@ void SetupBuyerClientMock(
       [bid, num_buyers_solicited, top_level_seller](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
           const RequestMetadata& metadata, GetBidDoneCallback on_done,
-          absl::Duration timeout) {
+          absl::Duration timeout, RequestConfig request_config) {
         ABSL_LOG(INFO) << "Returning mock bids";
         // Check top level seller is populated for component auctions.
         if (!top_level_seller.empty()) {
@@ -120,7 +121,8 @@ void SetupBuyerClientMock(
         }
         if (bid.has_value()) {
           std::move(on_done)(
-              std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid));
+              std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid),
+              /* response_metadata= */ {});
         }
         if (num_buyers_solicited) {
           ++(*num_buyers_solicited);
@@ -136,6 +138,7 @@ void SetupBuyerClientMock(
             .WillRepeatedly(MockGetBids);
         return buyer;
       };
+
   auto MockBuyerFactoryCall = [SetupMockBuyer](absl::string_view hostname) {
     return SetupMockBuyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
   };
@@ -146,7 +149,8 @@ void SetupBuyerClientMock(
 }
 
 void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
-                                         AdWithBid* result) {
+                                         AdWithBid* result,
+                                         absl::string_view buyer_reporting_id) {
   if (input.has_ad()) {
     *result->mutable_ad() = input.ad();
   }
@@ -158,6 +162,9 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   result->set_interest_group_name(input.interest_group_name());
   result->set_ad_cost(kAdCost);
   result->set_modeling_signals(kModelingSignals);
+  if (!buyer_reporting_id.empty()) {
+    result->set_buyer_reporting_id(buyer_reporting_id);
+  }
 }
 
 AdWithBid BuildNewAdWithBid(
@@ -166,7 +173,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<float> bid_value,
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
-    const absl::optional<absl::string_view>& bid_currency) {
+    const absl::optional<absl::string_view>& bid_currency,
+    absl::string_view buyer_reporting_id) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -192,6 +200,9 @@ AdWithBid BuildNewAdWithBid(
     debug_report_urls.set_auction_debug_loss_url(
         "https://test.com/debugLoss?render=" + ad_url);
     *bid.mutable_debug_report_urls() = debug_report_urls;
+  }
+  if (!buyer_reporting_id.empty()) {
+    bid.set_buyer_reporting_id(buyer_reporting_id);
   }
   return bid;
 }
@@ -295,6 +306,9 @@ TrustedServersConfigClient CreateConfig() {
   config.SetFlagForTest("2", KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS);
   config.SetFlagForTest("3", SCORE_ADS_RPC_TIMEOUT_MS);
   config.SetFlagForTest(kAuctionHost, AUCTION_SERVER_HOST);
+  config.SetFlagForTest(
+      "auction-seller1-tjs-appmesh-virtual-server.seller1-frontend.com",
+      GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config.SetFlagForTest(kTrue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
   config.SetFlagForTest(kSellerOriginDomain, SELLER_ORIGIN_DOMAIN);
   config.SetFlagForTest(kTrue, ENABLE_PROTECTED_AUDIENCE);
@@ -471,6 +485,20 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
   DCHECK_EQ(matched_left_to_add, 0);
   DCHECK_EQ(mismatched_left_to_add, 0);
   return pas_ads_with_bids;
+}
+
+void MockEntriesCallOnBuyerFactory(
+    const google::protobuf::Map<std::string, std::string>& buyer_input,
+    const BuyerFrontEndAsyncClientFactoryMock& factory) {
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+      entries;
+  for (const auto& [buyer, unused] : buyer_input) {
+    entries.emplace_back(buyer,
+                         std::make_shared<BuyerFrontEndAsyncClientMock>());
+  }
+
+  EXPECT_CALL(factory, Entries).WillRepeatedly(Return(std::move(entries)));
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

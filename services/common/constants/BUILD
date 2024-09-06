@@ -46,3 +46,13 @@ cc_library(
         "user_error_strings.h",
     ],
 )
+
+cc_library(
+    name = "common_constants",
+    hdrs = [
+        "common_constants.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)

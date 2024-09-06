@@ -91,7 +91,8 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
         request_->auction_config().top_level_seller());
   }
   PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
-                                << auction_result.DebugString();
+                                << auction_result.ShortDebugString();
+  log_context_.SetEventMessageField(auction_result);
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();
@@ -180,7 +181,7 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
     return;
   }
 
-  PS_VLOG(3, log_context_)
+  PS_VLOG(kNoisyInfo, log_context_)
       << "Found protected signals in buyer input, passing them to get bids";
   auto* protected_app_signals_buyer_input =
       get_bids_raw_request->mutable_protected_app_signals_buyer_input();
@@ -193,7 +194,7 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
   auto& per_buyer_config = request_->auction_config().per_buyer_config();
   auto buyer_config_it = per_buyer_config.find(buyer);
   if (buyer_config_it == per_buyer_config.end()) {
-    PS_VLOG(3, log_context_) << "No buyer config found for: " << buyer;
+    PS_VLOG(kNoisyInfo, log_context_) << "No buyer config found for: " << buyer;
     return;
   }
 
@@ -201,9 +202,10 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
   if (!buyer_config.has_contextual_protected_app_signals_data() ||
       buyer_config.contextual_protected_app_signals_data()
               .ad_render_ids_size() == 0) {
-    PS_VLOG(3, log_context_) << "No PAS ad render ids received via contextual "
-                                "path for buyer: "
-                             << buyer;
+    PS_VLOG(kNoisyInfo, log_context_)
+        << "No PAS ad render ids received via contextual "
+           "path for buyer: "
+        << buyer;
     return;
   }
 
@@ -239,9 +241,11 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   result.set_render(input.render());
   result.set_modeling_signals(input.modeling_signals());
   result.set_ad_cost(input.ad_cost());
-  result.set_egress_features(input.egress_features());
   result.set_owner(buyer_owner);
   result.set_bid_currency(input.bid_currency());
+  result.set_egress_payload(input.egress_payload());
+  result.set_temporary_unlimited_egress_payload(
+      input.temporary_unlimited_egress_payload());
   return result;
 }
 
@@ -253,8 +257,9 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
     return;
   }
 
-  PS_VLOG(3, log_context_) << "Protected App signals, may add protected app "
-                              "signals bids to score ads request";
+  PS_VLOG(kNoisyInfo, log_context_)
+      << "Protected App signals, may add protected app "
+         "signals bids to score ads request";
   for (const auto& [buyer_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
          i++) {

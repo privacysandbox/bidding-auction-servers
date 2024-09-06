@@ -22,24 +22,28 @@ load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
     "pkg_files",
+    "pkg_mklink",
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
     srcs = [
         "//services/bidding_service:server",
     ] + select({
+        "//:include_all_inference_binaries": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
+        ],
         "//:inference_noop": [
             "@inference_common//:inference_sidecar_test_target",
         ],
         "//:inference_pytorch": [
-            "@pytorch_v2_1_1//:artifacts/inference_sidecar",
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
         ],
         "//:inference_tensorflow": [
-            "@tensorflow_v2_14_0//:artifacts/inference_sidecar",
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
         ],
         "//conditions:default": [],
     }),
@@ -47,17 +51,16 @@ pkg_files(
     prefix = "/",
 )
 
-pkg_files(
-    name = "kmstool_enclave_executable",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_cli",
-    ],
-    attributes = pkg_attributes(mode = "0555"),
-    prefix = "/",
+# Create a symlink between where kmstool_enclave_cli expects shell to be
+# (/bin/sh) and where it actually is on our image (/busybox/sh).
+pkg_mklink(
+    name = "busybox_sh_symlink",
+    link_name = "/bin/sh",
+    target = "/busybox/sh",
 )
 
 server_binaries = [
-    ":kmstool_enclave_executable",
+    ":busybox_sh_symlink",
     ":server_executables",
 ]
 
@@ -71,30 +74,6 @@ pkg_tar(
     srcs = server_binaries,
 )
 
-# Ensure libnsm ends up in the load path.
-pkg_tar(
-    name = "libnsm-tar",
-    srcs = [
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:libnsm_so",
-    ],
-    mode = "0644",
-    # TODO(b/294113069): Remove arch-specific path.
-    package_dir = "/lib/x86_64-linux-gnu/",
-    visibility = ["//visibility:public"],
-)
-
-# Create a symlink between where kmstool_enclave_cli expects shell to be
-# (/bin/sh) and where it actually is on our image (/busybox/sh).
-container_layer(
-    name = "kmstool_enclave_cli_layer",
-    symlinks = {
-        "/bin/sh": "/busybox/sh",
-    },
-    tars = [
-        ":libnsm-tar",
-    ],
-)
-
 container_layer(
     name = "server_binary_layer",
     directory = "/",
@@ -105,6 +84,28 @@ container_layer(
     },
     tars = [
         ":server_binaries_tar",
+    ],
+)
+
+cddl_specs = [
+    "//services/bidding_service:packaged_cddl_specs",
+]
+
+pkg_zip(
+    name = "cddl_specs",
+    srcs = cddl_specs,
+)
+
+pkg_tar(
+    name = "cddl_specs_tar",
+    srcs = cddl_specs,
+)
+
+container_layer(
+    name = "cddl_specs_layer",
+    directory = "/",
+    tars = [
+        ":cddl_specs_tar",
     ],
 )
 
@@ -125,13 +126,17 @@ container_image(
     entrypoint = [
         "/busybox/sh",
     ],
-    env = LOG_ENV_VARS,
     layers = [
+        ":cddl_specs_layer",
         ":server_binary_layer",
-        ":kmstool_enclave_cli_layer",
-    ],
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
     ],
 )
 

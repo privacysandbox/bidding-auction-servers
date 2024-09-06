@@ -159,11 +159,9 @@ absl::Status CodeDispatchClientStub::BatchExecute(
     DispatchResponse dispatch_response;
     dispatch_response.resp = absl::StrFormat(
         R"JSON({
-              "response": {
-                "render": "fake_url",
-                "bid": %f
-              }
-            })JSON",
+            "render": "fake_url",
+            "bid": %f
+          })JSON",
         absl::Uniform(bit_gen, 0, 100.0));
     dispatch_response.id = request.id;
     responses.emplace_back(dispatch_response);
@@ -243,8 +241,7 @@ static void BM_ProtectedAudience(benchmark::State& state) {
   GenerateBidsResponse response;
   CodeDispatchClientStub dispatcher;
   BiddingServiceRuntimeConfig runtime_config = {
-      .enable_buyer_debug_url_generation = true,
-      .enable_adtech_code_logging = false};
+      .enable_buyer_debug_url_generation = true};
   for (auto _ : state) {
     // This code gets timed.
     metric::MetricContextMap<GenerateBidsRequest>(

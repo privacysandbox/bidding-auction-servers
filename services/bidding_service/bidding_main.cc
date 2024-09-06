@@ -12,6 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -30,6 +31,8 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
+#include "sandbox/sandbox_executor.h"
+#include "sandboxed_api/sandbox2/comms.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
@@ -38,8 +41,10 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/bidding_service/inference/inference_utils.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/bidding_service/runtime_flags.h"
+#include "services/common/blob_fetch/blob_fetcher.h"
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
@@ -50,6 +55,7 @@
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
@@ -57,13 +63,6 @@
 #include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
 #include "src/util/rlimit_core_config.h"
 #include "src/util/status_macro/status_macros.h"
-
-#ifdef PS_INFERENCE_NON_PROD
-#include "sandbox/sandbox_executor.h"
-#include "sandboxed_api/sandbox2/comms.h"
-#include "services/bidding_service/inference/inference_utils.h"
-#include "services/common/blob_fetch/blob_fetcher.h"
-#endif
 
 ABSL_FLAG(std::optional<uint16_t>, port, std::nullopt,
           "Port the server is listening on.");
@@ -85,14 +84,28 @@ ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
 ABSL_FLAG(std::optional<std::string>, tee_ad_retrieval_kv_server_addr, "",
           "Ad Retrieval KV Server Address");
+ABSL_FLAG(std::optional<std::string>,
+          tee_ad_retrieval_kv_server_grpc_arg_default_authority, "",
+          "Domain for Ad Retrieval KV Server, or other domain for Authority");
 ABSL_FLAG(std::optional<std::string>, tee_kv_server_addr, "",
           "KV Server Address to use for ads metadata lookup");
+ABSL_FLAG(std::optional<std::string>, tee_kv_server_grpc_arg_default_authority,
+          "", "Domain for KV Server, or other domain for Authority");
 ABSL_FLAG(std::optional<int>, ad_retrieval_timeout_ms, std::nullopt,
           "The time in milliseconds to wait for the ads retrieval to complete");
 ABSL_FLAG(std::optional<bool>, ad_retrieval_kv_server_egress_tls, std::nullopt,
           "If true, ad retrieval service gRPC client uses TLS.");
 ABSL_FLAG(std::optional<bool>, kv_server_egress_tls, std::nullopt,
           "If true, KV service gRPC client uses TLS.");
+ABSL_FLAG(std::optional<int64_t>,
+          bidding_tcmalloc_background_release_rate_bytes_per_second,
+          std::nullopt,
+          "Amount of cached memory in bytes that is returned back to the "
+          "system per second");
+ABSL_FLAG(std::optional<int64_t>, bidding_tcmalloc_max_total_thread_cache_bytes,
+          std::nullopt,
+          "Maximum amount of cached memory in bytes across all threads (or "
+          "logical CPUs)");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -153,7 +166,12 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_tee_ad_retrieval_kv_server_addr,
                         TEE_AD_RETRIEVAL_KV_SERVER_ADDR);
+  config_client.SetFlag(
+      FLAGS_tee_ad_retrieval_kv_server_grpc_arg_default_authority,
+      TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY);
   config_client.SetFlag(FLAGS_tee_kv_server_addr, TEE_KV_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_tee_kv_server_grpc_arg_default_authority,
+                        TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY);
   config_client.SetFlag(FLAGS_ad_retrieval_timeout_ms, AD_RETRIEVAL_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
   config_client.SetFlag(FLAGS_max_allowed_size_debug_url_bytes,
@@ -165,13 +183,17 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_kv_server_egress_tls, KV_SERVER_EGRESS_TLS);
   config_client.SetFlag(FLAGS_inference_sidecar_binary_path,
                         INFERENCE_SIDECAR_BINARY_PATH);
-  config_client.SetFlag(FLAGS_inference_model_local_paths,
-                        INFERENCE_MODEL_LOCAL_PATHS);
   config_client.SetFlag(FLAGS_inference_model_bucket_name,
                         INFERENCE_MODEL_BUCKET_NAME);
   config_client.SetFlag(FLAGS_inference_model_bucket_paths,
                         INFERENCE_MODEL_BUCKET_PATHS);
-
+  config_client.SetFlag(FLAGS_inference_sidecar_runtime_config,
+                        INFERENCE_SIDECAR_RUNTIME_CONFIG);
+  config_client.SetFlag(
+      FLAGS_bidding_tcmalloc_background_release_rate_bytes_per_second,
+      BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
+  config_client.SetFlag(FLAGS_bidding_tcmalloc_max_total_thread_cache_bytes,
+                        BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -189,16 +211,16 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                          "support enabled";
   }
 
-  PS_VLOG(1) << "Protected App Signals support enabled on the service: "
-             << enable_protected_app_signals;
-  PS_VLOG(1) << "Protected Audience support enabled on the service: "
-             << enable_protected_audience;
-  PS_VLOG(1) << "Successfully constructed the config client.";
+  PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
+               << enable_protected_app_signals;
+  PS_LOG(INFO) << "Protected Audience support enabled on the service: "
+               << enable_protected_audience;
+  PS_LOG(INFO) << "Successfully constructed the config client.";
   return config_client;
 }
 
-absl::string_view GetStringParameter(const TrustedServersConfigClient& client,
-                                     absl::string_view name) {
+absl::string_view GetStringParameterSafe(
+    const TrustedServersConfigClient& client, absl::string_view name) {
   if (client.HasParameter(name)) {
     return client.GetStringParameter(name);
   }
@@ -211,6 +233,10 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
 
+  MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
+      BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
+  MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
+      BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
   std::string_view port = config_client.GetStringParameter(PORT);
   std::string server_address = absl::StrCat("0.0.0.0:", port);
 
@@ -218,7 +244,7 @@ absl::Status RunServer() {
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
 
   std::string_view inference_sidecar_binary_path =
-      GetStringParameter(config_client, INFERENCE_SIDECAR_BINARY_PATH);
+      GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH);
   const bool enable_inference = !inference_sidecar_binary_path.empty();
 
   auto dispatcher = V8Dispatcher([&config_client, &enable_inference]() {
@@ -228,28 +254,40 @@ absl::Status RunServer() {
     config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
 
     if (enable_inference) {
-#ifdef PS_INFERENCE_NON_PROD
-      PS_VLOG(1) << "Register runInference API.";
+      PS_LOG(INFO) << "Register runInference API.";
       auto run_inference_function_object =
-          std::make_unique<google::scp::roma::FunctionBindingObjectV2<>>();
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContext>>();
       run_inference_function_object->function_name =
           std::string(inference::kInferenceFunctionName);
       run_inference_function_object->function = inference::RunInference;
       config.RegisterFunctionBinding(std::move(run_inference_function_object));
-      PS_VLOG(1) << "RunInference registered.";
+      PS_LOG(INFO) << "RunInference registered.";
 
-      PS_VLOG(1) << "Start the inference sidecar.";
-      // This usage of flag is not consistent with rest of the codebase, where
-      // we use the parameter from the config client directly instead of passing
-      // it back to the absl flag.
+      PS_LOG(INFO) << "Register getModelPaths API.";
+      auto get_model_paths_function_object =
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContext>>();
+      get_model_paths_function_object->function_name =
+          std::string(inference::kGetModelPathsFunctionName);
+      get_model_paths_function_object->function = inference::GetModelPaths;
+      config.RegisterFunctionBinding(
+          std::move(get_model_paths_function_object));
+      PS_LOG(INFO) << "getModelPaths registered.";
+
+      PS_LOG(INFO) << "Start the inference sidecar.";
+      // This usage of the following two flags is not consistent with rest of
+      // the codebase, where we use the parameter from the config client
+      // directly instead of passing it back to the absl flag.
       absl::SetFlag(
           &FLAGS_inference_sidecar_binary_path,
-          config_client.GetStringParameter(INFERENCE_SIDECAR_BINARY_PATH)
-              .data());
+          GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH));
+      absl::SetFlag(&FLAGS_inference_sidecar_runtime_config,
+                    GetStringParameterSafe(config_client,
+                                           INFERENCE_SIDECAR_RUNTIME_CONFIG));
       inference::SandboxExecutor& inference_executor = inference::Executor();
       CHECK_EQ(inference_executor.StartSandboxee().code(),
                absl::StatusCode::kOk);
-#endif
     }
     return config;
   }());
@@ -273,7 +311,6 @@ absl::Status RunServer() {
 
   bool enable_buyer_debug_url_generation =
       udf_config.enable_buyer_debug_url_generation();
-  bool enable_adtech_code_logging = udf_config.enable_adtech_code_logging();
   const bool enable_protected_audience =
       config_client.HasParameter(ENABLE_PROTECTED_AUDIENCE) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
@@ -289,41 +326,49 @@ absl::Status RunServer() {
       enable_protected_app_signals);
   PS_RETURN_IF_ERROR(udf_fetcher.Init()) << "Failed to initialize UDF fetch.";
 
-#ifdef PS_INFERENCE_NON_PROD
   bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
   if (enable_inference) {
     if (init_config_client) {
-      PS_VLOG(1) << "Start blob fetcher to read from a cloud bucket.";
-      std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
-          BlobStorageClientFactory::Create();
+      PS_LOG(INFO) << "Start blob fetcher to read from a cloud bucket.";
       std::string_view bucket_name =
-          GetStringParameter(config_client, INFERENCE_MODEL_BUCKET_NAME);
+          GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_NAME);
       std::string_view bucket_paths =
-          GetStringParameter(config_client, INFERENCE_MODEL_BUCKET_PATHS);
+          GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_PATHS);
       std::vector<std::string> models = absl::StrSplit(bucket_paths, ',');
 
-      auto blob_fetcher = std::make_unique<BlobFetcher>(
-          bucket_name, executor.get(), std::move(blob_storage_client));
-      CHECK(blob_fetcher->FetchSync().ok()) << "FetchSync() failed.";
-      const std::vector<BlobFetcher::Blob>& files = blob_fetcher->snapshot();
-      PS_VLOG(1) << "Register models from bucket.";
-      if (absl::Status status =
-              inference::RegisterModelsFromBucket(bucket_name, models, files);
-          !status.ok()) {
-        PS_VLOG(1) << "Skip registering models from bucket: "
-                   << status.message();
+      if (!bucket_name.empty() && !bucket_paths.empty()) {
+        std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
+            BlobStorageClientFactory::Create();
+        auto blob_fetcher = std::make_unique<BlobFetcher>(
+            bucket_name, executor.get(), std::move(blob_storage_client));
+        CHECK(blob_fetcher->FetchSync().ok()) << "FetchSync() failed.";
+        const std::vector<BlobFetcher::Blob>& files = blob_fetcher->snapshot();
+        PS_LOG(INFO) << "Register models from bucket.";
+        if (absl::Status status =
+                inference::RegisterModelsFromBucket(bucket_name, models, files);
+            !status.ok()) {
+          PS_LOG(INFO) << "Skip registering models from bucket: "
+                       << status.message();
+        }
+      } else {
+        PS_LOG(INFO)
+            << "Skip blob fetcher read from a cloud bucket due to empty "
+               "required arguements.";
       }
     }
-    PS_VLOG(1) << "Register models from local.";
-    std::string_view local_paths =
-        GetStringParameter(config_client, INFERENCE_MODEL_LOCAL_PATHS);
-    if (absl::Status status = inference::RegisterModelsFromLocal(
-            absl::StrSplit(local_paths, ','));
-        !status.ok()) {
-      PS_VLOG(1) << "Skip registering models from local: " << status.message();
+
+    if (std::optional<std::string> local_paths =
+            absl::GetFlag(FLAGS_inference_model_local_paths);
+        local_paths.has_value()) {
+      PS_LOG(INFO) << "Register models from local for testing.";
+      if (absl::Status status = inference::RegisterModelsFromLocal(
+              absl::StrSplit(local_paths.value(), ','));
+          !status.ok()) {
+        PS_LOG(INFO) << "Skip registering models from local: "
+                     << status.message();
+      }
     }
   }
-#endif
 
   bool enable_bidding_service_benchmark =
       config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
@@ -354,8 +399,14 @@ absl::Status RunServer() {
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   std::string tee_ad_retrieval_kv_server_addr = std::string(
       config_client.GetStringParameter(TEE_AD_RETRIEVAL_KV_SERVER_ADDR));
+  std::string tee_ad_retrieval_kv_server_grpc_arg_default_authority =
+      std::string(config_client.GetStringParameter(
+          TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY));
   std::string tee_kv_server_addr =
       std::string(config_client.GetStringParameter(TEE_KV_SERVER_ADDR));
+  std::string tee_kv_server_grpc_arg_default_authority =
+      std::string(config_client.GetStringParameter(
+          TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY));
   if (is_protected_app_signals_enabled &&
       tee_ad_retrieval_kv_server_addr.empty() && tee_kv_server_addr.empty()) {
     return absl::InvalidArgumentError(
@@ -367,11 +418,14 @@ absl::Status RunServer() {
   BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
+      .tee_ad_retrieval_kv_server_grpc_arg_default_authority =
+          std::move(tee_ad_retrieval_kv_server_grpc_arg_default_authority),
       .tee_kv_server_addr = std::move(tee_kv_server_addr),
+      .tee_kv_server_grpc_arg_default_authority =
+          std::move(tee_kv_server_grpc_arg_default_authority),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
       .roma_timeout_ms =
           config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
-      .enable_adtech_code_logging = enable_adtech_code_logging,
       .is_protected_app_signals_enabled = enable_protected_app_signals,
       .is_protected_audience_enabled = enable_protected_audience,
       .ad_retrieval_timeout_ms =
@@ -385,7 +439,7 @@ absl::Status RunServer() {
       .kv_server_egress_tls =
           config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS)};
 
-  if (udf_config.fetch_mode() == bidding_service::FETCH_MODE_BUCKET) {
+  if (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     if (enable_protected_audience) {
       runtime_config.default_protected_auction_generate_bid_version =
           udf_config.protected_auction_bidding_js_bucket_default_blob();
@@ -454,7 +508,7 @@ absl::Status RunServer() {
   }
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
-  PS_VLOG(1) << "Server listening on " << server_address;
+  PS_LOG(INFO) << "Server listening on " << server_address;
   server->Wait();
   return absl::OkStatus();
 }

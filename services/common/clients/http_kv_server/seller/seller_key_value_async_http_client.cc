@@ -18,6 +18,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
 #include "services/common/util/request_metadata.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -63,10 +64,10 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout) const {
   HTTPRequest request = BuildSellerKeyValueRequest(kv_server_base_address_,
                                                    metadata, std::move(keys));
-  PS_VLOG(2) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
-  PS_VLOG(2) << "\nSellerKeyValueAsyncHttpClient Headers:\n";
+  PS_VLOG(kKVLog) << "SellerKeyValueAsyncHttpClient Request: " << request.url;
+  PS_VLOG(kKVLog) << "\nSellerKeyValueAsyncHttpClient Headers:\n";
   for (const auto& header : request.headers) {
-    PS_VLOG(2) << header;
+    PS_VLOG(kKVLog) << header;
   }
   size_t request_size = 0;
   for (std::string& header : request.headers) {
@@ -76,16 +77,16 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
   auto done_callback = [on_done = std::move(on_done), request_size](
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
-      PS_VLOG(2) << "SellerKeyValueAsyncHttpClient Response: "
-                 << resultStr.value();
+      PS_VLOG(kKVLog) << "SellerKeyValueAsyncHttpClient Response: "
+                      << resultStr.value();
       size_t response_size = resultStr->size();
       std::unique_ptr<GetSellerValuesOutput> resultUPtr =
           std::make_unique<GetSellerValuesOutput>(GetSellerValuesOutput(
               {std::move(resultStr.value()), request_size, response_size}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
-      PS_VLOG(2) << "SellerKeyValueAsyncHttpClients Response: "
-                 << resultStr.status();
+      PS_VLOG(kNoisyWarn) << "SellerKeyValueAsyncHttpClients Response fail: "
+                          << resultStr.status();
       std::move(on_done)(resultStr.status());
     }
   };
@@ -102,21 +103,22 @@ SellerKeyValueAsyncHttpClient::SellerKeyValueAsyncHttpClient(
       kv_server_base_address_(kv_server_base_address) {
   if (pre_warm) {
     auto request = std::make_unique<GetSellerValuesInput>();
-    auto status = Execute(
-        std::move(request), {},
-        [](absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
-               seller_kv_output) mutable {
-          if (!seller_kv_output.ok()) {
-            PS_VLOG(1)
-                << "SellerKeyValueAsyncHttpClient pre-warm returned status:"
-                << seller_kv_output.status().message();
-          }
-        },
-        // Longer timeout for first request
-        absl::Milliseconds(60000));
+    auto status =
+        Execute(
+            std::move(request), {},
+            [](absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
+                   seller_kv_output) mutable {
+              if (!seller_kv_output.ok()) {
+                PS_LOG(ERROR)
+                    << "SellerKeyValueAsyncHttpClient pre-warm returned status:"
+                    << seller_kv_output.status().message();
+              }
+            },
+            // Longer timeout for first request
+            absl::Milliseconds(60000));
     if (!status.ok()) {
-      PS_VLOG(1) << "SellerKeyValueAsyncHttpClient pre-warming failed:"
-                 << status;
+      PS_LOG(ERROR) << "SellerKeyValueAsyncHttpClient pre-warming failed:"
+                    << status;
     }
   }
 }

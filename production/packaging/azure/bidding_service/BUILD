@@ -25,14 +25,29 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
     srcs = [
         "bin/init_server_basic",
         "//services/bidding_service:server",
-    ],
+        "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
+    ] + select({
+        "//:include_all_inference_binaries": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
+        ],
+        "//:inference_noop": [
+            "@inference_common//:inference_sidecar_test_target",
+        ],
+        "//:inference_pytorch": [
+            "@pytorch_v2_1_1//:artifacts/inference_sidecar_pytorch_v2_1_1",
+        ],
+        "//:inference_tensorflow": [
+            "@tensorflow_v2_14_0//:artifacts/inference_sidecar_tensorflow_v2_14_0",
+        ],
+        "//conditions:default": [],
+    }),
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/server/bin",
 )
@@ -54,8 +69,35 @@ pkg_tar(
 container_layer(
     name = "server_binary_layer",
     directory = "/",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
     tars = [
         ":server_binaries_tar",
+    ],
+)
+
+cddl_specs = [
+    "//services/bidding_service:packaged_cddl_specs",
+]
+
+pkg_zip(
+    name = "cddl_specs",
+    srcs = cddl_specs,
+)
+
+pkg_tar(
+    name = "cddl_specs_tar",
+    srcs = cddl_specs,
+)
+
+container_layer(
+    name = "cddl_specs_layer",
+    directory = "/",
+    tars = [
+        ":cddl_specs_tar",
     ],
 )
 
@@ -68,12 +110,18 @@ container_image(
     cmd = [
         "/server/bin/init_server_basic",
     ],
-    entrypoint = ["sh"],
-    env = LOG_ENV_VARS,
+    entrypoint = [
+        "sh",
+    ],
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
+        ":cddl_specs_layer",
         ":server_binary_layer",
-    ],
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
     ports = ["50051"],
 )
 

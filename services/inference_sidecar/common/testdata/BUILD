@@ -25,4 +25,6 @@ exports_files([
     # This pytorch model takes one int64 value and three floats as input. It
     # returns two tensors: a float embedding of size 4 and one int64 value.
     "models/pytorch_mixed_inputs_mixed_outputs_model.pt",
+    # This PyTorch model returns the incrementing counter.
+    "models/pytorch_stateful_model.pt",
 ])

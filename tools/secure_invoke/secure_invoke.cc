@@ -90,6 +90,7 @@ int main(int argc, char** argv) {
   };
 
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);
+  bool enable_unlimited_egress = absl::GetFlag(FLAGS_enable_unlimited_egress);
   if (op == "encrypt") {
     if (target_service == kSfe) {
       json_input_str =
@@ -97,22 +98,25 @@ int main(int argc, char** argv) {
       // LOG causes clipping of response.
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextSelectAdRequestToJson(
-                  json_input_str, client_type, keyset, enable_debug_reporting);
+                  json_input_str, client_type, keyset, enable_debug_reporting,
+                  enable_unlimited_egress);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
-              PackagePlainTextGetBidsRequestToJson(keyset,
-                                                   enable_debug_reporting);
+              PackagePlainTextGetBidsRequestToJson(
+                  keyset, enable_debug_reporting, enable_unlimited_egress);
     }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type, keyset, enable_debug_reporting);
+              client_type, keyset, enable_debug_reporting,
+              enable_unlimited_egress);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToBfe(
-              keyset, enable_debug_reporting);
+              keyset, enable_debug_reporting, /*stub=*/nullptr,
+              enable_unlimited_egress);
       CHECK(status.ok()) << status;
     } else {
       LOG(FATAL) << "Unsupported target service: " << target_service;

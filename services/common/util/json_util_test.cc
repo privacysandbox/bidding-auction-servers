@@ -123,9 +123,10 @@ TEST(SerializeJsonDoc, GetStringMember_FailsOnNonStringVal) {
 }
 
 // Function to compare a rapidjson::GenericArray with a std::vector
-bool areArraysEqual(const rapidjson::GenericArray<
-                        true, rapidjson::GenericValue<rapidjson::UTF8<>>>& arr1,
-                    const std::vector<std::string>& arr2) {
+bool are_arrays_equal(
+    const rapidjson::GenericArray<
+        true, rapidjson::GenericValue<rapidjson::UTF8<>>>& arr1,
+    const std::vector<std::string>& arr2) {
   if (arr1.Size() != arr2.size()) {
     return false;
   }
@@ -141,13 +142,13 @@ bool areArraysEqual(const rapidjson::GenericArray<
 
 TEST(SerializeJsonDoc, GetArrayMember_WorksForKeyPresentInDocument) {
   std::string json_str = R"json({"key": ["0.32", "0.12", "0.98"]})json";
-  auto document = ParseJsonString(json_str);
+  const auto document = ParseJsonString(json_str);
   ASSERT_TRUE(document.ok()) << document.status();
 
   auto actual_value = GetArrayMember(*document, "key");
   ASSERT_TRUE(actual_value.ok()) << actual_value.status();
   const std::vector<std::string> expectedArray = {"0.32", "0.12", "0.98"};
-  ASSERT_TRUE(areArraysEqual(actual_value.value(), expectedArray));
+  ASSERT_TRUE(are_arrays_equal(*actual_value, expectedArray));
 }
 
 TEST(SerializeJsonDoc, GetArrayMember_FailsOnMissingKey) {
@@ -165,6 +166,34 @@ TEST(SerializeJsonDoc, GetArrayMember_FailsOnNonArrayVal) {
 
   auto actual_value = GetArrayMember(*document, "key");
   EXPECT_FALSE(actual_value.ok());
+}
+
+TEST(SerializeJsonDoc, GetNumberMember_ParsesTheNumberSuccessfully) {
+  std::string json_str = R"json({"key": 123})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetIntMember(*document, "key");
+  ASSERT_TRUE(actual_value.ok());
+  EXPECT_EQ(*actual_value, 123);
+}
+
+TEST(SerializeJsonDoc, GetNumberMember_ComplainsOnMissingKey) {
+  std::string json_str = R"json({"key": 123})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetIntMember(*document, "MissingKey");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
+}
+
+TEST(SerializeJsonDoc, GetNumberMember_ComplainsOnNonIntType) {
+  std::string json_str = R"json({"key": 123.67})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetIntMember(*document, "Key");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
 }
 
 }  // namespace

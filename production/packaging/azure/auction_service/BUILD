@@ -25,13 +25,13 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
     srcs = [
         "bin/init_server_basic",
         "//services/auction_service:server",
+        "@com_github_grpc_grpc//test/cpp/util:grpc_cli",
     ],
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/server/bin",
@@ -69,11 +69,14 @@ container_image(
         "/server/bin/init_server_basic",
     ],
     entrypoint = ["sh"],
-    env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
-    ],
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
     ports = ["50051"],
 )
 

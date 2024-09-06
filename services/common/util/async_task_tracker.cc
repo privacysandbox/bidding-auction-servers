@@ -18,11 +18,12 @@
 
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 AsyncTaskTracker::AsyncTaskTracker(
-    int num_tasks_to_track, server_common::log::ContextImpl& log_context,
+    int num_tasks_to_track, RequestLogContext& log_context,
     absl::AnyInvocable<void(bool) &&> on_all_tasks_done)
     : num_tasks_to_track_(num_tasks_to_track),
       pending_tasks_count_(num_tasks_to_track),
@@ -30,6 +31,7 @@ AsyncTaskTracker::AsyncTaskTracker(
       empty_tasks_count_(0),
       skipped_tasks_count_(0),
       error_tasks_count_(0),
+      cancelled_tasks_count_(0),
       on_all_tasks_done_(std::move(on_all_tasks_done)),
       log_context_(log_context) {}
 
@@ -64,6 +66,9 @@ void AsyncTaskTracker::TaskCompleted(
       case TaskStatus::SKIPPED:
         ++skipped_tasks_count_;
         break;
+      case TaskStatus::CANCELLED:
+        ++cancelled_tasks_count_;
+        break;
       case TaskStatus::SUCCESS:
         ++successful_tasks_count_;
         break;
@@ -95,16 +100,16 @@ void AsyncTaskTracker::SetNumTasksToTrack(int num_tasks_to_track) {
   empty_tasks_count_ = 0;
   skipped_tasks_count_ = 0;
   error_tasks_count_ = 0;
-  PS_VLOG(3, log_context_) << "Reset of task tracker to track: "
-                           << num_tasks_to_track
-                           << " number of tasks done. New tracker: "
-                           << ToString();
+  cancelled_tasks_count_ = 0;
+  PS_VLOG(kStats, log_context_)
+      << "Reset of task tracker to track: " << num_tasks_to_track
+      << " number of tasks done. New tracker: " << ToString();
 }
 
 bool AsyncTaskTracker::AnyTaskSuccessfullyCompleted() {
   const int sum_tasks_count = skipped_tasks_count_ + successful_tasks_count_ +
                               error_tasks_count_ + empty_tasks_count_ +
-                              pending_tasks_count_;
+                              pending_tasks_count_ + cancelled_tasks_count_;
   DCHECK_EQ(num_tasks_to_track_, sum_tasks_count);
 
   const bool possible_chaff =
@@ -117,6 +122,7 @@ std::string AsyncTaskTracker::ToString() {
   return absl::StrCat("Async Task Stats: succeeded=", successful_tasks_count_,
                       ", errored=", error_tasks_count_,
                       ", skipped=", skipped_tasks_count_,
+                      ", cancelled=", cancelled_tasks_count_,
                       ", returned empty=", empty_tasks_count_,
                       ", pending=", pending_tasks_count_,
                       ", initial count=", num_tasks_to_track_);

@@ -53,6 +53,7 @@ inline constexpr char kSampleUserBiddingSignals[] =
 inline constexpr int kSampleJoinCount = 1;
 inline constexpr int kSampleBidCount = 2;
 inline constexpr int kSampleRecency = 3;
+inline constexpr int kSampleRecencyMs = 3000;
 inline constexpr char kSampleIgOwner[] = "foo_owner";
 inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
@@ -68,14 +69,20 @@ inline constexpr char kTestReportResultUrl[] = "http://reportResult.com";
 inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
 inline constexpr char kUsdIso[] = "USD";
-server_common::log::ContextImpl log_context{
-    {}, server_common::ConsentedDebugConfiguration()};
+inline constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+
+RequestLogContext log_context{{}, server_common::ConsentedDebugConfiguration()};
 
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+
+struct CborInterestGroupConfig {
+  std::optional<int> recency;
+  std::optional<int> recency_ms;
+};
 
 cbor_pair BuildStringMapPair(absl::string_view key, absl::string_view value) {
   return {cbor_move(cbor_build_stringn(key.data(), key.size())),
@@ -112,7 +119,8 @@ cbor_pair BuildStringArrayMapPair(
           cbor_move(array)};
 }
 
-struct cbor_item_t* BuildSampleCborInterestGroup() {
+struct cbor_item_t* BuildSampleCborInterestGroup(
+    CborInterestGroupConfig cbor_interest_group_config = {}) {
   cbor_item_t* interest_group = cbor_new_definite_map(kNumInterestGroupKeys);
   EXPECT_TRUE(
       cbor_map_add(interest_group, BuildStringMapPair(kName, kSampleIgName)));
@@ -136,9 +144,17 @@ struct cbor_item_t* BuildSampleCborInterestGroup() {
                            BuildIntMapPair(kJoinCount, kSampleJoinCount)));
   EXPECT_TRUE(cbor_map_add(browser_signals,
                            BuildIntMapPair(kBidCount, kSampleBidCount)));
-  EXPECT_TRUE(
-      cbor_map_add(browser_signals, BuildIntMapPair(kRecency, kSampleRecency)));
-
+  if (cbor_interest_group_config.recency.has_value()) {
+    EXPECT_TRUE(cbor_map_add(
+        browser_signals,
+        BuildIntMapPair(kRecency, cbor_interest_group_config.recency.value())));
+  }
+  if (cbor_interest_group_config.recency_ms.has_value()) {
+    EXPECT_TRUE(cbor_map_add(
+        browser_signals,
+        BuildIntMapPair(kRecencyMs,
+                        cbor_interest_group_config.recency_ms.value())));
+  }
   // Build prevWins arrays.
   cbor_item_t* child_arr_1 = cbor_new_definite_array(2);
   EXPECT_TRUE(cbor_array_push(child_arr_1, cbor_move(cbor_build_uint64(-20))));
@@ -234,7 +250,7 @@ ScoreAdsResponse::AdScore MakeARandomComponentAdScore() {
   return winner;
 }
 
-TEST(ChromeRequestUtils, Decode_Success) {
+void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
   EXPECT_TRUE(cbor_map_add(*protected_auction_input,
@@ -246,7 +262,8 @@ TEST(ChromeRequestUtils, Decode_Success) {
                            BuildBoolMapPair(kDebugReporting, true)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
-  EXPECT_TRUE(cbor_array_push(*ig_array, BuildSampleCborInterestGroup()));
+  EXPECT_TRUE(cbor_array_push(
+      *ig_array, BuildSampleCborInterestGroup(cbor_interest_group_config)));
   cbor_item_t* ig_bytestring = CompressInterestGroups(ig_array);
 
   cbor_item_t* interest_group_data_map = cbor_new_definite_map(1);
@@ -298,7 +315,12 @@ TEST(ChromeRequestUtils, Decode_Success) {
   BrowserSignals* signals = expected_ig.mutable_browser_signals();
   signals->set_join_count(kSampleJoinCount);
   signals->set_bid_count(kSampleBidCount);
-  signals->set_recency(kSampleRecency);
+  if (cbor_interest_group_config.recency.has_value()) {
+    signals->set_recency(cbor_interest_group_config.recency.value());
+  }
+  if (cbor_interest_group_config.recency_ms.has_value()) {
+    signals->set_recency_ms(cbor_interest_group_config.recency_ms.value());
+  }
   std::string prev_wins_json_str = absl::StrFormat(
       R"([[-20,"%s"],[-100,"%s"]])", kSampleAdRenderId1, kSampleAdRenderId2);
   signals->set_prev_wins(prev_wins_json_str);
@@ -358,6 +380,25 @@ TEST(ChromeRequestUtils, Decode_Success) {
         << bi_differences;
     FAIL();
   }
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {
+      .recency = kSampleRecency,
+  };
+  TestDecode(cbor_interest_group_config);
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyMsInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {.recency_ms =
+                                                            kSampleRecencyMs};
+  TestDecode(cbor_interest_group_config);
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithRecencyAndRecencyMsInBrowserSignals) {
+  CborInterestGroupConfig cbor_interest_group_config = {
+      .recency = kSampleRecency, .recency_ms = kSampleRecencyMs};
+  TestDecode(cbor_interest_group_config);
 }
 
 TEST(ChromeRequestUtils, Decode_FailOnWrongType) {
@@ -714,6 +755,7 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
       ->mutable_component_seller_reporting_urls()
       ->mutable_interaction_reporting_urls()
       ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.set_buyer_reporting_id(kTestBuyerReportingId);
   // Setup a bidding group map.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
       bidding_group_map;
@@ -742,9 +784,8 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
-  // The modified bid should not be set unless we have a component auction.
-  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), 0.0f))
-      << " Actual: " << decoded_result->bid() << ", Expected: " << 0.0f;
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), buyer_bid))
+      << " Actual: " << decoded_result->bid() << ", Expected: " << buyer_bid;
   EXPECT_TRUE(AreFloatsEqual(decoded_result->score(), desirability))
       << " Actual: " << decoded_result->score()
       << ", Expected: " << desirability;
@@ -777,6 +818,7 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
                 .interaction_reporting_urls()
                 .at(kTestEvent1),
             kTestInteractionUrl1);
+  EXPECT_EQ(decoded_result->buyer_reporting_id(), kTestBuyerReportingId);
 }
 
 TEST(ChromeResponseUtils, VerifyCborEncoding) {
@@ -821,9 +863,8 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
-  // Modified bid should not have been set at all.
-  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), 0.0f))
-      << " Actual: " << decoded_result->bid() << ", Expected: " << 0.0f;
+  EXPECT_TRUE(AreFloatsEqual(decoded_result->bid(), buyer_bid))
+      << " Actual: " << decoded_result->bid() << ", Expected: " << buyer_bid;
   EXPECT_TRUE(AreFloatsEqual(decoded_result->score(), desirability))
       << " Actual: " << decoded_result->score()
       << ", Expected: " << desirability;
@@ -1183,17 +1224,18 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   // Conversion can be verified at: https://cbor.me/
   EXPECT_EQ(
       absl::BytesToHexString(*ret),
-      "a86573636f7265fa4818fff26769734368616666f46a636f6d706f6e656e7473806b6164"
-      "52656e64657255524c606d62696464696e6747726f757073a4627a698207026369673182"
-      "070263696831820702666f776e6572318207027077696e5265706f7274696e6755524c73"
-      "a27262757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c7468"
-      "7474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e5265706f"
-      "7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d781b74"
-      "6f704c6576656c53656c6c65725265706f7274696e6755524c73a26c7265706f7274696e"
-      "6755524c77687474703a2f2f7265706f7274526573756c742e636f6d7818696e74657261"
+      "a963626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
+      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
+      "698207026369673182070263696831820702666f776e6572318207027077696e5265706f"
+      "7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c7265706f72"
+      "74696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e74657261"
       "6374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69"
-      "636b2e636f6d71696e74657265737447726f75704e616d656369673172696e7465726573"
-      "7447726f75704f776e65727268747470733a2f2f6164746563682e636f6d");
+      "636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a2"
+      "6c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f"
+      "6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
+      "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d65636967"
+      "3172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
+      "636f6d");
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {
@@ -1311,6 +1353,61 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncodingNoBidCurrency) {
       "687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d656369"
       "673172696e74657265737447726f75704f776e65727268747470733a2f2f616474656368"
       "2e636f6d");
+}
+
+TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
+  ScoreAdsResponse::AdScore winner;
+  winner.set_interest_group_owner("https://adtech.com");
+  winner.set_interest_group_name("ig1");
+  winner.set_desirability(156671.781);
+  winner.set_buyer_bid(0.195839122);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->set_reporting_url(kTestReportWinUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_buyer_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->set_reporting_url(kTestReportResultUrl);
+  winner.mutable_win_reporting_urls()
+      ->mutable_top_level_seller_reporting_urls()
+      ->mutable_interaction_reporting_urls()
+      ->try_emplace(kTestEvent1, kTestInteractionUrl1);
+  winner.set_buyer_reporting_id(kTestBuyerReportingId);
+  const std::string interest_group_owner_1 = "ig1";
+  const std::string interest_group_owner_2 = "zi";
+  const std::string interest_group_owner_3 = "ih1";
+  AuctionResult::InterestGroupIndex indices;
+  indices.add_index(7);
+  indices.add_index(2);
+  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
+      bidding_group_map;
+  bidding_group_map.try_emplace(interest_group_owner_1, indices);
+  bidding_group_map.try_emplace(interest_group_owner_2, indices);
+  bidding_group_map.try_emplace(interest_group_owner_3, indices);
+  bidding_group_map.try_emplace("owner1", std::move(indices));
+
+  auto ret = Encode(std::move(winner), bidding_group_map, std::nullopt,
+                    [](auto error) {});
+  ASSERT_TRUE(ret.ok()) << ret.status();
+  // Conversion can be verified at: https://cbor.me/
+  EXPECT_EQ(
+      absl::BytesToHexString(*ret),
+      "aa63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
+      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
+      "698207026369673182070263696831820702666f776e6572318207027062757965725265"
+      "706f7274696e674964747465737442757965725265706f7274696e6749647077696e5265"
+      "706f7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c726570"
+      "6f7274696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e7465"
+      "72616374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f63"
+      "6c69636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c"
+      "73a26c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e"
+      "636f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b"
+      "70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
+      "69673172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563"
+      "682e636f6d");
 }
 
 MATCHER_P(ProtoEq, value, "") {

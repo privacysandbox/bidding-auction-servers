@@ -97,7 +97,8 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
     int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<std::string>& bid_currency = absl::nullopt);
+    const absl::optional<std::string>& bid_currency = absl::nullopt,
+    absl::string_view buyer_reporting_id = "");
 
 void SetupMockCrytoClient(MockCryptoClientWrapper& crypto_client);
 
@@ -111,7 +112,7 @@ void SetupBuyerClientMock(
 
 void BuildAdWithBidFromAdWithBidMetadata(
     const ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata& input,
-    AdWithBid* result);
+    AdWithBid* result, absl::string_view buyer_reporting_id = "");
 
 AdWithBid BuildNewAdWithBid(
     const std::string& ad_url,
@@ -119,7 +120,8 @@ AdWithBid BuildNewAdWithBid(
     absl::optional<float> bid_value = absl::nullopt,
     const bool enable_event_level_debug_reporting = false,
     int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<absl::string_view>& bid_currency = absl::nullopt);
+    const absl::optional<absl::string_view>& bid_currency = absl::nullopt,
+    absl::string_view buyer_reporting_id = "");
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
@@ -143,6 +145,10 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
     const int num_ad_with_bids, const int num_mismatched,
     absl::string_view matching_currency, absl::string_view mismatching_currency,
     absl::string_view base_ad_render_url);
+
+void MockEntriesCallOnBuyerFactory(
+    const google::protobuf::Map<std::string, std::string>& buyer_input,
+    const BuyerFrontEndAsyncClientFactoryMock& factory);
 
 TrustedServersConfigClient CreateConfig();
 
@@ -216,12 +222,16 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
     ClientType client_type, absl::string_view seller_origin_domain,
     bool is_consented_debug = false, absl::string_view top_level_seller = "",
     EncryptionCloudPlatform top_seller_cloud_platform =
-        EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED) {
+        EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED,
+    bool enable_unlimited_egress = false) {
   BuyerInput buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
   *interest_group->mutable_bidding_signals_keys()->Add() = "[]";
-
+  google::protobuf::RepeatedPtrField<std::string> ad_render_ids;
+  ad_render_ids.Add(MakeARandomString());
+  interest_group->mutable_browser_signals()->CopyFrom(
+      MakeRandomBrowserSignalsForIG(ad_render_ids));
   google::protobuf::Map<std::string, BuyerInput> decoded_buyer_inputs;
   decoded_buyer_inputs.emplace(kSampleBuyer, buyer_input);
   google::protobuf::Map<std::string, std::string> encoded_buyer_inputs;
@@ -242,6 +252,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
   SelectAdRequest request;
   T protected_auction_input;
   protected_auction_input.set_generation_id(kSampleGenerationId);
+  protected_auction_input.set_enable_unlimited_egress(enable_unlimited_egress);
   if (is_consented_debug) {
     auto* consented_debug_config =
         protected_auction_input.mutable_consented_debug_config();
@@ -316,7 +327,7 @@ GetSelectAdRequestAndClientRegistryForTest(
     ClientType client_type, std::optional<float> buyer_bid,
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
         scoring_signals_provider,
-    const ScoringAsyncClientMock& scoring_client,
+    ScoringAsyncClientMock& scoring_client,
     const BuyerFrontEndAsyncClientFactoryMock&
         buyer_front_end_async_client_factory_mock,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
@@ -349,7 +360,8 @@ GetSelectAdRequestAndClientRegistryForTest(
   }
   using ScoreAdsDoneCallback =
       absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
-                                  ScoreAdsResponse::ScoreAdsRawResponse>>) &&>;
+                                  ScoreAdsResponse::ScoreAdsRawResponse>>,
+                              ResponseMetadata) &&>;
   // Sets up scoring Client
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
@@ -357,7 +369,7 @@ GetSelectAdRequestAndClientRegistryForTest(
            force_set_modified_bid_to_zero](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               const RequestMetadata& metadata, ScoreAdsDoneCallback on_done,
-              absl::Duration timeout) {
+              absl::Duration timeout, RequestConfig request_config) {
             for (const auto& bid : request->ad_bids()) {
               auto response =
                   std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
@@ -409,7 +421,8 @@ GetSelectAdRequestAndClientRegistryForTest(
               if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }
-              std::move(on_done)(std::move(response));
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
               // Expect only one bid.
               break;
             }

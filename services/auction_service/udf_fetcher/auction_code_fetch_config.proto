@@ -1,0 +1,78 @@
+/*
+ * Copyright 2023 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package privacy_sandbox.bidding_auction_servers.auction_service;
+
+import "services/common/blob_fetch/fetch_mode.proto";
+
+message SellerCodeFetchConfig {
+
+   // Required if fetch_mode = FETCH_MODE_LOCAL.
+   // The javascript generateBid script.
+   string auction_js_path = 1;
+
+   // Required if fetch_mode = FETCH_MODE_URL.
+   // URL endpoint for fetching AdTech code blob, js file.
+   string auction_js_url = 2;
+
+   // Period of how often to fetch AdTech code blob from the URL endpoint.
+   int64 url_fetch_period_ms = 3;
+
+   // A time out limit for HttpsFetcherAsync client to stop executing FetchUrl.
+   int64 url_fetch_timeout_ms = 4;
+
+   // Required if fetch_mode = FETCH_MODE_BUCKET.
+   // The name of a bucket from which to fetch code blobs.
+   // All blobs will be fetched from this bucket.
+   string auction_js_bucket = 11;
+
+   // Required if fetch_mode = FETCH_MODE_BUCKET.
+   // The name of the bucket's default code blob to use.
+   // The default will be used if the scoring request does not specify a version.
+   string auction_js_bucket_default_blob = 12;
+
+   // Required.
+   // Specifies which mode to use when fetching UDF blobs.
+   blob_fetch.FetchMode fetch_mode = 13;
+
+   // Allow seller debug URL generation.
+   bool enable_seller_debug_url_generation = 5;
+
+   // Allow handling of console.logs from AdTech script execution.
+   bool enable_adtech_code_logging = 6;
+
+   // Enables executing reportResult function from Seller's script.
+   bool enable_report_result_url_generation = 7;
+
+   // Enables executing reportWin function from Seller's script.
+   bool enable_report_win_url_generation = 8;
+
+   // Map of buyer origin to URL endpoint for reportWin js file.
+   map<string, string> buyer_report_win_js_urls = 9;
+
+   // Map of buyer origin to URL endpoint for reportWin js file for protected
+   // app signals.
+   map<string, string> protected_app_signals_buyer_report_win_js_urls = 10;
+
+   // Temporary flag to enable seller's udf and buyer's reportWin()
+   // udf isolation.
+   bool enable_seller_and_buyer_udf_isolation = 14;
+
+   // Enables private aggregate reporting.
+   bool enable_private_aggregate_reporting = 15;
+}

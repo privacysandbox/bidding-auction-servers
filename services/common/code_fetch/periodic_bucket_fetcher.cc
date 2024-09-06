@@ -29,6 +29,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
 #include "services/common/code_fetch/code_fetcher_interface.h"
+#include "services/common/util/request_response_constants.h"
 #include "src/core/interface/async_context.h"
 #include "src/core/interface/errors.h"
 #include "src/logger/request_context_logger.h"
@@ -103,12 +104,12 @@ PeriodicBucketFetcher::ListBlobsSync() {
             notification.Notify();
           });
 
-  auto list_blobs_execution =
-      blob_storage_client_.ListBlobsMetadata(list_blobs_context);
-  if (!list_blobs_execution.Successful()) {
-    result = absl::InternalError(
-        absl::StrCat("ListBlobsMetadata attempt failed: ",
-                     GetErrorMessage(list_blobs_execution.status_code)));
+  if (const absl::Status status =
+          blob_storage_client_.ListBlobsMetadata(list_blobs_context);
+      !status.ok()) {
+    result = absl::Status(
+        status.code(),
+        absl::StrCat("ListBlobsMetadata attempt failed: ", status.message()));
     PS_VLOG(5) << "List blob metadata failed.";
   } else {
     PS_VLOG(5) << "Waiting for list blob metadata done notification.";
@@ -122,19 +123,20 @@ void PeriodicBucketFetcher::HandleBlobFetchResult(
     const AsyncContext<GetBlobRequest, GetBlobResponse>& context) {
   absl::string_view version = context.request->blob_metadata().blob_name();
   if (!context.result.Successful()) {
-    PS_VLOG(0) << "Failed to fetch blob: " << version
-               << GetErrorMessage(context.result.status_code);
+    PS_LOG(ERROR) << "Failed to fetch blob: " << version
+                  << GetErrorMessage(context.result.status_code);
     return;
   }
   auto result_value = {context.response->blob().data()};
   std::string wrapped_code = wrap_code_(result_value);
   absl::Status roma_result = dispatcher_.LoadSync(version, wrapped_code);
   if (!roma_result.ok()) {
-    PS_VLOG(0) << "Roma failed to load blob: " << roma_result;
+    PS_LOG(ERROR) << "Roma failed to load blob: " << roma_result;
     return;
   }
-  PS_VLOG(1) << "Current code loaded into Roma for version " << version << ":\n"
-             << wrapped_code;
+  PS_VLOG(kSuccess) << "Current code loaded into Roma for version " << version
+                    << ":\n"
+                    << wrapped_code;
   absl::MutexLock lock(&some_load_success_mu_);
   some_load_success_ = true;
 }
@@ -142,9 +144,9 @@ void PeriodicBucketFetcher::HandleBlobFetchResult(
 void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
   absl::StatusOr<ListBlobsMetadataResponse> blob_list = ListBlobsSync();
   if (!blob_list.ok()) {
-    PS_VLOG(0) << "Periodic bucket fetch failed for bucket " << bucket_name_
-               << ". Will try again in " << fetch_period_ms_
-               << " milliseconds.";
+    PS_LOG(ERROR) << "Periodic bucket fetch failed for bucket " << bucket_name_
+                  << ". Will try again in " << fetch_period_ms_
+                  << " milliseconds.";
     task_id_ = executor_.RunAfter(fetch_period_ms_,
                                   [this]() { PeriodicBucketFetchSync(); });
     return;
@@ -166,12 +168,11 @@ void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
           blobs_remaining.DecrementCount();
         });
 
-    auto get_blob_result = blob_storage_client_.GetBlob(get_blob_context);
-
-    if (!get_blob_result.Successful()) {
+    if (absl::Status status = blob_storage_client_.GetBlob(get_blob_context);
+        !status.ok()) {
       blobs_remaining.DecrementCount();
-      PS_VLOG(0) << "GetBlob attempt failed for " << md.blob_name()
-                 << GetErrorMessage(get_blob_result.status_code);
+      PS_LOG(ERROR) << "GetBlob attempt failed for " << md.blob_name()
+                    << status.message();
     }
   }
 

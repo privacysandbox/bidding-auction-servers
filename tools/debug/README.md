@@ -82,18 +82,6 @@ Docker daemon should be up and running.
 #### Start Buyer stack
 
 ```bash
-# Find Bazel Build Path
-# The path for the server binaries will be different in case of docker builds. You can find the root
-# of the build directory as follows -
-# Run in bidding-auction-server root to find bazel build root
-ls -al
-# Should print out the following as part of the output
-# bazel-bin -> /bazel_root/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5/execroot/__main__/bazel-out/k8-opt/bin
-
-# Copy the directory name starting [build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5]
-# Find the root of bazel cache in your system. Should be ~/.cache/bazel/
-# Final path is a combination of the two - ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
-
 # Edit the run time flags in the scripts:
 # Eg. change the biddingJsUrl in tools/debug/start_bidding for custom generateBid script.
 # Eg. change the buyer_kv_server_addr in tools/debug/start_bfe for custom KV server.
@@ -101,11 +89,11 @@ ls -al
 
 # Open two new terminals at B&A project root.
 # Start the Bidding server in terminal 1 with bazel build folder:
-./tools/debug/start_bidding ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
+./tools/debug/start_bidding
 # You should see some logs in each server as it displays HTTP metrics for the first call to the generateBid JS endpoint and some errors for OTEL collectors not found.
 
 # Start the BuyerFrontEnd server in terminal 2 with bazel build folder:
-./tools/debug/start_bfe ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
+./tools/debug/start_bfe
 # You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
@@ -118,18 +106,6 @@ ls -al
 #### Start Seller stack
 
 ```bash
-# Find Bazel Build Path
-# The path for the server binaries will be different in case of docker builds. You can find the root
-# of the build directory as follows -
-# Run in bidding-auction-server root to find bazel build root
-ls -al
-# Should print out the following as part of the output
-# bazel-bin -> /bazel_root/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5/execroot/__main__/bazel-out/k8-opt/bin
-
-# Copy the directory name starting [build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5]
-# Find the root of bazel cache in your system. Should be ~/.cache/bazel/
-# Final path is a combination of the two - ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
-
 # Edit the run time flags in the scripts:
 # Eg. change the auctionJsUrl in tools/debug/start_auction for custom scoreAd script.
 # Eg. change the key_value_signals_host in tools/debug/start_sfe for custom KV server.
@@ -137,11 +113,11 @@ ls -al
 
 # Open two new terminals at B&A project root.
 # Start the Auction server in terminal 1 with bazel build folder:
-./tools/debug/start_auction ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
+./tools/debug/start_auction
 # You should see some logs in each server as it displays HTTP metrics for the first call to the scoreAd JS endpoint and some errors for OTEL collectors not found.
 
 # Start the SellerFrontEnd server in terminal 2 with bazel build folder:
-./tools/debug/start_sfe ~/.cache/bazel/build_ubuntu_b5f37d9/eb7c660ef3781542ec00a071f7f762a5
+./tools/debug/start_sfe
 # You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
@@ -180,7 +156,7 @@ there is no recommended way to get an encrypted ciphertext for testing.
 
 ### Test Seller stack
 
-#### Plaintext request
+#### Plaintext SelectAdRequest
 
 Plaintext requests need to be created manually. For the expected format for this request, please
 refer to the [secure_invoke] section.
@@ -204,7 +180,7 @@ DOCKER_NETWORK=host ./builders/tools/bazel-debian run //tools/secure_invoke:invo
     -insecure=true
 ```
 
-#### Encrypted request
+#### Encrypted SelectAdRequest
 
 Encrypted requests must be valid SelectAdRequests with an encrypted protectedAudienceCiphertext. The
 ciphertext can be obtained from the client side (Chrome/Android), and the auction config has to be
@@ -229,6 +205,16 @@ populated manually. There are two ways to send encrypted requests to local serve
     ```bash
     curl --url localhost:51052/v1/selectAd -H 'X-BnA-Client-IP:<Valid IP address>' -H 'X-User-Agent:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36' -H 'x-accept-language: en-US,en;q=0.9' -d "@select_ads_request.json"
     ```
+
+#### GetComponentAuctionCiphertexts
+
+Requests must be valid GetComponentAuctionCiphertextsRequest with an encrypted
+protectedAuctionCiphertext. The encrypted ciphertext can be obtained using the [secure_invoke] tool
+with -op='encrypt'.
+
+```bash
+grpcurl --plaintext -d '{"protected_auction_ciphertext":"", "component_sellers":["component-seller1.com", "component-seller2.com", "component-seller3.com"]}' localhost:50053 privacy_sandbox.bidding_auction_servers.SellerFrontEnd/GetComponentAuctionCiphertexts
+```
 
 Notes:
 

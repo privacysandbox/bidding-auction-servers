@@ -67,7 +67,7 @@ constexpr char kSampleGetBidRequest[] = R"JSON({
       "generationId" : "hardcoded-uuid"
    },
    "publisherName" : "example.com",
-   "seller" : "https://securepubads.g.doubleclick.net"
+   "seller" : "https://sellerorigin.com"
 })JSON";
 
 constexpr char kSampleComponentGetBidRequest[] = R"JSON({
@@ -93,7 +93,7 @@ constexpr char kSampleComponentGetBidRequest[] = R"JSON({
       "generationId" : "hardcoded-uuid"
    },
    "publisherName" : "example.com",
-   "seller" : "https://securepubads.g.doubleclick.net",
+   "seller" : "https://sellerorigin.com",
    "top_level_seller": "https://top-level-seller.com"
 })JSON";
 

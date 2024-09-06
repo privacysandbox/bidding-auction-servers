@@ -91,7 +91,7 @@ resource "google_compute_instance_template" "frontends" {
   }
   metadata = {
     tee-image-reference              = var.frontend_tee_image
-    tee-container-log-redirect       = true
+    tee-container-log-redirect       = var.enable_tee_container_log_redirect
     tee-impersonate-service-accounts = var.tee_impersonate_service_accounts
     mesh-name                        = var.mesh_name
     environment                      = var.environment
@@ -248,7 +248,7 @@ resource "google_compute_instance_template" "backends" {
   metadata = {
     mesh-name                        = var.mesh_name
     tee-image-reference              = var.backend_tee_image
-    tee-container-log-redirect       = true
+    tee-container-log-redirect       = var.enable_tee_container_log_redirect
     tee-impersonate-service-accounts = var.tee_impersonate_service_accounts
     operator                         = var.operator
   }

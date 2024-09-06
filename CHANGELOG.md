@@ -2,6 +2,229 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 3.10.0 (2024-07-13)
+
+
+### Features
+
+* [IsolateBuyerAndSellerCodeExecution] Add wrapper for buyer's reportWin() udf
+* [reporting] Enable reportResult execution for topLevelSeller
+* Add chaffing feature flags in SFE/BFE.
+* Add config flag enable_private_aggregation_generation to auction service's runtime_config
+* Add distribution of IGs related metrics
+* add EventMessage to log context
+* Add request creation timestamp to ProtectedAuctionInput
+* Add request/response to ExecuteInternal on async clients
+* Add support for collecting metrics from the Roma callbacks.
+* Add tee-container-log-redirect option in terraform
+* Bash script for ASG and Cloud Map Custom HealthChecks
+* Bid Currency Support for Top-Level Seller in Server-Orchestrated Multi-Seller Auctions
+* configured public key urls are verified against an explicit allowlist
+* Consented request replace enable_adtech_code_logging in Bidding Server
+* Create inference model store for model management
+* Create logging library for inference consented logs
+* Debug Reporting for Bid Currency
+* decrease aws/build_and_test duration by ~75%
+* Feature Flag for TLS in Service Mesh
+* Force the ML model reset with the probability of 0.1%
+* Forward per request consented debugging config to roma callback
+* Handle chaff and new request format on BFE
+* Implement AWS Cloud Un-Map
+* Implement new SFE <> BFE request format for chaffing
+* Implement the probabilistic model reset for PyTorch
+* Implement the probabilistic model reset for TensorFlow.
+* Integrate with Trusted KV Server in Mesh
+* Load Test Flag for AWS
+* Log consented debugging information in inference sidecar
+* log EventMessage in servers
+* log udf log in EventMessage for non_prod debug_info
+* Remove enableAdtechCodeLogging flag value
+* Remove Envoy Access Logging
+* Route consented inference requests to a consented model store
+* send chaff requests from SFE
+* Service Mesh in AWS
+* Support CPU isolation in the inference sidecar
+* Unpad KV server responses
+* update code/cloud build to use tags
+* Upgrade AWS Provider for Terraform from v3.xx to v4.xx
+* Use gRPC for AWS Service Mesh Envoy HCs
+
+
+### Bug Fixes
+
+* [IsolateBuyerAndSellerCodeExecution] Add a new class for buyer's reporting code fetch and load
+* [IsolateBuyerAndSellerCodeExecution] Add a new code wrapper with only scoreAd and reportResult
+* [IsolateBuyerAndSellerCodeExecution] Add config flag to enable seller and buyer code isolation
+* [IsolateBuyerAndSellerCodeExecution] Modify seller_udf_manager to fetch and load buyer udfs
+* [IsolateBuyerAndSellerCodeExecution] Refactor the code fetch files.
+* Add BidCurrency SUT to Pre-Submit
+* add check back in default grpc client
+* Add DebugInfo pointer for debugging log into RomaRequestContext
+* Add generation_id to chaff requests
+* Adds domain equality validations to buyer reporting UDF URL
+* Align plaintext buyer request for basic SUT with encrypted version
+* clean up log verbosity 3
+* do not try to impersonate service accounts if TEST_MODE=true
+* Eliminate Terraform Error Message about empty Authority Field
+* Ensure instance id is set in logs on AWS when not using mesh.
+* Execute Callback for empty HTTP request vector
+* make num_chaff_requests not have a static lower bound
+* Make terraform for aws delete cloud maps without error
+* Redirect misleading log to /dev/null
+* scorecard.yaml version updates
+* shuffle request order (real and chaff) on SFE
+* Update setup_2 and demo terraform configs to valid state
+* Upgrades google terraform plugin to 5.31.0 to fix crash
+
+## 3.9.0 (2024-06-25)
+
+
+### Features
+
+* [IsolateBuyerAndSellerCodeExecution] Add wrapper for buyer's reportWin() udf
+* [reporting] Enable reportResult execution for topLevelSeller
+* Add chaffing feature flags in SFE/BFE.
+* add EventMessage to log context
+* Add request creation timestamp to ProtectedAuctionInput
+* Add request/response to ExecuteInternal on async clients
+* Add tee-container-log-redirect option in terraform
+* Bash script for ASG and Cloud Map Custom HealthChecks
+* Consented request replace enable_adtech_code_logging in Bidding Server
+* Create inference model store for model management
+* Create logging library for inference consented logs
+* Debug Reporting for Bid Currency
+* decrease aws/build_and_test duration by ~75%
+* Feature Flag for TLS in Service Mesh
+* Force the ML model reset with the probability of 0.1%
+* Forward per request consented debugging config to roma callback
+* Implement AWS Cloud Un-Map
+* Implement new SFE <> BFE request format for chaffing
+* Implement the probabilistic model reset for PyTorch
+* Implement the probabilistic model reset for TensorFlow.
+* Load Test Flag for AWS
+* Log consented debugging information in inference sidecar
+* log EventMessage in servers
+* log udf log in EventMessage for non_prod debug_info
+* Remove enableAdtechCodeLogging flag value
+* Remove Envoy Access Logging
+* Route consented inference requests to a consented model store
+* send chaff requests from SFE
+* Service Mesh in AWS
+* Support CPU isolation in the inference sidecar
+* update code/cloud build to use tags
+* Upgrade AWS Provider for Terraform from v3.xx to v4.xx
+* Use gRPC for AWS Service Mesh Envoy HCs
+
+
+### Bug Fixes
+
+* [IsolateBuyerAndSellerCodeExecution] Add a new class for buyer's reporting code fetch and load
+* [IsolateBuyerAndSellerCodeExecution] Add a new code wrapper with only scoreAd and reportResult
+* [IsolateBuyerAndSellerCodeExecution] Add config flag to enable seller and buyer code isolation
+* [IsolateBuyerAndSellerCodeExecution] Modify seller_udf_manager to fetch and load buyer udfs
+* [IsolateBuyerAndSellerCodeExecution] Refactor the code fetch files.
+* add check back in default grpc client
+* Add DebugInfo pointer for debugging log into RomaRequestContext
+* Add generation_id to chaff requests
+* clean up log verbosity 3
+* do not try to impersonate service accounts if TEST_MODE=true
+* Eliminate Terraform Error Message about empty Authority Field
+* Ensure instance id is set in logs on AWS when not using mesh.
+* Execute Callback for empty HTTP request vector
+* make num_chaff_requests not have a static lower bound
+* scorecard.yaml version updates
+* Upgrades google terraform plugin to 5.31.0 to fix crash
+
+## 3.8.0 (2024-05-24)
+
+
+### Features
+
+* Add tee-container-log-redirect option in terraform
+* Create logging library for inference consented logs
+* Forward per request consented debugging config to roma callback
+* Support CPU isolation in the inference sidecar
+
+
+### Bug Fixes
+
+* [IsolateBuyerAndSellerCodeExecution] Add a new code wrapper with only scoreAd and reportResult
+* clean up log verbosity 3
+
+## 3.7.0 (2024-05-13)
+
+
+### Features
+
+* Add the CPU affinity lib for inference
+
+
+### Bug Fixes
+
+* Cap debug reporting URL
+* Fix the recency value passed to generateBid and scoreAds
+* make aws-image-tag optional
+* remove unitOverride in gcp seller dashboard terraform
+* replace ABSL_LOG with PS_LOG in reactors
+* update empty device signals to be an object, not string
+
+## 3.6.0 (2024-05-01)
+
+
+### Features
+
+* [Debug Reporting] Enable debug reporting by default
+* [DebugReporting] Add a log to get the libcurl queue time
+* add ability to tag AMIs
+* Add kv e2e tests environment
+* Add markdown-link-check to pre-commit
+* add support for AWS CodeBuild
+* add support for GCP Cloud Build
+* API Updates for Bid Currency Support for Top-Level Seller in Server-Orchestrated Multi-Seller Auctions
+* Enable TCMalloc for all B&A servers
+* support sending Nitro Enclave logs to AWS CloudWatch for debugging
+
+
+### Bug Fixes
+
+* [Temp] Adds buyer bid to top level auctions for Chrome < v125
+* Adjust ps_vlog pre-commit hook to avoid recursing symlinks
+* clean up log verbosity 2
+* **deps:** Upgrade clang-format to v18
+* **deps:** Upgrade pre-commit hooks
+* Ensure that the debug url length is capped
+
+## 3.5.0 (2024-04-24)
+
+
+### Features
+
+* Add runtime check for correct inference backend version
+* Adds debug info to secure invoke response
+* Adds implementation of GetComponentAuctionCiphertexts API
+* Adds optional flag to configure cloud platforms for component sellers
+* allow AWS Session Manager instance connection
+* enable bucket fetching for score ad
+* Enables and adds tests for GetComponentAuctionsCiphertexts API
+* Enables Top Level Auctions feature
+* Implement Support for Bid Currency in Reporting
+* Set Seller Rejection Reason on AdWithBid for Mismatch with Expected Buyer Currency
+* Set Seller Rejection Reasons on AdScore for currency-related rejectons
+* Support inference runtime configurations
+* Support Interest Group Origin in InterestGroup and AuctionResponse
+* Top Level auction does not accept multiple results from same seller
+* upload aws/gcp hashes as artifacts on release
+
+
+### Bug Fixes
+
+* Correct check condition in inference main
+* Increase the gRPC recv message limit for the inference sidecar
+* Pass complete ad object to scoreAd
+* Remove redundant clang-tidy repo, move config to .clang-tidy
+* RPC is finished properly in top level auction with reporting
+* Temporarily add bazel_clang_tidy repo
+
 ## 3.4.0 (2024-04-02)
 
 

@@ -51,8 +51,8 @@ TEST(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
       .WillOnce([&js_url, &wasm_helper_url, &url_response](
                     const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout,
-                    absl::AnyInvocable<
-                        void(std::vector<absl::StatusOr<std::string>>) &&>
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<std::string>>)&&>
                         done_callback) {
         EXPECT_EQ(js_url, requests.at(0).url);
         EXPECT_EQ(wasm_helper_url, requests.at(1).url);
@@ -96,8 +96,8 @@ TEST(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
       .WillOnce([&url_response, &done_fetch_url](
                     const std::vector<HTTPRequest>& requests,
                     absl::Duration timeout,
-                    absl::AnyInvocable<
-                        void(std::vector<absl::StatusOr<std::string>>) &&>
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<std::string>>)&&>
                         done_callback) {
         done_fetch_url.DecrementCount();
         std::move(done_callback)(url_response);
@@ -141,8 +141,8 @@ TEST(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
       .WillRepeatedly([&url_response, &done_fetch_url](
                           const std::vector<HTTPRequest>& requests,
                           absl::Duration timeout,
-                          absl::AnyInvocable<
-                              void(std::vector<absl::StatusOr<std::string>>) &&>
+                          absl::AnyInvocable<void(
+                              std::vector<absl::StatusOr<std::string>>)&&>
                               done_callback) {
         done_fetch_url.DecrementCount();
         std::move(done_callback)(url_response);
@@ -188,8 +188,8 @@ TEST(PeriodicCodeFetcherTest, LoadsCodeWithTheCorrectVersion) {
   EXPECT_CALL(*curl_http_fetcher, FetchUrls)
       .WillOnce([](const std::vector<HTTPRequest>& requests,
                    absl::Duration timeout,
-                   absl::AnyInvocable<
-                       void(std::vector<absl::StatusOr<std::string>>) &&>
+                   absl::AnyInvocable<void(
+                       std::vector<absl::StatusOr<std::string>>)&&>
                        done_callback) { std::move(done_callback)({""}); });
 
   constexpr char kTestVersion[] = "v10";

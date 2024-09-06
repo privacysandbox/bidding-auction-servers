@@ -18,6 +18,7 @@
 
 #include "include/grpcpp/support/status_code_enum.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
+#include "src/communication/encoding_utils.h"
 #include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 #include "src/public/cpio/proto/public_key_service/v1/public_key_service.pb.h"
 
@@ -53,29 +54,38 @@ void KVAsyncGrpcClient::SendRpc(
         auto oblivious_http_request_uptr =
             ObliviousHttpRequestUptr(captured_oblivious_http_context);
         if (!status.ok()) {
-          PS_VLOG(1) << "SendRPC completion status not ok: "
-                     << server_common::ToAbslStatus(status);
+          PS_LOG(ERROR) << "SendRPC completion status not ok: "
+                        << server_common::ToAbslStatus(status);
           params->OnDone(status);
           return;
         }
-
         PS_VLOG(6) << "SendRPC completion status ok";
         auto plain_text_binary_http_response =
             FromObliviousHTTPResponse(*params->ResponseRef()->mutable_data(),
                                       *captured_oblivious_http_context);
         if (!plain_text_binary_http_response.ok()) {
-          PS_VLOG(1) << "KVAsyncGrpcClient failed to get binary HTTP response";
+          PS_LOG(ERROR)
+              << "KVAsyncGrpcClient failed to get binary HTTP response";
           params->OnDone(grpc::Status(
               grpc::StatusCode::INVALID_ARGUMENT,
               plain_text_binary_http_response.status().ToString()));
           return;
         }
-
+        auto deframed_req =
+            privacy_sandbox::server_common::DecodeRequestPayload(
+                *plain_text_binary_http_response);
+        if (!deframed_req.ok()) {
+          PS_LOG(ERROR) << "Unpadding response failed: "
+                        << deframed_req.status();
+          params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                      deframed_req.status().ToString()));
+          return;
+        }
         auto response = FromBinaryHTTP<GetValuesResponse>(
-            *plain_text_binary_http_response, /*from_json=*/true);
+            deframed_req->compressed_data, /*from_json=*/false);
         PS_VLOG(7) << "Retrieved proto response: " << response->DebugString();
         if (!response->has_single_partition()) {
-          PS_VLOG(1)
+          PS_LOG(ERROR)
               << "KVAsyncGrpcClient expected a single partition response, got: "
               << response->DebugString();
           params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
@@ -93,13 +103,13 @@ void KVAsyncGrpcClient::SendRpc(
 absl::Status KVAsyncGrpcClient::ExecuteInternal(
     std::unique_ptr<GetValuesRequest> raw_request,
     const RequestMetadata& metadata,
-    absl::AnyInvocable<
-        void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>) &&>
+    absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                            ResponseMetadata) &&>
         on_done,
-    absl::Duration timeout) const {
+    absl::Duration timeout, RequestConfig request_config) {
   PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
   PS_ASSIGN_OR_RETURN(std::string binary_http_msg,
-                      ToBinaryHTTP(*raw_request, /*to_json=*/true));
+                      ToBinaryHTTP(*raw_request, /*to_json=*/false));
 
   PS_VLOG(5) << "Fetching public Key ...";
   PS_ASSIGN_OR_RETURN(auto public_key,

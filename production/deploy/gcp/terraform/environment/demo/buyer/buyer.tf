@@ -33,6 +33,11 @@ resource "google_compute_project_metadata" "default" {
   }
 }
 
+# See README.md for instructions on how to use the secrets module.
+module "secrets" {
+  source = "../../../modules/secrets"
+}
+
 module "buyer" {
   source               = "../../../modules/buyer"
   environment          = local.environment
@@ -52,7 +57,7 @@ module "buyer" {
     TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
     ENABLE_BIDDING_SERVICE_BENCHMARK              = "" # Example: "false"
-    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://googleads.g.doubleclick.net/td/bts"
+    BUYER_KV_SERVER_ADDR                          = "" # Example: "https://kvserver.com/trusted-signals"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR               = "" # Example: "xds:///ad-retrieval-host"
     TEE_KV_SERVER_ADDR                            = "" # Example: "xds:///kv-service-host"
     AD_RETRIEVAL_TIMEOUT_MS                       = "" # Example: "60000"
@@ -78,8 +83,7 @@ module "buyer" {
     #    "protectedAppSignalsBiddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
     #    "urlFetchTimeoutMs": 30000,
-    #    "enableBuyerDebugUrlGeneration": false,
-    #    "enableAdtechCodeLogging": false,
+    #    "enableBuyerDebugUrlGeneration": true,
     #    "prepareDataForAdsRetrievalJsUrl": "",
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #  }"
@@ -96,27 +100,40 @@ module "buyer" {
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.
     # More information on enrollment can be found here: https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#enroll-with-coordinators
     PUBLIC_KEY_ENDPOINT                           = "https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys"
-    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "https://privatekeyservice-a.pa-1.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
-    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT    = "https://privatekeyservice-b.pa-2.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
-    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY          = "a-opverifiedusr@ps-pa-coord-prd-gg-wif.iam.gserviceaccount.com"
-    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY        = "b-opverifiedusr@ps-pa-coord-prd-gg-wif.iam.gserviceaccount.com"
+    PRIMARY_COORDINATOR_PRIVATE_KEY_ENDPOINT      = "https://privatekeyservice-a.pa-3.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
+    SECONDARY_COORDINATOR_PRIVATE_KEY_ENDPOINT    = "https://privatekeyservice-b.pa-4.gcp.privacysandboxservices.com/v1alpha/encryptionKeys"
+    PRIMARY_COORDINATOR_ACCOUNT_IDENTITY          = "a-opverifiedusr@ps-pa-coord-prd-g3p-wif.iam.gserviceaccount.com"
+    SECONDARY_COORDINATOR_ACCOUNT_IDENTITY        = "b-opverifiedusr@ps-prod-pa-type2-fe82.iam.gserviceaccount.com"
     PRIMARY_COORDINATOR_REGION                    = "us-central1"
     SECONDARY_COORDINATOR_REGION                  = "us-central1"
-    GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER   = "projects/787276892073/locations/global/workloadIdentityPools/a-opwip/providers/a-opwip-pvdr"
-    GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "projects/787276892073/locations/global/workloadIdentityPools/b-opwip/providers/b-opwip-pvdr"
-    GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "https://a-us-central1-encryption-key-service-cloudfunctio-mik44m5f7q-uc.a.run.app"
-    GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "https://b-us-central1-encryption-key-service-cloudfunctio-amv3tcudsq-uc.a.run.app"
+    GCP_PRIMARY_WORKLOAD_IDENTITY_POOL_PROVIDER   = "projects/732552956908/locations/global/workloadIdentityPools/a-opwip/providers/a-opwip-pvdr"
+    GCP_SECONDARY_WORKLOAD_IDENTITY_POOL_PROVIDER = "projects/99438709206/locations/global/workloadIdentityPools/b-opwip/providers/b-opwip-pvdr"
+    GCP_PRIMARY_KEY_SERVICE_CLOUD_FUNCTION_URL    = "https://a-us-central1-encryption-key-service-cloudfunctio-j27wiaaz5q-uc.a.run.app"
+    GCP_SECONDARY_KEY_SERVICE_CLOUD_FUNCTION_URL  = "https://b-us-central1-encryption-key-service-cloudfunctio-wdqaqbifva-uc.a.run.app"
     PRIVATE_KEY_CACHE_TTL_SECONDS                 = "3974400"
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS        = "20000"
 
-    BFE_TLS_KEY                        = "" # You can either set this here or via a secrets.auto.tfvars.
-    BFE_TLS_CERT                       = "" # You can either set this here or via a secrets.auto.tfvars.
-    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
-    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
+    BFE_TLS_KEY                        = module.secrets.tls_key  # You may remove the secrets module and instead either inline or use an auto.tfvars for this variable.
+    BFE_TLS_CERT                       = module.secrets.tls_cert # You may remove the secrets module and instead either inline or use an auto.tfvars for this variable.
+    MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = ""                      # Example: "65536"
+    MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = ""                      # Example: "3000"
 
-    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar"
-    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
-    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
+    INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar"
+    INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_BUCKET_PATHS     = "" # Example: "<model_path1>,<model_path2>"
+    INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:
+    # "{
+    #    "num_interop_threads": 4,
+    #    "num_intraop_threads": 4,
+    #    "module_name": "tensorflow_v2_14_0",
+    # }"
+
+    # TCMalloc related config parameters.
+    # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
+    BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND = "4096"        # Example: 4096
+    BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240" # Example: 10737418240
+    BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
+    BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 
   # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.
@@ -129,7 +146,7 @@ module "buyer" {
   vm_startup_delay_seconds           = 200   # Example: 200
   cpu_utilization_percent            = 0.6   # Example: 0.6
   use_confidential_space_debug_image = false # Example: false
-  tee_impersonate_service_accounts   = "a-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com,b-opallowedusr@ps-pa-coord-prd-gg-svcacc.iam.gserviceaccount.com"
+  tee_impersonate_service_accounts   = "a-opallowedusr@ps-pa-coord-prd-g3p-svcacc.iam.gserviceaccount.com,b-opallowedusr@ps-prod-pa-type2-fe82.iam.gserviceaccount.com"
   collector_service_port             = 4317
   collector_startup_script = templatefile("../../../services/autoscaling/collector_startup.tftpl", {
     collector_port           = 4317
@@ -161,4 +178,5 @@ module "buyer" {
       }
     }
   }
+  enable_tee_container_log_redirect = false
 }

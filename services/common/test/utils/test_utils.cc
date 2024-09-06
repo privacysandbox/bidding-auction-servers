@@ -26,6 +26,7 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
   raw_request.set_publisher_name(kTestPublisherName);
   raw_request.set_seller(kTestSeller);
   raw_request.set_enable_debug_reporting(true);
+  raw_request.set_enable_unlimited_egress(true);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
   raw_request.mutable_log_context()->set_adtech_debug_id(kTestAdTechDebugId);
   raw_request.mutable_consented_debug_config()->set_is_consented(true);
@@ -82,7 +83,9 @@ ProtectedAppSignalsAdWithBid CreateProtectedAppSignalsAdWithBid() {
   ad_with_bid.set_modeling_signals(kTestModelingSignals2);
   ad_with_bid.set_ad_cost(kTestAdCost2);
   ad_with_bid.set_bid_currency(kTestCurrency2);
-  ad_with_bid.set_egress_features(kTestEgressFeature);
+  ad_with_bid.set_egress_payload(kTestEgressPayload);
+  ad_with_bid.set_temporary_unlimited_egress_payload(
+      kTestTemporaryEgressPayload);
   return ad_with_bid;
 }
 

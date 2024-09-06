@@ -37,7 +37,6 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 using bidding_service::BuyerCodeFetchConfig;
-using bidding_service::FetchMode;
 
 using ::google::cmrt::sdk::blob_storage_service::v1::BlobMetadata;
 using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest;
@@ -71,7 +70,7 @@ TEST_F(BuyerCodeFetchManagerTest, FetchModeLocalTriesFileLoad) {
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
 
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_LOCAL);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_LOCAL);
   const std::string bad_path = "error";
   udf_config.set_bidding_js_path(bad_path);
   BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
@@ -85,12 +84,10 @@ TEST_F(BuyerCodeFetchManagerTest, FetchModeLocalTriesFileLoad) {
 }
 
 TEST_F(BuyerCodeFetchManagerTest, FetchModeBucketTriesBucketLoad) {
-  EXPECT_CALL(*blob_storage_client_, Init)
-      .WillOnce(Return(SuccessExecutionResult()));
-  EXPECT_CALL(*blob_storage_client_, Run)
-      .WillOnce(Return(SuccessExecutionResult()));
+  EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_BUCKET);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_BUCKET);
   BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
                                     dispatcher_.get(),
                                     std::move(blob_storage_client_), udf_config,
@@ -104,17 +101,22 @@ TEST_F(BuyerCodeFetchManagerTest, FetchModeBucketTriesBucketLoad) {
 
 TEST_F(BuyerCodeFetchManagerTest, TriesBucketFetchForProtectedAuction) {
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_BUCKET);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_BUCKET);
   udf_config.set_url_fetch_period_ms(1);
   udf_config.set_protected_auction_bidding_js_bucket("pa");
   udf_config.set_protected_auction_bidding_js_bucket_default_blob("pa_test");
 
-  EXPECT_CALL(*blob_storage_client_, Init)
-      .WillOnce(Return(SuccessExecutionResult()));
-  EXPECT_CALL(*blob_storage_client_, Run)
-      .WillOnce(Return(SuccessExecutionResult()));
+  EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
+      .WillOnce(
+          [](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+                 context) {
+            context.response = std::make_shared<ListBlobsMetadataResponse>();
+            context.Finish(SuccessExecutionResult());
+            return absl::OkStatus();
+          });
 
-  // EXPECT_CALL(*blob_storage_client_)
   BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
                                     dispatcher_.get(),
                                     std::move(blob_storage_client_), udf_config,
@@ -129,16 +131,22 @@ TEST_F(BuyerCodeFetchManagerTest, TriesBucketFetchForProtectedAuction) {
 
 TEST_F(BuyerCodeFetchManagerTest, TriesBucketFetchForProtectedAppSignals) {
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_BUCKET);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_BUCKET);
   udf_config.set_url_fetch_period_ms(1);
   udf_config.set_protected_app_signals_bidding_js_bucket("pas");
   udf_config.set_protected_app_signals_bidding_js_bucket_default_blob(
       "pas_test");
 
-  EXPECT_CALL(*blob_storage_client_, Init)
-      .WillOnce(Return(SuccessExecutionResult()));
-  EXPECT_CALL(*blob_storage_client_, Run)
-      .WillOnce(Return(SuccessExecutionResult()));
+  EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
+      .WillOnce(
+          [](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+                 context) {
+            context.response = std::make_shared<ListBlobsMetadataResponse>();
+            context.Finish(SuccessExecutionResult());
+            return absl::OkStatus();
+          });
 
   BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
                                     dispatcher_.get(),
@@ -161,7 +169,7 @@ TEST_F(BuyerCodeFetchManagerTest,
   const std::string ads_object = "ads_test";
 
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_BUCKET);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_BUCKET);
   udf_config.set_url_fetch_period_ms(1);
   udf_config.set_protected_app_signals_bidding_js_bucket(pas_bucket);
   udf_config.set_protected_app_signals_bidding_js_bucket_default_blob(
@@ -169,13 +177,12 @@ TEST_F(BuyerCodeFetchManagerTest,
   udf_config.set_ads_retrieval_js_bucket(ads_bucket);
   udf_config.set_ads_retrieval_bucket_default_blob(ads_object);
 
-  EXPECT_CALL(*blob_storage_client_, Init)
-      .WillOnce(Return(SuccessExecutionResult()));
-  EXPECT_CALL(*blob_storage_client_, Run)
-      .WillOnce(Return(SuccessExecutionResult()));
+  EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
       .WillOnce(
-          [&](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+          [&pas_bucket, &pas_object](
+              AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
                   context) {
             EXPECT_EQ(context.request->blob_metadata().bucket_name(),
                       pas_bucket);
@@ -186,13 +193,13 @@ TEST_F(BuyerCodeFetchManagerTest,
             context.response = std::make_shared<ListBlobsMetadataResponse>();
             context.response->mutable_blob_metadatas()->Add(std::move(md));
             context.Finish(SuccessExecutionResult());
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           })
       .WillOnce([&ads_bucket](
                     const AsyncContext<ListBlobsMetadataRequest,
                                        ListBlobsMetadataResponse>& context) {
         EXPECT_EQ(context.request->blob_metadata().bucket_name(), ads_bucket);
-        return FailureExecutionResult(SC_UNKNOWN);
+        return absl::UnknownError("");
       });
   EXPECT_CALL(*blob_storage_client_, GetBlob)
       .WillOnce(
@@ -210,7 +217,7 @@ TEST_F(BuyerCodeFetchManagerTest,
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*dispatcher_, LoadSync)
@@ -220,7 +227,7 @@ TEST_F(BuyerCodeFetchManagerTest,
         EXPECT_EQ(
             blob_data,
             GetBuyerWrappedCode(pas_data, "", AuctionType::kProtectedAppSignals,
-                                "// No additional setup"));
+                                kEncodedProtectedAppSignalsHandler));
         return absl::OkStatus();
       });
 
@@ -248,7 +255,7 @@ TEST_F(BuyerCodeFetchManagerTest, FetchModeUrlTriesUrlLoad) {
   const std::string ads_retrieval_wasm_url = "f";
 
   BuyerCodeFetchConfig udf_config;
-  udf_config.set_fetch_mode(FetchMode::FETCH_MODE_URL);
+  udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_URL);
 
   udf_config.set_bidding_js_url(pa_url);
   udf_config.set_bidding_wasm_helper_url(pa_wasm_url);

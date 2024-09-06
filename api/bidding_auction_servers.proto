@@ -28,10 +28,11 @@ import "src/logger/logger.proto";
 message ProtectedAudienceInput {
   option deprecated = true;
   // Input per buyer.
-  // The key in the map corresponds to IGOwner (Interest Group Owner) that
-  // is the Buyer / DSP. This  string that can identify a
-  // buyer participating in the auction. The value corresponds to plaintext
-  // BuyerInput ingested by the buyer for bidding.
+  // The key in the map corresponds to the Buyer / DSP that owns interest
+  // groups and protected app signals (in case of Android) that are part of
+  // this request. This string can identify a buyer participating in the
+  // auction. The value corresponds to plaintext BuyerInput ingested by the
+  // buyer for bidding.
   map<string, bytes> buyer_input = 1;
 
   // Publisher website or app.
@@ -63,10 +64,11 @@ message ProtectedAudienceInput {
 // for the Protected Audience auction.
 message ProtectedAuctionInput {
   // Input per buyer.
-  // The key in the map corresponds to IGOwner (Interest Group Owner) that
-  // is the Buyer / DSP. This  string that can identify a
-  // buyer participating in the auction. The value corresponds to plaintext
-  // BuyerInput ingested by the buyer for bidding.
+  // The key in the map corresponds to the Buyer / DSP that owns interest
+  // groups and protected app signals (in case of Android) that are part of
+  // this request. This string can identify a buyer participating in the
+  // auction. The value corresponds to plaintext BuyerInput ingested by the
+  // buyer for bidding.
   map<string, bytes> buyer_input = 1;
 
   // Publisher website or app.
@@ -89,6 +91,13 @@ message ProtectedAuctionInput {
   // A boolean value which indicates whether temporary unlimited egress should
   // be enabled.
   bool enable_unlimited_egress = 6;
+
+  // Optional field (note: this will become a required field in 2025).
+  // The request timestamp represents when the SSP requests an ad auction to be run.
+  // For Chrome, the request timestamp will be passed to the browser by the SSP
+  // when it requests the browser to run an auction. For Android, the request
+  // timestamp will come from the system clock on the device.
+  int64 request_timestamp_ms = 7;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -179,6 +188,14 @@ message BrowserSignals {
   // that occurred in the last 30 days. The time is specified in seconds
   // before the containing auctionBlob was requested.
   string prev_wins = 4;
+
+  // The most recent join time for this group expressed in milli seconds
+  // before the containing auctionBlob was requested. This field will be used
+  // by newer client versions. For older devices, the precison will be in seconds.
+  // If recency_ms is present, this value will be used to offer higher precision.
+  // If not, recency will be used.
+  // Only one of the recency or recency_ms is expected to present in the request.
+  optional int64 recency_ms = 5;
 }
 
 // Information passed by Android.
@@ -318,6 +335,147 @@ message AuctionResult {
 
   // This is only populated for component auctions.
   AuctionParams auction_params = 18;
+
+  // BuyerReportingId of the winning Ad.
+  // This will be verified with the buyerReportingId in the Ad properties on
+  // the browser.
+  string buyer_reporting_id = 19;
+
+  // BuyerAndSellerReportingId of the winning Ad.
+  // This will be verified with the buyerAndSellerReportingId in the Ad
+  // properties on the browser.
+  string buyer_and_seller_reporting_id = 20;
+
+  // Join candidates for K-Anonymity for the winner. This should include
+  // key hashes corresponding to the winning ad only.
+  // Refer https://wicg.github.io/turtledove/#k-anonymity for details around
+  // how clients call the Join API using the hash.
+  message KAnonJoinCandidate {
+    // Protected Audience:
+    // - SHA-256 hash of the tuple: render_url, interest group owner, reportWin()
+    //   UDF endpoint.
+    //
+    // Protected App Signals:
+    // - SHA-256 hash of render_url, reportWin UDF endpoint.
+    //
+    // NOTE: The buyer's reportWin() UDF url endpoint must match with what
+    // Chrome has.
+    // Refer to the spec to create key hashes-   https://wicg.github.io/turtledove/#query-ad-k-anonymity-count
+    string ad_render_url_hash = 1;
+
+    // Protected Audience:
+    // - SHA-256 hash of an ad_component_render_url.
+    //
+    // Refer to the spec to create key hashes- https://wicg.github.io/turtledove/#query-component-ad-k-anonymity-count
+    //
+    // Note: There is a maximum limit of 40 ad component render urls per
+    // render url.
+    // Note: Currently component ads are not in scope of Protected App Signals
+    // for Android.
+    repeated string ad_component_render_urls_hash = 2;
+
+    // Protected Audience:
+    // - SHA-256 hash should include IG owner, ad render url, reportWin() UDF
+    // url and one of the following:
+    //   - If buyerAndSellerReportingId exists, this hash should  include that.
+    //   - Else if buyerReportingId exists, hash should include that.
+    //   - Else IG name should be included in the hash.
+    //
+    // Note: By design, an adtech can use either buyerReportingId or
+    // buyerAndSellerReportingId.
+    // Note: Currently reporting Ids are not in scope of Protected Audience
+    // for Android and Protected App Signal for Android.
+    string reporting_id_hash = 3;
+  }
+
+  KAnonJoinCandidate k_anon_winner_join_candidates = 21;
+
+  // Positional index of the k-anon winner, if there is a winner returned to
+  // the client (web browser, Android) for emitting metrics.
+  //
+  // Note: Positional index >= 0.
+  // - If this is equal to 0, that would imply the highest scored bid is also
+  // K-Anonymous and hence a winner.
+  // - If this is greater than 0, the positional index would imply the index of
+  // first K-Anonymous scored bid in a sorted list in decreasing order of scored
+  // bids. In this case, the highest scored bid that is not K-Anonymous is the
+  // ghost winner.
+  // - In case all scored bids fail the K-Anonymity constraint, this would be
+  // set to -1 since there is no winner.
+  // - In case all scored bids <= 0, this would be set to -1 since there is no
+  // winner.
+  optional int32 k_anon_winner_positional_index = 22;
+
+  // Data for the ghost winner sent back to the client. This should also include
+  // key-hashes corresponding to the ghost winning ad.
+  // Refer https://wicg.github.io/turtledove/#k-anonymity for details around
+  // how clients call the Join API using the hash.
+  message KAnonGhostWinner {
+    // Join candidates for the K-Anon ghost winner.
+    KAnonJoinCandidate k_anon_join_candidates = 1;
+
+    // Interest group index corresponding to buyer / DSP
+    // that generated the ghost winning bid.
+    // Note: This is only relevant in case of Protected Audience.
+    int32 interest_group_index = 2;
+
+    // Origin (Chrome) and domain (Android) of the buyer / DSP who owns
+    // the ghost winner.
+    // Protected Audience: This refers to the Interest Group owner.
+    // Proptected App Signal: This refers to the buyer domain.
+    string owner = 3;
+
+    // Private aggregation signals for the ghost winner.
+    // Single seller auctions: This would correspond to a ghost winner
+    // if available.
+    //
+    // Note: Event type is "reserved.loss" and bid rejection reason is 8
+    // when K-Anonymity threshold is not. The client should incorporate these static
+    // values; these won't be sent back.
+    message GhostWinnerPrivateAggregationSignals {
+      // 128 bit integer in the form of bytestring.
+      bytes bucket = 1;
+
+      int32 value = 2;
+    }
+    optional GhostWinnerPrivateAggregationSignals ghost_winner_private_aggregation_signals = 4;
+
+    // In case of multiseller auction, the associated data for the ghost winner
+    // will be returned so that the ghost winning bid can be scored
+    // during top level auction. This is true if there is a ghost winner
+    // after component level auction.
+    // - In case of device orchestrated component auction for web, this data will
+    // returned to the browser so that the ghost winner can be passed to the top
+    // level auction on-device.
+    // - In case of server orchestrated component auction (for web, Android), this
+    // data will be returned to the top level seller by the component level
+    // sellers.
+    message GhostWinnerForTopLevelAuction {
+      // The ad render url corresponding to ghost winner.
+      string ad_render_url = 1;
+
+      // Render URLs for ads which are components of the main ghost winning ad.
+      repeated string ad_component_render_urls = 2;
+
+      // Modified bid price corresponding to ghost winning bid.
+      float modified_bid = 3;
+
+      // Optional. Indicates the currency used for the bid price corresponding
+      // to the ghost winner (expressed as ISO 4217 alpha code).
+      string bid_currency = 4;
+
+      // Arbitrary metadata associated with ghost winner to pass to the
+      // top-level seller during top level auction.
+      string ad_metadata = 5;
+
+      // BuyerAndSellerReportingId of the ghost winning Ad.
+      // This will be verified with the buyerAndSellerReportingId in the Ad
+      // properties on the browser.
+      string buyer_and_seller_reporting_id = 6;
+    }
+    optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 5;
+  }
+  repeated KAnonGhostWinner k_anon_ghost_winners = 23;
 }
 
 message GetComponentAuctionCiphertextsRequest {
@@ -532,6 +690,20 @@ message SelectAdRequest {
     // object in SelectAdResponse will be encrypted with a public key
     // of the specified cloud platform instead of the shared encryption context.
     EncryptionCloudPlatform top_level_cloud_platform = 11;
+
+    // Optional. For use by the top-level seller in a server-orchestrated
+    // multiseller auction only. Specifies configuration information about the
+    // component sellers.
+    message PerComponentSellerConfig {
+      // The currency in which the top-level seller expects this component seller
+      // to submit bids. Expressed as three capital letters, ISO 4217 suggested.
+      string expected_currency = 1;
+    }
+
+    // Optional. For use by the top-level seller in a server-orchestrated
+    // multiseller auction only. The key in the map corresponds to the seller
+    // identifier in AuctionResult.auction_params.component_seller.
+    map<string, PerComponentSellerConfig> per_component_seller_config = 12;
   }
   message ComponentAuctionResult {
     //  AuctionResult from a server component auction.
@@ -580,17 +752,6 @@ message SelectAdResponse {
   // needs to use private keys corresponding to same key_id to decrypt
   // 'auction_result_ciphertext'.
   string key_id = 3;
-}
-
-// Context useful for logging and debugging requests.
-message LogContext {
-  // UUID for the request (as originating from client).
-  string generation_id = 1;
-
-  // Adtech debug id that can be used for correlating the request with the
-  // adtech. This will contain `buyer_debug_id` when used in context of buyer
-  // services and `seller_debug_id` when used in context of seller services.
-  string adtech_debug_id = 2;
 }
 
 // Buyer's FrontEnd service.
@@ -655,7 +816,7 @@ message GetBidsRequest {
     bool enable_debug_reporting = 7;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 8;
+    server_common.LogContext log_context = 8;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 9;
@@ -713,8 +874,8 @@ message GetBidsResponse {
 // Bid for an ad candidate.
 message AdWithBid {
   // Metadata of the ad, this will be passed to Seller's scoring function.
-  // Represents a serialized string that is deserialized to a JSON object
-  // before passing to Adtech script.
+  // Represents an opaque object that is eventually passed to seller Adtech
+  // script.
   // Note: API will be updated separately for Component Ads.
   google.protobuf.Value ad = 1;
 
@@ -752,6 +913,9 @@ message AdWithBid {
 
   // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
   string bid_currency = 10;
+
+  // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
+  string buyer_reporting_id = 11;
 }
 
 // Bidding service operated by buyer.
@@ -863,7 +1027,7 @@ message GenerateBidsRequest {
     string publisher_name = 7;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 8;
+    server_common.LogContext log_context = 8;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 9;
@@ -936,7 +1100,7 @@ message GenerateProtectedAppSignalsBidsRequest {
     string publisher_name = 5;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 6;
+    server_common.LogContext log_context = 6;
 
     // Consented debugging field.
     server_common.ConsentedDebugConfiguration consented_debug_config = 7;
@@ -989,12 +1153,17 @@ message ProtectedAppSignalsAdWithBid {
   // Indicates the currency used for the bid price.
   string bid_currency = 6;
 
-  // Holds schema version as well as features related information that needs
-  // to be send back to the buyer who has the winning bid.
-  bytes egress_features = 7;
+  reserved 7;
 
   // Optional field for debug report URLs.
   DebugReportUrls debug_report_urls = 8;
+
+  // Holds schema version as well as features related information that needs
+  // to be send back to the buyer who has the winning bid.
+  string egress_payload = 9;
+
+  // Temporary unlimited size egress features. Meant for experimentation only.
+  string temporary_unlimited_egress_payload = 10;
 }
 
 // Encrypted response to GenerateProtectedAppSignalsBidsRequest with bid prices
@@ -1032,8 +1201,7 @@ message ScoreAdsRequest {
     // Bid for an ad along with other information required to score the ad.
     message AdWithBidMetadata {
       // Metadata of the ad, this will be passed to Seller's scoring function.
-      // Represents a serialized string that is deserialized to a JSON object
-      // before passing to Adtech script.
+      // Represents an opaque ad metadata object.
       google.protobuf.Value ad = 1;
 
       // Bid price corresponding to an ad.
@@ -1081,6 +1249,13 @@ message ScoreAdsRequest {
 
       // Indicates the currency used for the bid price (expressed as ISO 4217 alpha code).
       string bid_currency = 12;
+
+      // Creator of the IG to which the winning ad belongs (applicable for
+      // Protected Audience only).
+      string interest_group_origin = 13;
+
+      // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
+      string buyer_reporting_id = 14;
     }
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
@@ -1129,7 +1304,7 @@ message ScoreAdsRequest {
     bool enable_debug_reporting = 6;
 
     // Helpful context for logging and tracing the request.
-    LogContext log_context = 7;
+    server_common.LogContext log_context = 7;
 
     // Map of buyer_origin to buyer_signals required as input for event level
     // reporting url generation for the winning buyer.
@@ -1161,15 +1336,21 @@ message ScoreAdsRequest {
       // performed stochastically.
       double ad_cost = 5;
 
-      // Features to be sent back to the buyer of winning app install ad to help
-      // train their models.
-      bytes egress_features = 6;
+      reserved 6;
 
       // Domain of Buyer who owns app signals used for this ad.
       string owner = 7;
 
       // Indicates the currency used for the bid price.
       string bid_currency = 8;
+
+      // Features to be sent back to the buyer of winning app install ad to help
+      // train their models.
+      string egress_payload = 9;
+
+      // Temporary unlimited size egress features. Meant for experimentation
+      // only.
+      string temporary_unlimited_egress_payload = 10;
     }
 
     // Ad with bid for protected app signals.
@@ -1326,6 +1507,24 @@ message ScoreAdsResponse {
     // If the seller specified a seller_currency in the AuctionConfig,
     // this value, if specified, must match it. If not, the bid is rejected.
     string bid_currency = 16;
+
+    // Currency of the of the original buyer bid if present
+    // (expressed as ISO 4217 alpha code).
+    // Not expected to be set in output from scoreAd();
+    // B&A will set this interally from the AdWithBid.
+    string buyer_bid_currency = 17;
+    // BuyerReportingId of the winning Ad.
+    // This will be verified with the buyerReportingId in the Ad properties on
+    // the browser.
+    string buyer_reporting_id = 18;
+    // BuyerAnd SellerReportingId of the winning Ad.
+    // This will be verified with the buyerAndSellerReportingId in the Ad
+    // properties on the browser.
+    string buyer_and_seller_reporting_id = 19;
+
+    // Owner of the IG to which the winning ad belongs (applicable for
+    // Protected Audience only).
+    string interest_group_origin = 20;
   }
 
   // The response includes the top scored ad along with other related data.
@@ -1377,4 +1576,36 @@ message DebugReportUrls {
   // URL to be triggered if the interest grou losses the auction.
   // If undefined or malformed url it will be ignored.
   string auction_debug_loss_url = 2;
+}
+
+// message to store the server request/ response
+message EventMessage {
+  repeated string udf_log = 1;
+
+  // sfe
+  SelectAdRequest select_ad_request = 2;
+  oneof protected_input {
+    ProtectedAuctionInput protected_auction = 3;
+    ProtectedAudienceInput protected_audience = 4;
+  }
+  AuctionResult auction_result = 5;
+
+  // bfe
+  GetBidsRequest get_bid_request = 11;
+  GetBidsRequest.GetBidsRawRequest get_bid_raw_request = 12;
+  GetBidsResponse.GetBidsRawResponse get_bid_raw_response = 13;
+
+  // bidding
+  GenerateBidsRequest generate_bid_request = 21;
+  GenerateBidsRequest.GenerateBidsRawRequest generate_bid_raw_request = 22;
+  GenerateBidsResponse.GenerateBidsRawResponse generate_bid_raw_response = 23;
+
+  GenerateProtectedAppSignalsBidsRequest generate_app_signal_request = 24;
+  GenerateProtectedAppSignalsBidsRequest.GenerateProtectedAppSignalsBidsRawRequest generate_app_signal_raw_request = 25;
+  GenerateProtectedAppSignalsBidsResponse.GenerateProtectedAppSignalsBidsRawResponse generate_app_signal_raw_response = 26;
+
+  // auction
+  ScoreAdsRequest score_ad_request = 31;
+  ScoreAdsRequest.ScoreAdsRawRequest score_ad_raw_request = 32;
+  ScoreAdsResponse.ScoreAdsRawResponse score_ad_raw_response = 33;
 }

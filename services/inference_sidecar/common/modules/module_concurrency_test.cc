@@ -21,6 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "benchmark/request_utils.h"
 #include "gtest/gtest.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
@@ -49,32 +50,9 @@ constexpr char kJsonString[] = R"json({
 }]
     })json";
 
-// Create a new request with model files in the new model path
-RegisterModelRequest CreateNewRegisterRequest(
-    const RegisterModelRequest& register_request,
-    const std::string& new_model_path) {
-  RegisterModelRequest new_register_request = register_request;
-  new_register_request.mutable_model_spec()->set_model_path(new_model_path);
-
-  std::map<std::string, std::string> new_model_files;
-
-  absl::string_view request_model_path =
-      register_request.model_spec().model_path();
-  for (const auto& [relative_path, file_content] :
-       register_request.model_files()) {
-    std::string new_file_path = absl::StrCat(
-        new_model_path, relative_path.substr(request_model_path.length()));
-    new_model_files[new_file_path] = file_content;
-  }
-  new_register_request.clear_model_files();
-  for (const auto& [new_file_path, file_content] : new_model_files) {
-    (*new_register_request.mutable_model_files())[new_file_path] = file_content;
-  }
-  return new_register_request;
-}
-
 TEST(ModuleConcurrencyTest, RegisterModel_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -87,7 +65,7 @@ TEST(ModuleConcurrencyTest, RegisterModel_Success) {
       std::string new_model_path =
           absl::StrCat(register_request.model_spec().model_path(), i);
       RegisterModelRequest new_register_request =
-          CreateNewRegisterRequest(register_request, new_model_path);
+          CreateRegisterModelRequest(register_request, new_model_path);
 
       EXPECT_TRUE(module->RegisterModel(new_register_request).ok());
     }));
@@ -99,7 +77,8 @@ TEST(ModuleConcurrencyTest, RegisterModel_Success) {
 }
 
 TEST(ModuleConcurrencyTest, Predict_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -121,7 +100,8 @@ TEST(ModuleConcurrencyTest, Predict_Success) {
 }
 
 TEST(ModuleConcurrencyTest, RegisterModel_Predict_Success) {
-  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> module = ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelPath, register_request).ok());
@@ -134,7 +114,7 @@ TEST(ModuleConcurrencyTest, RegisterModel_Predict_Success) {
       std::string new_model_path =
           absl::StrCat(register_request.model_spec().model_path(), i);
       RegisterModelRequest new_register_request =
-          CreateNewRegisterRequest(register_request, new_model_path);
+          CreateRegisterModelRequest(register_request, new_model_path);
 
       EXPECT_TRUE(module->RegisterModel(new_register_request).ok());
     }));

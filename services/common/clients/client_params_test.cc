@@ -37,7 +37,7 @@ class MockResponse {
 TEST(ClientParamsTest, RequestRefProvidesRequestObject) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
   int input_int = input_request->req_int;
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
 
   ClientParams<MockRequest, MockResponse> class_under_test(
@@ -49,7 +49,7 @@ TEST(ClientParamsTest, RequestRefProvidesRequestObject) {
 
 TEST(ClientParamsTest, ResponseRefProvidesNonNullResponseObject) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
 
   ClientParams<MockRequest, MockResponse> class_under_test(
@@ -61,7 +61,7 @@ TEST(ClientParamsTest, ResponseRefProvidesNonNullResponseObject) {
 
 TEST(ClientParamsTest, ContextRefProvidesNonNullContextObject) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
 
   ClientParams<MockRequest, MockResponse> class_under_test(
@@ -73,7 +73,7 @@ TEST(ClientParamsTest, ContextRefProvidesNonNullContextObject) {
 
 TEST(ClientParamsTest, SetDeadlineSetsDeadlineValueInContext) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
   absl::Duration timeout = absl::Microseconds(MakeARandomInt(1, 999));
   auto expected_timeout = absl::Now() + timeout;
@@ -93,7 +93,7 @@ TEST(ClientParamsTest, SetDeadlineSetsDeadlineValueInContext) {
 TEST(ClientParamsTest, OnDoneExecutesCallback) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
   int output_value = MakeARandomInt(INT16_MIN, INT16_MAX - 1);
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [&output_value](
                      absl::StatusOr<std::unique_ptr<MockResponse>> response) {
         ASSERT_TRUE(response.ok());
@@ -111,7 +111,7 @@ TEST(ClientParamsTest, OnDoneExecutesCallback) {
 
 TEST(ClientParamsTest, OnDoneDeletesInstance) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
 
   auto class_under_test = new ClientParams<MockRequest, MockResponse>(
@@ -126,7 +126,7 @@ TEST(ClientParamsTest, ReceivesMetadataObject) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
   absl::flat_hash_map<std::string, std::string> metadata = MakeARandomMap();
 
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>)&&>
+  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
       callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
 
   // Cannot test the values get set in the client context here because

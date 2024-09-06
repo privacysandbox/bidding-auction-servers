@@ -25,7 +25,6 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
-load("//:config.bzl", "LOG_ENV_VARS")
 
 pkg_files(
     name = "server_executables",
@@ -70,12 +69,19 @@ container_image(
         "/server/bin/init_server_basic",
     ],
     entrypoint = ["sh"],
-    env = LOG_ENV_VARS,
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
+    ] + select({
+        "//:e2e_build": [
+        ],
+        "//conditions:default": [],
+    }),
+    # BFE and BFE Non-TLS Healthcheck ports, respectively:
+    ports = [
+        "50051",
+        "50050",
     ],
-    ports = ["50051"],
 )
 
 container_test(

@@ -144,9 +144,9 @@ TEST(TensorflowParserTest, ConvertTensorsToJson) {
   for (int i = 0; i < 6; ++i) {
     tensor_data(i) = i * 2.0f;  // Set values (i * 2)
   }
-  std::vector<tensorflow::Tensor> tensors;
-  tensors.push_back(tensor);
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<TensorWithName> tensors;
+  tensors.push_back(TensorWithName("output", tensor));
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors);
 
@@ -154,15 +154,15 @@ TEST(TensorflowParserTest, ConvertTensorsToJson) {
   EXPECT_TRUE(output.ok()) << output.status();
   EXPECT_EQ(
       output.value(),
-      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_shape":[2,3],"data_type":"FLOAT","tensor_content":[0.0,2.0,4.0,6.0,8.0,10.0]}]}]})");
+      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_name":"output","tensor_shape":[2,3],"data_type":"FLOAT","tensor_content":[0.0,2.0,4.0,6.0,8.0,10.0]}]}]})");
 }
 
 TEST(TensorflowParserTest, ConvertTensorsToJson_UnsupportedFloat16Type) {
   tensorflow::Tensor half_tensor(tensorflow::DT_BFLOAT16);
 
-  std::vector<tensorflow::Tensor> tensors;
-  tensors.push_back(half_tensor);
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<TensorWithName> tensors;
+  tensors.push_back(TensorWithName("output", half_tensor));
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors);
 
@@ -177,9 +177,9 @@ TEST(TensorflowParserTest, ConvertTensorsToJson_int8) {
   auto int8_data_ptr = int8_tensor.flat<int8_t>().data();
   std::copy(int8_data.begin(), int8_data.end(), int8_data_ptr);
 
-  std::vector<tensorflow::Tensor> tensors;
-  tensors.push_back(int8_tensor);
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<TensorWithName> tensors;
+  tensors.push_back(TensorWithName("output", int8_tensor));
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors);
 
@@ -187,7 +187,7 @@ TEST(TensorflowParserTest, ConvertTensorsToJson_int8) {
   EXPECT_TRUE(output.ok());
   EXPECT_EQ(
       output.value(),
-      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_shape":[2],"data_type":"INT8","tensor_content":[10,-5]}]}]})");
+      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_name":"output","tensor_shape":[2],"data_type":"INT8","tensor_content":[10,-5]}]}]})");
 }
 
 TEST(TensorflowParserTest, ConvertTensorsToJson_int16) {
@@ -196,9 +196,9 @@ TEST(TensorflowParserTest, ConvertTensorsToJson_int16) {
   auto int16_data_ptr = int16_tensor.flat<int16_t>().data();
   std::copy(int16_data.begin(), int16_data.end(), int16_data_ptr);
 
-  std::vector<tensorflow::Tensor> tensors;
-  tensors.push_back(int16_tensor);
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<TensorWithName> tensors;
+  tensors.push_back(TensorWithName("output", int16_tensor));
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors);
 
@@ -206,7 +206,7 @@ TEST(TensorflowParserTest, ConvertTensorsToJson_int16) {
   EXPECT_TRUE(output.ok());
   EXPECT_EQ(
       output.value(),
-      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_shape":[2],"data_type":"INT16","tensor_content":[10,-5]}]}]})");
+      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_name":"output","tensor_shape":[2],"data_type":"INT16","tensor_content":[10,-5]}]}]})");
 }
 
 TEST(TensorflowParserTest, TestConvertTensorsToJson_MultipleTensors) {
@@ -222,11 +222,11 @@ TEST(TensorflowParserTest, TestConvertTensorsToJson_MultipleTensors) {
   auto tensor_data_2 = tensor_2.flat<int64_t>();
   tensor_data_2(0) = 1000;
 
-  std::vector<tensorflow::Tensor> tensors;
-  tensors.push_back(tensor_1);
-  tensors.push_back(tensor_2);
+  std::vector<TensorWithName> tensors;
+  tensors.push_back(TensorWithName("output1", tensor_1));
+  tensors.push_back(TensorWithName("output2", tensor_2));
 
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors);
 
@@ -234,7 +234,7 @@ TEST(TensorflowParserTest, TestConvertTensorsToJson_MultipleTensors) {
   EXPECT_TRUE(output.ok()) << output.status();
   EXPECT_EQ(
       output.value(),
-      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_shape":[1,1],"data_type":"DOUBLE","tensor_content":[3.14]},{"tensor_shape":[1,1],"data_type":"INT64","tensor_content":[1000]}]}]})");
+      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_name":"output1","tensor_shape":[1,1],"data_type":"DOUBLE","tensor_content":[3.14]},{"tensor_name":"output2","tensor_shape":[1,1],"data_type":"INT64","tensor_content":[1000]}]}]})");
 }
 
 TEST(TensorflowParserTest, TestConvertTensorsToJson_BatchOdModels) {
@@ -243,18 +243,18 @@ TEST(TensorflowParserTest, TestConvertTensorsToJson_BatchOdModels) {
   tensorflow::Tensor tensor_1(tensorflow::DT_DOUBLE, shape_1);
   auto tensor_data_1 = tensor_1.flat<double>();
   tensor_data_1(0) = 3.14;
-  std::vector<tensorflow::Tensor> tensors1;
-  tensors1.push_back(tensor_1);
+  std::vector<TensorWithName> tensors1;
+  tensors1.push_back(TensorWithName("output1", tensor_1));
 
   // Int64 tensor.
   tensorflow::TensorShape shape_2({1, 1});
   tensorflow::Tensor tensor_2(tensorflow::DT_INT64, shape_2);
   auto tensor_data_2 = tensor_2.flat<int64_t>();
   tensor_data_2(0) = 1000;
-  std::vector<tensorflow::Tensor> tensors2;
-  tensors2.push_back(tensor_2);
+  std::vector<TensorWithName> tensors2;
+  tensors2.push_back(TensorWithName("output2", tensor_2));
 
-  std::vector<std::pair<std::string, std::vector<tensorflow::Tensor>>>
+  std::vector<std::pair<std::string, std::vector<TensorWithName>>>
       batch_tensors;
   batch_tensors.emplace_back("my_bucket/models/pcvr_models/1/", tensors1);
   batch_tensors.emplace_back("my_bucket/models/pctr_models/1/", tensors2);
@@ -263,7 +263,7 @@ TEST(TensorflowParserTest, TestConvertTensorsToJson_BatchOdModels) {
   EXPECT_TRUE(output.ok()) << output.status();
   EXPECT_EQ(
       output.value(),
-      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_shape":[1,1],"data_type":"DOUBLE","tensor_content":[3.14]}]},{"model_path":"my_bucket/models/pctr_models/1/","tensors":[{"tensor_shape":[1,1],"data_type":"INT64","tensor_content":[1000]}]}]})");
+      R"({"response":[{"model_path":"my_bucket/models/pcvr_models/1/","tensors":[{"tensor_name":"output1","tensor_shape":[1,1],"data_type":"DOUBLE","tensor_content":[3.14]}]},{"model_path":"my_bucket/models/pctr_models/1/","tensors":[{"tensor_name":"output2","tensor_shape":[1,1],"data_type":"INT64","tensor_content":[1000]}]}]})");
 }
 
 }  // namespace

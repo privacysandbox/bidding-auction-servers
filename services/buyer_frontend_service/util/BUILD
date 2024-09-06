@@ -33,7 +33,7 @@ cc_library(
 )
 
 cc_test(
-    name = "buyer_frontend_utils_test",
+    name = "proto_factory_test",
     size = "small",
     testonly = True,
     srcs = [

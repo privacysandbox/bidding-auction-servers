@@ -34,7 +34,7 @@ inline constexpr int kNumConsentedDebugConfigKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // AuctionResult response.
-inline constexpr int kNumAuctionResultKeys = 13;
+inline constexpr int kNumAuctionResultKeys = 14;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // WinReportingUrls response.
@@ -66,6 +66,7 @@ inline constexpr char kBrowserSignals[] = "browserSignals";
 inline constexpr char kBidCount[] = "bidCount";
 inline constexpr char kJoinCount[] = "joinCount";
 inline constexpr char kRecency[] = "recency";
+inline constexpr char kRecencyMs[] = "recencyMs";
 inline constexpr char kPrevWins[] = "prevWins";
 inline constexpr char kConsentedDebugConfig[] = "consentedDebugConfig";
 inline constexpr char kIsConsented[] = "isConsented";
@@ -83,6 +84,7 @@ inline constexpr char kAdRenderUrl[] = "adRenderURL";              // length: 11
 inline constexpr char kBidCurrency[] = "bidCurrency";              // length: 11
 inline constexpr char kBiddingGroups[] = "biddingGroups";          // length: 13
 inline constexpr char kTopLevelSeller[] = "topLevelSeller";        // length: 14
+inline constexpr char kBuyerReportingId[] = "buyerReportingId";    // length: 16
 inline constexpr char kWinReportingUrls[] = "winReportingURLs";    // length: 16
 inline constexpr char kInterestGroupName[] = "interestGroupName";  // length: 17
 inline constexpr char kInterestGroupOwner[] =
@@ -98,14 +100,10 @@ inline constexpr std::array<absl::string_view, kNumInterestGroupKeys>
     kInterestGroupKeys = {kName, kBiddingSignalsKeys, kUserBiddingSignals,
                           kAds,  kAdComponents,       kBrowserSignals};
 
-inline constexpr int kNumBrowserSignalKeys = 4;
+inline constexpr int kNumBrowserSignalKeys = 5;
 inline constexpr std::array<absl::string_view, kNumBrowserSignalKeys>
-    kBrowserSignalKeys = {
-        kBidCount,
-        kJoinCount,
-        kRecency,
-        kPrevWins,
-};
+    kBrowserSignalKeys = {kBidCount, kJoinCount, kRecency, kPrevWins,
+                          kRecencyMs};
 inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
     kConsentedDebugConfigKeys = {
         kIsConsented,
@@ -140,9 +138,19 @@ inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
 enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
 
 // log verbosity
-inline constexpr int kPlain = 1;
-inline constexpr int kEncrypted = 4;
 
+inline constexpr int kPlain = 1;  // plaintext B&A request and response served
+inline constexpr int kNoisyWarn =
+    2;  // non-critical error, use PS_LOG(ERROR, *) for critical error
+inline constexpr int kUdfLog = 3;
+inline constexpr int kSuccess = 3;
+inline constexpr int kNoisyInfo = 4;
+inline constexpr int kDispatch = 4;  // UDF dispatch request and response
+inline constexpr int kOriginated =
+    5;  // plaintext B&A request and response originated from server
+inline constexpr int kKVLog = 5;  // KV request response
+inline constexpr int kStats = 5;  // Stats log like time , byte size, etc.
+inline constexpr int kEncrypted = 6;
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_REQUEST_RESPONSE_CONSTANTS_H_

@@ -515,6 +515,84 @@ TEST(PaylodPackagingTest,
   EXPECT_EQ(actual.component_auction_results_size(), 0);
 }
 
+TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
+  auto input = R"JSON(
+  {
+     "auction_config" : {
+        "auctionSignals" : "{}",
+        "buyerList" : [
+           "1698245045005905922"
+        ],
+        "buyerTimeoutMs" : 1000,
+        "perBuyerConfig" : {
+           "1698245045005905922" : {
+              "buyerSignals" : "1698245045006101412"
+           }
+        },
+        "seller" : "seller.com",
+        "sellerSignals" : "{}"
+     },
+     "raw_protected_audience_input" : {
+        "raw_buyer_input" : {
+           "ad_tech_A.com" : {
+              "interestGroups" : [
+                 {
+                    "adRenderIds" : [
+                       "ad_id1"
+                    ],
+                    "biddingSignalsKeys" : [
+                       "1"
+                    ],
+                    "browserSignals" : {
+                       "bidCount" : "41",
+                       "joinCount" : "8",
+                       "prevWins" : "[[1,\"ad_id1\"]]",
+                       "recency" : "1698245045"
+                    },
+                    "name" : "1",
+                    "userBiddingSignals" : "{\"1\":\"1\"}"
+                 }
+              ]
+           }
+        }
+     }
+  }
+  )JSON";
+  HpkeKeyset keyset;
+  auto select_ad_req = std::move(PackagePlainTextSelectAdRequest(
+                                     input, CLIENT_TYPE_ANDROID, keyset,
+                                     /*enable_debug_reporting=*/false,
+                                     /*protected_app_signals_json=*/"",
+                                     /*enable_unlimited_egress=*/true))
+                           .first;
+
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request = server_common::ParseEncapsulatedRequest(
+          select_ad_req->protected_auction_ciphertext());
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
+  // Decrypt.
+  server_common::PrivateKey private_key;
+  private_key.key_id = std::to_string(keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(keyset.private_key);
+  auto decrypted_response = server_common::DecryptEncapsulatedRequest(
+      private_key, *parsed_encapsulated_request);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  absl::StatusOr<server_common::DecodedRequest> decoded_response =
+      server_common::DecodeRequestPayload(
+          decrypted_response->GetPlaintextData());
+  ASSERT_TRUE(decoded_response.ok()) << decoded_response.status();
+
+  // Decode.
+  ProtectedAuctionInput protected_auction_input;
+  ASSERT_TRUE(protected_auction_input.ParseFromArray(
+      decoded_response->compressed_data.data(),
+      decoded_response->compressed_data.size()));
+  EXPECT_TRUE(protected_auction_input.enable_unlimited_egress());
+}
+
 }  // namespace
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <curl/multi.h>
+#include <event2/event.h>
 #include <grpc/event_engine/event_engine.h>
 
 #include "absl/container/flat_hash_set.h"
@@ -38,6 +39,46 @@ struct DataToUpload {
   std::string data;
   // First offset in the data that has not yet been uploaded.
   int offset = 0;
+};
+
+// Libevent uses default priority as half of the number of priorities.
+// We needed 2 priorities to begin with (high and default) but configured 3
+// here for future use if we have to configure a low priority event.
+inline constexpr int kNumEventPriorities = 3;
+
+// Wrapper for the libevent structure to hold information and state for a
+// libevent dispatch loop.
+class EventBase {
+ public:
+  explicit EventBase(int num_priorities = kNumEventPriorities);
+  virtual ~EventBase();
+
+  // Gets the underlying event base data type.
+  struct event_base* get();
+
+ private:
+  struct event_base* event_base_ = nullptr;
+};
+
+// Arguments are documented here:
+// https://libevent.org/doc/event_8h.html#aed2307f3d9b38e07cc10c2607322d758
+using EventCallback = void (*)(/*fd or signal=*/int, /*events=*/short,
+                               /*pointer to user provided data=*/void*);
+
+// Wraps the event used by libevent. This wrapper makes it easier to manage
+// lifecycle of the underlying event.
+class Event {
+ public:
+  explicit Event(struct event_base* base, evutil_socket_t fd, short event_type,
+                 EventCallback event_callback, void* arg,
+                 int priority = kNumEventPriorities / 2,
+                 struct timeval* event_timeout = nullptr);
+  struct event* get();
+  virtual ~Event();
+
+ private:
+  int priority_;
+  struct event* event_ = nullptr;
 };
 
 // MultiCurlHttpFetcherAsync provides a thread-safe libcurl wrapper to perform
@@ -114,6 +155,21 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
                  absl::Duration timeout, OnDoneFetchUrls done_callback) override
       ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
+  // Fetches provided urls and response metadata with libcurl.
+  //
+  // requests: The URL and headers for the HTTP GET requests.
+  // timeout: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error. Guaranteed to be invoked
+  // with results in the same order as the corresponding requests.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrlsWithMetadata(const std::vector<HTTPRequest>& requests,
+                             absl::Duration timeout,
+                             OnDoneFetchUrlsWithMetadata done_callback) override
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
  private:
   // This struct maintains the data related to a Curl request, some of which
   // has to stay valid throughout the life of the request. The code maintains a
@@ -128,19 +184,52 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
     struct curl_slist* headers_list_ptr = nullptr;
 
     // The callback function for this request from FetchUrl.
-    OnDoneFetchUrl done_callback;
+    OnDoneFetchUrlWithMetadata done_callback;
 
     // Pointer to the body of request. Relevant only for HTTP methods that
     // upload data to server.
     std::unique_ptr<DataToUpload> body;
 
-    // The pointer that is used by the req_handle to write the request output.
-    std::unique_ptr<std::string> output;
+    // Set response headers in the output.
+    std::vector<std::string> response_headers;
+
+    // Set the final redirect URL in the output.
+    bool include_redirect_url;
+
+    HTTPResponse response_with_metadata;
 
     CurlRequestData(const std::vector<std::string>& headers,
-                    OnDoneFetchUrl on_done);
+                    OnDoneFetchUrlWithMetadata on_done,
+                    std::vector<std::string> response_header_keys,
+                    bool include_redirect_url);
     ~CurlRequestData();
   };
+
+  // FetchUrlsLifetime manages a single FetchUrls request and encapsulates
+  // all of the data each individual FetchUrl callback will need.
+  struct FetchUrlsWithMetadataLifetime {
+    OnDoneFetchUrlsWithMetadata all_done_callback;
+    // Results will be passed into all_done_callback.
+    std::vector<absl::StatusOr<HTTPResponse>> results;
+    // This is used to guard pending_results
+    // to keep the count accurate when updated by
+    // different threads.
+    absl::Mutex results_mu;
+    int pending_results;
+  };
+
+  // Fetches provided url with libcurl and metadata.
+  //
+  // http_request: The URL and headers for the HTTP GET request.
+  // timeout_ms: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrl(const HTTPRequest& request, int timeout_ms,
+                OnDoneFetchUrlWithMetadata done_callback)
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
   // This method adds the curl handle to a set to keep track of pending handles.
   // Must be called after the handle has been initialized.
@@ -165,8 +254,11 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // available, it schedules the callback on the executor_.
   // Only a single thread can execute this function at a time since it requires
   // the acquisition of the in_loop_mu_ mutex.
-  void PerformCurlUpdate() ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_loop_mu_)
-      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+  void PerformCurlUpdate() ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
+  // Shuts down the event loop. This is a callback registered with an event
+  // that fires every second to see if the event loop should be shutdown.
+  static void ShutdownEventLoop(int fd, short event_type, void* arg);
 
   // Parses curl message to result string or an error message for the callback.
   std::pair<absl::Status, void*> GetResultFromMsg(CURLMsg* msg);
@@ -174,7 +266,7 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Creates and sets up a curl request with default options.
   std::unique_ptr<CurlRequestData> CreateCurlRequest(
       const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,
-      int64_t keepalive_interval_sec, OnDoneFetchUrl done_callback);
+      int64_t keepalive_interval_sec, OnDoneFetchUrlWithMetadata done_callback);
 
   // Adds the request to curl multi request manager. If the addition fails, the
   // executes the callback else stores the request handle in curl data map.
@@ -193,8 +285,18 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Interval time between keep-alive probes in case of no response.
   int64_t keepalive_interval_sec_;
 
+  // All events in the loop are associated with this event base. Note: There can
+  // be a single event base for a single thread.
+  // Documentation: https://libevent.org/libevent-book/Ref2_eventbase.html
+  EventBase event_base_;
+  // This event is registered with the event loop and fires every second to
+  // check if the fetcher has been stopped and if so, the callback registered
+  // for this event will also stop the event loop.
+  Event shutdown_timer_event_;
+
   // The multi session used for performing HTTP calls.
   MultiCurlRequestManager multi_curl_request_manager_;
+  Event multi_timer_event_;  // Controlled by multi libcurl stack.
 
   // Makes sure only one execution loop runs at a time.
   absl::Mutex in_loop_mu_;

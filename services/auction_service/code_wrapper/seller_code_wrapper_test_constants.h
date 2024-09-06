@@ -18,20 +18,30 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
-constexpr char kTestReportResultUrl[] = "http://test.com";
-constexpr char kTestComponentReportResultUrl[] =
-    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
-    "seller.com&bid=1&modifiedBid=2";
+constexpr char kTestReportResultUrl[] =
+    "http://test.com&bid=1&bidCurrency=EUR&"
+    "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
+    "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
+    "barStandardAds.com";
+constexpr char kTestComponentReportResultUrlWithEverything[] =
+    "http://"
+    "test.com&topLevelSeller=topLevelSeller&bid=1&bidCurrency=EUR&modifiedBid="
+    "2&modifiedBidCurrency=USD&"
+    "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
+    "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
+    "barStandardAds.com";
 constexpr char kTestComponentReportResultUrlWithNoModifiedBid[] =
-    "http://test.com&topLevelSeller=topLevelSeller&componentSeller=http://"
-    "seller.com&bid=1&modifiedBid=1";
+    "http://test.com&topLevelSeller=topLevelSeller&bid=1&modifiedBid=1";
+constexpr char kTestTopLevelReportResultUrl[] =
+    "http://test.com&componentSeller=http://"
+    "componentSeller.com&bid=1&desirability=1";
 constexpr char kTestInteractionEvent[] = "clickEvent";
 constexpr char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestReportWinUrl[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "modelingSignals=4&recency=3&joinCount=5";
-
+constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
 constexpr absl::string_view kBuyerBaseCodeSimple =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){
@@ -53,11 +63,6 @@ constexpr absl::string_view kBuyerBaseCode =
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(buyerReportingSignals.interestGroupName == "" || buyerReportingSignals.interestGroupName == undefined
-            || buyerReportingSignals.interestGroupName == null){
-          console.error("Missing interestGroupName in input to reportWin")
-          return
-        }
         if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
             || buyerReportingSignals.adCost == undefined
             || buyerReportingSignals.adCost == null){
@@ -69,9 +74,11 @@ constexpr absl::string_view kBuyerBaseCode =
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
-
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
+        if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
+            reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
+        }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
@@ -101,7 +108,7 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&signalsForWinner="+signalsForWinner+
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
                     "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
         }
         console.log("Logging from ReportWin");
@@ -126,40 +133,11 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
 
 constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, egressFeatures){
+                              directFromSellerSignals, egressPayload, temporaryUnlimitedEgressPayload){
       console.log("Testing Protected App Signals");
       sendReportTo("http://test.com");
       registerAdBeacon({"clickEvent":"http://click.com"});
-      return "testSignalsForWinner";
-    }
-)JS_CODE";
-
-constexpr absl::string_view kSellerBaseCode = R"JS_CODE(
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-      return {
-        desirability: score,
-        allow_component_auction: false
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
-        } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
-        }
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+      return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
@@ -177,12 +155,34 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&modifiedBid="+sellerReportingSignals.modifiedBid+"&modifiedBidCurrency="+sellerReportingSignals.modifiedBidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
+    }
+
+)JS_CODE";
+
+constexpr absl::string_view kTopLevelSellerCode = R"JS_CODE(
+    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, device_signals, directFromSellerSignals){
+      return {
+        ad: device_signals["topLevelSeller"],
+        desirability: 1,
+        bid: 2,
+        allowComponentAuction: true
+      }
+    }
+    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+        console.log("Logging from ReportResult");
+        if(sellerReportingSignals.componentSeller === undefined || sellerReportingSignals.componentSeller.length === 0){
+          sendReportTo("http://test.com")
+        } else{
+          sendReportTo("http://test.com&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&desirability="+sellerReportingSignals.desirability)
+        }
+        registerAdBeacon({"clickEvent":"http://click.com"})
+        return {"testSignal":"testValue"}
     }
 
 )JS_CODE";
@@ -200,10 +200,10 @@ constexpr absl::string_view kComponentAuctionCodeWithNoModifiedBid = R"JS_CODE(
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
           sendReportTo("http://test.com")
         } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&modifiedBid="+sellerReportingSignals.modifiedBid)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 
 )JS_CODE";
@@ -239,34 +239,29 @@ constexpr absl::string_view kTopLevelAuctionCode = R"JS_CODE(
 )JS_CODE";
 
 constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
+    var forDebuggingOnly_auction_loss_url = undefined;
+    var forDebuggingOnly_auction_win_url = undefined;
+    const forDebuggingOnly = {};
+    forDebuggingOnly.reportAdAuctionLoss = function(url){
+      forDebuggingOnly_auction_loss_url = url;
+    }
+    forDebuggingOnly.reportAdAuctionWin = function(url){
+      forDebuggingOnly_auction_win_url = url;
+    }
+    globalThis.forDebuggingOnly = forDebuggingOnly;
+
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(featureFlags.enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
-
-      var forDebuggingOnly_auction_loss_url = undefined;
-      var forDebuggingOnly_auction_win_url = undefined;
-      const forDebuggingOnly = {};
-      forDebuggingOnly.reportAdAuctionLoss = function(url){
-        forDebuggingOnly_auction_loss_url = url;
-      }
-      forDebuggingOnly.reportAdAuctionWin = function(url){
-        forDebuggingOnly_auction_win_url = url;
-      }
-      globalThis.forDebuggingOnly = forDebuggingOnly;
-
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (featureFlags.enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       var scoreAdResponse = {};
       try {
         scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
@@ -295,26 +290,22 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
     ps_signalsForWinner = ""
-    var ps_report_result_response = {
+    const ps_report_result_response = {
         reportResultUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_result_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -337,7 +328,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
+          buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        }
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -345,6 +338,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
+          buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
+        }
         // Absence of interest group indicates that this is a protected app
         // signals ad.
         if (buyerReportingMetadata.enableProtectedAppSignals &&
@@ -381,26 +377,22 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     // response with reportWin url and interaction reporting urls.
     function reportWinWrapperhttpbuyer1com(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals, enable_logging, ) {
-      var ps_report_win_response = {
+      const ps_report_win_response = {
         reportWinUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_buyer_logs = [];
-      var ps_buyer_error_logs = [];
-      var ps_buyer_warning_logs = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_buyer_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_buyer_error_logs.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_buyer_warning_logs.push(JSON.stringify(args))
-        }
-      }
+      const ps_buyer_logs = [];
+      const ps_buyer_error_logs = [];
+      const ps_buyer_warning_logs = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_buyer_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_buyer_warning_logs.push(JSON.stringify(args));
+        console.error = (...args) => ps_buyer_error_logs.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_win_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -424,11 +416,6 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(buyerReportingSignals.interestGroupName == "" || buyerReportingSignals.interestGroupName == undefined
-            || buyerReportingSignals.interestGroupName == null){
-          console.error("Missing interestGroupName in input to reportWin")
-          return
-        }
         if(buyerReportingSignals.adCost == 0 || buyerReportingSignals.adCost == -1
             || buyerReportingSignals.adCost == undefined
             || buyerReportingSignals.adCost == null){
@@ -440,9 +427,11 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
                     "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
                     buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+signalsForWinner+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
-
+                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
+        if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
+            reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
+        }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
         console.warn("Logging warning from ReportWin")
@@ -484,44 +473,39 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
 constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
+    var forDebuggingOnly_auction_loss_url = undefined;
+    var forDebuggingOnly_auction_win_url = undefined;
+    const forDebuggingOnly = {};
+    forDebuggingOnly.reportAdAuctionLoss = function(url){
+      forDebuggingOnly_auction_loss_url = url;
+    }
+    forDebuggingOnly.reportAdAuctionWin = function(url){
+      forDebuggingOnly_auction_win_url = url;
+    }
+    globalThis.forDebuggingOnly = forDebuggingOnly;
+
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(featureFlags.enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
-
-      var forDebuggingOnly_auction_loss_url = undefined;
-      var forDebuggingOnly_auction_win_url = undefined;
-      const forDebuggingOnly = {};
-      forDebuggingOnly.reportAdAuctionLoss = function(url){
-        forDebuggingOnly_auction_loss_url = url;
-      }
-      forDebuggingOnly.reportAdAuctionWin = function(url){
-        forDebuggingOnly_auction_win_url = url;
-      }
-      globalThis.forDebuggingOnly = forDebuggingOnly;
-
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (featureFlags.enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       var scoreAdResponse = {};
       try {
         scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
@@ -548,28 +532,24 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
 
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
-    function reportingEntryFunctionProtectedAppSignals(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, egressFeatures) {
+    function reportingEntryFunctionProtectedAppSignals(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, egressPayload, temporaryUnlimitedEgressPayload) {
     ps_signalsForWinner = ""
-    var ps_report_result_response = {
+    const ps_report_result_response = {
         reportResultUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_result_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -592,7 +572,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
+          buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        }
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -600,6 +582,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
+          buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
+        }
         // Absence of interest group indicates that this is a protected app
         // signals ad.
         if (buyerReportingMetadata.enableProtectedAppSignals &&
@@ -608,7 +593,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
           functionSuffix += "ProtectedAppSignals";
         }
         var reportWinFunction = "reportWinWrapper"+functionSuffix+"(auctionSignals, perBuyerSignals, ps_signalsForWinner, buyerReportingSignals,"+
-                              "directFromSellerSignals, enable_logging, egressFeatures)"
+                              "directFromSellerSignals, enable_logging, egressPayload, temporaryUnlimitedEgressPayload)"
         var reportWinResponse = eval(reportWinFunction)
         return {
           reportResultResponse: ps_report_result_response,
@@ -635,27 +620,23 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     // Handler method to call adTech provided reportWin method and wrap the
     // response with reportWin url and interaction reporting urls.
     function reportWinWrapperhttpbuyer1comProtectedAppSignals(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, enable_logging, egressFeatures) {
-      var ps_report_win_response = {
+                              directFromSellerSignals, enable_logging, egressPayload, temporaryUnlimitedEgressPayload) {
+      const ps_report_win_response = {
         reportWinUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_buyer_logs = [];
-      var ps_buyer_error_logs = [];
-      var ps_buyer_warning_logs = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_buyer_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_buyer_error_logs.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_buyer_warning_logs.push(JSON.stringify(args))
-        }
-      }
+      const ps_buyer_logs = [];
+      const ps_buyer_error_logs = [];
+      const ps_buyer_warning_logs = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_buyer_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_buyer_warning_logs.push(JSON.stringify(args));
+        console.error = (...args) => ps_buyer_error_logs.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_win_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -672,17 +653,17 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
       }
       {
       reportWinProtectedAppSignals = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, egressFeatures){
+                              directFromSellerSignals, egressPayload, temporaryUnlimitedEgressPayload){
       console.log("Testing Protected App Signals");
       sendReportTo("http://test.com");
       registerAdBeacon({"clickEvent":"http://click.com"});
-      return "testSignalsForWinner";
+      return {"testSignal":"testValue"}
     }
 
       }
       try{
       reportWinProtectedAppSignals(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
-                              directFromSellerSignals, egressFeatures)
+                              directFromSellerSignals, egressPayload, temporaryUnlimitedEgressPayload)
       } catch(ex){
         console.error(ex.message)
       }
@@ -698,26 +679,22 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
     ps_signalsForWinner = ""
-    var ps_report_result_response = {
+    const ps_report_result_response = {
         reportResultUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_result_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -740,7 +717,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
+          buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        }
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -748,6 +727,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
+          buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
+        }
         // Absence of interest group indicates that this is a protected app
         // signals ad.
         if (buyerReportingMetadata.enableProtectedAppSignals &&
@@ -784,26 +766,22 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     // response with reportWin url and interaction reporting urls.
     function reportWinWrapperhttpbuyer1com(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals, enable_logging, ) {
-      var ps_report_win_response = {
+      const ps_report_win_response = {
         reportWinUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_buyer_logs = [];
-      var ps_buyer_error_logs = [];
-      var ps_buyer_warning_logs = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_buyer_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_buyer_error_logs.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_buyer_warning_logs.push(JSON.stringify(args))
-        }
-      }
+      const ps_buyer_logs = [];
+      const ps_buyer_error_logs = [];
+      const ps_buyer_warning_logs = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_buyer_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_buyer_warning_logs.push(JSON.stringify(args));
+        console.error = (...args) => ps_buyer_error_logs.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_win_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -856,44 +834,39 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
 constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
+    var forDebuggingOnly_auction_loss_url = undefined;
+    var forDebuggingOnly_auction_win_url = undefined;
+    const forDebuggingOnly = {};
+    forDebuggingOnly.reportAdAuctionLoss = function(url){
+      forDebuggingOnly_auction_loss_url = url;
+    }
+    forDebuggingOnly.reportAdAuctionWin = function(url){
+      forDebuggingOnly_auction_win_url = url;
+    }
+    globalThis.forDebuggingOnly = forDebuggingOnly;
+
     function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
                                 browserSignals, directFromSellerSignals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(featureFlags.enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
-
-      var forDebuggingOnly_auction_loss_url = undefined;
-      var forDebuggingOnly_auction_win_url = undefined;
-      const forDebuggingOnly = {};
-      forDebuggingOnly.reportAdAuctionLoss = function(url){
-        forDebuggingOnly_auction_loss_url = url;
-      }
-      forDebuggingOnly.reportAdAuctionWin = function(url){
-        forDebuggingOnly_auction_win_url = url;
-      }
-      globalThis.forDebuggingOnly = forDebuggingOnly;
-
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (featureFlags.enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       var scoreAdResponse = {};
       try {
         scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
@@ -922,26 +895,22 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     // response with reportResult url and interaction reporting urls.
     function reportingEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging, buyerReportingMetadata, ) {
     ps_signalsForWinner = ""
-    var ps_report_result_response = {
+    const ps_report_result_response = {
         reportResultUrl : "",
         interactionReportingUrls : {},
         sendReportToInvoked : false,
         registerAdBeaconInvoked : false,
       }
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
+      const ps_logs = [];
+      const ps_errors = [];
+      const ps_warns = [];
+    if (enable_logging) {
+        console.log = (...args) => ps_logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
+        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    } else {
+      console.log = console.warn = console.error = function() {};
+    }
       globalThis.sendReportTo = function sendReportTo(url){
         if(ps_report_result_response.sendReportToInvoked) {
           throw new Error("sendReportTo function invoked more than once");
@@ -964,7 +933,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         var auctionSignals = auctionConfig.auctionSignals
         var buyerReportingSignals = sellerReportingSignals
         delete buyerReportingSignals.desirability
-        buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        if(buyerReportingMetadata.hasOwnProperty("interestGroupName")){
+          buyerReportingSignals.interestGroupName = buyerReportingMetadata.interestGroupName
+        }
         buyerReportingSignals.madeHighestScoringOtherBid = buyerReportingMetadata.madeHighestScoringOtherBid
         buyerReportingSignals.joinCount = buyerReportingMetadata.joinCount
         buyerReportingSignals.recency = buyerReportingMetadata.recency
@@ -972,6 +943,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
+          buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
+        }
         // Absence of interest group indicates that this is a protected app
         // signals ad.
         if (buyerReportingMetadata.enableProtectedAppSignals &&
@@ -1023,94 +997,14 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
+          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
+        return {"testSignal":"testValue"}
     }
 )JS_CODE";
 
-constexpr absl::string_view kExpectedCodeWithReportingDisabled = R"JS_CODE(
-    function scoreAdEntryFunction(adMetadata, bid, auctionConfig, trustedScoringSignals,
-                                browserSignals, directFromSellerSignals, featureFlags){
-      var ps_logs = [];
-      var ps_errors = [];
-      var ps_warns = [];
-      if(featureFlags.enable_logging){
-        console.log = function(...args) {
-          ps_logs.push(JSON.stringify(args))
-        }
-        console.error = function(...args) {
-          ps_errors.push(JSON.stringify(args))
-        }
-        console.warn = function(...args) {
-          ps_warns.push(JSON.stringify(args))
-        }
-      }
-
-      var forDebuggingOnly_auction_loss_url = undefined;
-      var forDebuggingOnly_auction_win_url = undefined;
-      const forDebuggingOnly = {};
-      forDebuggingOnly.reportAdAuctionLoss = function(url){
-        forDebuggingOnly_auction_loss_url = url;
-      }
-      forDebuggingOnly.reportAdAuctionWin = function(url){
-        forDebuggingOnly_auction_win_url = url;
-      }
-      globalThis.forDebuggingOnly = forDebuggingOnly;
-
-      var scoreAdResponse = {};
-      try {
-        scoreAdResponse = scoreAd(adMetadata, bid, auctionConfig,
-              trustedScoringSignals, browserSignals, directFromSellerSignals);
-      } catch({error, message}) {
-          console.error("[Error: " + error + "; Message: " + message + "]");
-      } finally {
-        if( featureFlags.enable_debug_url_generation &&
-              (forDebuggingOnly_auction_loss_url
-                  || forDebuggingOnly_auction_win_url)) {
-          scoreAdResponse.debugReportUrls = {
-            auctionDebugLossUrl: forDebuggingOnly_auction_loss_url,
-            auctionDebugWinUrl: forDebuggingOnly_auction_win_url
-          }
-        }
-      }
-      return {
-        response: scoreAdResponse,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
-    }
-
-    function fibonacci(num) {
-      if (num <= 1) return 1;
-      return fibonacci(num - 1) + fibonacci(num - 2);
-    }
-
-    function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
-      // Do a random amount of work to generate the score:
-      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
-      console.log("Logging from ScoreAd")
-      console.error("Logging error from ScoreAd")
-      console.warn("Logging warn from ScoreAd")
-      return {
-        desirability: score,
-        allow_component_auction: false
-      }
-    }
-    function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
-        console.log("Logging from ReportResult");
-        if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com")
-        } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
-        }
-        registerAdBeacon({"clickEvent":"http://click.com"})
-        return "testSignalsForWinner"
-    }
-)JS_CODE";
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // FLEDGE_SERVICES_SELLER_CODE_WRAPPER_TEST_CONSTANTS_H_

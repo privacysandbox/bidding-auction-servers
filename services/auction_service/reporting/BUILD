@@ -34,8 +34,11 @@ cc_library(
     deps = [
         ":noiser_and_bucketer",
         ":reporting_response",
+        "//services/auction_service:auction_constants",
+        "//services/common:feature_flags",
         "//services/common/clients/code_dispatcher:code_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/common/util:post_auction_signals",
         "//services/common/util:reporting_util",
@@ -43,9 +46,20 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@google_privacysandbox_servers_common//src/logger:request_context_impl",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
+        "@rapidjson",
+    ],
+)
+
+cc_library(
+    name = "reporting_test_util",
+    srcs = ["reporting_test_util.cc"],
+    hdrs = ["reporting_test_util.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":reporting_helper",
+        ":reporting_response",
         "@rapidjson",
     ],
 )

@@ -15,11 +15,14 @@
 // IPC sidecar for testing.
 
 #include "absl/log/check.h"
+#include "proto/inference_sidecar.pb.h"
 
 #include "ipc_sidecar.h"
 
 int main(int argc, char** argv) {
-  CHECK(!privacy_sandbox::bidding_auction_servers::inference::Run().ok())
+  privacy_sandbox::bidding_auction_servers::inference::
+      InferenceSidecarRuntimeConfig config;
+  CHECK(!privacy_sandbox::bidding_auction_servers::inference::Run(config).ok())
       << "Unsuccessful run of the inference sidecar.";
   return 0;
 }

@@ -118,37 +118,40 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
   this->SetupComponentAuctionResults(2);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
-      .WillOnce([this, &scoring_done](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_request,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<
-                        void(absl::StatusOr<std::unique_ptr<
-                                 ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
-                        on_done,
-                    absl::Duration timeout) {
-        EXPECT_EQ(score_ads_request->auction_signals(),
-                  this->request_.auction_config().auction_signals());
-        EXPECT_EQ(score_ads_request->seller_signals(),
-                  this->request_.auction_config().seller_signals());
-        EXPECT_EQ(score_ads_request->seller(),
-                  this->request_.auction_config().seller());
-        EXPECT_EQ(score_ads_request->seller_currency(),
-                  this->request_.auction_config().seller_currency());
-        EXPECT_EQ(score_ads_request->component_auction_results_size(),
-                  this->request_.component_auction_results_size());
-        for (int i = 0; i < score_ads_request->component_auction_results_size();
-             i++) {
-          // bidding groups are not sent to Auction server.
-          this->component_auction_results_[i].clear_bidding_groups();
-          EXPECT_THAT(score_ads_request->component_auction_results(i),
-                      EqualsProto(this->component_auction_results_[i]));
-        }
-        std::move(on_done)(
-            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
-        scoring_done.Notify();
-        return absl::OkStatus();
-      });
+      .WillOnce(
+          [this, &scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            EXPECT_EQ(score_ads_request->auction_signals(),
+                      this->request_.auction_config().auction_signals());
+            EXPECT_EQ(score_ads_request->seller_signals(),
+                      this->request_.auction_config().seller_signals());
+            EXPECT_EQ(score_ads_request->seller(),
+                      this->request_.auction_config().seller());
+            EXPECT_EQ(score_ads_request->seller_currency(),
+                      this->request_.auction_config().seller_currency());
+            EXPECT_EQ(score_ads_request->component_auction_results_size(),
+                      this->request_.component_auction_results_size());
+            for (int i = 0;
+                 i < score_ads_request->component_auction_results_size(); i++) {
+              // bidding groups are not sent to Auction server.
+              this->component_auction_results_[i].clear_bidding_groups();
+              EXPECT_THAT(score_ads_request->component_auction_results(i),
+                          EqualsProto(this->component_auction_results_[i]));
+            }
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
+                /* response_metadata= */ {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
   ClientRegistry clients = {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
@@ -159,6 +162,30 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
           std::make_unique<MockHttpFetcherAsync>())};
   auto response = RunRequest(this->config_, clients, this->request_);
   scoring_done.WaitForNotification();
+}
+
+TYPED_TEST(SelectAuctionResultReactorTest, AbortsAuctionWithDuplicateResults) {
+  absl::Notification scoring_done;
+  this->SetupComponentAuctionResults(1);
+  // Add duplicate
+  const auto& original_car = this->request_.component_auction_results(0);
+  auto* duplicate_car =
+      this->request_.mutable_component_auction_results()->Add();
+  duplicate_car->set_key_id(original_car.key_id());
+  duplicate_car->set_auction_result_ciphertext(
+      original_car.auction_result_ciphertext());
+
+  EXPECT_CALL(this->scoring_client_, ExecuteInternal).Times(0);
+  ClientRegistry clients = {
+      MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
+      this->scoring_client_,
+      BuyerFrontEndAsyncClientFactoryMock(),
+      this->key_fetcher_manager_,
+      &this->crypto_client_,
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>())};
+  auto response = RunRequest(this->config_, clients, this->request_);
+  EXPECT_EQ(response.auction_result_ciphertext().size(), 0);
 }
 
 TYPED_TEST(SelectAuctionResultReactorTest,
@@ -187,22 +214,25 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       /*rejection_reason_ig_per_owner = */ 2);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
-      .WillOnce([&scoring_done, &winner](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_request,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<
-                        void(absl::StatusOr<std::unique_ptr<
-                                 ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
-                        on_done,
-                    absl::Duration timeout) {
-        auto response =
-            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
-        response->mutable_ad_score()->MergeFrom(winner);
-        std::move(on_done)(std::move(response));
-        scoring_done.Notify();
-        return absl::OkStatus();
-      });
+      .WillOnce(
+          [&scoring_done, &winner](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            auto response =
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
+            response->mutable_ad_score()->MergeFrom(winner);
+            std::move(on_done)(std::move(response),
+                               /* response_metadata= */ {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
   ClientRegistry clients = {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
@@ -224,18 +254,20 @@ TYPED_TEST(SelectAuctionResultReactorTest,
   this->SetupComponentAuctionResults(2);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
-      .WillOnce([&scoring_done](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_request,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<
-                        void(absl::StatusOr<std::unique_ptr<
-                                 ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
-                        on_done,
-                    absl::Duration timeout) {
-        scoring_done.Notify();
-        return absl::Status(absl::StatusCode::kInternal, "test msg");
-      });
+      .WillOnce(
+          [&scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            scoring_done.Notify();
+            return absl::Status(absl::StatusCode::kInternal, "test msg");
+          });
   ClientRegistry clients = {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
@@ -277,20 +309,23 @@ TYPED_TEST(SelectAuctionResultReactorTest,
   this->SetupComponentAuctionResults(2);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
-      .WillOnce([&scoring_done](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_request,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<
-                        void(absl::StatusOr<std::unique_ptr<
-                                 ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
-                        on_done,
-                    absl::Duration timeout) {
-        std::move(on_done)(
-            absl::Status(absl::StatusCode::kInvalidArgument, "test msg"));
-        scoring_done.Notify();
-        return absl::OkStatus();
-      });
+      .WillOnce(
+          [&scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            std::move(on_done)(
+                absl::Status(absl::StatusCode::kInvalidArgument, "test msg"),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
   ClientRegistry clients = {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
@@ -310,20 +345,23 @@ TYPED_TEST(SelectAuctionResultReactorTest,
   this->SetupComponentAuctionResults(2);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
-      .WillOnce([&scoring_done](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_request,
-                    const RequestMetadata& metadata,
-                    absl::AnyInvocable<
-                        void(absl::StatusOr<std::unique_ptr<
-                                 ScoreAdsResponse::ScoreAdsRawResponse>>) &&>
-                        on_done,
-                    absl::Duration timeout) {
-        std::move(on_done)(
-            absl::Status(absl::StatusCode::kInternal, "test msg"));
-        scoring_done.Notify();
-        return absl::OkStatus();
-      });
+      .WillOnce(
+          [&scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            std::move(on_done)(
+                absl::Status(absl::StatusCode::kInternal, "test msg"),
+                /* response_metadata= */ {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
   ClientRegistry clients = {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,

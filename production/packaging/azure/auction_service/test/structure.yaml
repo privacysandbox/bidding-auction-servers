@@ -17,7 +17,7 @@
 schemaVersion: 2.0.0
 
 fileExistenceTests:
-  - name: init_server_basic
+  - name: init_server_basic.sh
     path: /server/bin/init_server_basic
     shouldExist: true
     isExecutableBy: any

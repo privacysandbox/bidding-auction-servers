@@ -17,12 +17,16 @@
 #include <string>
 
 #include "gmock/gmock.h"
+#include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 #include "rapidjson/writer.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/score_ads_reactor_test_util.h"
 #include "services/common/test/random.h"
+#include "services/common/util/json_util.h"
+#include "services/common/util/proto_util.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -36,6 +40,8 @@ constexpr char kTestTopLevelSeller[] = "top_level_seller_origin";
 constexpr char kTestAdComponentUrl_1[] = "https://compoennt_1";
 constexpr char kTestAdComponentUrl_2[] = "https://component_2";
 constexpr char kTestBidCurrency[] = "ABC";
+
+using ::google::protobuf::util::MessageDifferencer;
 
 google::protobuf::RepeatedPtrField<std::string> MakeMockAdComponentUrls() {
   google::protobuf::RepeatedPtrField<std::string> component_urls;
@@ -126,12 +132,23 @@ TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   }
 }
 
-constexpr char kTestAdMetadataJson[] = R"JSON({"arbitraryMetadataKey":2})JSON";
+constexpr absl::string_view kTestAdMetadataJson = R"JSON(
+  {
+    "metadata": {
+      "arbitraryMetadataKey": 2
+    },
+    "renderUrl": "https://render_url"
+  })JSON";
 constexpr char kTestScoringSignals[] = R"JSON({"RandomScoringSignals":{}})JSON";
 constexpr char kTestAuctionConfig[] = R"JSON({"RandomAuctionConfig":{}})JSON";
 constexpr char kTestBidMetadata[] = R"JSON({"RandomBidMetadata":{}})JSON";
-server_common::log::ContextImpl log_context{
-    {}, server_common::ConsentedDebugConfiguration()};
+RequestLogContext log_context{{}, server_common::ConsentedDebugConfiguration()};
+
+google::protobuf::Value GetTestAdMetadata() {
+  auto ads_metadata = JsonStringToValue(kTestAdMetadataJson);
+  CHECK_OK(ads_metadata) << "Malformed JSON: " << kTestAdMetadataJson;
+  return *ads_metadata;
+}
 
 TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesInDispatchRequest) {
   float test_bid = MakeARandomNumber<float>(0.1, 10.1);
@@ -140,11 +157,12 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesInDispatchRequest) {
       std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
       log_context,
       /*enable_adtech_code_logging = */ false,
-      /*enable_debug_reporting = */ false);
+      /*enable_debug_reporting = */ false, kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
-  EXPECT_EQ(output->version_string, "v1");
+  EXPECT_EQ(output->version_string, kScoreAdBlobVersion);
   EXPECT_EQ(output->handler_name, DispatchHandlerFunctionWithSellerWrapper);
+
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)],
             kTestAdMetadataJson);
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kBid)],
@@ -158,6 +176,32 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesInDispatchRequest) {
   EXPECT_EQ(
       *output->input[ScoreArgIndex(ScoreAdArgs::kDirectFromSellerSignals)],
       "{}");
+}
+
+TEST(BuildScoreAdRequestTest, HandlesAdsMetadataString) {
+  float test_bid = MakeARandomNumber<float>(0.1, 10.1);
+  std::string ad_metadata_json = R"JSON("test_ads_data")JSON";
+  auto output = BuildScoreAdRequest(
+      kTestRenderUrl, ad_metadata_json, kTestScoringSignals, test_bid,
+      std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
+      log_context,
+      /*enable_adtech_code_logging = */ false,
+      /*enable_debug_reporting = */ false, kScoreAdBlobVersion);
+  auto observed_ad = JsonStringToValue(
+      *output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]);
+  CHECK_OK(observed_ad)
+      << "Malformed observed ad JSON: "
+      << *output->input[static_cast<int>(ScoreAdArgs::kAdMetadata)];
+  std::string difference;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&difference);
+  auto expected_ad = JsonStringToValue(ad_metadata_json);
+  CHECK_OK(expected_ad) << "Malformed JSON: " << ad_metadata_json;
+  EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_ad))
+      << "\n Observed:\n"
+      << observed_ad->DebugString() << "\n\nExpected:\n"
+      << expected_ad->DebugString() << "\n\nDifference:\n"
+      << difference;
 }
 
 AdWithBidMetadata MakeAnAdWithMetadata(float bid) {
@@ -188,13 +232,26 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesForAdWithBidMetadata) {
       MakeAnAdWithMetadata(test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
       MakeScoringSignalsForAd(), /*enable_debug_reporting = */ false,
-      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata);
+      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
-  EXPECT_EQ(output->version_string, "v1");
+  EXPECT_EQ(output->version_string, kScoreAdBlobVersion);
   EXPECT_EQ(output->handler_name, DispatchHandlerFunctionWithSellerWrapper);
-  EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)],
-            kTestAdMetadataJson);
+  auto observed_ad = JsonStringToValue(
+      *output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]);
+  CHECK_OK(observed_ad)
+      << "Malformed observed ad JSON: "
+      << *output->input[static_cast<int>(ScoreAdArgs::kAdMetadata)];
+  std::string difference;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&difference);
+  auto expected_ad = GetTestAdMetadata();
+  EXPECT_TRUE(differencer.Compare(*observed_ad, expected_ad))
+      << "\n Observed:\n"
+      << observed_ad->DebugString() << "\n\nExpected:\n"
+      << expected_ad.DebugString() << "\n\nDifference:\n"
+      << difference;
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kBid)],
             std::to_string(test_bid));
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)],
@@ -215,13 +272,26 @@ TEST(BuildScoreAdRequestTest,
       GetProtectedAppSignalsAdWithBidMetadata(kTestRenderUrl, test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
       MakeScoringSignalsForAd(), /*enable_debug_reporting = */ false,
-      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata);
+      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
   EXPECT_EQ(output->version_string, "v1");
   EXPECT_EQ(output->handler_name, DispatchHandlerFunctionWithSellerWrapper);
-  EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)],
-            kTestAdMetadataJson);
+  auto observed_ad = JsonStringToValue(
+      *output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]);
+  CHECK_OK(observed_ad)
+      << "Malformed observed ad JSON: "
+      << *output->input[static_cast<int>(ScoreAdArgs::kAdMetadata)];
+  std::string difference;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&difference);
+  auto expected_ad = GetTestAdMetadata();
+  EXPECT_TRUE(differencer.Compare(*observed_ad, expected_ad))
+      << "\n Observed:\n"
+      << observed_ad->DebugString() << "\n\nExpected:\n"
+      << expected_ad.DebugString() << "\n\nDifference:\n"
+      << difference;
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kBid)],
             std::to_string(test_bid));
   EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kAuctionConfig)],
@@ -253,7 +323,7 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsInDispatchRequest) {
           std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
           log_context,
           /*enable_adtech_code_logging = */ flag_1,
-          /*enable_debug_reporting = */ flag_2);
+          /*enable_debug_reporting = */ flag_2, kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));
@@ -270,7 +340,7 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForAdWithBidMetadata) {
           std::make_shared<std::string>(kTestAuctionConfig),
           MakeScoringSignalsForAd(), /*enable_debug_reporting = */ flag_2,
           log_context, /*enable_adtech_code_logging = */ flag_1,
-          kTestBidMetadata);
+          kTestBidMetadata, kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));
@@ -287,12 +357,42 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
           std::make_shared<std::string>(kTestAuctionConfig),
           MakeScoringSignalsForAd(), /*enable_debug_reporting = */ flag_2,
           log_context, /*enable_adtech_code_logging = */ flag_1,
-          kTestBidMetadata);
+          kTestBidMetadata, kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));
     }
   }
+}
+
+TEST(ScoreAdsTest, ParsesScoreAdResponseRespectsDebugUrlLimits) {
+  std::string long_win_url(1024, 'A');
+  std::string long_loss_url(1025, 'B');
+  auto scored_ad = ParseJsonString(absl::Substitute(
+      R"({
+                  "desirability" : 10,
+                  "allowComponentAuction" : false,
+                  "debugReportUrls": {
+                    "auctionDebugLossUrl": "$0",
+                    "auctionDebugWinUrl": "$1"
+                  }
+                })",
+      long_loss_url, long_win_url));
+  CHECK_OK(scored_ad);
+  int64_t current_all_debug_urls_chars = 0;
+  auto parsed_response = ParseScoreAdResponse(
+      *scored_ad, /*max_allowed_size_debug_url_chars=*/65536,
+      /*max_allowed_size_all_debug_urls_chars=*/1024,
+      /*device_component_auction=*/false, current_all_debug_urls_chars);
+  CHECK_OK(parsed_response);
+  std::cerr << " parsed response: \n" << parsed_response->DebugString() << "\n";
+  EXPECT_TRUE(parsed_response->has_debug_report_urls());
+  EXPECT_FALSE(
+      parsed_response->debug_report_urls().auction_debug_win_url().empty());
+  EXPECT_EQ(parsed_response->debug_report_urls().auction_debug_win_url().size(),
+            1024);
+  EXPECT_TRUE(
+      parsed_response->debug_report_urls().auction_debug_loss_url().empty());
 }
 
 }  // namespace

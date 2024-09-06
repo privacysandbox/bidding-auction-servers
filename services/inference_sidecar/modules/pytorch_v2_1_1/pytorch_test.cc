@@ -23,6 +23,8 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/blocking_counter.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "gtest/gtest.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
@@ -37,11 +39,43 @@ constexpr absl::string_view kTestModelVariedInputs1 = "e2e_model1";
 constexpr absl::string_view kTestModelVariedInputs2 = "e2e_model2";
 constexpr absl::string_view kTestModelMixedInputsMixedOutputs =
     "mixed_inputs_mixed_outputs_model";
+constexpr absl::string_view kStatefulModelDir = "stateful_model";
 constexpr int kNumThreads = 100;
+
+TEST(PyTorchModuleRuntimeConfigTest,
+     RuntimeConfigInitializationSucceeds_Empty) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+
+  // PyTorch runtime threading configuration is set at the process level.
+  std::thread t([]() {
+    EXPECT_NE(at::get_num_threads(), 0);
+    EXPECT_NE(at::get_num_interop_threads(), 0);
+  });
+  t.join();
+}
+
+TEST(PyTorchModuleRuntimeConfigTest, RuntimeConfigInitializationSucceeds) {
+  InferenceSidecarRuntimeConfig config;
+  config.set_num_intraop_threads(4);
+  config.set_num_interop_threads(5);
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+
+  // PyTorch runtime threading configuration is set at the process level.
+  std::thread t([]() {
+    EXPECT_EQ(at::get_num_threads(), 4);
+    EXPECT_EQ(at::get_num_interop_threads(), 5);
+  });
+  t.join();
+}
 
 TEST(PyTorchModuleRegisterModelTest,
      RegisterModelWithEmtpyKeyReturnsInvalidArgument) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_EQ(torch_module->RegisterModel(register_request).status().code(),
             absl::StatusCode::kInvalidArgument);
@@ -49,7 +83,9 @@ TEST(PyTorchModuleRegisterModelTest,
 
 TEST(PyTorchModuleRegisterModelTest,
      RegisterModelWithExistingKeyReturnsAlreadyExists) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -60,7 +96,9 @@ TEST(PyTorchModuleRegisterModelTest,
 
 TEST(PyTorchModuleRegisterModelTest,
      RegisterModelWithNoModelContentReturnsInvalidArgument) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   register_request.mutable_model_spec()->set_model_path("e2e_model1");
   EXPECT_EQ(torch_module->RegisterModel(register_request).status().code(),
@@ -68,7 +106,9 @@ TEST(PyTorchModuleRegisterModelTest,
 }
 
 TEST(PyTorchModuleRegisterModelTest, RegisterModelOk) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -77,7 +117,9 @@ TEST(PyTorchModuleRegisterModelTest, RegisterModelOk) {
 
 TEST(PyTorchModulePredictTest,
      PredictWithoutValidBatchRequestInputReturnsInvalidArgument) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -110,7 +152,9 @@ constexpr char kInvalidTensorContentRequest[] = R"json({
 
 TEST(PyTorchModulePredictTest,
      PredictWithInvalidTensorContentReturnsInvalidArgument) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -140,8 +184,14 @@ constexpr char kSimpleRequest[] = R"json({
 }]
     })json";
 
+constexpr absl::string_view kSimpleRequestResponse =
+    "{\"response\":[{\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_"
+    "shape\":[1],\"data_type\":\"DOUBLE\",\"tensor_content\":[3.14]}]}]}";
+
 TEST(PyTorchModulePredictTest, PredictWithoutValidModelReturnsNotFound) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_EQ(torch_module->RegisterModel(register_request).status().code(),
             absl::StatusCode::kInvalidArgument);
@@ -156,7 +206,9 @@ TEST(PyTorchModulePredictTest, PredictWithoutValidModelReturnsNotFound) {
 }
 
 TEST(PyTorchModulePredictTest, PredictSimpleSuccess) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -168,10 +220,55 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess) {
   const absl::StatusOr<PredictResponse> result =
       torch_module->Predict(predict_request);
   EXPECT_TRUE(result.ok());
-  EXPECT_EQ(
-      result->output(),
-      "{\"response\":[{\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_"
-      "shape\":[1],\"data_type\":\"DOUBLE\",\"tensor_content\":[3.14]}]}]}");
+  EXPECT_EQ(result->output(), kSimpleRequestResponse);
+}
+
+TEST(PyTorchModulePredictTest, PredictConsentedRequestSuccess) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kSimpleRequest);
+  predict_request.set_is_consented(true);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  EXPECT_TRUE(result.ok());
+  EXPECT_EQ(result->output(), kSimpleRequestResponse);
+}
+
+TEST(PyTorchModuleResetModelTest, NoModel) {
+  InferenceSidecarRuntimeConfig config;
+  config.set_model_reset_probability(1.0);
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  torch_module->ResetModels();
+}
+
+TEST(PyTorchModuleResetModelTest, ResetModelOk) {
+  InferenceSidecarRuntimeConfig config;
+  config.set_model_reset_probability(1.0);
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kSimpleRequest);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  EXPECT_TRUE(result.ok());
+  EXPECT_EQ(result->output(), kSimpleRequestResponse);
+
+  torch_module->ResetModels();
 }
 
 constexpr char kNotRegisteredModelRequest[] = R"json({
@@ -190,7 +287,9 @@ constexpr char kNotRegisteredModelRequest[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictReturnsNotFoundError) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
@@ -204,7 +303,7 @@ TEST(PyTorchModulePredictTest, PredictReturnsNotFoundError) {
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(result.status().code(), absl::StatusCode::kNotFound);
   EXPECT_EQ(result.status().message(),
-            "Model not_registered has not been registered");
+            "Requested model 'not_registered' has not been registered");
 }
 
 constexpr char kMismatchedInput[] = R"json({
@@ -223,7 +322,9 @@ constexpr char kMismatchedInput[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictReturnsInternalError) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
@@ -258,7 +359,9 @@ constexpr char kSimpleRequest2Elements[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictSimpleSuccessShape1x2) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -291,7 +394,9 @@ constexpr char kSimpleRequestBatchSize2[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictSimpleBatchSize2Success) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -338,7 +443,9 @@ constexpr char kSameModelSameBatchSizeMultipleRequests[] = R"json({
 
 TEST(PyTorchModulePredictTest,
      PredictSameModelSameBatchSizeMultipleRequestsSuccess) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -387,7 +494,9 @@ constexpr char kSameModelVariedBatchSizesMultipleRequests[] = R"json({
 
 TEST(PyTorchModulePredictTest,
      PredictSameModelVariedBatchSizesMultipleRequestsSuccess) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -435,7 +544,9 @@ constexpr char kRequestsWithMultipleInvalidInputs[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictMutilpleInvalidInputsReturnsFirstError) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -479,7 +590,9 @@ constexpr char kBothValidAndInvalidInputs[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictBothValidAndInvalidInputsReturnsError) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -560,7 +673,9 @@ constexpr char kVariedInputsRequestBatchSize1[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize1Success) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
@@ -652,7 +767,9 @@ constexpr char kVariedInputsRequestBatchSize2[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize2Success) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
@@ -694,7 +811,9 @@ constexpr char kMixedInputsBatchSize1[] = R"json({
     })json";
 
 TEST(PyTorchModulePredictTest, PredictMixedInputsMixedOutputsSuccess) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(PopulateRegisterModelRequest(kTestModelMixedInputsMixedOutputs,
                                            register_request)
@@ -860,7 +979,9 @@ constexpr char kVariedInputsMultipleModelsRequest[] = R"json({
 
 TEST(PyTorchModulePredictTest,
      PredictVariedInputsMultipleModelsBatchSize1Success) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request1;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request1)
@@ -887,8 +1008,80 @@ TEST(PyTorchModulePredictTest,
       "content\":[0.3857767879962921,0.458008348941803]}]}]}");
 }
 
+constexpr char kStatefulModelRequest[] = R"json({
+  "request" : [{
+    "model_path" : "stateful_model",
+    "tensors" : [
+    {
+      "data_type": "INT32",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["0"]
+    }
+  ]
+}]
+    })json";
+
+TEST(PyTorchModuleResetModelTest, NoResetWithStatefulModel) {
+  const int kIterations = 100;
+  InferenceSidecarRuntimeConfig config;
+  config.set_model_reset_probability(0.0);
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  for (int count = 1; count < kIterations; count++) {
+    PredictRequest predict_request;
+    predict_request.set_input(kStatefulModelRequest);
+    absl::StatusOr predict_status = torch_module->Predict(predict_request);
+    ASSERT_TRUE(predict_status.ok());
+    PredictResponse response = predict_status.value();
+    ASSERT_FALSE(response.output().empty());
+
+    EXPECT_TRUE(absl::StrContains(
+        response.output(),
+        absl::StrCat(
+            "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[",
+            count, "]}")))
+        << response.output();
+  }
+}
+
+TEST(PyTorchModuleResetModelTest, ResetSuccessWithStatefulModel) {
+  const int kIterations = 10;
+  InferenceSidecarRuntimeConfig config;
+  config.set_model_reset_probability(1.0);
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  for (int i = 0; i < kIterations; i++) {
+    PredictRequest predict_request;
+    predict_request.set_input(kStatefulModelRequest);
+    absl::StatusOr predict_status = torch_module->Predict(predict_request);
+    ASSERT_TRUE(predict_status.ok());
+    PredictResponse response = predict_status.value();
+    ASSERT_FALSE(response.output().empty());
+
+    EXPECT_TRUE(absl::StrContains(
+        response.output(),
+        "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[1]}"))
+        << response.output();
+    absl::SleepFor(absl::Seconds(1));
+  }
+}
+
 TEST(PyTorchModuleConcurrencyTest, RegisterSameModelWithMultipleThreads) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -910,9 +1103,11 @@ TEST(PyTorchModuleConcurrencyTest, RegisterSameModelWithMultipleThreads) {
             num_returns_already_exists.DecrementCount();
           }
         }));
+    if (i == 0) {
+      // The first call returns ok.
+      num_returns_ok.Wait();
+    }
   }
-
-  num_returns_ok.Wait();
   num_returns_already_exists.Wait();
 
   for (auto& thread : threads) {
@@ -922,7 +1117,9 @@ TEST(PyTorchModuleConcurrencyTest, RegisterSameModelWithMultipleThreads) {
 
 TEST(PyTorchModuleConcurrencyTest,
      ThreadsMakingInferenceRequestAgainstSingleModel) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
@@ -954,7 +1151,9 @@ TEST(PyTorchModuleConcurrencyTest,
 
 TEST(PyTorchModuleConcurrencyTest,
      ThreadsMakingInferenceRequestAgainstMultipleModels) {
-  std::unique_ptr<ModuleInterface> torch_module = ModuleInterface::Create();
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
 
   std::thread register_request_thread1([&torch_module]() {
     RegisterModelRequest register_request1;

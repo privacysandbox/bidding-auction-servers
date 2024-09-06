@@ -126,9 +126,9 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
 // Retrieves the string value of the specified member in the document.
 template <typename T>
 inline absl::StatusOr<std::string> GetStringMember(
-    const T& document, const std::string& member_name,
+    const T& document, absl::string_view member_name,
     bool is_empty_ok = false) {
-  auto it = document.FindMember(member_name.c_str());
+  auto it = document.FindMember(member_name.data());
   if (it == document.MemberEnd()) {
     return absl::InvalidArgumentError(
         absl::StrFormat(kMissingMember, member_name));
@@ -166,6 +166,45 @@ GetArrayMember(const T& document, const std::string& member_name) {
   }
 
   return it->value.GetArray();
+}
+
+// Retrieves the array value of the specified member in the document as a
+// non-const array.
+template <typename T>
+inline absl::StatusOr<rapidjson::GenericValue<rapidjson::UTF8<>>::Array>
+GetArrayMember(T& document, const std::string& member_name) {
+  auto it = document.FindMember(member_name.c_str());
+  if (it == document.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kMissingMember, member_name));
+  }
+
+  if (!it->value.IsArray()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kArrayType, it->value.GetType()));
+  }
+
+  return it->value.GetArray();
+}
+
+// Retrieves the number value of the specified member in the document.
+template <typename T>
+inline absl::StatusOr<int> GetIntMember(const T& document,
+                                        absl::string_view member_name) {
+  auto it = document.FindMember(member_name.data());
+  if (it == document.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kMissingMember, member_name));
+  }
+
+  if (!it->value.IsInt()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kNumberType, it->value.GetType()));
+  }
+
+  return it->value.GetInt();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -133,6 +133,11 @@ void AllowGrpc(sandbox2::PolicyBuilder& builder) {
                           {ARG_32(2) /*sig*/, JEQ32(SIGABRT, ALLOW)});
 }
 
+void AllowAws(sandbox2::PolicyBuilder& builder) {
+  // TODO(b/333559278): Revisit the need for the following permissions.
+  builder.AllowSyscall(__NR_getsockopt);
+}
+
 void AllowPyTorch(sandbox2::PolicyBuilder& builder) {
   // TODO(b/323601668): Rewrite the PyTorch sidecar in order not to call
   // sysinfo.
@@ -158,6 +163,7 @@ std::unique_ptr<sandbox2::Policy> MakePolicy() {
   }
   AllowSamePolicyAsRoma(builder);
   AllowGrpc(builder);
+  AllowAws(builder);
   AllowPyTorch(builder);
   AllowTensorFlow(builder);
   builder.AllowStaticStartup().AllowLogForwarding();

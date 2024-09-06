@@ -22,8 +22,18 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
+#include "services/common/clients/async_grpc/request_config.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+class CancellableAsyncClient {
+ public:
+  // Polymorphic class => virtual destructor
+  virtual ~CancellableAsyncClient() = default;
+
+  // Cancel the GRPC request
+  virtual void Cancel() const {}
+};
 
 // This provides access to the Metadata Object type
 using RequestMetadata = absl::flat_hash_map<std::string, std::string>;
@@ -54,9 +64,10 @@ class AsyncClient {
   // Executes the inter service GRPC request asynchronously.
   virtual absl::Status ExecuteInternal(
       std::unique_ptr<RawRequest> request, const RequestMetadata& metadata,
-      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>) &&>
+      absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<RawResponse>>,
+                              ResponseMetadata) &&>
           on_done,
-      absl::Duration timeout) const {
+      absl::Duration timeout, RequestConfig request_config = {}) {
     return absl::NotFoundError("Method not implemented.");
   }
 };

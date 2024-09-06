@@ -46,18 +46,18 @@ TEST(BlobFetcherTest, FetchBucket) {
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
 
-  EXPECT_CALL(*blob_storage_client, Run).WillOnce([&]() {
-    return SuccessExecutionResult();
+  EXPECT_CALL(*blob_storage_client, Run).WillOnce([]() {
+    return absl::OkStatus();
   });
 
-  EXPECT_CALL(*executor, Run).WillOnce([&](absl::AnyInvocable<void()> closure) {
+  EXPECT_CALL(*executor, Run).WillOnce([](absl::AnyInvocable<void()> closure) {
     closure();
   });
 
   EXPECT_CALL(*blob_storage_client, ListBlobsMetadata)
       .WillOnce(
-          [&](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
-                  async_context) {
+          [](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+                 async_context) {
             auto async_bucket_name =
                 async_context.request->blob_metadata().bucket_name();
             EXPECT_EQ(async_bucket_name, kSampleBucketName);
@@ -70,12 +70,12 @@ TEST(BlobFetcherTest, FetchBucket) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
       .WillOnce(
-          [&](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
+          [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
             auto async_bucket_name =
                 async_context.request->blob_metadata().bucket_name();
             auto async_blob_name =
@@ -88,7 +88,7 @@ TEST(BlobFetcherTest, FetchBucket) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   BlobFetcher bucket_fetcher(kSampleBucketName, executor.get(),
@@ -100,18 +100,18 @@ TEST(BlobFetcherTest, FetchBucket_Failure) {
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
 
-  EXPECT_CALL(*blob_storage_client, Run).WillOnce([&]() {
-    return SuccessExecutionResult();
+  EXPECT_CALL(*blob_storage_client, Run).WillOnce([] {
+    return absl::OkStatus();
   });
 
-  EXPECT_CALL(*executor, Run).WillOnce([&](absl::AnyInvocable<void()> closure) {
+  EXPECT_CALL(*executor, Run).WillOnce([](absl::AnyInvocable<void()> closure) {
     closure();
   });
 
   EXPECT_CALL(*blob_storage_client, ListBlobsMetadata)
       .WillOnce(
-          [&](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
-                  async_context) {
+          [](AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
+                 async_context) {
             auto async_bucket_name =
                 async_context.request->blob_metadata().bucket_name();
             EXPECT_EQ(async_bucket_name, kSampleBucketName);
@@ -124,22 +124,21 @@ TEST(BlobFetcherTest, FetchBucket_Failure) {
             async_context.result = SuccessExecutionResult();
             async_context.Finish();
 
-            return SuccessExecutionResult();
+            return absl::OkStatus();
           });
 
   EXPECT_CALL(*blob_storage_client, GetBlob)
       .WillOnce(
-          [&](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
+          [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
             async_context.result = FailureExecutionResult(SC_UNKNOWN);
             async_context.Finish();
-
-            return FailureExecutionResult(SC_UNKNOWN);
+            return absl::UnknownError("");
           });
 
   BlobFetcher bucket_fetcher(kSampleBucketName, executor.get(),
                              std::move(blob_storage_client));
   auto status = bucket_fetcher.FetchSync();
-  EXPECT_EQ(status.code(), absl::StatusCode::kInternal);
+  EXPECT_FALSE(status.ok());
 }
 
 }  // namespace
