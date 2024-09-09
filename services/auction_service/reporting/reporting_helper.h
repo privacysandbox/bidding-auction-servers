@@ -186,6 +186,8 @@ struct BuyerReportingDispatchRequestData {
   std::string buyer_origin;
   std::string signals_for_winner = "null";
   std::string winning_ad_render_url;
+  std::optional<absl::string_view> egress_payload;
+  std::optional<absl::string_view> temporary_unlimited_egress_payload;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(

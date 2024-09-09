@@ -138,6 +138,12 @@ data "aws_iam_policy_document" "instance_policy_doc" {
     actions   = ["route53:ChangeResourceRecordSets"]
     resources = ["*"]
   }
+  statement {
+    sid       = "AllowWriteS3"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "instance_policy" {

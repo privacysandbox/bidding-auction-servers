@@ -72,6 +72,8 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRawRequestForAndroid();
   auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
 
   GetBidsRequest::GetBidsRawRequest input;
   // 1. Set Interest Group For Bidding
@@ -127,18 +129,14 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
     input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
         input_ig.release());
   }
-
   // 2. Set Auction Signals.
   input.set_auction_signals(expected_raw_output.auction_signals());
   // 3. Set Buyer Signals.
   input.set_buyer_signals(expected_raw_output.buyer_signals());
-  // 4. Set Bidding Signals
-  bidding_signals->trusted_signals =
-      std::make_unique<std::string>(expected_raw_output.bidding_signals());
 
   auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
                                                  std::move(bidding_signals),
-                                                 server_common::LogContext{});
+                                                 NoOpContext().log);
 
   std::string difference;
   MessageDifferencer differencer;
@@ -147,156 +145,12 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
       << difference;
 }
 
-TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
-  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
-      MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-
-  GetBidsRequest::GetBidsRawRequest input;
-
-  // Create a test IG with ads.
-  auto ig_with_two_ads = MakeAnInterestGroupSentFromDevice();
-
-  // Check that IG parsed correctly.
-  ASSERT_FALSE(ig_with_two_ads->name().empty());
-  ASSERT_TRUE(ig_with_two_ads->has_browser_signals());
-  ASSERT_TRUE(ig_with_two_ads->browser_signals().IsInitialized());
-  ASSERT_EQ(ig_with_two_ads->ad_render_ids_size(), 2);
-  ASSERT_GT(ig_with_two_ads->bidding_signals_keys_size(), 0);
-
-  // Now transform the IG into the expected output IGForBidding and add it to
-  // expected output object.
-  expected_raw_output.mutable_interest_group_for_bidding()->Clear();
-
-  GenBidsRawReq::InterestGroupForBidding* ig_for_bidding =
-      expected_raw_output.mutable_interest_group_for_bidding()->Add();
-
-  ig_for_bidding->set_name(ig_with_two_ads->name());
-  ig_for_bidding->mutable_browser_signals()->CopyFrom(
-      ig_with_two_ads->browser_signals());
-  ig_for_bidding->mutable_ad_render_ids()->MergeFrom(
-      ig_with_two_ads->ad_render_ids());
-  ig_for_bidding->mutable_trusted_bidding_signals_keys()->MergeFrom(
-      ig_with_two_ads->bidding_signals_keys());
-
-  // Move Input Interest Group to Buyer Input.
-  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
-      ig_with_two_ads.release());
-  // Check that exactly 1 IG is in the input.
-  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
-
-  // 2. Set Auction Signals.
-  input.set_auction_signals(expected_raw_output.auction_signals());
-  // 3. Set Buyer Signals.
-  input.set_buyer_signals(expected_raw_output.buyer_signals());
-  // 4. Set Bidding Signals
-  bidding_signals->trusted_signals =
-      std::make_unique<std::string>(expected_raw_output.bidding_signals());
-
-  input.set_seller(expected_raw_output.seller());
-  input.set_publisher_name(expected_raw_output.publisher_name());
-
-  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
-                                                 std::move(bidding_signals),
-                                                 server_common::LogContext{});
-
-  ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
-  ASSERT_GT(raw_output->interest_group_for_bidding().size(), 0);
-
-  EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
-
-  if (!(MessageDifferencer::Equals(expected_raw_output, *raw_output))) {
-    std::string expected_output_str, output_str;
-
-    CHECK_OK(MessageToJsonString(
-        expected_raw_output.interest_group_for_bidding().at(0),
-        &expected_output_str));
-    CHECK_OK(MessageToJsonString(raw_output->interest_group_for_bidding().at(0),
-                                 &output_str));
-
-    ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
-    ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
-
-    ABSL_LOG(INFO) << "\nExpected seller:\n" << expected_raw_output.seller();
-    ABSL_LOG(INFO) << "\nActual seller:\n" << raw_output->seller();
-  }
-}
-
-TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
-  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
-      MakeARandomGenerateBidsRequestForBrowser();
-  GetBidsRequest::GetBidsRawRequest input;
-  input.set_top_level_seller(MakeARandomString());
-
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::make_unique<BiddingSignals>(),
-      server_common::LogContext{});
-
-  EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
-}
-
-TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForBrowserIG) {
-  GetBidsRequest::GetBidsRawRequest input;
-
-  // Create a test IG.
-  auto input_ig = MakeARandomInterestGroupFromBrowser();
-  input_ig->mutable_bidding_signals_keys()->Clear();
-
-  // Check that IG created correctly.
-  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 0);
-
-  // Move Input Interest Group to Buyer Input.
-  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
-      input_ig.release());
-  // Check that exactly 1 IG is in the input.
-  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
-
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::make_unique<BiddingSignals>(),
-      server_common::LogContext{});
-
-  ASSERT_EQ(raw_output->interest_group_for_bidding().size(), 1);
-  // Expect no bidding signal keys in output.
-  EXPECT_EQ(raw_output->interest_group_for_bidding(0)
-                .trusted_bidding_signals_keys()
-                .size(),
-            0);
-}
-
-TEST(CreateGenerateBidsRequestTest, SetsEmptyBiddingSignalKeysForAndroidIG) {
-  GetBidsRequest input;
-
-  // Create a test IG.
-  auto input_ig = MakeARandomInterestGroupFromAndroid();
-  input_ig->mutable_bidding_signals_keys()->Clear();
-
-  // Check that IG created correctly.
-  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 0);
-
-  // Move Input Interest Group to Buyer Input.
-  GetBidsRequest::GetBidsRawRequest get_bids_raw_request;
-  get_bids_raw_request.mutable_buyer_input()
-      ->mutable_interest_groups()
-      ->AddAllocated(input_ig.release());
-  // Check that exactly 1 IG is in the input.
-  ASSERT_EQ(get_bids_raw_request.buyer_input().interest_groups().size(), 1);
-
-  auto raw_output = CreateGenerateBidsRawRequest(
-      get_bids_raw_request, get_bids_raw_request.buyer_input(),
-      std::make_unique<BiddingSignals>(), server_common::LogContext{});
-
-  ASSERT_EQ(raw_output->interest_group_for_bidding().size(), 1);
-  // Expect no bidding signal keys in output.
-  EXPECT_EQ(raw_output->interest_group_for_bidding(0)
-                .trusted_bidding_signals_keys()
-                .size(),
-            0);
-}
-
 TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
   auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
 
   GetBidsRequest::GetBidsRawRequest input;
   // 1. Set Interest Group For Bidding
@@ -356,16 +210,12 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   input.set_auction_signals(expected_raw_output.auction_signals());
   // 3. Set Buyer Signals.
   input.set_buyer_signals(expected_raw_output.buyer_signals());
-  // 4. Set Bidding Signals
-  bidding_signals->trusted_signals =
-      std::make_unique<std::string>(expected_raw_output.bidding_signals());
-
   input.set_seller(expected_raw_output.seller());
   input.set_publisher_name(expected_raw_output.publisher_name());
 
   auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
                                                  std::move(bidding_signals),
-                                                 server_common::LogContext{});
+                                                 NoOpContext().log);
 
   EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
 
@@ -394,49 +244,221 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   }
 }
 
-TEST(CreateGenerateBidsRequestTest,
-     SetsEmptyBiddingSignalsForNullTrustedSignals) {
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-
+TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
   GetBidsRequest::GetBidsRawRequest input;
-  server_common::LogContext log_context;
+
+  // Create a test IG with ads.
+  auto ig_with_two_ads = MakeAnInterestGroupSentFromDevice();
+  // Check that IG parsed correctly.
+  ASSERT_FALSE(ig_with_two_ads->name().empty());
+  ASSERT_TRUE(ig_with_two_ads->has_browser_signals());
+  ASSERT_TRUE(ig_with_two_ads->browser_signals().IsInitialized());
+  ASSERT_EQ(ig_with_two_ads->ad_render_ids_size(), 2);
+  ASSERT_GT(ig_with_two_ads->bidding_signals_keys_size(), 0);
+
+  // Get bidding signals for test IG
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      MakeBiddingSignalsForIGFromDevice(*ig_with_two_ads.get()));
+
+  // Now transform the IG into the expected output IGForBidding and add it to
+  // expected output object.
+  expected_raw_output.mutable_interest_group_for_bidding()->Clear();
+  GenBidsRawReq::InterestGroupForBidding* ig_for_bidding =
+      expected_raw_output.mutable_interest_group_for_bidding()->Add();
+  ig_for_bidding->set_name(ig_with_two_ads->name());
+  ig_for_bidding->mutable_browser_signals()->CopyFrom(
+      ig_with_two_ads->browser_signals());
+  ig_for_bidding->mutable_ad_render_ids()->MergeFrom(
+      ig_with_two_ads->ad_render_ids());
+  ig_for_bidding->mutable_trusted_bidding_signals_keys()->MergeFrom(
+      ig_with_two_ads->bidding_signals_keys());
+  ig_for_bidding->set_trusted_bidding_signals(
+      MakeTrustedBiddingSignalsForIG(*ig_for_bidding));
+
+  // Move Input Interest Group to Buyer Input.
+  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      ig_with_two_ads.release());
+  // Check that exactly 1 IG is in the input.
+  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
+
+  // 2. Set Auction Signals.
+  input.set_auction_signals(expected_raw_output.auction_signals());
+  // 3. Set Buyer Signals.
+  input.set_buyer_signals(expected_raw_output.buyer_signals());
+  input.set_seller(expected_raw_output.seller());
+  input.set_publisher_name(expected_raw_output.publisher_name());
+
   auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
                                                  std::move(bidding_signals),
-                                                 server_common::LogContext{});
+                                                 NoOpContext().log);
 
-  EXPECT_TRUE(raw_output->bidding_signals().empty());
+  ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
+  ASSERT_GT(raw_output->interest_group_for_bidding().size(), 0);
+
+  EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
+
+  if (!(MessageDifferencer::Equals(expected_raw_output, *raw_output))) {
+    std::string expected_output_str, output_str;
+
+    CHECK_OK(MessageToJsonString(
+        expected_raw_output.interest_group_for_bidding().at(0),
+        &expected_output_str));
+    CHECK_OK(MessageToJsonString(raw_output->interest_group_for_bidding().at(0),
+                                 &output_str));
+
+    ABSL_LOG(INFO) << "\nExpected First IG:\n" << expected_output_str;
+    ABSL_LOG(INFO) << "\nActual First IG:\n" << output_str;
+
+    ABSL_LOG(INFO) << "\nExpected seller:\n" << expected_raw_output.seller();
+    ABSL_LOG(INFO) << "\nActual seller:\n" << raw_output->seller();
+  }
+}
+
+TEST(CreateGenerateBidsRequestTest, IsEmptyForMalformedBiddingSignals) {
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals =
+      std::make_unique<std::string>("Malformed JSON");
+
+  GetBidsRequest::GetBidsRawRequest input;
+  auto input_ig = MakeARandomInterestGroupFromBrowser();
+  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      input_ig.release());
+  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
+
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(raw_output->ByteSizeLong(), 0);
+}
+
+TEST(CreateGenerateBidsRequestTest, SkipsIGWithEmptyBiddingSignalsKeys) {
+  GetBidsRequest::GetBidsRawRequest input;
+  auto input_ig = MakeARandomInterestGroupFromBrowser();
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      MakeBiddingSignalsForIGFromDevice(*input_ig.get()));
+
+  input_ig->mutable_bidding_signals_keys()->Clear();
+  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 0);
+  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      input_ig.release());
+  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
+
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(raw_output->interest_group_for_bidding().size(), 0);
+}
+
+constexpr char kTestBiddingSignals[] =
+    R"JSON({"keys":{"key1":["val1"]}, "perInterestGroupData":{"ig":["val1"]}})JSON";
+constexpr char kTestTrustedBiddingSignals[] = R"JSON({"key1":["val1"]})JSON";
+
+TEST(CreateGenerateBidsRequestTest, HandlesIGWithDuplicateBiddingSignalsKeys) {
+  GetBidsRequest::GetBidsRawRequest input;
+  auto input_ig = MakeARandomInterestGroupFromBrowser();
+  input_ig->set_name("ig");
+  input_ig->mutable_bidding_signals_keys()->Clear();
+  input_ig->add_bidding_signals_keys("key1");
+  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 1);
+  input_ig->add_bidding_signals_keys("key1");
+  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 2);
+  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      input_ig.release());
+  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
+
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals =
+      std::make_unique<std::string>(kTestBiddingSignals);
+
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(raw_output->interest_group_for_bidding(0)
+                .trusted_bidding_signals_keys_size(),
+            1);
+  EXPECT_EQ(raw_output->interest_group_for_bidding(0).trusted_bidding_signals(),
+            kTestTrustedBiddingSignals);
+}
+
+TEST(CreateGenerateBidsRequestTest,
+     HandlesIGWithBiddingSignalsKeysWithoutValue) {
+  GetBidsRequest::GetBidsRawRequest input;
+  auto input_ig = MakeARandomInterestGroupFromBrowser();
+  input_ig->set_name("ig");
+  input_ig->mutable_bidding_signals_keys()->Clear();
+  input_ig->add_bidding_signals_keys("key1");
+  input_ig->add_bidding_signals_keys("key2");
+  ASSERT_EQ(input_ig->bidding_signals_keys_size(), 2);
+  input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      input_ig.release());
+  ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
+
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals =
+      std::make_unique<std::string>(kTestBiddingSignals);
+
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(raw_output->interest_group_for_bidding(0)
+                .trusted_bidding_signals_keys_size(),
+            1);
+  EXPECT_EQ(raw_output->interest_group_for_bidding(0).trusted_bidding_signals(),
+            kTestTrustedBiddingSignals);
 }
 
 TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
   auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
 
   GetBidsRequest::GetBidsRawRequest input;
   input.set_enable_debug_reporting(true);
+
   auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
                                                  std::move(bidding_signals),
-                                                 server_common::LogContext{});
+                                                 NoOpContext().log);
 
   EXPECT_TRUE(raw_output->enable_debug_reporting());
 }
 
 TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
   auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
 
   GetBidsRequest::GetBidsRawRequest input;
   server_common::LogContext log_context;
   log_context.set_generation_id(kSampleGenerationId);
   log_context.set_adtech_debug_id(kSampleAdtechDebugId);
-  auto raw_output = CreateGenerateBidsRawRequest(
-      input, input.buyer_input(), std::move(bidding_signals), log_context);
+  *input.mutable_log_context() = std::move(log_context);
 
-  EXPECT_EQ(raw_output->log_context().generation_id(),
-            log_context.generation_id());
-  EXPECT_EQ(raw_output->log_context().adtech_debug_id(),
-            log_context.adtech_debug_id());
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(raw_output->log_context().generation_id(), kSampleGenerationId);
+  EXPECT_EQ(raw_output->log_context().adtech_debug_id(), kSampleAdtechDebugId);
 }
 
 TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
   auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
 
   GetBidsRequest::GetBidsRawRequest input;
   auto* consented_debug_config = input.mutable_consented_debug_config();
@@ -445,11 +467,28 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
 
   auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
                                                  std::move(bidding_signals),
-                                                 server_common::LogContext{});
+                                                 NoOpContext().log);
 
   EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
             kIsConsentedDebug);
   EXPECT_EQ(raw_output->consented_debug_config().token(), kConsentedDebugToken);
+}
+
+TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRequestForBrowser();
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
+
+  GetBidsRequest::GetBidsRawRequest input;
+  input.set_top_level_seller(MakeARandomString());
+
+  auto raw_output = CreateGenerateBidsRawRequest(input, input.buyer_input(),
+                                                 std::move(bidding_signals),
+                                                 NoOpContext().log);
+
+  EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
 }
 
 TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,

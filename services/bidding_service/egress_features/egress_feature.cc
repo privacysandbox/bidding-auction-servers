@@ -39,7 +39,7 @@ uint32_t EgressFeature::Size() const { return size_; }
 absl::Status EgressFeature::SetValue(rapidjson::Value value, bool verify_type) {
   DCHECK(!is_value_set_);
   std::string observed_feat_type;
-  PS_ASSIGN_IF_PRESENT(observed_feat_type, value, "type", String);
+  PS_ASSIGN_IF_PRESENT(observed_feat_type, value, "name", String);
   if (verify_type) {
     absl::string_view expected_feat_type = Type();
     if (observed_feat_type != expected_feat_type) {

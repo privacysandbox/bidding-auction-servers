@@ -1,3 +1,4 @@
+
 //  Copyright 2022 Google LLC
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
@@ -95,7 +96,14 @@ using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
-bool kEnableSellerAndBuyerUdfIsolation = false;
+namespace {
+bool ShouldEnableSellerAndBuyerUdfIsolation(bool test_mode) {
+  if (test_mode) {
+    return false;
+  }
+  return true;
+}
+}  // namespace
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
@@ -227,8 +235,12 @@ absl::Status RunServer() {
       code_fetch_proto.enable_private_aggregate_reporting();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  bool test_mode = config_client.GetBooleanParameter(TEST_MODE);
+  bool enable_seller_and_buyer_udf_isolation =
+      ShouldEnableSellerAndBuyerUdfIsolation(test_mode);
+
   code_fetch_proto.set_enable_seller_and_buyer_udf_isolation(
-      kEnableSellerAndBuyerUdfIsolation);
+      enable_seller_and_buyer_udf_isolation);
   MultiCurlHttpFetcherAsync http_fetcher =
       MultiCurlHttpFetcherAsync(executor.get());
   HttpFetcherAsync* seller_udf_fetcher = &http_fetcher;
@@ -296,7 +308,7 @@ absl::Status RunServer() {
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB),
       .default_code_version = default_code_version,
       .enable_seller_and_buyer_udf_isolation =
-          kEnableSellerAndBuyerUdfIsolation,
+          enable_seller_and_buyer_udf_isolation,
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),

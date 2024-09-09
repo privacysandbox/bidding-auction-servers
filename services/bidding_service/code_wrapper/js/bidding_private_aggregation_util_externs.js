@@ -23,11 +23,4 @@ class BiddingPrivateAggregationUtil {
    * @throws {TypeError}
    */
   mapEventToEnum(event) {}
-
-  /**
-   * @param {string} value
-   * @return {number}
-   * @throws {TypeError}
-   */
-  convertBaseValueToInt(value) {}
 }

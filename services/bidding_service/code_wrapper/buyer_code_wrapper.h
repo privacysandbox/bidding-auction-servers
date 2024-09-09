@@ -90,7 +90,7 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
       //Add private aggregate contributions to the response.
       //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
       if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
       }
       ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&

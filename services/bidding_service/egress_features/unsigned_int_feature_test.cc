@@ -34,7 +34,7 @@ class UnsignedIntFeatureTest : public ::testing::Test {
     std::string test_schema = absl::Substitute(R"JSON(
       {
         "test_wrapper": {
-          "type": "unsigned-integer-feature",
+          "name": "unsigned-integer-feature",
           "value": $0
         }
       }

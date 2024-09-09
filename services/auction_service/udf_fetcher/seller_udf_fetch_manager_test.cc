@@ -14,6 +14,8 @@
 
 #include "services/auction_service/udf_fetcher/seller_udf_fetch_manager.h"
 
+#include <include/gmock/gmock-matchers.h>
+
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/synchronization/notification.h"
@@ -49,6 +51,7 @@ using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;
 using ::google::scp::cpio::MockBlobStorageClient;
 using ::testing::Return;
+using ::testing::StrEq;
 
 struct TestSellerUdfConfig {
   std::string pa_buyer_origin = "http://PABuyerOrigin.com";
@@ -315,18 +318,24 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
 
   EXPECT_CALL(*dispatcher_, LoadSync)
       .Times(3)
-      .WillOnce([&expected_buyer_udf, &expected_pa_version](
-                    std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&expected_buyer_udf, &expected_pa_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
         EXPECT_EQ(version, expected_pa_version);
 
-        EXPECT_EQ(blob_data, GetBuyerWrappedCode(expected_buyer_udf));
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
         return absl::OkStatus();
       })
-      .WillOnce([&expected_buyer_udf, &expected_pas_version](
-                    std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&expected_buyer_udf, &expected_pas_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
         EXPECT_EQ(version, expected_pas_version);
 
-        EXPECT_EQ(blob_data, GetBuyerWrappedCode(expected_buyer_udf));
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
         return absl::OkStatus();
       })
       .WillOnce([&udf_config, &expected_seller_udf](
@@ -402,18 +411,24 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
 
   EXPECT_CALL(*dispatcher_, LoadSync)
       .Times(3)
-      .WillOnce([&expected_buyer_udf, &expected_pa_version](
-                    std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&expected_buyer_udf, &expected_pa_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
         EXPECT_EQ(version, expected_pa_version);
 
-        EXPECT_EQ(blob_data, GetBuyerWrappedCode(expected_buyer_udf));
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
         return absl::OkStatus();
       })
-      .WillOnce([&expected_buyer_udf, &expected_pas_version](
-                    std::string_view version, absl::string_view blob_data) {
+      .WillOnce([&expected_buyer_udf, &expected_pas_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
         EXPECT_EQ(version, expected_pas_version);
 
-        EXPECT_EQ(blob_data, GetBuyerWrappedCode(expected_buyer_udf));
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
         return absl::OkStatus();
       })
       .WillOnce([&udf_config, &expected_seller_udf](

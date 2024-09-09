@@ -64,7 +64,7 @@ using GenerateProtectedAppSignalsBidsRawResponse =
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
 
 constexpr char valid_bidding_signals[] =
-    R"JSON({"keys":{"ig_name":[123,456]}})JSON";
+    R"JSON({"keys":{"key":[123,456]}})JSON";
 
 TrustedServersConfigClient CreateTrustedServerConfigClient() {
   TrustedServersConfigClient config_client({});

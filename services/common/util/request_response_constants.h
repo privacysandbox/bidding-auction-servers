@@ -138,20 +138,6 @@ inline constexpr std::array<absl::string_view, kNumReportingUrlsKeys>
 
 enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
 
-// log verbosity
-
-inline constexpr int kPlain = 1;  // plaintext B&A request and response served
-inline constexpr int kNoisyWarn =
-    2;  // non-critical error, use PS_LOG(ERROR, *) for critical error
-inline constexpr int kUdfLog = 3;
-inline constexpr int kSuccess = 3;
-inline constexpr int kNoisyInfo = 4;
-inline constexpr int kDispatch = 4;  // UDF dispatch request and response
-inline constexpr int kOriginated =
-    5;  // plaintext B&A request and response originated from server
-inline constexpr int kKVLog = 5;  // KV request response
-inline constexpr int kStats = 5;  // Stats log like time , byte size, etc.
-inline constexpr int kEncrypted = 6;
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_REQUEST_RESPONSE_CONSTANTS_H_

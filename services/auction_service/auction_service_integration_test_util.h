@@ -119,6 +119,12 @@ void LoadAndRunScoreAdsForPA(
     const TestScoreAdsRequestConfig& test_score_ads_request_config,
     absl::string_view buyer_udf, absl::string_view seller_udf,
     ScoreAdsResponse& response);
+
+void LoadAndRunScoreAdsForPAS(
+    const AuctionServiceRuntimeConfig& runtime_config,
+    const TestScoreAdsRequestConfig& test_score_ads_request_config,
+    absl::string_view buyer_udf, absl::string_view seller_udf,
+    ScoreAdsResponse& response);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_INTEGRATION_TEST_UTIL_H_

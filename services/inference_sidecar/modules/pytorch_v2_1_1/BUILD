@@ -82,18 +82,17 @@ cc_library(
 cc_library(
     name = "pytorch",
     srcs = ["pytorch.cc"],
+    hdrs = ["pytorch.h"],
     deps = [
         ":pytorch_parser",
         "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
         "@inference_common//model:model_store",
         "@inference_common//modules:module_interface",
         "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:inference_error_code",
         "@inference_common//utils:inference_metric_util",
         "@inference_common//utils:log",
         "@inference_common//utils:request_parser",
@@ -130,6 +129,20 @@ genrule(
 )
 
 genrule(
+    name = "test_unfreezable_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_unfreezable_model.pt"],
+    outs = ["unfreezable_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "test_frozen_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_frozen_model.pt"],
+    outs = ["frozen_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
     name = "test_mixed_inputs_mixed_outputs_target",
     srcs = ["@inference_common//testdata:models/pytorch_mixed_inputs_mixed_outputs_model.pt"],
     outs = ["mixed_inputs_mixed_outputs_model"],
@@ -143,9 +156,11 @@ cc_test(
     data = [
         ":test_e2e_model1_target",
         ":test_e2e_model2_target",
+        ":test_frozen_model_target",
         ":test_mixed_inputs_mixed_outputs_target",
         ":test_simple_model_target",
         ":test_stateful_model_target",
+        ":test_unfreezable_model_target",
     ],
     deps = [
         ":pytorch",
@@ -160,6 +175,7 @@ cc_test(
         "@inference_common//utils:file_util",
         "@inference_common//utils:inference_metric_util",
         "@inference_common//utils:test_util",
+        "@pytorch_v2_1_1//:torch",
     ],
 )
 

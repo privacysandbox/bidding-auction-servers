@@ -90,8 +90,7 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
         protected_auction_input_,
         request_->auction_config().top_level_seller());
   }
-  PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
-                                << auction_result.ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "AuctionResult exported in EventMessage";
   log_context_.SetEventMessageField(auction_result);
 
   // Serialized the data to bytes array.

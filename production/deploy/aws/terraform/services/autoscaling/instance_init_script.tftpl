@@ -96,10 +96,13 @@ systemctl enable vsockproxy.service
 
 # Update otel collector config
 sed -i -e 's/$SERVICE/'${service}'/g' /opt/privacysandbox/otel_collector_config.yaml
+sed -i -e 's/$S3_REGION/'${region}'/g' /opt/privacysandbox/otel_collector_config.yaml
+sed -i -e 's/$S3_BUCKET/'${consented_request_s3_bucket}'/g' /opt/privacysandbox/otel_collector_config.yaml
+sed -i -e 's/$S3_PREFIX/'${s3_prefix}'/g' /opt/privacysandbox/otel_collector_config.yaml
+sed -i -e 's/$FILE_PREFIX/'${file_prefix}'/g' /opt/privacysandbox/otel_collector_config.yaml
+
 # Start the otel collector
-sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl \
-  -c /opt/privacysandbox/otel_collector_config.yaml \
-  -a start
+sudo systemctl restart otelcol-contrib
 
 if [[ "${enclave_debug_mode}" == "true" ]]; then
   # Create cloudwatch config

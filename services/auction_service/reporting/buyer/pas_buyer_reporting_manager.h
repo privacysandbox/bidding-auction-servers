@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_MANAGER_H_
-#define SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_MANAGER_H_
+#ifndef SERVICES_AUCTION_SERVICE_REPORTING_PAS_BUYER_REPORTING_MANAGER_H_
+#define SERVICES_AUCTION_SERVICE_REPORTING_PAS_BUYER_REPORTING_MANAGER_H_
 
 #include <memory>
 #include <string>
@@ -26,14 +26,28 @@
 #include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+inline constexpr int kPASReportWinArgSize = 8;
+enum class PASReportWinArgs : int {
+  kAuctionConfig,
+  kPerBuyerSignals,
+  kSignalsForWinner,
+  kBuyerReportingSignals,
+  kDirectFromSellerSignals,
+  kEnableLogging,
+  kEgressPayload,
+  kTemporaryUnlimitedEgressPayload
+};
+
+inline constexpr int PASReportWinArgIndex(PASReportWinArgs arg) {
+  return static_cast<std::underlying_type_t<PASReportWinArgs>>(arg);
+}
 
 // Generates the DispatchRequest and invokes reportWin() udf with
 // report_win_callback for Protected App Signal auctions
 absl::Status PerformPASReportWin(
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const BuyerReportingMetadata& buyer_reporting_metadata,
-    const std::string& seller_signals,
-    const rapidjson::Document& seller_device_signals,
+    const BuyerReportingDispatchRequestData& request_data,
+    rapidjson::Document& seller_device_signals,
     absl::AnyInvocable<
         void(const std::vector<absl::StatusOr<DispatchResponse>>&)>
         report_win_callback,
@@ -41,4 +55,4 @@ absl::Status PerformPASReportWin(
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_MANAGER_H_
+#endif  // SERVICES_AUCTION_SERVICE_REPORTING_PAS_BUYER_REPORTING_MANAGER_H_

@@ -23,6 +23,7 @@ proto_library(
     name = "bidding_auction_servers_proto",
     srcs = ["bidding_auction_servers.proto"],
     deps = [
+        "//api/udf:generate_bid_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_protobuf//:struct_proto",
         "@google_privacysandbox_servers_common//src/logger:logger_proto",

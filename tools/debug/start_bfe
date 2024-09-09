@@ -39,7 +39,7 @@ export SERVER_START_CMD=$(cat << END
 --enable_protected_audience="true" \
 --bfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
---enable_protected_app_signals="false" && exit
+--enable_protected_app_signals="true" && exit
 END
 )
 

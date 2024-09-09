@@ -292,6 +292,7 @@ cc_binary(
         "//services/bidding_service/data:runtime_config",
         "//services/bidding_service/egress_features:adtech_schema_fetcher",
         "//services/bidding_service/inference:inference_utils",
+        "//services/bidding_service/inference:model_fetcher_metric",
         "//services/bidding_service/inference:periodic_model_fetcher",
         "//services/common:feature_flags",
         "//services/common/blob_fetch:blob_fetcher",

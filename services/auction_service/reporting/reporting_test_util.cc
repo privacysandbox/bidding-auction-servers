@@ -199,6 +199,16 @@ void VerifyBuyerReportingSignals(
   }
   EXPECT_EQ(observed_buyer_device_signals.made_highest_scoring_other_bid,
             expected_buyer_device_signals.made_highest_scoring_other_bid);
+  if (observed_buyer_device_signals.egress_payload.has_value()) {
+    EXPECT_EQ(*observed_buyer_device_signals.egress_payload,
+              *expected_buyer_device_signals.egress_payload);
+  }
+  if (observed_buyer_device_signals.temporary_unlimited_egress_payload
+          .has_value()) {
+    EXPECT_EQ(
+        *observed_buyer_device_signals.temporary_unlimited_egress_payload,
+        *expected_buyer_device_signals.temporary_unlimited_egress_payload);
+  }
 }
 
 void ParseBuyerReportingSignals(
@@ -292,6 +302,27 @@ void VerifyPABuyerReportingSignalsJson(
                               expected_buyer_dispatch_request_data);
 }
 
+void VerifyPASBuyerReportingSignalsJson(
+    const std::string& buyer_reporting_signals_json,
+    const BuyerReportingDispatchRequestData&
+        expected_buyer_dispatch_request_data,
+    const SellerReportingDispatchRequestData& seller_dispatch_request_data) {
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
+  BuyerReportingDispatchRequestData observed_buyer_device_signals{
+      .log_context = log_context};
+  absl::StatusOr<rapidjson::Document> document =
+      ParseJsonString(buyer_reporting_signals_json);
+  ASSERT_TRUE(document.ok());
+  TestSellerDeviceSignals observed_seller_device_signals =
+      ParseSellerDeviceSignals(*document);
+  VerifySellerDeviceSignals(observed_seller_device_signals,
+                            seller_dispatch_request_data);
+  ParseBuyerReportingSignals(observed_buyer_device_signals, *document);
+  VerifyBuyerReportingSignals(observed_buyer_device_signals,
+                              expected_buyer_dispatch_request_data);
+}
+
 BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
     RequestLogContext& log_context) {
   std::shared_ptr<std::string> auction_config =
@@ -309,7 +340,10 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
           .log_context = log_context,
           .buyer_origin = kTestInterestGroupOwner,
           .signals_for_winner = kTestSignalsForWinner,
-          .winning_ad_render_url = kTestRender};
+          .winning_ad_render_url = kTestRender,
+          .egress_payload = kTestEgressPayload,
+          .temporary_unlimited_egress_payload =
+              kTestTemporaryUnlimitedEgressPayload};
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

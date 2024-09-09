@@ -26,23 +26,40 @@ testSuite({
       value: 30,
     };
 
-    const customEventName = 'my_custom_event';
-
     // Test with ReservedEventConstants
     const reservedWin = 'reserved.win';
     assertEquals(ReservedEventConstants.WIN, reservedWin);
     privateAggregation.contributeToHistogramOnEvent(ReservedEventConstants.WIN, contribution);
     assertEquals(privateAggregationContributions.win.length, 1);
     // Assert the expected fields and values directly
-    assertEquals(privateAggregationContributions.win[0].bucket_128_bit, 10);
-    assertEquals(privateAggregationContributions.win[0].int_value, 30);
+    assertEquals(privateAggregationContributions.win[0].bucket.bucket_128_bit.bucket_128_bits[0], 10);
+    assertEquals(privateAggregationContributions.win[0].bucket.bucket_128_bit.bucket_128_bits[1], 0);
+    assertEquals(privateAggregationContributions.win[0].value.int_value, 30);
+  },
+
+  /** @return {void} */
+  /** @return {void} */
+  testContributeToHistogramOnEventWithCustomEvent_ValidNumericBucketAndValue() {
+    const contribution = {
+      bucket: 10,
+      value: 30,
+    };
+
+    const customEventName = 'my_custom_event';
 
     // Test with custom event
     privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
     assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
     // Assert the expected fields and values directly
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].bucket_128_bit, 10);
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].int_value, 30);
+    assertEquals(
+      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[0],
+      10
+    );
+    assertEquals(
+      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[1],
+      0
+    );
+    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].value.int_value, 30);
   },
 
   /** @return {void} */
@@ -75,78 +92,77 @@ testSuite({
   /** @return {void} */
   testContributeToHistogramOnEvent_ValidObjectBucketAndValue() {
     const bucket_object = {
-      base_value: 'winning-bid',
+      baseValue: 'winning-bid',
+      scale: 1.0,
+      offset: 10,
+    };
+    const signal_bucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
       scale: 1.0,
       offset: {
-        value: [10, 20],
+        value: [10, 0],
         is_negative: false,
       },
     };
-
     const value_object = {
-      base_value: 'winning-bid',
-      offset: 30,
+      baseValue: 'winning-bid',
       scale: 1.0,
+      offset: 30,
+    };
+    const signal_value = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 1.0,
+      offset: 30,
     };
     const contribution = {
       bucket: bucket_object,
       value: value_object,
     };
 
-    const customEventName = 'my_custom_event';
-
     // Test with ReservedEventConstants
     privateAggregation.contributeToHistogramOnEvent(ReservedEventConstants.WIN, contribution);
     assertEquals(privateAggregationContributions.win.length, 1);
     // Assert the expected fields and values directly
-    assertObjectEquals(privateAggregationContributions.win[0].signal_bucket, bucket_object);
-    assertObjectEquals(privateAggregationContributions.win[0].extended_value, value_object);
-
-    // Test with custom event
-    privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
-    // Assert the expected fields and values directly
-    assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].signal_bucket,
-      bucket_object
-    );
-    assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].extended_value,
-      value_object
-    );
+    assertObjectEquals(privateAggregationContributions.win[0].bucket.signal_bucket, signal_bucket);
+    assertObjectEquals(privateAggregationContributions.win[0].value.extended_value, signal_value);
   },
 
   /** @return {void} */
   testContributeToHistogramOnEvent_ValidObjectBucketAndNumericValue() {
     const contribution = {
       bucket: {
-        base_value: 'winning-bid',
+        baseValue: 'winning-bid',
         scale: 1.0,
-        offset: {
-          value: [10, 20],
-          is_negative: false,
-        },
+        offset: 10,
       },
       value: 30,
+    };
+    const signal_bucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 1.0,
+      offset: {
+        value: [10, 0],
+        is_negative: false,
+      },
     };
     const customEventName = 'my_custom_event';
 
     // Test with ReservedEventConstants
     privateAggregation.contributeToHistogramOnEvent(ReservedEventConstants.WIN, contribution);
-    assertEquals(privateAggregationContributions.win.length, 1);
-    // Assert the expected fields and values directly
-    assertObjectEquals(privateAggregationContributions.win[0].signal_bucket, contribution.bucket);
-    assertEquals(privateAggregationContributions.win[0].int_value, 30);
-
     // Test with custom event
     privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
+    assertEquals(privateAggregationContributions.win.length, 1);
+    // Assert the expected fields and values directly
+    assertObjectEquals(privateAggregationContributions.win[0].bucket.signal_bucket, signal_bucket);
+    assertEquals(privateAggregationContributions.win[0].value.int_value, 30);
+
     assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
     // Assert the expected fields and values directly
     assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].signal_bucket,
-      contribution.bucket
+      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.signal_bucket,
+      signal_bucket
     );
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].int_value, 30);
+    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].value.int_value, 30);
   },
 
   /** @return {void} */
@@ -154,28 +170,40 @@ testSuite({
     const contribution = {
       bucket: 5,
       value: {
-        base_value: 'winning-bid',
-        value: 30,
-        is_negative: false,
+        baseValue: 'winning-bid',
+        scale: 10,
+        offset: 20,
       },
     };
-
+    const signalValue = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 10,
+      offset: 20,
+    };
     const customEventName = 'my_custom_event';
 
     // Test with ReservedEventConstants
     privateAggregation.contributeToHistogramOnEvent(ReservedEventConstants.WIN, contribution);
     assertEquals(privateAggregationContributions.win.length, 1);
-    assertEquals(privateAggregationContributions.win[0].bucket_128_bit, 5);
-    assertObjectEquals(privateAggregationContributions.win[0].extended_value, contribution.value);
+    assertEquals(privateAggregationContributions.win[0].bucket.bucket_128_bit.bucket_128_bits[0], 5);
+    assertEquals(privateAggregationContributions.win[0].bucket.bucket_128_bit.bucket_128_bits[1], 0);
+    assertObjectEquals(privateAggregationContributions.win[0].value.extended_value, signalValue);
 
     // Test with custom event
     privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
     assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
     // Assert the expected fields and values directly
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].bucket_128_bit, 5);
+    assertEquals(
+      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[0],
+      5
+    );
+    assertEquals(
+      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[1],
+      0
+    );
     assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].extended_value,
-      contribution.value
+      privateAggregationContributions.custom_events.get(customEventName)[0].value.extended_value,
+      signalValue
     );
   },
 
@@ -201,8 +229,9 @@ testSuite({
     privateAggregation.contributeToHistogram(contribution);
     assertEquals(privateAggregationContributions.always.length, 1);
     // Assert the expected fields and values directly
-    assertEquals(privateAggregationContributions.always[0].bucket_128_bit, 10);
-    assertEquals(privateAggregationContributions.always[0].int_value, 30);
+    assertEquals(privateAggregationContributions.always[0].bucket.bucket_128_bit.bucket_128_bits[0], 10);
+    assertEquals(privateAggregationContributions.always[0].bucket.bucket_128_bit.bucket_128_bits[1], 0);
+    assertEquals(privateAggregationContributions.always[0].value.int_value, 30);
 
     const expectedErrorType = 'TypeError';
     const expectedErrorMessage = 'Attempting to define property on object that is not extensible.';

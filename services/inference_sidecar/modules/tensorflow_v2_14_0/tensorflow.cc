@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-#include <atomic>
 #include <future>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "absl/base/thread_annotations.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/log/absl_log.h"
-#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/synchronization/notification.h"
+#include "absl/strings/string_view.h"
 #include "model/model_store.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
@@ -43,6 +38,7 @@
 #include "tensorflow/tsl/platform/env.h"
 #include "tensorflow/tsl/platform/file_system.h"
 #include "utils/error.h"
+#include "utils/inference_error_code.h"
 #include "utils/inference_metric_util.h"
 #include "utils/log.h"
 #include "utils/request_parser.h"
@@ -72,12 +68,15 @@ absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
   std::vector<std::pair<std::string, tensorflow::Tensor>> inputs;
   for (const auto& tensor : inference_request.inputs) {
     if (tensor.tensor_name.empty()) {
-      return absl::InvalidArgumentError(
-          "Name is required for each TensorFlow tensor input");
+      return absl::InvalidArgumentError(absl::StrCat(
+          kInferenceTensorInputNameError,
+          ". Message: ", "Name is required for each TensorFlow tensor input."));
     }
     auto tf_tensor = ConvertFlatArrayToTensor(tensor);
     if (!tf_tensor.ok()) {
-      return absl::InvalidArgumentError(tf_tensor.status().message());
+      return absl::InvalidArgumentError(
+          absl::StrCat(kInferenceInputTensorConversionError,
+                       ". Message: ", tf_tensor.status().message()));
     }
     inputs.emplace_back(tensor.tensor_name, *tf_tensor);
   }
@@ -86,6 +85,7 @@ absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
   const auto& signature_map = model->meta_graph_def.signature_def();
   if (signature_map.find("serving_default") == signature_map.end()) {
     return absl::InternalError(absl::StrCat(
+        kInferenceSignatureNotFoundError, ". Message: ",
         "The 'serving_default' signature was not found for model '",
         model_key));
   }
@@ -101,13 +101,15 @@ absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
       model->session->Run(inputs, output_names, {}, &outputs);
   if (!status.ok()) {
     return absl::InternalError(absl::StrCat(
+        kInferenceModelExecutionError, ". Message: ",
         "Inference failed for model '", model_key, "': ", status.ToString()));
   }
   std::vector<TensorWithName> zipped_vector;
   if (output_names.size() != outputs.size()) {
     return absl::InternalError(
-        "The number of output tensors doesn't match the number of output "
-        "tensor names");
+        absl::StrCat(kInferenceOutputTensorMismatchError, ". Message: ",
+                     "The number of output tensors doesn't match the number of "
+                     "output tensor names. "));
   }
   for (size_t i = 0; i < output_names.size(); ++i) {
     zipped_vector.push_back(TensorWithName(output_names[i], outputs[i]));
@@ -116,7 +118,7 @@ absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
   return zipped_vector;
 }
 
-absl::StatusOr<std::unique_ptr<tensorflow::SavedModelBundle>>
+absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>>
 TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
                            const RegisterModelRequest& request) {
   tensorflow::SessionOptions session_options;
@@ -131,13 +133,36 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
   }
   const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
-  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
+  auto model_bundle = std::make_shared<tensorflow::SavedModelBundle>();
   if (auto status = tensorflow::LoadSavedModel(
           session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
           tags, model_bundle.get());
       !status.ok()) {
     return absl::InternalError(
         absl::StrCat("Error loading model: ", model_path));
+  }
+  // perform warm up if metadata been provided.
+  // TODO(b/362338463): Add optional execute mode choice.
+  if (!request.warm_up_batch_request_json().empty()) {
+    absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
+        ParseJsonInferenceRequest(request.warm_up_batch_request_json());
+    if (!parsed_requests.ok()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Encounters warm up batch inference request parsing error: ",
+          parsed_requests.status().message()));
+    }
+    // Process warm up for each inference request.
+    for (const InferenceRequest& inference_request : (*parsed_requests)) {
+      if (inference_request.model_path != model_path) {
+        return absl::InvalidArgumentError(
+            "Warm up request using different model path.");
+      }
+      auto inference_response =
+          PredictPerModel(model_bundle, inference_request);
+      if (!inference_response.ok()) {
+        return inference_response.status();
+      }
+    }
   }
   return model_bundle;
 }
@@ -146,57 +171,21 @@ class TensorflowModule final : public ModuleInterface {
  public:
   explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config)
       : runtime_config_(config),
-        store_(config, TensorFlowModelConstructor),
-        background_thread_running_(true) {
-    // TODO(b/332328206): Move reset model logic into the ModelStore.
-    background_thread_ = std::thread([this]() {
-      while (background_thread_running_) {
-        // ResetModels() is continually called in the background thread.
-        ResetModels();
-        // Waits for the completed inference execution.
-        //
-        // Moves on after 1 second and check if the background thread should
-        // terminate. The destructor terminates this thread by setting
-        // |background_thread_running_|.
-        inference_notification_.WaitForNotificationWithTimeout(
-            absl::Seconds(1));
-      }
-    });
-  }
-
-  ~TensorflowModule() override {
-    background_thread_running_ = false;
-    background_thread_.join();
-  }
+        store_(std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
+            config, TensorFlowModelConstructor)) {}
 
   absl::StatusOr<PredictResponse> Predict(
       const PredictRequest& request,
       const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) override;
-  void ResetModels() override;
 
  private:
   const InferenceSidecarRuntimeConfig runtime_config_;
 
   // Stores a set of models. It's thread safe.
   // TODO(b/327907675) : Add a test for concurrency
-  ModelStore<tensorflow::SavedModelBundle> store_;
-
-  // Counts the number of inferences per model. Used for model reset.
-  absl::flat_hash_map<std::string, int> per_model_inference_count_
-      ABSL_GUARDED_BY(per_model_inference_count_mu_);
-  absl::Mutex per_model_inference_count_mu_;
-
-  // Notification to trigger model reset.
-  absl::Notification inference_notification_;
-
-  // The background thread continuously running ResetModels().
-  std::thread background_thread_;
-  // The background thread is shutdown if set to false.
-  std::atomic<bool> background_thread_running_;
-  // Exclusively used in a single backgrond thread. No need of a mutex.
-  absl::BitGen bitgen_;
+  std::unique_ptr<ModelStore<tensorflow::SavedModelBundle>> store_;
 };
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
@@ -207,6 +196,8 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
+    AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+              std::string(kInferenceUnableToParseRequest));
     INFERENCE_LOG(ERROR, request_context) << parsed_requests.status();
     predict_response.set_output(CreateBatchErrorString(
         Error{.error_type = Error::INPUT_PARSING,
@@ -223,13 +214,19 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
     const InferenceRequest& inference_request = (*parsed_requests)[task_id];
     const std::string& model_path = inference_request.model_path;
+    AddMetric(predict_response, "kInferenceRequestCountByModel", 1, model_path);
     INFERENCE_LOG(INFO, request_context)
         << "Received inference request to model: " << model_path;
     absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>> model =
-        store_.GetModel(model_path, request.is_consented());
+        store_->GetModel(model_path, request.is_consented());
     if (!model.ok()) {
+      AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+                std::string(kInferenceModelNotFoundError));
+      AddMetric(predict_response, "kInferenceRequestFailedCountByModel", 1,
+                model_path);
       INFERENCE_LOG(ERROR, request_context)
-          << "Fails to get model : " << model_path << model.status();
+          << "Fails to get model: " << model_path
+          << " Reason: " << model.status();
       batch_outputs[task_id] = TensorsOrError{
           .model_path = model_path,
           .error = Error{.error_type = Error::MODEL_NOT_FOUND,
@@ -245,19 +242,32 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
       absl::StatusOr<std::vector<TensorWithName>> tensors =
           tasks[task_id].get();
       const std::string& model_path = (*parsed_requests)[task_id].model_path;
+
       if (!tensors.ok()) {
+        AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+                  std::optional(
+                      ExtractErrorCodeFromMessage(tensors.status().message())));
+        AddMetric(predict_response, "kInferenceRequestFailedCountByModel", 1,
+                  model_path);
         INFERENCE_LOG(ERROR, request_context)
-            << "Inference fails for model: " << model_path << tensors.status();
+            << "Inference fails for model: " << model_path
+            << " Reason: " << tensors.status();
         Error::ErrorType error_type =
             tensors.status().code() == absl::StatusCode::kInvalidArgument
                 ? Error::INPUT_PARSING
                 : Error::MODEL_EXECUTION;
+
         batch_outputs[task_id] = TensorsOrError{
             .model_path = model_path,
             .error =
                 Error{.error_type = error_type,
                       .description = std::string(tensors.status().message())}};
       } else {
+        int model_execution_time_ms =
+            (absl::Now() - start_inference_execution_time) /
+            absl::Milliseconds(1);
+        AddMetric(predict_response, "kInferenceRequestDurationByModel",
+                  model_execution_time_ms, model_path);
         batch_outputs[task_id] =
             TensorsOrError{.model_path = model_path, .tensors = *tensors};
       }
@@ -266,21 +276,18 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
 
   auto output_json = ConvertTensorsOrErrorToJson(batch_outputs);
   if (!output_json.ok()) {
+    AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+              std::string(kInferenceOutputParsingError));
+
     INFERENCE_LOG(ERROR, request_context) << output_json.status();
     predict_response.set_output(CreateBatchErrorString(
         Error{.error_type = Error::OUTPUT_PARSING,
               .description = "Error during output parsing to json."}));
     return predict_response;
   }
-
-  {
-    absl::MutexLock lock(&per_model_inference_count_mu_);
-    for (const InferenceRequest& inference_request : *parsed_requests) {
-      const std::string& model_key = inference_request.model_path;
-      ++per_model_inference_count_[model_key];
-    }
+  for (const InferenceRequest& inference_request : *parsed_requests) {
+    store_->IncrementModelInferenceCount(inference_request.model_path);
   }
-  inference_notification_.Notify();
 
   predict_response.set_output(output_json.value());
   int inference_execution_time_ms =
@@ -299,7 +306,7 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     return absl::InvalidArgumentError("Model path is empty");
   }
 
-  if (store_.GetModel(model_path).ok()) {
+  if (store_->GetModel(model_path).ok()) {
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_path, " has already been registered"));
   }
@@ -307,40 +314,12 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
 
   RegisterModelRequest model_request;
   *model_request.mutable_model_spec() = request.model_spec();
-  PS_RETURN_IF_ERROR(store_.PutModel(model_path, model_request));
+  if (!request.warm_up_batch_request_json().empty()) {
+    model_request.set_warm_up_batch_request_json(
+        request.warm_up_batch_request_json());
+  }
+  PS_RETURN_IF_ERROR(store_->PutModel(model_path, model_request));
   return RegisterModelResponse();
-}
-
-// TODO(b/346813356): Refactor duplicate logic into a shared library/class.
-void TensorflowModule::ResetModels() {
-  const double reset_probability = runtime_config_.model_reset_probability();
-  if (reset_probability == 0.0) {
-    // Model reset is disabled.
-    return;
-  }
-
-  std::vector<std::string> models = store_.ListModels();
-  for (const auto& model_key : models) {
-    int count = 0;
-    {
-      absl::MutexLock lock(&per_model_inference_count_mu_);
-      count = per_model_inference_count_[model_key];
-      // Sets the per-model counter to 0.
-      per_model_inference_count_[model_key] = 0;
-    }
-    if (count <= 0) continue;
-    double random = absl::Uniform(bitgen_, 0.0, 1.0);
-    // Boosts the chance of reset multiplied by the number of inferences as
-    // approximation.
-    if (reset_probability != 1.0 && random >= reset_probability * count) {
-      continue;
-    }
-
-    // We should make sure the model reset is successfully done.
-    // Otherwise, we terminate the program to preserve user privacy.
-    CHECK(store_.ResetModel(model_key).ok())
-        << "Failed to reset model: " << model_key;
-  }
 }
 
 }  // namespace

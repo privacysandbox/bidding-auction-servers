@@ -1,7 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 ### register Python toolchain -- note this toolchain defines the path to a specific version of python
-load("//builders/bazel:deps.bzl", "python_deps")
+load("//builders/bazel:deps.bzl", "python_deps", "python_register_toolchains")
 
 http_archive(
     name = "io_bazel_rules_docker",
@@ -9,7 +9,9 @@ http_archive(
     urls = ["https://github.com/bazelbuild/rules_docker/releases/download/v0.25.0/rules_docker-v0.25.0.tar.gz"],
 )
 
-python_deps("//builders/bazel")
+python_deps()
+
+python_register_toolchains("//builders/bazel")
 
 # TODO: Remove bazel_clang_tidy once we sync to the common repo commit 9edb0c3 (4/3/2024) or later
 http_archive(
@@ -23,11 +25,11 @@ http_archive(
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2024-08-06
-    sha256 = "776c90c2eb6961c4b834242db58ba187cf1e790c876c5e8ef4bdb912210b8266",
-    strip_prefix = "data-plane-shared-libraries-81262eb0b1dfad7b998eec6c6d38e902ed151482",
+    # 2024-08-26
+    sha256 = "dcd09e9241b9e2e85dfa9bd6b12768391f20e4587cba20589c781e4be1ba64a2",
+    strip_prefix = "data-plane-shared-libraries-da1550404faa919ccbbdaf9e91e6225934ad1620",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/81262eb0b1dfad7b998eec6c6d38e902ed151482.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/da1550404faa919ccbbdaf9e91e6225934ad1620.zip",
     ],
 )
 

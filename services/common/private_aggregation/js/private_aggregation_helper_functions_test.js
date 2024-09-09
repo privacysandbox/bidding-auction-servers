@@ -60,7 +60,7 @@ testSuite({
   /** @return {void} */
   testIsValidValue_ValidSignalValue() {
     const validSignalValue = {
-      base_value: BaseValue.WINNING_BID,
+      baseValue: BaseValue.WINNING_BID,
       scale: 10,
       offset: 5,
     };
@@ -79,7 +79,7 @@ testSuite({
   /** @return {void} */
   testIsValidValue_invalidSignalValue_InvalidBaseValue() {
     const invalidSignalValue = {
-      base_value: 'invalid',
+      baseValue: 'invalid',
       scale: 10,
       offset: 5,
     };
@@ -89,7 +89,7 @@ testSuite({
   /** @return {void} */
   testIsValidValue_InvalidSignalValue_InvalidScale() {
     const invalidSignalValue = {
-      base_value: BaseValue.WINNING_BID,
+      baseValue: BaseValue.WINNING_BID,
       scale: 'invalid',
       offset: 5,
     };
@@ -99,7 +99,7 @@ testSuite({
   /** @return {void} */
   testIsValidValue_InvalidSignalValue_InvalidOffset() {
     const invalidSignalValue = {
-      base_value: BaseValue.WINNING_BID,
+      baseValue: BaseValue.WINNING_BID,
       scale: 10,
       offset: 'invalid',
     };
@@ -132,51 +132,173 @@ testSuite({
     assertFalse(privateAggregationUtil.isValidCustomEvent(undefined));
   },
 
-  /** @return {void} */
-  testIsValidContribution() {},
-
-  /**
-   * TODO(b/355034881): All usage and test cases of "number" type for bucket should be replaced as "bigint" once bigint support is enabled.
-   * Validation of SignalBucket and SignalValue's fields should also be added.
-   */
   /**
    * @return {void}
    * @suppress {reportUnknownTypes}
    */
   testCreateContribution() {
-    const numberBucket = 5;
+    const numberBucket = 12345;
     const numberValue = 5;
-
     const expectedContribution = {
-      bucket_128_bit: numberBucket,
-      signal_bucket: null,
-      int_value: numberValue,
-      extended_value: null,
+      bucket: { bucket_128_bit: { bucket_128_bits: [12345, 0] } },
+      value: { int_value: numberValue },
     };
-
     const contribution = privateAggregationUtil.createContribution(numberBucket, numberValue);
     assertObjectEquals(expectedContribution, contribution);
+  },
+  /** @return {void} */
+  /** @suppress {reportUnknownTypes, checkTypes} */
+  testConvertBaseValueForWinningBid() {
+    var result = privateAggregationUtil.convertBaseValueToEnumString('winning-bid');
+    assertEquals(result, 'BASE_VALUE_WINNING_BID');
+  },
+  /** @return {void} */
+  /** @suppress {reportUnknownTypes, checkTypes} */
+  testConvertBaseValueForHighestScoringOtherBid() {
+    var result = privateAggregationUtil.convertBaseValueToEnumString('highest-scoring-other-bid');
+    assertEquals(result, 'BASE_VALUE_HIGHEST_SCORING_OTHER_BID');
+  },
+  /** @return {void} */
+  /** @suppress {reportUnknownTypes, checkTypes} */
+  testConvertBaseValueForScriptRunTime() {
+    var result = privateAggregationUtil.convertBaseValueToEnumString('script-run-time');
+    assertEquals(result, 'BASE_VALUE_SCRIPT_RUN_TIME');
+  },
+  /** @return {void} */
+  /** @suppress {reportUnknownTypes, checkTypes} */
+  testConvertBaseValueForInvalidString() {
+    try {
+      privateAggregationUtil.convertBaseValueToEnumString('something-else');
+      fail('Expected TypeError for unsupported base value');
+    } catch (error) {
+      assertTrue(error instanceof TypeError);
+    }
+  },
+  /** @return {void} */
+  /** @suppress {reportUnknownTypes, checkTypes} */
+  testConvertBaseValueWithNullInput() {
+    try {
+      privateAggregationUtil.convertBaseValueToEnumString(null);
+      fail('Expected TypeError for null base value');
+    } catch (error) {
+      assertTrue(error instanceof TypeError);
+    }
+  },
 
+  /**
+   * @return {void}
+   * @suppress {reportUnknownTypes}
+   */
+  testCreateContributionWhenBucketAndValueAreObjects() {
     const objectBucket = {
-      value: [5, 0],
+      baseValue: 'winning-bid',
+      scale: 2.0,
+      offset: 1,
+    };
+    const bucketOffset = {
+      value: [1, 0],
       is_negative: false,
+    };
+    const signalBucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 2.0,
+      offset: bucketOffset,
     };
     const objectValue = {
-      base_value: 'winning-bid',
-      int_value: 10,
-      is_negative: false,
+      baseValue: 'winning-bid',
+      scale: 10,
+      offset: 5,
     };
-
+    const signalValue = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 10,
+      offset: 5,
+    };
     const expectedContribution2 = {
-      bucket_128_bit: null,
-      signal_bucket: objectBucket,
-      int_value: null,
-      extended_value: objectValue,
+      bucket: { signal_bucket: signalBucket },
+      value: { extended_value: signalValue },
     };
 
     const contribution2 = privateAggregationUtil.createContribution(objectBucket, objectValue);
     assertObjectEquals(expectedContribution2, contribution2);
+  },
 
+  /**
+   * @return {void}
+   * @suppress {reportUnknownTypes}
+   */
+  testCreateContributionWithDefaultSignalBucketScaleAndOffset() {
+    const objectBucket = {
+      baseValue: 'winning-bid',
+    };
+    const objectValue = {
+      baseValue: 'winning-bid',
+    };
+    const signalValue = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 1.0,
+      offset: 0,
+    };
+    const bucketOffset = {
+      value: [0, 0],
+      is_negative: false,
+    };
+    const signalBucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 1.0,
+      offset: bucketOffset,
+    };
+    const expectedContribution2 = {
+      bucket: { signal_bucket: signalBucket },
+      value: { extended_value: signalValue },
+    };
+
+    const contribution2 = privateAggregationUtil.createContribution(objectBucket, objectValue);
+    assertObjectEquals(expectedContribution2, contribution2);
+  },
+  /**
+   * @return {void}
+   * @suppress {reportUnknownTypes}
+   */
+  testCreateContributionWithNegativeSignalBucketOffset() {
+    const objectBucket = {
+      baseValue: 'winning-bid',
+      scale: 2.0,
+      offset: -1,
+    };
+    const objectValue = {
+      baseValue: 'winning-bid',
+      scale: 10,
+      offset: -5,
+    };
+    const signalValue = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 10,
+      offset: -5,
+    };
+    const bucketOffset = {
+      value: [1, 0],
+      is_negative: true,
+    };
+    const signalBucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 2.0,
+      offset: bucketOffset,
+    };
+    const expectedContribution2 = {
+      bucket: { signal_bucket: signalBucket },
+      value: { extended_value: signalValue },
+    };
+
+    const contribution2 = privateAggregationUtil.createContribution(objectBucket, objectValue);
+    assertObjectEquals(expectedContribution2, contribution2);
+  },
+
+  /**
+   * @return {void}
+   * @suppress {reportUnknownTypes}
+   */
+  testCreateContributionWhenBucketAndValueAreInvalid() {
     const invalidBucket = 'invalid';
     const invalidValue = 'invalid';
 
@@ -186,6 +308,14 @@ testSuite({
       assertEquals(e.message, 'Invalid type for Private Aggregation bucket.');
       assertEquals(e.name, 'TypeError');
     }
+  },
+  /**
+   * @return {void}
+   * @suppress {reportUnknownTypes}
+   */
+  testCreateContributionWithInvalidValue() {
+    const numberBucket = 12345;
+    const invalidValue = 'invalid';
 
     try {
       privateAggregationUtil.createContribution(numberBucket, invalidValue);

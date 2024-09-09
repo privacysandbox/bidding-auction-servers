@@ -23,6 +23,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kReportWinEntryFunction[] = "reportWinEntryFunction";
+inline constexpr char kEgressArgs[] =
+    "egressVector, temporaryUnlimitedEgressVector";
 
 // The wrapper function which enables the below features for reportWin:
 // - Exporting console.log, console.error and console.warn logs from UDF
@@ -86,7 +88,8 @@ function reportWinEntryFunction(
 // The wrapper supports:
 // - Generation of event level reporting urls for buyer
 // - Exporting console.logs from the AdTech execution.
-std::string GetBuyerWrappedCode(absl::string_view buyer_js_code);
+std::string GetBuyerWrappedCode(absl::string_view buyer_js_code,
+                                bool enable_protected_app_signals = false);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

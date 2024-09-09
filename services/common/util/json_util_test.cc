@@ -57,6 +57,25 @@ TEST(SerializeJsonDoc, WorksForValidDocWithSize) {
   EXPECT_STREQ(output.value()->c_str(), expected_output.c_str());
 }
 
+TEST(SerializeJsonDoc, WorksForValidDocWithSizeToReserveString) {
+  std::string key = MakeARandomString();
+  std::string value = MakeARandomString();
+  std::string expected_output = "{\"" + key + "\":\"" + value + "\"}";
+
+  rapidjson::Document document;
+  document.SetObject();
+  rapidjson::Value key_v;
+  key_v.SetString(key.c_str(), document.GetAllocator());
+  rapidjson::Value val_v;
+  val_v.SetString(value.c_str(), document.GetAllocator());
+  document.AddMember(key_v, val_v.Move(), document.GetAllocator());
+
+  absl::StatusOr<std::string> output =
+      SerializeJsonDocToReservedString(document, 20);
+  ASSERT_TRUE(output.ok()) << output.status();
+  EXPECT_STREQ(output.value().c_str(), expected_output.c_str());
+}
+
 TEST(SerializeJsonDoc, WorksForValidDoc) {
   std::string key = MakeARandomString();
   std::string value = MakeARandomString();
@@ -193,6 +212,62 @@ TEST(SerializeJsonDoc, GetNumberMember_ComplainsOnNonIntType) {
   ASSERT_TRUE(document.ok()) << document.status();
 
   auto actual_value = GetIntMember(*document, "Key");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
+}
+
+TEST(SerializeJsonDoc, GetDoubleMember_ParsesTheNumberSuccessfully) {
+  std::string json_str = R"json({"key": 123.67})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetDoubleMember(*document, "key");
+  ASSERT_TRUE(actual_value.ok());
+  EXPECT_EQ(*actual_value, 123.67);
+}
+
+TEST(SerializeJsonDoc, GetDoubleMember_ComplainsOnMissingKey) {
+  std::string json_str = R"json({"key": 123.67})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetDoubleMember(*document, "MissingKey");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
+}
+
+TEST(SerializeJsonDoc, GetNumberMember_ComplainsOnNonDoubleType) {
+  std::string json_str = R"json({"key": 123})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetDoubleMember(*document, "Key");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
+}
+
+TEST(SerializeJsonDoc, GetBoolMember_ParsesTheNumberSuccessfully) {
+  std::string json_str = R"json({"key": true})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetBoolMember(*document, "key");
+  ASSERT_TRUE(actual_value.ok());
+  EXPECT_EQ(*actual_value, true);
+}
+
+TEST(SerializeJsonDoc, GetBoolMember_ComplainsOnMissingKey) {
+  std::string json_str = R"json({"key": 123.67})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetBoolMember(*document, "MissingKey");
+  EXPECT_FALSE(actual_value.ok()) << actual_value.status();
+}
+
+TEST(SerializeJsonDoc, GetBoolMember_ComplainsOnNonBoolType) {
+  std::string json_str = R"json({"key": 123})json";
+  auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  auto actual_value = GetBoolMember(*document, "key");
   EXPECT_FALSE(actual_value.ok()) << actual_value.status();
 }
 

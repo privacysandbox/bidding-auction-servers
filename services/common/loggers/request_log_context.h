@@ -43,7 +43,7 @@ inline server_common::log::SystemLogContext& SystemLogContext() {
 
 class EventMessageProvider {
  public:
-  EventMessage Get() { return event_message_; }
+  const EventMessage& Get() { return event_message_; }
 
   EVENT_MESSAGE_PROVIDER_SET(SelectAdRequest, select_ad_request);
   EVENT_MESSAGE_PROVIDER_SET(ProtectedAuctionInput, protected_auction);
@@ -100,6 +100,33 @@ inline RequestContext NoOpContext() {
 
 // use single ']' as separator
 constexpr absl::string_view kFailCurl = "Failed to curl]";
+
+// log verbosity
+
+inline constexpr int kPlain = 1;  // plaintext B&A request and response served
+inline constexpr int kNoisyWarn =
+    2;  // non-critical error, use PS_LOG(ERROR, *) for critical error
+inline constexpr int kUdfLog = 3;
+inline constexpr int kSuccess = 3;
+inline constexpr int kNoisyInfo = 4;
+inline constexpr int kDispatch = 4;  // UDF dispatch request and response
+inline constexpr int kOriginated =
+    5;  // plaintext B&A request and response originated from server
+inline constexpr int kKVLog = 5;  // KV request response
+inline constexpr int kStats = 5;  // Stats log like time , byte size, etc.
+inline constexpr int kEncrypted = 6;
+
+inline bool AllowAnyEventLogging(RequestLogContext& log_context) {
+  // if is_debug_response in non prod, it logs to debug kNoisyInfo
+  // if is_consented, it logs to event message
+  return (log_context.is_debug_response() && !server_common::log::IsProd()) ||
+         log_context.is_consented();
+}
+
+inline bool AllowAnyUdfLogging(RequestLogContext& log_context) {
+  return server_common::log::PS_VLOG_IS_ON(kUdfLog) ||
+         AllowAnyEventLogging(log_context);
+}
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

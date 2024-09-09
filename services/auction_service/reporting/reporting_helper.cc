@@ -112,13 +112,12 @@ absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
 void HandleUdfLogs(const rapidjson::Document& document,
                    const std::string& log_type, absl::string_view udf_name,
                    RequestLogContext& log_context) {
+  if (!AllowAnyUdfLogging(log_context)) {
+    return;
+  }
   auto LogUdf = [&log_context,
                  prefix(absl::StrCat(log_type, " from udf:", udf_name))](
                     absl::string_view adtech_log) {
-    if (!server_common::log::PS_VLOG_IS_ON(kUdfLog) &&
-        !log_context.is_debug_response()) {
-      return;
-    }
     PS_VLOG(kUdfLog, log_context) << prefix << adtech_log;
     log_context.SetEventMessageField(absl::StrCat(prefix, adtech_log));
   };

@@ -77,6 +77,10 @@ AuctionResult MapAdScoreToAuctionResult(
           ->try_emplace(event, url);
     }
     SetReportingUrls(high_score->win_reporting_urls(), auction_result);
+    if (high_score->top_level_contributions().size() > 0) {
+      *auction_result.mutable_top_level_contributions() =
+          high_score->top_level_contributions();
+    }
     *auction_result.mutable_ad_component_render_urls() =
         high_score->component_renders();
     auction_result.set_ad_type(high_score->ad_type());
@@ -134,12 +138,11 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
     return absl::Status(serialized_data.status().code(), error_msg);
   } else {
     PS_VLOG(kPlain, log_context)
-        << "AuctionResult:\n"
-        << [&](absl::string_view encoded_data) {
+        << "AuctionResult: " << [&](absl::string_view encoded_data) {
              auto result = CborDecodeAuctionResultToProto(encoded_data);
              if (result.ok()) {
                log_context.SetEventMessageField(*result);
-               return result->DebugString();
+               return std::string("exported in EventMessage");
              } else {
                return result.status().ToString();
              }
@@ -159,7 +162,7 @@ absl::StatusOr<std::string> PackageAuctionResultForApp(
   // Map to AuctionResult proto and serialized to bytes array.
 
   AuctionResult result = MapAdScoreToAuctionResult(high_score, error);
-  PS_VLOG(kPlain, log_context) << "AuctionResult:\n" << result.DebugString();
+  PS_VLOG(kPlain, log_context) << "AuctionResult exported in EventMessage";
   log_context.SetEventMessageField(result);
   return PackageAuctionResultCiphertext(result.SerializeAsString(),
                                         decrypted_request);

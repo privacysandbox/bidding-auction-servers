@@ -79,12 +79,6 @@ absl::StatusOr<RegisterModelResponse> TestModule::RegisterModel(
   return response;
 }
 
-void TestModule::ResetModels() {
-  if (config_.model_reset_probability() == 0.0) {
-    ABSL_LOG(INFO) << "Model reset is disabled.";
-  }
-}
-
 std::unique_ptr<ModuleInterface> ModuleInterface::Create(
     const InferenceSidecarRuntimeConfig& config) {
   return std::make_unique<TestModule>(config);

@@ -20,9 +20,9 @@
 #include <utility>
 #include <vector>
 
-#include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/buyer_frontend_service/data/bidding_signals.h"
+#include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -38,7 +38,7 @@ CreateGenerateBidsRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bid_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const server_common::LogContext& log_context);
+    RequestLogContext& log_context);
 
 // Creates a request to generate bid for protected app signals.
 std::unique_ptr<GenerateProtectedAppSignalsBidsRequest::

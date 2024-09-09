@@ -27,4 +27,8 @@ exports_files([
     "models/pytorch_mixed_inputs_mixed_outputs_model.pt",
     # This PyTorch model returns the incrementing counter.
     "models/pytorch_stateful_model.pt",
+    # This PyTorch model returns itself and is not freezable.
+    "models/pytorch_unfreezable_model.pt",
+    # This PyTorch model returns is already frozen.
+    "models/pytorch_frozen_model.pt",
 ])

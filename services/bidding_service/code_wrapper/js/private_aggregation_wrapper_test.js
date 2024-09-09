@@ -26,19 +26,15 @@ testSuite({
     };
 
     const expectedContribution1 = {
-      bucket_128_bit: numberBucket,
-      signal_bucket: null,
-      int_value: numberValue,
-      extended_value: null,
+      bucket: { bucket_128_bit: { bucket_128_bits: [numberBucket, 0] } },
+      value: { int_value: numberValue },
       event: {
         event_type: 'EVENT_TYPE_WIN',
       },
     };
     const expectedContribution2 = {
-      bucket_128_bit: numberBucket,
-      signal_bucket: null,
-      int_value: numberValue,
-      extended_value: null,
+      bucket: { bucket_128_bit: { bucket_128_bits: [numberBucket, 0] } },
+      value: { int_value: numberValue },
       event: {
         event_type: 'EVENT_TYPE_CUSTOM',
         event_name: 'a-custom-event-test',
@@ -53,40 +49,43 @@ testSuite({
   },
   testContributeToHistogramOnEvent_ValidObjectBucketAndValue() {
     const objectBucket = {
-      base_value: 'winning-bid',
+      baseValue: 'winning-bid',
+      scale: 1.0,
+      offset: 10,
+    };
+    const signalBucket = {
+      base_value: 'BASE_VALUE_WINNING_BID',
       scale: 1.0,
       offset: {
-        value: [10, 20],
+        value: [10, 0],
         is_negative: false,
       },
     };
     const objectValue = {
-      extended_value: {
-        base_value: 'winning-bid',
-        int_value: 30,
-        is_negative: false,
-      },
+      baseValue: 'winning-bid',
+      scale: 30,
+      offset: 5,
     };
-
+    const signalValue = {
+      base_value: 'BASE_VALUE_WINNING_BID',
+      scale: 30,
+      offset: 5,
+    };
     const contribution = {
       bucket: objectBucket,
       value: objectValue,
     };
 
     const expectedContribution1 = {
-      bucket_128_bit: null,
-      signal_bucket: objectBucket,
-      int_value: null,
-      extended_value: objectValue,
+      bucket: { signal_bucket: signalBucket },
+      value: { extended_value: signalValue },
       event: {
         event_type: 'EVENT_TYPE_WIN',
       },
     };
     const expectedContribution2 = {
-      bucket_128_bit: null,
-      signal_bucket: objectBucket,
-      int_value: null,
-      extended_value: objectValue,
+      bucket: { signal_bucket: signalBucket },
+      value: { extended_value: signalValue },
       event: {
         event_type: 'EVENT_TYPE_CUSTOM',
         event_name: 'a-custom-event-test',
@@ -94,11 +93,12 @@ testSuite({
     };
     // Test with win.
     privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+    privateAggregation.contributeToHistogramOnEvent('a-custom-event-test', contribution);
     assertObjectEquals(expectedContribution1, private_aggregation_contributions[0]);
     // Test with custom.
-    privateAggregation.contributeToHistogramOnEvent('a-custom-event-test', contribution);
     assertObjectEquals(expectedContribution2, private_aggregation_contributions[1]);
   },
+
   testContributeToHistogram() {
     const numberBucket = 5;
     const numberValue = 10;
@@ -109,10 +109,8 @@ testSuite({
     };
 
     const expectedContribution1 = {
-      bucket_128_bit: numberBucket,
-      signal_bucket: null,
-      int_value: numberValue,
-      extended_value: null,
+      bucket: { bucket_128_bit: { bucket_128_bits: [numberBucket, 0] } },
+      value: { int_value: numberValue },
       event: {
         event_type: 'EVENT_TYPE_ALWAYS', // reserved.always
       },

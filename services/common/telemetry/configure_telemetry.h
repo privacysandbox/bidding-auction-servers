@@ -44,7 +44,8 @@ template <typename T>
 void InitTelemetry(const TrustedServerConfigUtil& config_util,
                    const TrustedServersConfigClient& config_client,
                    absl::string_view server,
-                   const std::vector<std::string>& buyer_list = {}) {
+                   const std::vector<std::string>& buyer_list = {},
+                   const std::vector<std::string>& model_list = {}) {
   using ::opentelemetry::logs::LoggerProvider;
   using ::opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions;
   using ::opentelemetry::sdk::resource::Resource;
@@ -109,6 +110,9 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
 
   if constexpr (std::is_same_v<T, SelectAdRequest>) {
     AddBuyerPartition(context_map->metric_config(), buyer_list);
+  }
+  if constexpr (std::is_same_v<T, GenerateBidsRequest>) {
+    AddModelPartition(context_map->metric_config(), model_list);
   }
   AddErrorTypePartition(context_map->metric_config(), server);
 }

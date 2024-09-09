@@ -68,7 +68,7 @@ boolean-feature-type = {
 }
 
 boolean-feature = {
-  type: boolean-feature-type,
+  name: text .regexp "^boolean-feature$",
   value: bool,
 }
 
@@ -78,7 +78,7 @@ unsigned-integer-feature-type = {
 }
 
 unsigned-integer-feature = {
-  type: unsigned-integer-feature-type,
+  name: text .regexp "^unsigned-integer-feature$",
   value: uint,
 }
 
@@ -88,17 +88,17 @@ signed-integer-feature-type = {
 }
 
 signed-integer-feature = {
-  type: signed-integer-feature-type,
+  name: text .regexp "^signed-integer-feature$",
   value: int,
 }
 
 bucket-feature-type = {
-  name: text .regexp "^bucket-feature$"
+  name: text .regexp "^bucket-feature$",
   size: uint,  ; number of buckets.
 }
 
 bucket-feature = {
-  type: bucket-feature-type,
+  name: text .regexp "^bucket-feature$",
   value: [* bool],
 }
 
@@ -111,7 +111,7 @@ histogram-feature-type = {
 histogram-feature-subtype /= unsigned-integer-feature-type / signed-integer-feature-type
 
 histogram-feature = {
-  type: histogram-feature-type,
+  name: text .regexp "^histogram-feature$",
   value: [1* unsigned-integer-feature / signed-integer-feature ],
 }
 

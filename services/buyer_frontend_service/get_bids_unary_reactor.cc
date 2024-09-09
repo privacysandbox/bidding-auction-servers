@@ -215,11 +215,11 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     return;
   }
 
-  PS_VLOG(kPlain, log_context_) << "GetBidsRawResponse:\n"
-                                << get_bids_raw_response_->ShortDebugString();
+  PS_VLOG(kPlain, log_context_)
+      << "GetBidsRawResponse exported in EventMessage";
   log_context_.SetEventMessageField(*get_bids_raw_response_);
-  log_context_.ExportEventMessage();
-
+  // ExportEventMessage before encrypt response
+  log_context_.ExportEventMessage(/*if_export_consented=*/true);
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     PS_LOG(ERROR, log_context_) << "Failed to encrypt the response";
     benchmarking_logger_->End();
@@ -285,7 +285,7 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
   return grpc::Status::OK;
 }
 
-int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
+int GetBidsUnaryReactor::GetNumberOfMaximumBiddingCalls() {
   int num_expected_calls = 0;
   if (config_.is_protected_audience_enabled &&
       raw_request_.buyer_input().interest_groups_size() > 0) {
@@ -302,8 +302,8 @@ int GetBidsUnaryReactor::GetNumberOfBiddingCalls() {
 
 void GetBidsUnaryReactor::CancellableExecute() {
   benchmarking_logger_->Begin();
-  PS_VLOG(kEncrypted, log_context_) << "Encrypted GetBidsRequest:\n"
-                                    << request_->ShortDebugString();
+  PS_VLOG(kEncrypted, log_context_)
+      << "Encrypted GetBidsRequest exported in EventMessage";
   log_context_.SetEventMessageField(*request_);
   PS_VLOG(kPlain, log_context_)
       << "Headers:\n"
@@ -318,8 +318,7 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
-  PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest:\n"
-                                << raw_request_.ShortDebugString();
+  PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest exported in EventMessage";
   log_context_.SetEventMessageField(raw_request_);
 
   LogIgMetric(raw_request_, *metric_context_);
@@ -329,7 +328,7 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
 
-  const int num_bidding_calls = GetNumberOfBiddingCalls();
+  const int num_bidding_calls = GetNumberOfMaximumBiddingCalls();
   if (num_bidding_calls == 0) {
     // This is unlikely to happen since we already have this check in place
     // in SFE.
@@ -555,21 +554,24 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
     async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
     return;
   }
-  const auto& log_context = raw_request_.log_context();
   std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
-      raw_bidding_input =
-          CreateGenerateBidsRawRequest(raw_request_, raw_request_.buyer_input(),
-                                       std::move(bidding_signals), log_context);
-
+      raw_bidding_input = CreateGenerateBidsRawRequest(
+          raw_request_, raw_request_.buyer_input(), std::move(bidding_signals),
+          log_context_);
   PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"
                                      << raw_bidding_input->ShortDebugString();
+  if (raw_bidding_input->interest_group_for_bidding_size() == 0) {
+    PS_LOG(INFO, log_context_)
+        << "No interest groups for bidding found in the request.";
+    async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
+    return;
+  }
+
   auto bidding_request =
       metric::MakeInitiatedRequest(metric::kBs, metric_context_.get())
           .release();
   bidding_request->SetRequestSize((int)raw_bidding_input->ByteSizeLong());
-
   grpc::ClientContext* client_context = client_contexts_.Add();
-
   absl::Status execute_result = bidding_async_client_->ExecuteInternal(
       std::move(raw_bidding_input), client_context,
       [this, bidding_request](

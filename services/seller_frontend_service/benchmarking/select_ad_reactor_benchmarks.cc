@@ -20,6 +20,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 
@@ -333,6 +334,7 @@ void ScoringSignalsProviderStub::Get(
 }
 
 static void BM_PerformDebugReporting(benchmark::State& state) {
+  CommonTestInit();
   ProtectedAuctionInput protected_auction_input =
       MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
   protected_auction_input.set_enable_debug_reporting(true);
@@ -358,6 +360,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
   TrustedServersConfigClient config_client = CreateConfig();
   config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
   config_client.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride(kFalse, ENABLE_CHAFFING);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,
@@ -384,6 +387,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
 BENCHMARK(BM_PerformDebugReporting);
 
 static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
+  CommonTestInit();
   ProtectedAuctionInput protected_auction_input =
       MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
   SelectAdRequest request = MakeARandomSelectAdRequest<ProtectedAuctionInput>(
@@ -410,6 +414,7 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
   TrustedServersConfigClient config_client = CreateConfig();
   config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
   config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride(kFalse, ENABLE_CHAFFING);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,

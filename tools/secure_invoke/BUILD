@@ -52,6 +52,7 @@ cc_binary(
     deps = [
         ":secure_invoke_lib",
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/test/utils:test_init",
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
@@ -73,6 +74,7 @@ cc_binary(
     ],
     deps = [
         ":secure_invoke_lib",
+        "//services/common/test/utils:test_init",
         "//tools/secure_invoke/payload_generator:payload_packaging_lib",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",

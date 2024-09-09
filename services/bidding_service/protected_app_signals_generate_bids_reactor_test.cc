@@ -65,30 +65,7 @@ using kv_server::v2::GetValuesRequest;
 using kv_server::v2::GetValuesResponse;
 using kv_server::v2::ObliviousGetValuesRequest;
 
-class GenerateBidsReactorTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    CommonTestInit();
-    TrustedServersConfigClient config_client({});
-    config_client.SetOverride(kTrue, TEST_MODE);
-    config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
-    server_common::log::SetGlobalPSVLogLevel(20);
-
-    key_fetcher_manager_ =
-        CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
-    SetupMockCryptoClientWrapper(crypto_client_);
-    egress_schema_cache_ = PopulateEgressSchemaCache();
-    limited_egress_schema_cache_ = PopulateEgressSchemaCache();
-  }
-
-  std::unique_ptr<EgressSchemaCache> PopulateEgressSchemaCache() {
-    std::unique_ptr<CddlSpecCache> cddl_spec_cache =
-        std::make_unique<CddlSpecCache>(
-            "services/bidding_service/egress_cddl_spec/");
-    CHECK_OK(cddl_spec_cache->Init());
-    auto egress_schema_cache =
-        std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
-    CHECK_OK(egress_schema_cache->Update(R"JSON(
+constexpr absl::string_view kLimitedEgressSchema = R"JSON(
     {
       "cddl_version": "1.0.0",
       "version": 2,
@@ -112,7 +89,60 @@ class GenerateBidsReactorTest : public ::testing::Test {
         }
       ]
     }
-  )JSON"));
+  )JSON";
+
+constexpr absl::string_view kUnlimitedEgressSchema = R"JSON(
+    {
+      "cddl_version": "1.0.0",
+      "version": 2,
+      "features": [
+        {
+          "name": "unsigned-integer-feature",
+          "size": 7
+        },
+        {
+          "name": "boolean-feature"
+        },
+        {
+          "name": "histogram-feature",
+          "size": 1,
+          "value": [
+            {
+              "name": "signed-integer-feature",
+              "size": 1
+            }
+          ]
+        }
+      ]
+    }
+  )JSON";
+
+class GenerateBidsReactorTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    CommonTestInit();
+    TrustedServersConfigClient config_client({});
+    config_client.SetOverride(kTrue, TEST_MODE);
+    config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+    server_common::log::SetGlobalPSVLogLevel(20);
+
+    key_fetcher_manager_ =
+        CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
+    SetupMockCryptoClientWrapper(crypto_client_);
+    egress_schema_cache_ = PopulateEgressSchemaCache(kUnlimitedEgressSchema);
+    limited_egress_schema_cache_ =
+        PopulateEgressSchemaCache(kLimitedEgressSchema);
+  }
+
+  std::unique_ptr<EgressSchemaCache> PopulateEgressSchemaCache(
+      absl::string_view egress_schema) {
+    std::unique_ptr<CddlSpecCache> cddl_spec_cache =
+        std::make_unique<CddlSpecCache>(
+            "services/bidding_service/egress_cddl_spec/");
+    CHECK_OK(cddl_spec_cache->Init());
+    auto egress_schema_cache =
+        std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
+    CHECK_OK(egress_schema_cache->Update(egress_schema));
     return egress_schema_cache;
   }
 
@@ -665,12 +695,12 @@ TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
         "temporaryUnlimitedEgressPayload" :
           "{\"features\":
             [
-              {\"type\": \"boolean-feature\", \"value\": true},
-              {\"type\": \"unsigned-integer-feature\", \"value\": 2},
-              {\"type\": \"histogram-feature\",
+              {\"name\": \"unsigned-integer-feature\", \"value\": 2},
+              {\"name\": \"boolean-feature\", \"value\": true},
+              {\"name\": \"histogram-feature\",
                \"value\": [
                   {
-                    \"type\": \"signed-integer-feature\",
+                    \"name\": \"signed-integer-feature\",
                     \"value\": -1
                   }
                 ]
@@ -811,12 +841,12 @@ TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
         "temporaryUnlimitedEgressPayload" :
           "{\"features\":
             [
-              {\"type\": \"boolean-feature\", \"value\": true},
-              {\"type\": \"unsigned-integer-feature\", \"value\": 2},
-              {\"type\": \"histogram-feature\",
+              {\"name\": \"unsigned-integer-feature\", \"value\": 2},
+              {\"name\": \"boolean-feature\", \"value\": true},
+              {\"name\": \"histogram-feature\",
                \"value\": [
                   {
-                    \"type\": \"signed-integer-feature\",
+                    \"name\": \"signed-integer-feature\",
                     \"value\": -1
                   }
                 ]
@@ -859,13 +889,13 @@ TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
   // bits for each feature are populated (if not explicitly set, then a
   // default of 0 is used).
   //
-  // Base64 encoded payload: AQVA
-  // Wire representation: 00000001 00000101 01000000
+  // Base64 encoded payload: AYJA
+  // Wire representation: 00000001 10000010 01000000
   // In the wire representation, we expect the schema version (2 is used for
   // this test by default) in 3 MSB of header and in the payload, there is a
-  // single boolean present, unsigned integer of value 2 and width 7 and a
+  // unsigned integer of value 2 with width 7, a single boolean present and a
   // histogram feature with a signed integer of value 1.
-  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload(), "AQVA");
+  EXPECT_EQ(generated_bid.temporary_unlimited_egress_payload(), "AYJA");
 }
 
 TEST_F(GenerateBidsReactorTest, SerializesMultipleFeatures) {
@@ -881,12 +911,12 @@ TEST_F(GenerateBidsReactorTest, SerializesMultipleFeatures) {
         "render": "$1",
         "egressPayload" :
           "{\"features\": [
-              {\"type\": \"boolean-feature\", \"value\": true},
-              {\"type\": \"unsigned-integer-feature\", \"value\": 127},
-              {\"type\": \"histogram-feature\",
+              {\"name\": \"boolean-feature\", \"value\": true},
+              {\"name\": \"unsigned-integer-feature\", \"value\": 127},
+              {\"name\": \"histogram-feature\",
                \"value\": [
                   {
-                      \"type\": \"signed-integer-feature\",
+                      \"name\": \"signed-integer-feature\",
                       \"value\": -1
                     }
                   ]
@@ -950,7 +980,7 @@ TEST_F(GenerateBidsReactorTest, EgressClearedIfOverLimit) {
         {
         "bid" : $0,
         "render": "$1",
-        "egressPayload" : "{\"features\": [{\"type\": \"boolean-feature\", \"value\": true}, {\"type\": \"unsigned-integer-feature\", \"value\": 127}]}"
+        "egressPayload" : "{\"features\": [{\"name\": \"boolean-feature\", \"value\": true}, {\"name\": \"unsigned-integer-feature\", \"value\": 127}]}"
         }
       )JSON",
                        kTestWinningBid, kTestRenderUrl));

@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "pytorch.h"
+
 #include <gmock/gmock-matchers.h>
 
+#include <istream>
 #include <memory>
+#include <string>
+#include <vector>
 
-#include <torch/torch.h>
+#include <torch/script.h>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -26,10 +31,12 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "gtest/gtest.h"
+#include "model/model_store.h"
 #include "modules/module_interface.h"
 #include "proto/inference_sidecar.pb.h"
 #include "utils/file_util.h"
 #include "utils/inference_metric_util.h"
+#include "utils/log.h"
 #include "utils/test_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -44,7 +51,9 @@ constexpr absl::string_view kTestModelVariedInputs1 = "e2e_model1";
 constexpr absl::string_view kTestModelVariedInputs2 = "e2e_model2";
 constexpr absl::string_view kTestModelMixedInputsMixedOutputs =
     "mixed_inputs_mixed_outputs_model";
-constexpr absl::string_view kStatefulModelDir = "stateful_model";
+constexpr absl::string_view kStatefulModel = "stateful_model";
+constexpr absl::string_view kUnfreezableModel = "unfreezable_model";
+constexpr absl::string_view kFrozenModel = "frozen_model";
 constexpr int kNumThreads = 100;
 
 TEST(PyTorchModuleRuntimeConfigTest,
@@ -108,6 +117,43 @@ TEST(PyTorchModuleRegisterModelTest,
   register_request.mutable_model_spec()->set_model_path("e2e_model1");
   EXPECT_EQ(torch_module->RegisterModel(register_request).status().code(),
             absl::StatusCode::kInvalidArgument);
+}
+
+TEST(PyTorchModuleRegisterModelTest,
+     RegisterModelWithAttributesReturnsFailedPrecondition) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kStatefulModel, register_request).ok());
+  EXPECT_EQ(torch_module->RegisterModel(register_request).status().code(),
+            absl::StatusCode::kFailedPrecondition);
+}
+
+TEST(PyTorchModuleRegisterModelTest,
+     RegisterModelWithUnfreezableModelReturnsInternalError) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  // Model that returns itself is not freezable.
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kUnfreezableModel, register_request).ok());
+  EXPECT_EQ(torch_module->RegisterModel(register_request).status().code(),
+            absl::StatusCode::kInternal);
+}
+
+TEST(PyTorchModuleRegisterModelTest,
+     RegisterModelWithFrozenModelReturnsOkStatus) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  // Model that is already frozen can be loaded.
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel, register_request).ok());
+  EXPECT_TRUE(torch_module->RegisterModel(register_request).ok());
 }
 
 TEST(PyTorchModuleRegisterModelTest, RegisterModelOk) {
@@ -232,7 +278,7 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess) {
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 TEST(PyTorchModulePredictTest, PredictSimpleSuccess_ValidateMetrics) {
@@ -252,10 +298,10 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess_ValidateMetrics) {
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
   CheckMetric(result->metrics(), "kInferenceRequestCount", 1);
   CheckMetric(result->metrics(), "kInferenceRequestSize", 204);
-  CheckMetric(result->metrics(), "kInferenceResponseSize", 215);
+  CheckMetric(result->metrics(), "kInferenceResponseSize", 318);
   auto it = result->metrics().find("kInferenceRequestDuration");
   ASSERT_NE(it, result->metrics().end())
       << "kInferenceRequestDuration metric is missing.";
@@ -279,38 +325,7 @@ TEST(PyTorchModulePredictTest, PredictConsentedRequestSuccess) {
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
-}
-
-TEST(PyTorchModuleResetModelTest, NoModel) {
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(1.0);
-  std::unique_ptr<ModuleInterface> torch_module =
-      ModuleInterface::Create(config);
-  torch_module->ResetModels();
-}
-
-TEST(PyTorchModuleResetModelTest, ResetModelOk) {
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(1.0);
-  std::unique_ptr<ModuleInterface> torch_module =
-      ModuleInterface::Create(config);
-  RegisterModelRequest register_request;
-  ASSERT_TRUE(
-      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
-  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
-
-  PredictRequest predict_request;
-  predict_request.set_input(kSimpleRequest);
-
-  const absl::StatusOr<PredictResponse> result =
-      torch_module->Predict(predict_request);
-  EXPECT_TRUE(result.ok());
-  EXPECT_EQ(result->output(), kSimpleRequestResponse);
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
-
-  torch_module->ResetModels();
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kNotRegisteredModelRequest[] = R"json({
@@ -400,7 +415,7 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccessShape1x2) {
             "\"tensor_shape\":[1,2],\"data_type\":\"DOUBLE\",\"tensor_"
             "content\":[3.14,2.718]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kSimpleRequestBatchSize2[] = R"json({
@@ -438,7 +453,7 @@ TEST(PyTorchModulePredictTest, PredictSimpleBatchSize2Success) {
             "\"tensor_shape\":[2,1],\"data_type\":\"DOUBLE\",\"tensor_"
             "content\":[3.14,2.718]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kSameModelSameBatchSizeMultipleRequests[] = R"json({
@@ -491,7 +506,7 @@ TEST(PyTorchModulePredictTest,
       "\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_shape\":[1],"
       "\"data_type\":\"DOUBLE\",\"tensor_content\":[2.718]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kSameModelVariedBatchSizesMultipleRequests[] = R"json({
@@ -544,7 +559,7 @@ TEST(PyTorchModulePredictTest,
       "{\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_shape\":[3,1],"
       "\"data_type\":\"DOUBLE\",\"tensor_content\":[2.718,1.0,1.0]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kRequestsWithMultipleInvalidInputs[] = R"json({
@@ -726,7 +741,7 @@ TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize1Success) {
             "\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_content\":"
             "[0.4846605658531189]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kVariedInputsRequestBatchSize2[] = R"json({
@@ -822,7 +837,173 @@ TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize2Success) {
             "\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_content\":"
             "[0.5412338972091675,0.4757022559642792]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
+}
+
+TEST(PyTorchModulePredictTest, RegisterModelWithWarmupDataSuccess) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
+          .ok());
+  register_request.set_warm_up_batch_request_json(
+      kVariedInputsRequestBatchSize2);
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+}
+
+constexpr char kVariedInputsRequestBatchSize2WithWrongPath[] = R"json({
+  "request" : [{
+    "model_path" : "e2e_model1_non_exist_path",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["8", "6"]
+    },
+    {
+      "tensor_name": "serving_default_int_input2:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["18", "11"]
+    },
+    {
+      "tensor_name": "serving_default_int_input3:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["9", "14"]
+    },
+    {
+      "tensor_name": "serving_default_int_input4:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["2", "1"]
+    },
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["10", "4"]
+    },
+    {
+      "tensor_name": "serving_default_double1:0",
+      "data_type": "FLOAT",
+      "tensor_shape": [
+        2, 10
+      ],
+      "tensor_content": [
+        "0.7862", "0.6386", "0.9695", "0.0469", "0.5807", "0.8201", "0.8321",
+        "0.1021", "0.6779", "0.2152", "0.4805", "0.3957", "0.0825", "0.0230",
+        "0.1711", "0.7269", "0.7287", "0.0651", "0.3122", "0.5082"
+      ]
+    }
+  ]
+}]
+    })json";
+
+constexpr char kVariedInputsRequestBatchSize2WithWrongTensor[] = R"json({
+  "request" : [{
+    "model_path" : "e2e_model1",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["8", "6"]
+    },
+    {
+      "tensor_name": "serving_default_int_input2:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["18", "11"]
+    },
+    {
+      "tensor_name": "serving_default_int_input3:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["9", "14"]
+    },
+    {
+      "tensor_name": "serving_default_int_input4:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["2", "1"]
+    },
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2
+      ],
+      "tensor_content": ["10", "4"]
+    },
+    {
+      "tensor_name": "serving_default_double1:0",
+      "data_type": "FLOAT",
+      "tensor_shape": [
+        2, 10
+      ],
+      "tensor_content": [
+        "0.7862", "0.6386", "0.9695", "0.0469", "0.5807", "0.8201", "0.8321",
+        "0.1021", "0.6779", "0.2152", "0.4805", "0.3957", "0.0825", "0.0230",
+        "0.1711", "0.7269", "0.7287", "0.0651", "0.3122", "0.5082"
+      ]
+    },
+    {
+      "tensor_name": "serving_default_double2:0",
+      "data_type": "FLOAT",
+      "tensor_shape": [
+        2, 10
+      ],
+      "tensor_content": [
+        "0.0677", "0.7817", "0.9529", "0.5884", "0.1285", "0.6166", "0.6815",
+        "0.8959", "0.2340", "0.0520", "0.7197", "0.5311", "0.3371", "0.2905",
+        "0.2422", "0.9047", "0.4137", "0.8606", "0.9463", "0.5633"
+      ]
+    }
+  ]
+}]
+    })json";
+
+TEST(PyTorchModulePredictTest, RegisterModelWithInavlidWarmupDataFail) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request_wrong_path;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kTestModelVariedInputs1,
+                                           register_request_wrong_path)
+                  .ok());
+  register_request_wrong_path.set_warm_up_batch_request_json(
+      kVariedInputsRequestBatchSize2WithWrongPath);
+  ASSERT_FALSE(torch_module->RegisterModel(register_request_wrong_path).ok());
+
+  RegisterModelRequest register_request_wrong_tensor;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kTestModelVariedInputs1,
+                                           register_request_wrong_tensor)
+                  .ok());
+  register_request_wrong_tensor.set_warm_up_batch_request_json(
+      kVariedInputsRequestBatchSize2WithWrongPath);
+  ASSERT_FALSE(torch_module->RegisterModel(register_request_wrong_tensor).ok());
 }
 
 constexpr char kMixedInputsBatchSize1[] = R"json({
@@ -872,7 +1053,7 @@ TEST(PyTorchModulePredictTest, PredictMixedInputsMixedOutputsSuccess) {
       "\"data_"
       "type\":\"INT64\",\"tensor_content\":[0]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kVariedInputsMultipleModelsRequest[] = R"json({
@@ -1046,7 +1227,7 @@ TEST(PyTorchModulePredictTest,
       "\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
       "content\":[0.3857767879962921,0.458008348941803]}]}]}");
   ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 4);
+  EXPECT_EQ(result->metrics().size(), 6);
 }
 
 constexpr char kStatefulModelRequest[] = R"json({
@@ -1063,65 +1244,6 @@ constexpr char kStatefulModelRequest[] = R"json({
   ]
 }]
     })json";
-
-TEST(PyTorchModuleResetModelTest, NoResetWithStatefulModel) {
-  const int kIterations = 100;
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(0.0);
-  std::unique_ptr<ModuleInterface> torch_module =
-      ModuleInterface::Create(config);
-  RegisterModelRequest register_request;
-  ASSERT_TRUE(
-      PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
-  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
-
-  for (int count = 1; count < kIterations; count++) {
-    PredictRequest predict_request;
-    predict_request.set_input(kStatefulModelRequest);
-    absl::StatusOr predict_status = torch_module->Predict(predict_request);
-    ASSERT_TRUE(predict_status.ok());
-    PredictResponse response = predict_status.value();
-    ASSERT_FALSE(response.output().empty());
-
-    EXPECT_TRUE(absl::StrContains(
-        response.output(),
-        absl::StrCat(
-            "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[",
-            count, "]}")))
-        << response.output();
-    ASSERT_FALSE(response.metrics().empty());
-    EXPECT_EQ(response.metrics().size(), 4);
-  }
-}
-
-TEST(PyTorchModuleResetModelTest, ResetSuccessWithStatefulModel) {
-  const int kIterations = 10;
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(1.0);
-  std::unique_ptr<ModuleInterface> torch_module =
-      ModuleInterface::Create(config);
-  RegisterModelRequest register_request;
-  ASSERT_TRUE(
-      PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
-  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
-
-  for (int i = 0; i < kIterations; i++) {
-    PredictRequest predict_request;
-    predict_request.set_input(kStatefulModelRequest);
-    absl::StatusOr predict_status = torch_module->Predict(predict_request);
-    ASSERT_TRUE(predict_status.ok());
-    PredictResponse response = predict_status.value();
-    ASSERT_FALSE(response.output().empty());
-
-    EXPECT_TRUE(absl::StrContains(
-        response.output(),
-        "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[1]}"))
-        << response.output();
-    ASSERT_FALSE(response.metrics().empty());
-    EXPECT_EQ(response.metrics().size(), 4);
-    absl::SleepFor(absl::Seconds(1));
-  }
-}
 
 TEST(PyTorchModuleConcurrencyTest, RegisterSameModelWithMultipleThreads) {
   InferenceSidecarRuntimeConfig config;
@@ -1186,7 +1308,7 @@ TEST(PyTorchModuleConcurrencyTest,
                   "[{\"tensor_shape\":[1],\"data_type\":\"DOUBLE\",\"tensor_"
                   "content\":[3.14]}]}]}");
         ASSERT_FALSE(result->metrics().empty());
-        EXPECT_EQ(result->metrics().size(), 4);
+        EXPECT_EQ(result->metrics().size(), 6);
       }
     }));
   }
@@ -1238,7 +1360,7 @@ TEST(PyTorchModuleConcurrencyTest,
                   "shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_content\":[0."
                   "3857767879962921,0.458008348941803]}]}]}");
         ASSERT_FALSE(result->metrics().empty());
-        EXPECT_EQ(result->metrics().size(), 4);
+        EXPECT_EQ(result->metrics().size(), 6);
       }
     }));
   }
@@ -1249,4 +1371,98 @@ TEST(PyTorchModuleConcurrencyTest,
 }
 
 }  // namespace
+
+class PyTorchModuleResetModelTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    torch_module_ =
+        std::make_unique<PyTorchModule>(InferenceSidecarRuntimeConfig());
+  }
+
+  void SetResetProbability(float prob) {
+    InferenceSidecarRuntimeConfig config;
+    config.set_model_reset_probability(prob);
+    torch_module_->SetModelStoreForTestOnly(
+        std::make_unique<ModelStore<torch::jit::script::Module>>(
+            config, MockModelConstructor));
+  }
+
+  // No model freezing to allow stateful models to be loaded.
+  static absl::StatusOr<std::shared_ptr<torch::jit::script::Module>>
+  MockModelConstructor(const InferenceSidecarRuntimeConfig& config,
+                       const RegisterModelRequest& request) {
+    try {
+      const std::string& model_payload = request.model_files().begin()->second;
+      std::istringstream is(model_payload);
+      auto model =
+          std::make_shared<torch::jit::script::Module>(torch::jit::load(is));
+      model->eval();
+      return model;
+    } catch (...) {
+      return absl::InternalError("Error loading model");
+    }
+  }
+
+  std::unique_ptr<PyTorchModule> torch_module_;
+};
+
+TEST_F(PyTorchModuleResetModelTest, NoResetWithStatefulModel) {
+  const int kIterations = 100;
+
+  SetResetProbability(0.0);
+
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kStatefulModel, register_request).ok());
+  ASSERT_TRUE(torch_module_->RegisterModel(register_request).ok());
+
+  for (int count = 1; count < kIterations; count++) {
+    PredictRequest predict_request;
+    predict_request.set_input(kStatefulModelRequest);
+    absl::StatusOr predict_status =
+        torch_module_->Predict(predict_request, RequestContext());
+    ASSERT_TRUE(predict_status.ok());
+    PredictResponse response = predict_status.value();
+    ASSERT_FALSE(response.output().empty());
+
+    EXPECT_TRUE(absl::StrContains(
+        response.output(),
+        absl::StrCat(
+            "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[",
+            count, "]}")))
+        << response.output();
+    ASSERT_FALSE(response.metrics().empty());
+    EXPECT_EQ(response.metrics().size(), 6);
+  }
+}
+
+TEST_F(PyTorchModuleResetModelTest, ResetSuccessWithStatefulModel) {
+  const int kIterations = 10;
+
+  SetResetProbability(1.0);
+
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kStatefulModel, register_request).ok());
+  ASSERT_TRUE(torch_module_->RegisterModel(register_request).ok());
+
+  for (int i = 0; i < kIterations; i++) {
+    PredictRequest predict_request;
+    predict_request.set_input(kStatefulModelRequest);
+    absl::StatusOr predict_status =
+        torch_module_->Predict(predict_request, RequestContext());
+    ASSERT_TRUE(predict_status.ok());
+    PredictResponse response = predict_status.value();
+    ASSERT_FALSE(response.output().empty());
+
+    EXPECT_TRUE(absl::StrContains(
+        response.output(),
+        "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[1]}"))
+        << response.output();
+    ASSERT_FALSE(response.metrics().empty());
+    EXPECT_EQ(response.metrics().size(), 6);
+    absl::SleepFor(absl::Seconds(1));
+  }
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

@@ -237,3 +237,8 @@ variable "ad_retrieval_kv_server_virtual_service_name" {
   description = "Full name of the virtual service for the Ad Retrieval KV server."
   type        = string
 }
+
+variable "consented_request_s3_bucket" {
+  description = "s3 bucket to export event message for consented request"
+  type        = string
+}

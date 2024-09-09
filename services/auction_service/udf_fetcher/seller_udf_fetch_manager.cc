@@ -91,8 +91,9 @@ absl::Status SellerUdfFetchManager::End() {
 }
 
 WrapSingleCodeBlobForDispatch SellerUdfFetchManager::GetUdfWrapperForBuyer() {
-  return [](const std::string& ad_tech_code_blob) {
-    return GetBuyerWrappedCode(ad_tech_code_blob);
+  return [enable_protected_app_signals = enable_protected_app_signals_](
+             const std::string& ad_tech_code_blob) {
+    return GetBuyerWrappedCode(ad_tech_code_blob, enable_protected_app_signals);
   };
 }
 

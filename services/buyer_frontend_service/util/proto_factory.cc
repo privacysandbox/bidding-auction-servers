@@ -14,6 +14,12 @@
 
 #include "services/buyer_frontend_service/util/proto_factory.h"
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/strings/string_view.h"
+#include "services/common/util/json_util.h"
+#include "services/common/util/request_response_constants.h"
+#include "src/util/status_macro/status_macros.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 using GetBidsRawRequest = GetBidsRequest::GetBidsRawRequest;
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
@@ -21,6 +27,10 @@ using GenerateBidsRawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 using GenerateProtectedAppSignalsBidsRawRequest =
     GenerateProtectedAppSignalsBidsRequest::
         GenerateProtectedAppSignalsBidsRawRequest;
+struct ParsedTrustedBiddingSignals {
+  std::string json;
+  absl::flat_hash_set<std::string> keys;
+};
 
 std::unique_ptr<GetBidsRawResponse> CreateGetBidsRawResponse(
     std::unique_ptr<GenerateBidsResponse::GenerateBidsRawResponse>
@@ -37,7 +47,55 @@ std::unique_ptr<GetBidsRawResponse> CreateGetBidsRawResponse(
   return get_bids_raw_response;
 }
 
+// Parses trusted bidding signals for a single Interest Group (IG).
+// Queries the bidding signals for trusted bidding signal keys in the IG.
+// If found,
+// 1. Copies key to parsed trusted keys hash set
+// 2. Key-value pair to parsed trusted JSON string
+absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
+    const ::google::protobuf::RepeatedPtrField<std::string>&
+        bidding_signals_keys,
+    rapidjson::Value* bidding_signals_obj, long avg_signal_str_size) {
+  // Insert bidding signal values for this IG.
+  ParsedTrustedBiddingSignals parsed_signals;
+  rapidjson::Document ig_signals;
+  ig_signals.SetObject();
+  // If no bidding signals passed, return empty document.
+  if (bidding_signals_obj == nullptr) {
+    return parsed_signals;
+  }
+
+  // Copy bidding signals with key name in bidding signal keys.
+  for (const auto& key : bidding_signals_keys) {
+    if (parsed_signals.keys.contains(key)) {
+      // Do not process duplicate keys.
+      continue;
+    }
+    rapidjson::Value::ConstMemberIterator bidding_signals_key_itr =
+        bidding_signals_obj->FindMember(key.c_str());
+    if (bidding_signals_key_itr != bidding_signals_obj->MemberEnd()) {
+      rapidjson::Value json_key;
+      // Keep string reference. Assumes safe lifecycle.
+      json_key.SetString(rapidjson::StringRef(key.c_str()));
+      rapidjson::Value json_value;
+      // Copy instead of move, could be referenced by multiple IGs.
+      json_value.CopyFrom(bidding_signals_key_itr->value,
+                          ig_signals.GetAllocator());
+      // AddMember moves Values, do not reference them anymore.
+      ig_signals.AddMember(json_key, json_value, ig_signals.GetAllocator());
+      parsed_signals.keys.emplace(key);
+    }
+  }
+  if (ig_signals.MemberCount() > 0) {
+    absl::StatusOr<std::string> ig_signals_str =
+        SerializeJsonDocToReservedString(ig_signals, avg_signal_str_size);
+    PS_ASSIGN_OR_RETURN(parsed_signals.json, ig_signals_str);
+  }
+  return parsed_signals;
+}
+
 // Copy properties from IG from device to IG for Bidding.
+// Note: trusted bidding signals and keys are not copied.
 void CopyIGFromDeviceToIGForBidding(
     const BuyerInput::InterestGroup& ig_from_device,
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding*
@@ -53,17 +111,13 @@ void CopyIGFromDeviceToIGForBidding(
     mutable_ig_for_bidding->mutable_ad_render_ids()->CopyFrom(
         ig_from_device.ad_render_ids());
   }
+
   if (!ig_from_device.component_ads().empty()) {
     mutable_ig_for_bidding->mutable_ad_component_render_ids()->CopyFrom(
         ig_from_device.component_ads());
   }
 
-  if (!ig_from_device.bidding_signals_keys().empty()) {
-    mutable_ig_for_bidding->mutable_trusted_bidding_signals_keys()->MergeFrom(
-        ig_from_device.bidding_signals_keys());
-  }
-
-  // Set Device Signals.
+  // Set device signals.
   if (ig_from_device.has_browser_signals() &&
       ig_from_device.browser_signals().IsInitialized()) {
     mutable_ig_for_bidding->mutable_browser_signals()->CopyFrom(
@@ -78,30 +132,83 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRawRequest& get_bids_raw_request,
     const BuyerInput& buyer_input,
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const server_common::LogContext& log_context) {
+    RequestLogContext& log_context) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
 
-  // 1. Set Interest Group for bidding
-  for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
-    const auto& interest_group_from_device = buyer_input.interest_groups(i);
-    // IG must have a name.
-    if (interest_group_from_device.name().empty()) {
-      continue;
-    }
-    // Add InterestGroupForBidding.
-    auto mutable_interest_group_for_bidding =
-        generate_bids_raw_request->mutable_interest_group_for_bidding()->Add();
-
-    // Copy from IG from device.
-    CopyIGFromDeviceToIGForBidding(interest_group_from_device,
-                                   mutable_interest_group_for_bidding);
+  // Deserialize trusted bidding signals.
+  // Note: Null checks for bidding_signals and bidding_signals->trusted signals
+  // expected to be already performed elsewhere.
+  auto start_deserialize_time = absl::Now();
+  absl::StatusOr<rapidjson::Document> trusted_signals_status =
+      ParseJsonString(*bidding_signals->trusted_signals);
+  rapidjson::Document trusted_signals;
+  if (trusted_signals_status.ok()) {
+    trusted_signals = *std::move(trusted_signals_status);
+    PS_VLOG(kStats, log_context)
+        << "\nTrusted Bidding Signals Deserialize Time: "
+        << ToInt64Microseconds((absl::Now() - start_deserialize_time))
+        << " microseconds for " << trusted_signals.Size() << " bytes.";
+  } else {
+    // TODO(b/308793587): Publish a metric for this error.
+    PS_VLOG(kNoisyWarn, log_context)
+        << "Trusted bidding signals JSON deserialize error: "
+        << trusted_signals_status.status();
+    return generate_bids_raw_request;
+  }
+  rapidjson::Value bidding_signals_obj;
+  if (trusted_signals.HasMember("keys")) {
+    bidding_signals_obj = std::move(trusted_signals["keys"]);
+  } else {
+    // TODO(b/308793587): Publish a metric for this error.
+    PS_VLOG(kNoisyWarn, log_context)
+        << "Trusted bidding signals JSON validate error (Missing property "
+           "\"keys\")";
+    return generate_bids_raw_request;
   }
 
-  // 2. Set Auction Signals.
+  // 1. Set interest groups (IGs) for bidding.
+  if (buyer_input.interest_groups_size() > 0) {
+    long avg_signal_size_per_ig = bidding_signals->trusted_signals->size() /
+                                  buyer_input.interest_groups_size();
+    // Iterate through each IG from device.
+    for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
+      // Skip IG if it has no name or bidding signals keys.
+      const auto& ig_from_device = buyer_input.interest_groups(i);
+      if (ig_from_device.name().empty() ||
+          ig_from_device.bidding_signals_keys().empty()) {
+        continue;
+      }
+      // Get parsed trusted bidding signals for this IG.
+      absl::StatusOr<ParsedTrustedBiddingSignals> parsed_signals =
+          GetSignalsForIG(ig_from_device.bidding_signals_keys(),
+                          &bidding_signals_obj, avg_signal_size_per_ig);
+      // Skip IG if it has no parsed trusted bidding signals.
+      if (!parsed_signals.ok() || parsed_signals->json.empty()) {
+        continue;
+      }
+      // Initialize IG for bidding.
+      auto mutable_ig_for_bidding =
+          generate_bids_raw_request->mutable_interest_group_for_bidding()
+              ->Add();
+      // Only add trusted bidding signals keys that are parsed.
+      // TODO(b/308793587): Optimize.
+      for (const std::string& key : parsed_signals->keys) {
+        mutable_ig_for_bidding->add_trusted_bidding_signals_keys(key);
+      }
+      // Set trusted bidding signals to include only those signals that are
+      // parsed.
+      mutable_ig_for_bidding->set_trusted_bidding_signals(
+          std::move(parsed_signals->json));
+      // Copy other properties from IG from device to IG for bidding.
+      CopyIGFromDeviceToIGForBidding(ig_from_device, mutable_ig_for_bidding);
+    }
+  }
+
+  // 2. Set auction signals.
   generate_bids_raw_request->set_auction_signals(
       get_bids_raw_request.auction_signals());
 
-  // 3. Set Buyer Signals.
+  // 3. Set buyer signals.
   if (!get_bids_raw_request.buyer_signals().empty()) {
     generate_bids_raw_request->set_buyer_signals(
         get_bids_raw_request.buyer_signals());
@@ -109,35 +216,36 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     generate_bids_raw_request->set_buyer_signals("");
   }
 
-  // 4. Set Bidding Signals
-  generate_bids_raw_request->set_allocated_bidding_signals(
-      bidding_signals->trusted_signals.release());
-
-  // 5. Set Debug Reporting Flag
+  // 5. Set debug reporting flag.
   generate_bids_raw_request->set_enable_debug_reporting(
       get_bids_raw_request.enable_debug_reporting());
 
+  // 6. Set seller domain.
+  generate_bids_raw_request->set_seller(get_bids_raw_request.seller());
+
+  // 7. Set publisher name.
   generate_bids_raw_request->set_publisher_name(
       get_bids_raw_request.publisher_name());
-  generate_bids_raw_request->set_seller(get_bids_raw_request.seller());
-  generate_bids_raw_request->set_top_level_seller(
-      get_bids_raw_request.top_level_seller());
 
-  // 6. Set logging context.
-  if (!log_context.adtech_debug_id().empty()) {
+  // 8. Set logging context.
+  if (!get_bids_raw_request.log_context().adtech_debug_id().empty()) {
     generate_bids_raw_request->mutable_log_context()->set_adtech_debug_id(
-        log_context.adtech_debug_id());
+        get_bids_raw_request.log_context().adtech_debug_id());
   }
-  if (!log_context.generation_id().empty()) {
+  if (!get_bids_raw_request.log_context().generation_id().empty()) {
     generate_bids_raw_request->mutable_log_context()->set_generation_id(
-        log_context.generation_id());
+        get_bids_raw_request.log_context().generation_id());
   }
 
-  // 7. Set consented debug config.
+  // 9. Set consented debug config.
   if (get_bids_raw_request.has_consented_debug_config()) {
     *generate_bids_raw_request->mutable_consented_debug_config() =
         get_bids_raw_request.consented_debug_config();
   }
+
+  // 10. Set top level seller.
+  generate_bids_raw_request->set_top_level_seller(
+      get_bids_raw_request.top_level_seller());
 
   return generate_bids_raw_request;
 }
@@ -169,14 +277,13 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   generate_bids_raw_request->set_publisher_name(raw_request.publisher_name());
 
-  const auto& log_context = raw_request.log_context();
-  if (!log_context.adtech_debug_id().empty()) {
+  if (!raw_request.log_context().adtech_debug_id().empty()) {
     generate_bids_raw_request->mutable_log_context()->set_adtech_debug_id(
-        log_context.adtech_debug_id());
+        raw_request.log_context().adtech_debug_id());
   }
-  if (!log_context.generation_id().empty()) {
+  if (!raw_request.log_context().generation_id().empty()) {
     generate_bids_raw_request->mutable_log_context()->set_generation_id(
-        log_context.generation_id());
+        raw_request.log_context().generation_id());
   }
 
   if (raw_request.has_consented_debug_config()) {

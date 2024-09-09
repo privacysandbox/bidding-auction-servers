@@ -222,6 +222,37 @@ TEST_F(AuctionServiceReportingIntegrationTest,
   EXPECT_GT(score_ad.desirability(), 0);
 }
 
+TEST_F(AuctionServiceReportingIntegrationTest,
+       ScoresAdsSuccessWithProtectedAppSignalsEnabled) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_protected_app_signals = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  LoadAndRunScoreAdsForPAS(runtime_config, test_score_ads_request_config,
+                           kProtectedAppSignalsBuyerBaseCode, kSellerBaseCode,
+                           response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& top_level_seller_reporting_urls =
+      score_ad.win_reporting_urls().top_level_seller_reporting_urls();
+  EXPECT_EQ(top_level_seller_reporting_urls.reporting_url(),
+            kExpectedReportResultUrl);
+  EXPECT_EQ(top_level_seller_reporting_urls.interaction_reporting_urls().size(),
+            1);
+  EXPECT_EQ(top_level_seller_reporting_urls.interaction_reporting_urls().at(
+                kTestInteractionEvent),
+            kTestInteractionReportingUrl);
+}
+
 TEST_F(
     AuctionServiceReportingIntegrationTest,
     ReportingSuccessWithSellerAndBuyerCodeIsolationAndEmptySignalsForWinner) {

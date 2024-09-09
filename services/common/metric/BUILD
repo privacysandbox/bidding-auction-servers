@@ -37,6 +37,7 @@ cc_library(
         "//services/common/util:reporting_util",
         "@google_privacysandbox_servers_common//src/metric:context_map",
         "@google_privacysandbox_servers_common//src/metric:key_fetch",
+        "@inference_common//utils:inference_error_code",
     ],
 )
 

@@ -46,31 +46,6 @@ class BiddingPrivateAggregationUtilImpl {
         return 'EVENT_TYPE_CUSTOM'; // Custom event
     }
   }
-
-  /** Converts string baseValue type to an int using the values from enum BaseValue.
-   * @param {string} value
-   * @return {number}
-   * @throws {TypeError}
-   * @override
-   */
-  convertBaseValueToInt(value) {
-    switch (value) {
-      case 'winning-bid':
-        return 0;
-      case 'highest-scoring-other-bid':
-        return 1;
-      case 'bid-rejection-reason':
-        return 2;
-      //TBD
-      case 'script-run-time':
-        return 3;
-      //TBD
-      case 'signals-fetch-time':
-        return 4;
-      default:
-        throw new TypeError('Base value type not supported.');
-    }
-  }
 }
 
 /**

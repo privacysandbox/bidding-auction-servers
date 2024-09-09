@@ -46,6 +46,10 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
   }
   if (add_protected_audience_input) {
     *raw_request.mutable_buyer_input() = MakeARandomBuyerInput();
+    auto interest_group =
+        raw_request.mutable_buyer_input()->mutable_interest_groups()->Add();
+    interest_group->set_name("ig_name");
+    interest_group->add_bidding_signals_keys("key");
   }
   return raw_request;
 }

@@ -15,13 +15,21 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 
 #include <string>
+#include <utility>
 
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-std::string GetBuyerWrappedCode(absl::string_view buyer_js_code) {
-  return absl::StrCat(kReportWinWrapperFunction, buyer_js_code);
+std::string GetBuyerWrappedCode(absl::string_view buyer_js_code,
+                                bool enable_protected_app_signals) {
+  std::string wrap_code{kReportWinWrapperFunction};
+  if (enable_protected_app_signals) {
+    wrap_code = absl::StrReplaceAll(wrap_code, {{"$extraArgs", kEgressArgs}});
+  }
+  wrap_code.append(buyer_js_code);
+  return wrap_code;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

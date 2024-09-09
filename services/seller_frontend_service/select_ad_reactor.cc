@@ -521,8 +521,8 @@ void SelectAdReactor::Execute() {
   LogIfError(metric_context_->LogHistogram<metric::kAuctionConfigSize>(
       (int)request_->auction_config().ByteSizeLong()));
 
-  PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdRequest:\n"
-                                    << request_->ShortDebugString();
+  PS_VLOG(kEncrypted, log_context_)
+      << "Encrypted SelectAdRequest exported in EventMessage";
   log_context_.SetEventMessageField(*request_);
 
   PS_VLOG(kPlain, log_context_)
@@ -539,14 +539,10 @@ void SelectAdReactor::Execute() {
   std::visit(
       [this](auto& input) {
         log_context_.SetEventMessageField(input);
-        for (auto& each_buyer_input : *input.mutable_buyer_input()) {
-          each_buyer_input.second = "encoded buyer input erased";
-        }
         PS_VLOG(kPlain, log_context_)
             << (is_protected_auction_request_ ? "ProtectedAuctionInput"
                                               : "ProtectedAudienceInput")
-            << ":\n"
-            << input.ShortDebugString();
+            << " exported in EventMessage";
       },
       protected_auction_input_);
   MayLogBuyerInput();
@@ -1139,7 +1135,7 @@ void SelectAdReactor::FinishWithStatus(const grpc::Status& status) {
         static_cast<int>((absl::Now() - start_) / absl::Milliseconds(1))));
   }
   benchmarking_logger_->End();
-  log_context_.ExportEventMessage();
+  log_context_.ExportEventMessage(/*if_export_consented=*/true);
   Finish(status);
 }
 

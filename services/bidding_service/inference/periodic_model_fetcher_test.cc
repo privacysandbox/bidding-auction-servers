@@ -41,6 +41,7 @@ constexpr char kTestModelContent1[] = "bytes1";
 constexpr char kTestModelName2[] = "model2";
 constexpr char kTestModelContent2[] = "bytes2";
 constexpr char kModelConfigPath[] = "model_metadata_config.json";
+constexpr char kModelWarmUpRequestJson[] = "model_warm_up_request_json";
 
 using ::google::scp::core::test::EqualsProto;
 using ::testing::_;
@@ -396,6 +397,86 @@ TEST(PeriodicModelFetcherTest, CorrectChecksumShouldRegisterModel) {
 
   EXPECT_CALL(*mock_inference_stub,
               RegisterModel(_, EqualsProto(register_model_request), _))
+      .WillOnce(Return(grpc::Status::OK));
+
+  EXPECT_CALL(*executor, RunAfter)
+      .WillOnce(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            done.DecrementCount();
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
+TEST(PeriodicModelFetcherTest, RegisterModelWithWarmUpRequestIfProvided) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1"},
+            {"model_path": "model2", "warm_up_batch_request_json": "model_warm_up_request_json"}
+        ]
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1),
+      BlobFetcherBase::Blob(kTestModelName2, kTestModelContent2)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  absl::BlockingCounter done(1);
+  {
+    InSequence s;
+
+    EXPECT_CALL(
+        *blob_fetcher,
+        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
+                        ElementsAre(kModelConfigPath))))
+        .WillOnce(Return(absl::OkStatus()));
+
+    EXPECT_CALL(*blob_fetcher, snapshot())
+        .WillOnce(ReturnRef(config_fetch_result));
+
+    EXPECT_CALL(
+        *blob_fetcher,
+        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
+                        ElementsAre(kTestModelName1, kTestModelName2))))
+        .WillOnce(Return(absl::OkStatus()));
+
+    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
+  }
+
+  RegisterModelRequest register_model_request_1;
+  register_model_request_1.mutable_model_spec()->set_model_path(
+      kTestModelName1);
+  (*register_model_request_1.mutable_model_files())[kTestModelName1] =
+      kTestModelContent1;
+
+  RegisterModelRequest register_model_request_2;
+  register_model_request_2.mutable_model_spec()->set_model_path(
+      kTestModelName2);
+  (*register_model_request_2.mutable_model_files())[kTestModelName2] =
+      kTestModelContent2;
+  register_model_request_2.set_warm_up_batch_request_json(
+      kModelWarmUpRequestJson);
+
+  EXPECT_CALL(*mock_inference_stub,
+              RegisterModel(_, EqualsProto(register_model_request_1), _))
+      .WillOnce(Return(grpc::Status::OK));
+
+  EXPECT_CALL(*mock_inference_stub,
+              RegisterModel(_, EqualsProto(register_model_request_2), _))
       .WillOnce(Return(grpc::Status::OK));
 
   EXPECT_CALL(*executor, RunAfter)

@@ -83,6 +83,11 @@ void VerifyPABuyerReportingSignalsJson(
     const BuyerReportingDispatchRequestData&
         expected_buyer_dispatch_request_data,
     const SellerReportingDispatchRequestData& seller_dispatch_request_data);
+void VerifyPASBuyerReportingSignalsJson(
+    const std::string& buyer_reporting_signals_json,
+    const BuyerReportingDispatchRequestData&
+        expected_buyer_dispatch_request_data,
+    const SellerReportingDispatchRequestData& seller_dispatch_request_data);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_TEST_UTIL_H_

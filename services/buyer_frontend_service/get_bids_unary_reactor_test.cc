@@ -74,7 +74,7 @@ constexpr int kTestModelingSignals2 = 3;
 constexpr char kTestRender2[] = "https://test-render-2.com";
 constexpr char kTestCurrency2[] = "RS";
 constexpr char bidding_signals_to_be_returned[] =
-    R"JSON({"keys":{"ig_name":[123,456]}})JSON";
+    R"JSON({"keys":{"key":[123,456]}})JSON";
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
@@ -140,17 +140,18 @@ class GetBidUnaryReactorTest : public ::testing::Test {
         config_client, /* public_key_fetcher= */ nullptr);
     SetupMockCryptoClientWrapper(*crypto_client_);
 
-    GetBidsRequest::GetBidsRawRequest raw_request =
-        MakeARandomGetBidsRawRequest();
-    raw_request.mutable_buyer_input()->mutable_interest_groups()->Add();
-    request_.set_request_ciphertext(raw_request.SerializeAsString());
+    raw_request_ = MakeARandomGetBidsRawRequest();
+    auto interest_group =
+        raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
+    interest_group->set_name("ig_name");
+    interest_group->add_bidding_signals_keys("key");
+    request_.set_request_ciphertext(raw_request_.SerializeAsString());
     request_.set_key_id(MakeARandomString());
   }
 
   grpc::CallbackServerContext context_;
   GetBidsRequest request_ = MakeARandomGetBidsRequest();
-  GetBidsRequest::GetBidsRawRequest raw_request_ =
-      MakeARandomGetBidsRawRequest();
+  GetBidsRequest::GetBidsRawRequest raw_request_;
   GetBidsResponse response_;
   BiddingAsyncClientMock bidding_client_mock_;
   MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>
@@ -263,8 +264,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
   auto* log_context = raw_request_.mutable_log_context();
   log_context->set_adtech_debug_id(kSampleBuyerDebugId);
   log_context->set_generation_id(kSampleGenerationId);
-  raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
-  *request_.mutable_request_ciphertext() = raw_request_.SerializeAsString();
+  request_.set_request_ciphertext(raw_request_.SerializeAsString());
 
   SetupBiddingProviderMock(
       /*provider=*/bidding_signals_provider_,
@@ -276,8 +276,8 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
       expected_generate_bids_raw_request;
   auto* expected_log_context =
       expected_generate_bids_raw_request.mutable_log_context();
-  expected_log_context->set_generation_id(kSampleGenerationId);
   expected_log_context->set_adtech_debug_id(kSampleBuyerDebugId);
+  expected_log_context->set_generation_id(kSampleGenerationId);
   EXPECT_CALL(bidding_client_mock_,
               ExecuteInternal(Pointee(EqGenerateBidsRawRequestWithLogContext(
                                   expected_generate_bids_raw_request)),

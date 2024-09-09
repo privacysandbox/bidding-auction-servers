@@ -79,6 +79,7 @@ cc_library(
         "//services/auction_service/reporting:reporting_response",
         "//services/auction_service/reporting/buyer:buyer_reporting_helper",
         "//services/auction_service/reporting/buyer:pa_buyer_reporting_manager",
+        "//services/auction_service/reporting/buyer:pas_buyer_reporting_manager",
         "//services/auction_service/reporting/seller:component_seller_reporting_manager",
         "//services/auction_service/reporting/seller:seller_reporting_manager",
         "//services/auction_service/reporting/seller:top_level_seller_reporting_manager",

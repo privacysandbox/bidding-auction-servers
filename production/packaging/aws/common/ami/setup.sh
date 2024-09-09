@@ -21,8 +21,13 @@ sudo yum update -y
 sudo yum install -y \
   amazon-cloudwatch-agent \
   docker
-wget -O /tmp/aws-otel-collector.rpm https://aws-otel-collector.s3.amazonaws.com/amazon_linux/amd64/latest/aws-otel-collector.rpm
-sudo yum localinstall -y /tmp/aws-otel-collector.rpm
+
+wget -O /tmp/otelcol-contrib_0.105.0_linux_amd64.rpm https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.105.0/otelcol-contrib_0.105.0_linux_amd64.rpm
+sudo yum localinstall -y /tmp/otelcol-contrib_0.105.0_linux_amd64.rpm
+ENV_FILE="/etc/otelcol-contrib/otelcol-contrib.conf"
+NEW_OTELCOL_OPTIONS="OTELCOL_OPTIONS=\"--config=/opt/privacysandbox/otel_collector_config.yaml\""
+sudo bash -c "sudo sed -i 's|^OTELCOL_OPTIONS=.*|${NEW_OTELCOL_OPTIONS}|' $ENV_FILE"
+
 sudo amazon-linux-extras install -y aws-nitro-enclaves-cli
 
 sudo usermod -a -G docker ec2-user

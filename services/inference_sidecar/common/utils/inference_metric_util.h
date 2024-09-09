@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/strings/string_view.h"
 #include "proto/inference_sidecar.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -27,6 +28,9 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 // Adds a metric to the provided PredictResponse object.
 void AddMetric(PredictResponse& response, const std::string& key, int32_t value,
                std::optional<std::string> partition = std::nullopt);
+
+// Extracts the error code from the error message for Error Reporting.
+std::string ExtractErrorCodeFromMessage(absl::string_view errorMessage);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

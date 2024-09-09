@@ -32,13 +32,14 @@ build:clang --cxxopt=-fsized-deallocation
 build:clang --host_cxxopt=-fsized-deallocation
 build:clang --cxxopt=-fnew-alignment=8
 build:clang --host_cxxopt=-fnew-alignment=8
+build:clang --per_file_copt=api/udf/.*@-fconstexpr-steps=1271242
 
 # Flag compiler warnings as errors.
 build:cpp_no_warn --copt=-Werror
 # Ignore warnings from Roma, zlib, differential privacy repo etc.
 build:cpp_no_warn --per_file_copt=.*external/.*@-Wno-error
 # Ignore deprecated declarations warnings from Roma, ProtectedAudience, Telemetry
-build:cpp_no_warn --per_file_copt=services/.*@-Wno-macro-redefined,-Wno-deprecated-declarations
+build:cpp_no_warn --per_file_copt=(services|api/udf)/.*@-Wno-macro-redefined,-Wno-deprecated-declarations
 build:cpp_no_warn --per_file_copt=tools/secure_invoke.*@-Wno-macro-redefined,-Wno-deprecated-declarations
 # Telemetry has some unchecked results after registering observers.
 build:cpp_no_warn --per_file_copt=services/.*_main.cc@-Wno-unused-result

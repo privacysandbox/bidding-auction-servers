@@ -157,7 +157,12 @@ module "buyer" {
   collector_service_port             = 4317
   collector_startup_script = templatefile("../../../services/autoscaling/collector_startup.tftpl", {
     collector_port           = 4317
-    otel_collector_image_uri = "otel/opentelemetry-collector-contrib:0.81.0"
+    otel_collector_image_uri = "otel/opentelemetry-collector-contrib:0.105.0"
+    gcs_hmac_key             = module.secrets.gcs_hmac_key
+    gcs_hmac_secret          = module.secrets.gcs_hmac_secret
+    gcs_bucket               = "" # Example: ${name of a gcs bucket}
+    gcs_bucket_prefix        = "" # Example: "consented-eventmessage-${local.environment}"
+    file_prefix              = "" # Example: "operator-name"
   })
   region_config = {
     # Example config provided for us-central1 and you may add your own regions.

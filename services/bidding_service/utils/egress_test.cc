@@ -52,19 +52,19 @@ boolean-feature-type = {
 ;
 ; 1 bit of information.
 boolean-feature = {
-  type: boolean-feature-type,
+  name: text .regexp "^boolean-feature$"
   value: bool,
 }
 
 ; Type for `bucket-feature`.
 bucket-feature-type = {
-  name: text .regexp "^bucket-feature$"
+  name: text .regexp "^bucket-feature$",
   size: uint,  ; number of buckets.
 }
 
 ; A `feature` representing a bucketized value.
 bucket-feature = {
-  type: bucket-feature-type,
+  name: text .regexp "^bucket-feature$",
   value: [* bool],
 }
 

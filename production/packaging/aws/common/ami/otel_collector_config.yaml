@@ -33,6 +33,16 @@ processors:
     timeout: 60s
   batch/logs:
     timeout: 60s
+  filter/drop_event:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["ps_tee_log_type"] == "event_message"'
+  filter/drop_non_event:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["ps_tee_log_type"] != "event_message"'
 
 exporters:
   awsxray:
@@ -44,6 +54,14 @@ exporters:
   awscloudwatchlogs:
     log_group_name: "bidding-auction"
     log_stream_name: "consented-log-stream"
+  awss3:
+    s3uploader:
+      region: $S3_REGION
+      s3_bucket: $S3_BUCKET
+      s3_prefix: $S3_PREFIX
+      s3_partition: minute
+      file_prefix: $FILE_PREFIX
+    marshaler: body
 
 service:
   pipelines:
@@ -55,9 +73,13 @@ service:
       receivers: [otlp]
       processors: [batch/metrics]
       exporters: [awsemf]
-    logs:
+    logs/1:
       receivers: [otlp]
-      processors: [batch/logs]
+      processors: [batch/logs, filter/drop_event]
       exporters: [awscloudwatchlogs]
+    logs/2:
+      receivers: [otlp]
+      processors: [filter/drop_non_event]
+      exporters: [awss3]
 
   extensions: [health_check]

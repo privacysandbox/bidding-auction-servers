@@ -43,7 +43,6 @@ class TestModule final : public ModuleInterface {
       const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) override;
-  void ResetModels() override;
 
   void set_model_path(absl::string_view path) { model_path_ = path; }
 

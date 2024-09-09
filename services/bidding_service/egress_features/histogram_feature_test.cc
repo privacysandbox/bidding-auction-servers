@@ -37,7 +37,7 @@ class HistogramFeatureTest : public ::testing::Test {
   std::shared_ptr<rapidjson::Value> TestSchema() {
     std::string test_schema = R"JSON(
       {
-        "type": "histogram-feature",
+        "name": "histogram-feature",
         "test_wrapper": {
           "value": [
             {
@@ -66,7 +66,7 @@ class HistogramFeatureTest : public ::testing::Test {
           absl::StrAppend(out,
                           absl::Substitute(R"JSON(
               {
-                "type": "$0",
+                "name": "$0",
                 "value": $1
               }
         )JSON",
@@ -74,7 +74,7 @@ class HistogramFeatureTest : public ::testing::Test {
         });
     std::string test_schema = absl::Substitute(R"JSON(
       {
-        "test_wrapper": {"type": "histogram-feature", "value": [ $0 ]}
+        "test_wrapper": {"name": "histogram-feature", "value": [ $0 ]}
       }
       )JSON",
                                                histogram_feat_json);

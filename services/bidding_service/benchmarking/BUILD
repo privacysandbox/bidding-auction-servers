@@ -56,6 +56,7 @@ cc_binary(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "@com_google_benchmark//:benchmark",
         "@com_google_benchmark//:benchmark_main",
         "@google_privacysandbox_servers_common//src/concurrent:executor",

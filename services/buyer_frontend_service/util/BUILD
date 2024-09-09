@@ -27,8 +27,12 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/buyer_frontend_service/data:buyer_frontend_data",
+        "//services/common/loggers:request_log_context",
+        "//services/common/util:json_util",
+        "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
 

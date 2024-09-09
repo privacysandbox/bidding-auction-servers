@@ -30,6 +30,7 @@
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -175,6 +176,8 @@ InterestGroupForBidding GetInterestGroupForBidding(const std::string& name) {
   ig_for_bidding.set_name(name);
   ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
       kTrustedBiddingSignalsKey);
+  ig_for_bidding.set_trusted_bidding_signals(
+      MakeTrustedBiddingSignalsForIG(ig_for_bidding));
   ig_for_bidding.set_user_bidding_signals(
       R"JSON({"years": [1776, 1868], "name": "winston", "someId": 1789})JSON");
   for (int i = 0; i < kNumAdRenderIds; ++i) {
@@ -215,15 +218,12 @@ GetGenerateBidsRawRequestForAndroid() {
   std::string signals = MakeAStructJsonString();
   raw_request.set_auction_signals(signals);
   raw_request.set_buyer_signals(std::move(signals));
-  auto bidding_signals = MakeRandomTrustedBiddingSignals(raw_request);
-  CHECK_OK(bidding_signals);
-  raw_request.set_bidding_signals(*std::move(bidding_signals));
-
   return raw_request;
 }
 
 static void BM_ProtectedAudience(benchmark::State& state) {
   // Setup.
+  CommonTestInit();
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
 

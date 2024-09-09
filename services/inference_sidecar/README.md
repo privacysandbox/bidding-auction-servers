@@ -204,7 +204,7 @@ one with a shape `[2,3]` will expect a 6 element one.
 Currently we support 6 tensor types (both in Tensorflow and PyTorch): double, float, int8, int16,
 int32, int64.
 
-All numbers in `tensor_content` MUST be surrounded by quotes.
+All numbers in `tensor_content` MUST be in string format.
 
 See an example of a Batch Inference Request in a JSON format with 2 models:
 
@@ -236,6 +236,37 @@ See an example of a Batch Inference Request in a JSON format with 2 models:
                     "data_type": "FLOAT",
                     "tensor_shape": [2, 3],
                     "tensor_content": ["0.5", "0.6", "0.7", "0.8", "0.21", "-0.99"]
+                }
+            ]
+        }
+    ]
+}
+```
+
+The response for the above request would look like this :
+
+```json
+{
+    "response": [
+        {
+            "model_path": "my_bucket/models/pcvr/1/",
+            "tensors": [
+                {
+                    "tensor_name": "StatefulPartitionedCall:0",
+                    "data_type": "FLOAT",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": [0.11673324, 0.178222424]
+                }
+            ]
+        },
+        {
+            "model_path": "my_bucket/models/pctr/2/",
+            "tensors": [
+                {
+                    "tensor_name": "StatefulPartitionedCall:0",
+                    "data_type": "FLOAT",
+                    "tensor_shape": [2, 1],
+                    "tensor_content": [0.342842, 0.23468234]
                 }
             ]
         }

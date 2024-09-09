@@ -143,3 +143,9 @@ variable "healthcheck_grace_period_sec" {
   description = "Amount of time to wait for service inside enclave to start up before starting health checks, in seconds."
   type        = number
 }
+
+variable "consented_request_s3_bucket" {
+  description = "s3 bucket to export event message for consented request"
+  type        = string
+  # no default value, to enforce configuration at buyer and seller module
+}
