@@ -43,11 +43,13 @@ const ReservedEventConstants = Object.freeze({
 Object.freeze(BaseValue);
 Object.freeze(ReservedEventConstants);
 
-/** @implements {PrivateAggregationUtil} */
+/** @implements {PrivateAggregationUtil}
+ * @suppress {checkTypes}
+ * */
 class PrivateAggregationUtilImpl {
   /**
    * Checks if the number is an 128-bit unsigned integer.
-   * @param {number|bigint} number The number to check.
+   * @param {bigint} number The number to check.
    * @return {boolean} True if the number is an unsigned 128-bit integer, false otherwise.
    *
    * @override
@@ -58,24 +60,105 @@ class PrivateAggregationUtilImpl {
   /**
    * Converts a 128-bit unsigned integer to an array of two 64-bit integers.
    *
-   * @param {number|bigint} number The 128-bit unsigned integer to convert.
+   * @param {bigint} bucket The 128-bit unsigned integer to convert.
    * @return {Array<number>} An array of two 64-bit integers representing the 128-bit integer.
+   * The first element of the array is the high 64 bits of the 128-bit integer, and the second
+   * element is the low 64 bits of the 128-bit integer.
    * @override
    */
-  convertTo128BitArray(number) {
-    return null;
+  convertTo128BitArray(bucket) {
+    //Assume that the type of the bucket is BigInt. The type cannot be checked since
+    // closure_js_test does not support any features >ES6 including the BigInt type.
+    const highBits = bucket >>> 64; // Right shift 64 bits (zero-fill)
+    const lowBits = bucket & 0xffffffffffffffff; // Mask to get the lower 64 bits
+    return [highBits, lowBits];
   }
   /**
    * Converts numerical offset to BucketOffset.
    *
-   * @param {number|bigint} offset The numerical offset to convert.
+   * @param {bigint} offset The numerical offset to convert.
    * @return {{value: Array<number>, is_negative: boolean}} The BucketOffset Object.
    * @override
    */
   convertToBucketOffset(offset) {
     return {
-      value: null,
-      is_negative: false,
+      value: this.convertTo128BitArray(Math.abs(offset)),
+      is_negative: offset < 0,
+    };
+  }
+
+  /** Converts string baseValue type to equivalent ENUM BaseValue string.
+   * @param {string} value
+   * @return {string}
+   * @throws {TypeError}
+   * @override
+   */
+  convertBaseValueToEnumString(value) {
+    switch (value) {
+      case 'winning-bid':
+        return 'BASE_VALUE_WINNING_BID';
+      case 'highest-scoring-other-bid':
+        return 'BASE_VALUE_HIGHEST_SCORING_OTHER_BID';
+      case 'bid-rejection-reason':
+        return 'BASE_VALUE_BID_REJECTION_REASON';
+      //TBD
+      case 'script-run-time':
+        return 'BASE_VALUE_SCRIPT_RUN_TIME';
+      //TBD
+      case 'signals-fetch-time':
+        return 'BASE_VALUE_SIGNALS_FETCH_TIME';
+      default:
+        throw new TypeError('Base value type not supported.');
+    }
+  }
+
+  /**
+   * Converts bucket object in contribution to SignalBucket.
+   *
+   * @param {Object} bucket_obj The bucket object.
+   * @return {{base_value: string, scale: number, offset: {value: Array<number>, is_negative: boolean}}} The SignalBucket Object.
+   * @override
+   */
+  convertToSignalBucket(bucket_obj) {
+    var scale = 1.0;
+    var offset = this.convertToBucketOffset(0);
+    // Optional scale factor for the bucket. Default value will be 1.0
+    if (bucket_obj.scale) {
+      scale = bucket_obj.scale;
+    }
+    // Optional offset for the bucket. Default value will be 0
+    if (bucket_obj.offset) {
+      offset = this.convertToBucketOffset(bucket_obj.offset);
+    }
+    return {
+      base_value: this.convertBaseValueToEnumString(bucket_obj.baseValue),
+      scale: scale,
+      offset: offset,
+    };
+  }
+
+  /**
+   * Converts value object in contribution to SignalValue.
+   *
+   * @param {Object} value_obj The value object.
+   * @return {{base_value: string, scale: number, offset: number}} The SignalValue Object.
+   * @override
+   */
+  convertToSignalValue(value_obj) {
+    var scale = 1.0;
+    var offset = 0;
+    // Optional scale factor for the value. Default value will be 1.0
+    if (value_obj.scale) {
+      scale = value_obj.scale;
+    }
+    // Optional offset for the value. Default value will be 0
+    if (value_obj.offset) {
+      offset = value_obj.offset;
+    }
+    return {
+      base_value: this.convertBaseValueToEnumString(value_obj.baseValue),
+      scale: scale,
+      offset: offset,
     };
   }
 
@@ -113,7 +196,7 @@ class PrivateAggregationUtilImpl {
         return false;
       }
       // Check if it contains the required base_value field.
-      if (value.base_value != null && Object.values(BaseValue).includes(value.base_value)) {
+      if (value.baseValue != null && Object.values(BaseValue).includes(value.baseValue)) {
         return true;
       }
     }
@@ -143,9 +226,6 @@ class PrivateAggregationUtilImpl {
   }
 
   /**
-   * TODO(b/355034881): All usage of "number" type for bucket should be replaced as "bigint" once bigint support is enabled.
-   */
-  /**
    * Create a Private Aggregation contribution object with the input Private Aggregation bucket and value.
    *
    * @param {Object | number | *} bucket
@@ -173,24 +253,21 @@ class PrivateAggregationUtilImpl {
      * @property {?Object} extended_value
      */
     const contribution = {
-      bucket_128_bit: null,
-      signal_bucket: null,
-      int_value: null,
-      extended_value: null,
+      bucket: {},
+      value: {},
     };
-
-    if (typeof bucket === 'number') {
-      contribution.bucket_128_bit = bucket; // TODO(b/355034881): Once bigint is supported, should be Array returned from PrivateAggregationUtilImpl.prototype.convertTo128BitArray(bucket);
-    } else if (typeof bucket === 'object') {
-      contribution.signal_bucket = bucket;
-    } else {
+    if (typeof bucket === 'object') {
+      contribution.bucket.signal_bucket = this.convertToSignalBucket(bucket);
+    } else if (typeof bucket === 'string') {
       throw new TypeError('Invalid type for Private Aggregation bucket.');
+    } else {
+      contribution.bucket.bucket_128_bit = {};
+      contribution.bucket.bucket_128_bit.bucket_128_bits = privateAggregationUtil.convertTo128BitArray(bucket);
     }
-
     if (typeof value === 'number') {
-      contribution.int_value = value;
+      contribution.value.int_value = value;
     } else if (typeof value === 'object') {
-      contribution.extended_value = value;
+      contribution.value.extended_value = privateAggregationUtil.convertToSignalValue(value);
     } else {
       throw new TypeError('Invalid type for Private Aggregation value.');
     }

@@ -48,6 +48,7 @@
 #include "src/util/status_macro/status_util.h"
 #include "utils/error.h"
 #include "utils/file_util.h"
+#include "utils/inference_error_code.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
@@ -72,6 +73,26 @@ void LogMetrics(
       log_status =
           metric_context->AccumulateMetric<metric::kInferenceResponseSize>(
               metric_value.value());
+    } else if (key == "kInferenceErrorCountByErrorCode") {
+      log_status =
+          metric_context
+              ->AccumulateMetric<metric::kInferenceErrorCountByErrorCode>(
+                  metric_value.value(), metric_value.partition());
+    } else if (key == "kInferenceRequestCountByModel") {
+      log_status =
+          metric_context
+              ->AccumulateMetric<metric::kInferenceRequestCountByModel>(
+                  metric_value.value(), metric_value.partition());
+    } else if (key == "kInferenceRequestDurationByModel") {
+      log_status =
+          metric_context
+              ->AccumulateMetric<metric::kInferenceRequestDurationByModel>(
+                  metric_value.value(), metric_value.partition());
+    } else if (key == "kInferenceRequestFailedCountByModel") {
+      log_status =
+          metric_context
+              ->AccumulateMetric<metric::kInferenceRequestFailedCountByModel>(
+                  metric_value.value(), metric_value.partition());
     } else {
       log_status = absl::NotFoundError("Unrecognized metric key: " + key);
     }

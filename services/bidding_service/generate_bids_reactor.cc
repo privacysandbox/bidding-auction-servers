@@ -41,13 +41,6 @@ using ::google::protobuf::TextFormat;
 using RawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 using IGForBidding =
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
-struct ParsedTrustedBiddingSignals {
-  std::shared_ptr<std::string> json = std::make_shared<std::string>();
-  absl::flat_hash_set<std::string> keys;
-};
-using TrustedBiddingSignalsByIg =
-    absl::flat_hash_map<std::string,
-                        absl::StatusOr<ParsedTrustedBiddingSignals>>;
 constexpr int kArgsSizeWithWrapper = 6;
 
 absl::StatusOr<std::string> ProtoToJson(
@@ -57,52 +50,6 @@ absl::StatusOr<std::string> ProtoToJson(
   PS_RETURN_IF_ERROR(
       google::protobuf::util::MessageToJsonString(proto, &json, options));
   return json;
-}
-
-// Creates a json of trusted bidding signals for a single IG. Queries the
-// bidding signals for -
-// 1. IG Name and moves the bidding signal values to the new json document.
-// 2. Bidding signal keys in the IG and copies them to the new json document.
-absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
-    const GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding&
-        ig,
-    rapidjson::Value* bidding_signals_obj, long avg_signal_str_size) {
-  // Insert bidding signal values for this Interest Group.
-  ParsedTrustedBiddingSignals parsed_trusted_bidding_signals;
-  rapidjson::Document ig_signals;
-  ig_signals.SetObject();
-  // If no bidding signals passed, return empty document.
-  if (bidding_signals_obj == nullptr) {
-    return parsed_trusted_bidding_signals;
-  }
-
-  // Copy bidding signals with key name in bidding signal keys.
-  for (const auto& key : ig.trusted_bidding_signals_keys()) {
-    if (parsed_trusted_bidding_signals.keys.contains(key)) {
-      // Do not process duplicate keys.
-      continue;
-    }
-    rapidjson::Value::ConstMemberIterator trusted_bidding_signals_key_itr =
-        bidding_signals_obj->FindMember(key.c_str());
-    if (trusted_bidding_signals_key_itr != bidding_signals_obj->MemberEnd()) {
-      rapidjson::Value json_key;
-      // Keep string reference. Assumes safe lifecycle.
-      json_key.SetString(rapidjson::StringRef(key.c_str()));
-      rapidjson::Value json_value;
-      // Copy instead of move, could be referenced by multiple IGs.
-      json_value.CopyFrom(trusted_bidding_signals_key_itr->value,
-                          ig_signals.GetAllocator());
-      // AddMember moves Values, do not reference them anymore.
-      ig_signals.AddMember(json_key, json_value, ig_signals.GetAllocator());
-      parsed_trusted_bidding_signals.keys.emplace(key);
-    }
-  }
-  if (ig_signals.MemberCount() > 0) {
-    absl::StatusOr<std::shared_ptr<std::string>> ig_signals_str =
-        SerializeJsonDoc(ig_signals, avg_signal_str_size);
-    PS_ASSIGN_OR_RETURN(parsed_trusted_bidding_signals.json, ig_signals_str);
-  }
-  return parsed_trusted_bidding_signals;
 }
 
 constexpr char kTopWindowHostname[] = "topWindowHostname";
@@ -217,46 +164,6 @@ absl::StatusOr<std::string> SerializeIG(const IGForBidding& ig) {
   return serialized_ig;
 }
 
-// Creates a map of Interest Group names -> trusted bidding signals json
-// strings. Parses the trusted bidding signals string and calls GetSignalsForIG
-// in a loop for all Interest Groups.
-absl::StatusOr<TrustedBiddingSignalsByIg>
-DeserializeAndGetTrustedBiddingSignalsPerIG(
-    const GenerateBidsRequest::GenerateBidsRawRequest& raw_request,
-    RequestLogContext& log_context) {
-  // Parse into JSON.
-  auto start_parse_time = absl::Now();
-  PS_ASSIGN_OR_RETURN((rapidjson::Document parsed_signals),
-                      ParseJsonString(raw_request.bidding_signals()));
-  PS_VLOG(kStats, log_context)
-      << "\nTrusted Bidding Signals Deserialize Time: "
-      << ToInt64Microseconds((absl::Now() - start_parse_time))
-      << " microseconds for " << raw_request.bidding_signals().size()
-      << " bytes.";
-
-  // Select root key.
-  if (!parsed_signals.HasMember("keys")) {
-    PS_VLOG(kNoisyWarn, log_context)
-        << "Trusted bidding signals JSON validate error (Missing property "
-           "\"keys\")";
-
-    return absl::InvalidArgumentError(
-        "Malformed trusted bidding signals (Missing property \"keys\")");
-  }
-  rapidjson::Value& bidding_signals_obj = parsed_signals["keys"];
-
-  // Create IG -> TrustedBiddingSignals Map.
-  TrustedBiddingSignalsByIg per_ig_signals_map;
-  long avg_signal_size_per_ig = raw_request.bidding_signals().size() /
-                                raw_request.interest_group_for_bidding_size();
-  for (const auto& ig : raw_request.interest_group_for_bidding()) {
-    per_ig_signals_map.try_emplace(
-        ig.name(),
-        GetSignalsForIG(ig, &bidding_signals_obj, avg_signal_size_per_ig));
-  }
-  return per_ig_signals_map;
-}
-
 // Builds a vector containing commonly shared inputs, following the description
 // here:
 // https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_api.md#generatebids
@@ -286,7 +193,6 @@ std::vector<std::shared_ptr<std::string>> BuildBaseInput(
 absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     IGForBidding& interest_group, const RawRequest& raw_request,
     const std::vector<std::shared_ptr<std::string>>& base_input,
-    const TrustedBiddingSignalsByIg& ig_trusted_signals_map,
     const bool enable_buyer_debug_url_generation,
     RequestLogContext& log_context, const bool enable_adtech_code_logging,
     const std::string& version) {
@@ -298,28 +204,11 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   // Copy base input and amend with custom interest_group
   generate_bid_request.input = base_input;
 
-  // IG must have trusted bidding signals to participate in Bidding.
-  const auto& trusted_bidding_signals_itr =
-      ig_trusted_signals_map.find(interest_group.name());
-  if (trusted_bidding_signals_itr == ig_trusted_signals_map.end()) {
-    return absl::InvalidArgumentError(
-        "Interest Group must contain non-empty trusted bidding "
-        "signals to generate bids.");
-  }
-
-  if (!trusted_bidding_signals_itr->second.ok()) {
-    return trusted_bidding_signals_itr->second.status();
-  }
-
-  if (trusted_bidding_signals_itr->second.value().json->empty()) {
-    return absl::InvalidArgumentError(
-        "Interest Group must contain non-empty trusted bidding "
-        "signals to generate bids.");
-  }
-
   generate_bid_request
       .input[ArgIndex(GenerateBidArgs::kTrustedBiddingSignals)] =
-      trusted_bidding_signals_itr->second.value().json;
+      std::make_shared<std::string>(
+          std::move(*interest_group.mutable_trusted_bidding_signals()));
+  interest_group.clear_trusted_bidding_signals();
 
   // IG must have device signals to participate in Bidding.
   google::protobuf::util::MessageDifferencer differencer;
@@ -334,7 +223,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   } else if (interest_group.has_android_signals() &&
              interest_group.android_signals().IsInitialized() &&
              !differencer.Equals(AndroidSignals::default_instance(),
-                                 interest_group.browser_signals())) {
+                                 interest_group.android_signals())) {
     PS_ASSIGN_OR_RETURN(std::string serialized_android_signals,
                         ProtoToJson(interest_group.android_signals()));
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
@@ -353,11 +242,6 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   generate_bid_request.handler_name =
       kDispatchHandlerFunctionNameWithCodeWrapper;
 
-  // Only add parsed keys.
-  interest_group.clear_trusted_bidding_signals_keys();
-  interest_group.mutable_trusted_bidding_signals_keys()->Add(
-      trusted_bidding_signals_itr->second.value().keys.begin(),
-      trusted_bidding_signals_itr->second.value().keys.end());
   auto start_parse_time = absl::Now();
   auto serialized_ig = SerializeIG(interest_group);
   if (!serialized_ig.ok()) {
@@ -372,6 +256,7 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
       << generate_bid_request.input[ArgIndex(GenerateBidArgs::kInterestGroup)]
              ->size()
       << " bytes.";
+
   if (server_common::log::PS_VLOG_IS_ON(10)) {
     PS_VLOG(10, log_context) << "\n\nGenerateBid Input Args:";
     for (const auto& it : generate_bid_request.input) {
@@ -453,25 +338,21 @@ void GenerateBidsReactor::Execute() {
   }
   benchmarking_logger_->BuildInputBegin();
 
-  PS_VLOG(kEncrypted, log_context_) << "Encrypted GenerateBidsRequest:\n"
-                                    << request_->ShortDebugString();
+  PS_VLOG(kEncrypted, log_context_)
+      << "Encrypted GenerateBidsRequest exported in EventMessage";
   log_context_.SetEventMessageField(*request_);
-  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
-                                << raw_request_.ShortDebugString();
+  PS_VLOG(kPlain, log_context_)
+      << "GenerateBidsRawRequest exported in EventMessage";
   log_context_.SetEventMessageField(raw_request_);
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
-
-  // Parse trusted bidding signals
-  absl::StatusOr<TrustedBiddingSignalsByIg> ig_trusted_signals_map =
-      DeserializeAndGetTrustedBiddingSignalsPerIG(raw_request_, log_context_);
-  if (!ig_trusted_signals_map.ok()) {
-    PS_LOG(ERROR, log_context_)
-        << "Request failed while parsing bidding signals: "
-        << ig_trusted_signals_map.status().ToString(
-               absl::StatusToStringMode::kWithEverything);
+  if (interest_groups.empty()) {
+    // This is unlikely to happen since we already have this check in place
+    // in BFE.
+    PS_LOG(ERROR, log_context_) << "Request has no interest groups.";
     EncryptResponseAndFinish(
-        server_common::FromAbslStatus(ig_trusted_signals_map.status()));
+        server_common::FromAbslStatus(absl::InvalidArgumentError(
+            "Request must have at least one interest group.")));
     return;
   }
 
@@ -481,7 +362,6 @@ void GenerateBidsReactor::Execute() {
   for (int i = 0; i < interest_groups.size(); i++) {
     absl::StatusOr<DispatchRequest> generate_bid_request =
         BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
-                                ig_trusted_signals_map.value(),
                                 enable_buyer_debug_url_generation_,
                                 log_context_, enable_adtech_code_logging_,
                                 protected_auction_generate_bid_version_);
@@ -659,10 +539,11 @@ void GenerateBidsReactor::GenerateBidsCallback(
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawResponse:\n"
-                                << raw_response_.ShortDebugString();
+  PS_VLOG(kPlain, log_context_)
+      << "GenerateBidsRawResponse exported in EventMessage";
   log_context_.SetEventMessageField(raw_response_);
-  log_context_.ExportEventMessage();
+  // ExportEventMessage before encrypt response
+  log_context_.ExportEventMessage(/*if_export_consented=*/true);
 
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)

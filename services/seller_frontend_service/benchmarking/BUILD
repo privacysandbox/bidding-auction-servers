@@ -28,6 +28,7 @@ cc_binary(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "//services/seller_frontend_service",
         "//services/seller_frontend_service/util:select_ad_reactor_test_utils",
         "@google_benchmark//:benchmark",

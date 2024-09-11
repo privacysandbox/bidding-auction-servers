@@ -73,8 +73,8 @@ ABSL_FLAG(std::optional<bool>, enable_buyer_frontend_benchmarking, std::nullopt,
 ABSL_FLAG(
     std::optional<bool>, create_new_event_engine, std::nullopt,
     "Share the event engine with gprc when false , otherwise create new one");
-ABSL_FLAG(std::optional<bool>, enable_bidding_compression, true,
-          "Flag to enable bidding client compression. True by default.");
+ABSL_FLAG(std::optional<bool>, enable_bidding_compression, std::nullopt,
+          "Flag to enable bidding client compression. Turned off by default.");
 ABSL_FLAG(std::optional<bool>, bfe_ingress_tls, std::nullopt,
           "If true, frontend gRPC service terminates TLS");
 ABSL_FLAG(std::optional<std::string>, bfe_tls_key, std::nullopt,

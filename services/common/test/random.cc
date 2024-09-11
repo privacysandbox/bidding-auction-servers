@@ -22,6 +22,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kTestIgWithTwoAds[] =
     R"json({"ad_render_ids":["adg_id=134256827445&cr_id=594352291621&cv_id=4", "adg_id=134256827445&cr_id=605048329089&cv_id=2"],"browser_signals":{"joinCount":1,"bidCount":100,"prevWins":"[[1472425.0,{\"metadata\":[134256827485.0,594352291615.0,null,16996677067.0]}],[1475389.0,{\"metadata\":[134256827445.0,594352291621.0,null,16996677067.0]}],[1487572.0,{\"metadata\":[134256827445.0,605490292974.0,null,16996677067.0]}],[1451707.0,{\"metadata\":[134256827445.0,605048329092.0,null,16996677067.0]}],[1485996.0,{\"metadata\":[134256827445.0,605048329089.0,null,16996677067.0]}],[1450931.0,{\"metadata\":[134256827485.0,605490292980.0,null,16996677067.0]}],[1473069.0,{\"metadata\":[134256827485.0,605048328957.0,null,16996677067.0]}],[1461197.0,{\"metadata\":[134256827485.0,605048329080.0,null,16996677067.0]}]]"},"name":"1j1043317685"})json";
+
 std::string MakeARandomString() {
   return std::to_string(ToUnixNanos(absl::Now()));
 }
@@ -163,6 +164,174 @@ std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice() {
   return u_ptr_to_ig;
 }
 
+std::string MakeBiddingSignalsValuesForKey(const std::string& key) {
+  std::string values = "[";
+  int length = key.back() - '0';
+  if (length < 1) {
+    length = 1;
+  }
+  if (length > 9) {
+    length = 9;
+  }
+  for (int j = 0; j < length; j++) {
+    absl::StrAppend(&values, absl::StrFormat(R"JSON("%s_val%d",)JSON", key, j));
+  }
+  absl::StrAppend(&values,
+                  absl::StrFormat(R"JSON("%s_val%d"])JSON", key, length));
+  return values;
+}
+
+std::string MakeBiddingSignalsForIGFromDevice(
+    const BuyerInput::InterestGroup& interest_group) {
+  std::string signals_dest;
+
+  // First add the values for the bidding signals keys.
+  absl::StrAppend(&signals_dest, absl::StrFormat(R"JSON({"keys":{)JSON"));
+  for (int i = 0; i < interest_group.bidding_signals_keys_size(); i++) {
+    const auto& bidding_signal_key = interest_group.bidding_signals_keys(i);
+
+    // Append key-value pair.
+    absl::StrAppend(
+        &signals_dest,
+        absl::StrFormat(R"JSON("%s":%s)JSON", bidding_signal_key,
+                        MakeBiddingSignalsValuesForKey(bidding_signal_key)));
+
+    // Add a comma for all but the last key-value pair in this IG.
+    if (i < interest_group.bidding_signals_keys_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+
+  // Then add the list of values for the IG.
+  absl::StrAppend(&signals_dest,
+                  absl::StrFormat(R"JSON(},"perInterestGroupData":{)JSON"));
+
+  // Iterate through all of the trusted bidding signals keys and flatten their
+  // values into raw_values.
+  std::string raw_values = "[";
+  for (int i = 0; i < interest_group.bidding_signals_keys_size(); i++) {
+    const auto& bidding_signal_key = interest_group.bidding_signals_keys(i);
+
+    // Read in values for this key and append them to raw_values without the
+    // list brackets on either side.
+    std::string raw_values_for_key =
+        MakeBiddingSignalsValuesForKey(bidding_signal_key);
+    absl::StrAppend(&raw_values,
+                    absl::StrFormat(R"JSON(%s)JSON",
+                                    raw_values_for_key.substr(
+                                        1, raw_values_for_key.size() - 2)));
+
+    // Unless we are at the final key, add the last comma for this key's list
+    // of values.
+    if (i < interest_group.bidding_signals_keys_size() - 1) {
+      absl::StrAppend(&raw_values, ",");
+    }
+  }
+  absl::StrAppend(&raw_values, "]");
+
+  // Add the name-values pair for the IG.
+  absl::StrAppend(&signals_dest,
+                  absl::StrFormat(R"JSON("%s":%s}})JSON", interest_group.name(),
+                                  raw_values));
+
+  return signals_dest;
+}
+
+std::string MakeTrustedBiddingSignalsForIG(
+    const InterestGroupForBidding& interest_group) {
+  std::string signals_dest = "{";
+  // Iterate over each bidding signal key.
+  for (int i = 0; i < interest_group.trusted_bidding_signals_keys_size(); i++) {
+    const auto& trusted_bidding_signal_key =
+        interest_group.trusted_bidding_signals_keys(i);
+
+    // Append key-value pair to trusted bidding signals JSON string.
+    absl::StrAppend(
+        &signals_dest,
+        absl::StrFormat(
+            R"JSON("%s":%s)JSON", trusted_bidding_signal_key,
+            MakeBiddingSignalsValuesForKey(trusted_bidding_signal_key)));
+
+    // Add a comma for all but the last key-value pair.
+    if (i < interest_group.trusted_bidding_signals_keys_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+  absl::StrAppend(&signals_dest, "}");
+  return signals_dest;
+}
+
+std::string GetBiddingSignalsFromGenerateBidsRequest(
+    const GenerateBidsRequest::GenerateBidsRawRequest& raw_request) {
+  std::string signals_dest;
+
+  // First add the values for the trusted bidding signals keys for each IG.
+  absl::StrAppend(&signals_dest, absl::StrFormat(R"JSON({"keys":{)JSON"));
+  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
+    const auto& interest_group = raw_request.interest_group_for_bidding(i);
+
+    // Read in key-value pairs for this IG and append them to signals_dest
+    // without the JSON brackets on either side.
+    absl::string_view raw_signals = interest_group.trusted_bidding_signals();
+    absl::StrAppend(
+        &signals_dest,
+        absl::StrFormat(R"JSON(%s)JSON",
+                        raw_signals.substr(1, raw_signals.size() - 2)));
+
+    // Unless we are at the final IG, add the last comma for this IG's key-value
+    // pairs.
+    if (i < raw_request.interest_group_for_bidding_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+
+  // Then add the list of values for each IG.
+  absl::StrAppend(&signals_dest,
+                  absl::StrFormat(R"JSON(},"perInterestGroupData":{)JSON"));
+  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
+    const auto& interest_group = raw_request.interest_group_for_bidding(i);
+
+    // Iterate through all of the trusted bidding signals keys of this IG and
+    // flatten their values into raw_values.
+    std::string raw_values = "[";
+    for (int j = 0; j < interest_group.trusted_bidding_signals_keys_size();
+         j++) {
+      const auto& trusted_bidding_signal_key =
+          interest_group.trusted_bidding_signals_keys(j);
+
+      // Read in values for this key and append them to raw_values without the
+      // list brackets on either side.
+      std::string raw_values_for_key =
+          MakeBiddingSignalsValuesForKey(trusted_bidding_signal_key);
+      absl::StrAppend(&raw_values,
+                      absl::StrFormat(R"JSON(%s)JSON",
+                                      raw_values_for_key.substr(
+                                          1, raw_values_for_key.size() - 2)));
+
+      // Unless we are at the final key, add the last comma for this key's list
+      // of values.
+      if (j < interest_group.trusted_bidding_signals_keys_size() - 1) {
+        absl::StrAppend(&raw_values, ",");
+      }
+    }
+    absl::StrAppend(&raw_values, "]");
+
+    // Add the name-values pair for this IG.
+    absl::StrAppend(&signals_dest,
+                    absl::StrFormat(R"JSON("%s":%s)JSON", interest_group.name(),
+                                    raw_values));
+
+    // Unless we are at the final IG, add the last comma for this IG's
+    // name-values pair.
+    if (i < raw_request.interest_group_for_bidding_size() - 1) {
+      absl::StrAppend(&signals_dest, ",");
+    }
+  }
+  absl::StrAppend(&signals_dest, "}}");
+
+  return signals_dest;
+}
+
 InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice() {
   std::unique_ptr<BuyerInput::InterestGroup> ig_with_two_ads =
       MakeAnInterestGroupSentFromDevice();
@@ -175,58 +344,9 @@ InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice() {
       ig_with_two_ads->ad_render_ids());
   ig_for_bidding_from_device.mutable_trusted_bidding_signals_keys()->Add(
       MakeARandomString());
+  ig_for_bidding_from_device.set_trusted_bidding_signals(
+      MakeTrustedBiddingSignalsForIG(ig_for_bidding_from_device));
   return ig_for_bidding_from_device;
-}
-
-absl::StatusOr<std::string> MakeRandomTrustedBiddingSignals(
-    const GenerateBidsRequest::GenerateBidsRawRequest& raw_request) {
-  std::string signals_dest;
-
-  // First add the values for the trusted bidding signals keys for each IG.
-  absl::StrAppend(&signals_dest, "{\"keys\":{");
-  // Iterate through all of the IGs.
-  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
-    const auto& interest_group = raw_request.interest_group_for_bidding(i);
-    // Now iterate through all of their trusted bidding signals keys.
-    for (int j = 0; j < interest_group.trusted_bidding_signals_keys_size();
-         j++) {
-      const auto& trusted_bidding_signal_key =
-          interest_group.trusted_bidding_signals_keys(j);
-      std::string raw_random_signals;
-      PS_RETURN_IF_ERROR(google::protobuf::util::MessageToJsonString(
-          MakeARandomListOfStrings(), &raw_random_signals));
-      absl::StrAppend(&signals_dest, absl::StrFormat(R"JSON("%s":%s)JSON",
-                                                     trusted_bidding_signal_key,
-                                                     raw_random_signals));
-      // Add a comma for all but the last signal-value pair in this IG.
-      if (j < interest_group.trusted_bidding_signals_keys_size() - 1) {
-        absl::StrAppend(&signals_dest, ",");
-      }
-    }
-    // Unless we are at the final IG, add the last comma for this IG's key-value
-    // pairs.
-    if (i < raw_request.interest_group_for_bidding_size() - 1) {
-      absl::StrAppend(&signals_dest, ",");
-    }
-  }
-
-  // Then add the values for the IG names.
-  absl::StrAppend(&signals_dest, "},\"perInterestGroupData\":{");
-  for (int i = 0; i < raw_request.interest_group_for_bidding_size(); i++) {
-    const auto& interest_group = raw_request.interest_group_for_bidding(i);
-    std::string raw_random_signals;
-    PS_RETURN_IF_ERROR(google::protobuf::util::MessageToJsonString(
-        MakeARandomListOfStrings(), &raw_random_signals));
-    absl::StrAppend(&signals_dest,
-                    absl::StrFormat(R"JSON("%s":%s)JSON", interest_group.name(),
-                                    raw_random_signals));
-    if (i < raw_request.interest_group_for_bidding_size() - 1) {
-      absl::StrAppend(&signals_dest, ",");
-    }
-  }
-  absl::StrAppend(&signals_dest, "}}");
-
-  return signals_dest;
 }
 
 InterestGroupForBidding MakeARandomInterestGroupForBidding(
@@ -235,6 +355,8 @@ InterestGroupForBidding MakeARandomInterestGroupForBidding(
   ig_for_bidding.set_name(absl::StrCat("ig_name_random_", MakeARandomString()));
   ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
       absl::StrCat("trusted_bidding_signals_key_random_", MakeARandomString()));
+  ig_for_bidding.set_trusted_bidding_signals(
+      MakeTrustedBiddingSignalsForIG(ig_for_bidding));
   if (!set_user_bidding_signals_to_empty_struct) {
     // Takes ownership of pointer.
     ig_for_bidding.set_user_bidding_signals(
@@ -278,6 +400,9 @@ InterestGroupForBidding MakeALargeInterestGroupForBiddingForLatencyTesting() {
     ig_for_bidding.mutable_trusted_bidding_signals_keys()->Add(
         absl::StrCat("biddingSignalsKey", i + 1));
   }
+  // Bidding signals.
+  ig_for_bidding.set_trusted_bidding_signals(
+      MakeTrustedBiddingSignalsForIG(ig_for_bidding));
   // User bidding signals.
   ig_for_bidding.set_user_bidding_signals(
       MakeAFixedSetOfUserBiddingSignals(num_user_bidding_signals));
@@ -308,7 +433,6 @@ MakeARandomGenerateBidsRawRequestForAndroid() {
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
-  raw_request.set_bidding_signals(MakeARandomString());
 
   return raw_request;
 }
@@ -326,7 +450,6 @@ MakeARandomGenerateBidsRequestForBrowser() {
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 10))).release());
-  raw_request.set_bidding_signals(MakeARandomString());
   raw_request.set_seller(MakeARandomString());
   raw_request.set_publisher_name(MakeARandomString());
 

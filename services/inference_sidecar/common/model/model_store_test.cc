@@ -27,6 +27,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "proto/inference_sidecar.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -400,6 +402,57 @@ TEST_F(ModelStoreConcurrencyTest,
 
   for (auto& thread : threads) {
     thread.join();
+  }
+}
+
+class ModelStoreBackgroundModelResetTest : public ::testing::Test {
+ protected:
+  ModelStoreBackgroundModelResetTest()
+      : store_(BuildAlwaysResetInferenceSidecarRuntimeConfig(),
+               MockModelConstructorWithInitCounter) {}
+
+  MockModelStore store_;
+
+ private:
+  InferenceSidecarRuntimeConfig
+  BuildAlwaysResetInferenceSidecarRuntimeConfig() {
+    InferenceSidecarRuntimeConfig config;
+    config.set_model_reset_probability(1.0);
+    return config;
+  }
+};
+
+TEST_F(ModelStoreBackgroundModelResetTest, ResetSuccessWithStatefulModels) {
+  for (int i = 0; i < kNumThreads; ++i) {
+    EXPECT_TRUE(store_
+                    .PutModel(absl::StrCat(kTestModelName, i),
+                              BuildMockModelRegisterModelRequest(1))
+                    .ok());
+  }
+
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.push_back(std::thread([this, i]() {
+      absl::StatusOr<std::shared_ptr<MockModel>> prod_model = store_.GetModel(
+          absl::StrCat(kTestModelName, i), /*is_consented=*/false);
+      ASSERT_TRUE(prod_model.ok());
+      EXPECT_EQ((*prod_model)->GetCounter(), 1);
+      (*prod_model)->Increment();
+      store_.IncrementModelInferenceCount(absl::StrCat(kTestModelName, i));
+    }));
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  absl::SleepFor(absl::Seconds(1));
+  for (int i = 0; i < kNumThreads; ++i) {
+    absl::StatusOr<std::shared_ptr<MockModel>> prod_model = store_.GetModel(
+        absl::StrCat(kTestModelName, i), /*is_consented=*/false);
+    ASSERT_TRUE(prod_model.ok());
+    EXPECT_EQ((*prod_model)->GetCounter(), 1);
   }
 }
 

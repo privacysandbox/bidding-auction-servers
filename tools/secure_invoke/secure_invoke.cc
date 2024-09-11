@@ -23,6 +23,7 @@
 #include "absl/synchronization/notification.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/test/utils/ohttp_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/key_fetcher_utils.h"
 #include "tools/secure_invoke/flags.h"
 #include "tools/secure_invoke/payload_generator/payload_packaging.h"
@@ -40,6 +41,7 @@ using ::privacy_sandbox::bidding_auction_servers::SelectAdRequest;
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
+  privacy_sandbox::bidding_auction_servers::CommonTestInit();
   // Set log level to 0 and to be shown on terminal.
   std::string input_file = absl::GetFlag(FLAGS_input_file);
   std::string json_input_str = absl::GetFlag(FLAGS_json_input_str);

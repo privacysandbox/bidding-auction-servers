@@ -115,11 +115,23 @@ cc_test(
 )
 
 cc_library(
+    name = "inference_error_code",
+    hdrs = ["inference_error_code.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "inference_metric_util",
     srcs = ["inference_metric_util.cc"],
     hdrs = ["inference_metric_util.h"],
+    visibility = ["//visibility:public"],
     deps = [
+        ":inference_error_code",
         "//proto:inference_sidecar_cc_proto",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -129,6 +141,7 @@ cc_test(
     size = "small",
     srcs = ["inference_metric_util_test.cc"],
     deps = [
+        ":inference_error_code",
         ":inference_metric_util",
         "//proto:inference_sidecar_cc_proto",
         "@com_google_googletest//:gtest",

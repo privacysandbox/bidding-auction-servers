@@ -14,8 +14,11 @@
 
 #include "utils/inference_metric_util.h"
 
+#include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
 #include "gtest/gtest.h"
 #include "proto/inference_sidecar.pb.h"
+#include "utils/inference_error_code.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
@@ -27,6 +30,26 @@ void AddMetric(PredictResponse& response, const std::string& key, int32_t value,
     metric.set_partition(*partition);
   }
   response.mutable_metrics()->insert({key, metric});
+}
+
+std::string ExtractErrorCodeFromMessage(absl::string_view errorMessage) {
+  if (absl::StartsWith(errorMessage, kInferenceTensorInputNameError)) {
+    return std::string(kInferenceTensorInputNameError);
+  }
+  if (absl::StartsWith(errorMessage, kInferenceInputTensorConversionError)) {
+    return std::string(kInferenceInputTensorConversionError);
+  }
+  if (absl::StartsWith(errorMessage, kInferenceSignatureNotFoundError)) {
+    return std::string(kInferenceSignatureNotFoundError);
+  }
+  if (absl::StartsWith(errorMessage, kInferenceModelExecutionError)) {
+    return std::string(kInferenceModelExecutionError);
+  }
+  if (absl::StartsWith(errorMessage, kInferenceOutputTensorMismatchError)) {
+    return std::string(kInferenceOutputTensorMismatchError);
+  }
+  return std::string(
+      kInferenceUnknownError);  // Return an Unknown error if no match is found
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

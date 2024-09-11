@@ -82,7 +82,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   request_size += request.url.size();
   EventMessage::KvSignal bid_signal = [&]() {
     EventMessage::KvSignal signal;
-    if (!context.log.is_debug_response()) {
+    if (!AllowAnyEventLogging(context.log)) {
       return signal;
     }
     signal.set_request(request.url);
@@ -96,9 +96,8 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
                            absl::StatusOr<std::string> resultStr) mutable {
     if (resultStr.ok()) {
       PS_VLOG(kKVLog, context.log)
-          << "BuyerKeyValueAsyncHttpClient Success Response:\n"
-          << resultStr.value();
-      if (context.log.is_debug_response()) {
+          << "BuyerKeyValueAsyncHttpClient response exported in EventMessage";
+      if (AllowAnyEventLogging(context.log)) {
         bid_signal.set_response(resultStr.value());
         context.log.SetEventMessageField(std::move(bid_signal));
       }
@@ -111,6 +110,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
       PS_VLOG(kNoisyWarn, context.log)
           << "BuyerKeyValueAsyncHttpClient Failure Response: "
           << resultStr.status();
+      context.log.SetEventMessageField(std::move(bid_signal));
       std::move(on_done)(resultStr.status());
     }
   };

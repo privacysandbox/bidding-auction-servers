@@ -27,11 +27,34 @@ class PrivateAggregationUtil {
   isUnsigned128BitInteger(value) {}
 
   /**
-   * @param {number|bigint} value
+   * @param {bigint} bucket
    * @return {?Array<number>}
    */
-  convertTo128BitArray(value) {}
+  convertTo128BitArray(bucket) {}
+  /** Converts string baseValue type to equivalent ENUM BaseValue string.
+   * @param {string} value
+   * @return {string}
+   * @throws {TypeError}
+   * @override
+   */
+  convertBaseValueToEnumString(value) {}
+  /**
+   * Converts value object in contribution to SignalValue.
+   *
+   * @param {Object} value_obj The value object.
+   * @return {{base_value: string, scale: number, offset: {value: Array<number>, is_negative: boolean}}} The SignalValue Object.
+   * @override
+   */
+  convertToSignalValue(value_obj) {}
 
+  /**
+   * Converts bucket object in contribution to SignalBucket.
+   *
+   * @param {Object} bucket_obj The bucket object.
+   * @return {{base_value: string, scale: number, offset: {value: Array<number>, is_negative: boolean}}} The SignalBucket Object.
+   * @override
+   */
+  convertToSignalBucket(bucket_obj) {}
   /**
    * @param {number|bigint} offset
    * @return {{is_negative: boolean, value: ?Array<number>}}

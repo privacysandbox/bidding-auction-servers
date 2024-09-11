@@ -171,6 +171,12 @@ class ScoreAdsReactor
   // PerformReportingWithSellerAndBuyerCodeIsolation instead")]]
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
+
+  // Initializes buyer_reporting_dispatch_request_data_ with the
+  // fields included in winning_ad_score.
+  void InitializeBuyerReportingDispatchRequestData(
+      const ScoreAdsResponse::AdScore& winning_ad_score);
+
   // Performs reportResult and reportWin udf execution with seller and buyer
   // code isolation
   void PerformReportingWithSellerAndBuyerCodeIsolation(

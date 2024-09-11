@@ -1459,6 +1459,180 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         },
         "width": 24,
         "yPos": 323
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.errors_count [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "300s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"error_code\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 323
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.request.count_by_model [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.request.count_by_model\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "300s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"model\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 342
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.request.duration_ms_by_model [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"model\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.request.duration_ms_by_model\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 342
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.request.failed_count_by_model [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.request.failed_count_by_model\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=\"${var.environment}\"",
+                    "secondaryAggregation": {
+                      "alignmentPeriod": "300s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"model\"",
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 361
       }
     ]
   }

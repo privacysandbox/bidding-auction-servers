@@ -139,7 +139,7 @@ export SERVER_START_CMD=$(cat << END
       "urlFetchTimeoutMs": 30000,
     }' \
 --buyer_code_fetch_config='${BUYER_CODE_FETCH_CONFIG}' \
---enable_protected_app_signals="false" \
+--enable_protected_app_signals="true" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --enable_protected_audience="true" \

@@ -57,6 +57,9 @@ constexpr float kTestModifiedBid = 1.0;
 constexpr char kUsdIsoCode[] = "USD";
 constexpr char kEurosIsoCode[] = "EUR";
 constexpr bool kTestEnableReportWinInputNoisingTrue = true;
+constexpr char kTestEgressPayload[] = "testEgressPayload";
+constexpr char kTestTemporaryUnlimitedEgressPayload[] =
+    "testTemporaryUnlimitedEgressPayload";
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_TEST_CONSTANTS_H_

@@ -110,14 +110,14 @@ class ProtectedAppSignalsGenerateBidsReactor
   // set to an empty string.
   void PopulateSerializedEgressPayload(
       uint32_t schema_version, std::string& egress_payload_in_proto,
-      const EgressSchemaCache& egress_schema_cache,
+      EgressSchemaCache& egress_schema_cache,
       int egress_bit_limit = std::numeric_limits<int>::max());
 
   // Converts the JSON string egress payload received from the response of
   // generateBid to wire format.
   absl::StatusOr<std::string> GetSerializedEgressPayload(
       uint32_t schema_version, absl::string_view egress_payload,
-      const EgressSchemaCache& egress_schema_cache,
+      EgressSchemaCache& egress_schema_cache,
       int egress_bit_limit = std::numeric_limits<int>::max());
 
   CLASS_CANCELLATION_WRAPPER(FetchAds, enable_cancellation_, context_,

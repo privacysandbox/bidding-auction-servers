@@ -42,6 +42,5 @@ message ModelMetadata {
   // Batch inference requests used to perform warm up for target model during model
   // registration, schema should follow BatchInferenceRequest in inference_payload.proto
   // request text should be in json format.
-  bytes warm_up_batch_request_json = 3;
-  // TODO(b/346816785): Add metadata for model prewarming.
+  string warm_up_batch_request_json = 3;
 }

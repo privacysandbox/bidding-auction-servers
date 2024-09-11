@@ -34,7 +34,7 @@ class BooleanFeatureTest : public ::testing::Test {
     std::string test_schema = absl::Substitute(R"JSON(
       {
         "test_wrapper": {
-          "type": "boolean-feature",
+          "name": "boolean-feature",
           "value": $0
         }
       }

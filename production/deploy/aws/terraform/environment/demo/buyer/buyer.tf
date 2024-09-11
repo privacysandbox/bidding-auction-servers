@@ -168,4 +168,5 @@ module "buyer" {
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
+  consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
 }

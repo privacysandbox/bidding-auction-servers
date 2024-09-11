@@ -45,6 +45,7 @@ cc_library(
         "@inference_common//sandbox:sandbox_executor",
         "@inference_common//utils:error",
         "@inference_common//utils:file_util",
+        "@inference_common//utils:inference_error_code",
         "@rapidjson",
     ],
 )
@@ -93,6 +94,7 @@ cc_library(
     visibility = ["//services/bidding_service:__subpackages__"],
     deps = [
         ":inference_utils",
+        ":model_fetcher_metric",
         "//services/common/blob_fetch:blob_fetcher_base",
         "//services/common/data_fetch:fetcher_interface",
         "@com_github_grpc_grpc//:grpc++",
@@ -104,6 +106,7 @@ cc_library(
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
         "@inference_common//proto:inference_sidecar_cc_grpc_proto",
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//proto:model_metadata_cc_proto",
@@ -123,5 +126,30 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/core/test/utils",
         "@inference_common//proto:inference_sidecar_cc_grpc_proto",
+    ],
+)
+
+cc_library(
+    name = "model_fetcher_metric",
+    hdrs = ["model_fetcher_metric.h"],
+    visibility = ["//services/bidding_service:__subpackages__"],
+    deps = [
+        "//services/common/metric:server_definition",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "model_fetcher_metric_test",
+    size = "small",
+    srcs = ["model_fetcher_metric_test.cc"],
+    deps = [
+        ":model_fetcher_metric",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

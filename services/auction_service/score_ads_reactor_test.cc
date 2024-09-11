@@ -34,6 +34,7 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/reporting/buyer/pa_buyer_reporting_manager.h"
+#include "services/auction_service/reporting/buyer/pas_buyer_reporting_manager.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_test_util.h"
@@ -3469,9 +3470,9 @@ TEST_F(ScoreAdsReactorTest,
               .resp = absl::Substitute(kComponentWithCurrencyAdScoreTemplate,
                                        kTestDesirability,
                                        // NOLINTNEXTLINE
-                                       /*bid=*/1.0, kEuroIsoCode,
+                                       /*bid=*/2.0, kEuroIsoCode,
                                        // NOLINTNEXTLINE
-                                       /*incomingBidInSellerCurrency=*/3,
+                                       /*incomingBidInSellerCurrency=*/1,
                                        // NOLINTNEXTLINE
                                        /*allowComponentAuction=*/"true")};
           done_callback({response});

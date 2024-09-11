@@ -37,14 +37,9 @@ fileExistenceTests:
     shouldExist: true
     isExecutableBy: any
 
-  - name: envoy-config
+  - name: envoy
     path: /etc/envoy/envoy.yaml
     shouldExist: true
-
-  - name: envoy-binary
-    path: /usr/local/bin/envoy
-    shouldExist: true
-    isExecutableBy: any
 
   - name: ca-certs
     path: /etc/ssl/certs/ca-certificates.crt

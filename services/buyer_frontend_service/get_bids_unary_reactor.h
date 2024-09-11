@@ -133,8 +133,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Finishes the RPC call with a status.
   void FinishWithStatus(const grpc::Status& status);
 
-  // Gets the number of outbound bidding requests to the bidding service.
-  int GetNumberOfBiddingCalls();
+  // Gets the maximum number of outbound bidding requests to the bidding
+  // service.
+  int GetNumberOfMaximumBiddingCalls();
 
   // References for state, request, response and context from gRPC.
   // Should be released by gRPC
@@ -191,9 +192,6 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   ClientContexts client_contexts_;
 
   const bool enable_cancellation_;
-
-  // Logs GetBidsRawRequest if the consented debugging is enabled.
-  void MayLogRawRequest();
 
   // Gets Protected Audience Bids.
   void MayGetProtectedAudienceBids();

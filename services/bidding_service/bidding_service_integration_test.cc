@@ -400,6 +400,28 @@ constexpr absl::string_view kJsCodeWithComponentBidNotAllowed = R"JS_CODE(
     }
   )JS_CODE";
 
+SignalBucket GetExpectedSignalBucket() {
+  BucketOffset bucket_offset;
+  bucket_offset.add_value(1);  // Add first 64-bit value
+  bucket_offset.add_value(0);  // Add second 64-bit value
+  bucket_offset.set_is_negative(false);
+
+  SignalBucket signal_bucket;
+  signal_bucket.set_base_value(BASE_VALUE_WINNING_BID);
+  signal_bucket.set_scale(2.0);
+  *signal_bucket.mutable_offset() = bucket_offset;
+
+  return signal_bucket;
+}
+
+SignalValue GetExpectedSignalValue() {
+  SignalValue signal_value;
+  signal_value.set_base_value(BASE_VALUE_HIGHEST_SCORING_OTHER_BID);
+  signal_value.set_scale(3.0);
+  signal_value.set_offset(2);
+  return signal_value;
+}
+
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
       .Times(testing::AnyNumber())
@@ -469,10 +491,12 @@ function generateBid( interest_group,
 )JS_CODE";
 
 void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
-                       std::string adtech_wasm = "") {
+                       std::string adtech_wasm = "",
+                       bool enable_private_aggregate_reporting = false) {
   ASSERT_TRUE(dispatcher->Init().ok());
-  BuyerCodeWrapperConfig wrapper_config = {.ad_tech_wasm =
-                                               std::move(adtech_wasm)};
+  BuyerCodeWrapperConfig wrapper_config = {
+      .ad_tech_wasm = std::move(adtech_wasm),
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
   std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, wrapper_config);
   ASSERT_TRUE(
       dispatcher
@@ -497,9 +521,6 @@ BuildGenerateBidsRequestFromBrowser(
     *raw_request.mutable_interest_group_for_bidding()->Add() =
         std::move(interest_group);
   }
-  PS_ASSIGN_OR_RETURN(std::string bidding_signals,
-                      MakeRandomTrustedBiddingSignals(raw_request));
-  raw_request.set_bidding_signals(std::move(bidding_signals));
   if (enable_adtech_code_logging) {
     raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
     raw_request.mutable_consented_debug_config()->set_is_consented(true);
@@ -807,7 +828,11 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   ASSERT_TRUE(req.ok()) << req.status();
   auto raw_request = *std::move(req);
   request.set_request_ciphertext(raw_request.SerializeAsString());
-  ASSERT_GT(raw_request.bidding_signals().length(), 0);
+  ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
+  ASSERT_GT(raw_request.interest_group_for_bidding(0)
+                .trusted_bidding_signals()
+                .length(),
+            0);
 
   auto generate_bids_reactor_factory =
       [&client](grpc::CallbackServerContext* context,
@@ -1060,9 +1085,6 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
     // This fails in production, the user Bidding Signals are not being set.
     // use logging to figure out why.
   }
-  auto sigs = MakeRandomTrustedBiddingSignals(raw_request);
-  ASSERT_TRUE(sigs.ok()) << sigs.status();
-  raw_request.set_bidding_signals(*std::move(sigs));
   GenerateBidsResponse response;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   auto generate_bids_reactor_factory =
@@ -1135,24 +1157,34 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   }
 }
 
+struct GenerateBidHelperConfig {
+  bool enable_debug_reporting = false;
+  bool enable_buyer_debug_url_generation = false;
+  bool enable_adtech_code_logging = false;
+  std::string wasm_blob = "";
+  int desired_bid_count = 5;
+  bool component_auction = false;
+  bool enable_private_aggregate_reporting = false;
+};
+
 void GenerateBidCodeWrapperTestHelper(
     GenerateBidsResponse* response, absl::string_view js_blob,
-    bool enable_debug_reporting, bool enable_buyer_debug_url_generation,
-    bool enable_adtech_code_logging = false, std::string wasm_blob = "",
-    int desired_bid_count = 5, bool component_auction = false) {
+    const GenerateBidHelperConfig& test_config) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
   CodeDispatchClient client(dispatcher);
-  SetupV8Dispatcher(&dispatcher, js_blob, std::move(wasm_blob));
+  SetupV8Dispatcher(&dispatcher, js_blob, test_config.wasm_blob,
+                    test_config.enable_private_aggregate_reporting);
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
   auto req = BuildGenerateBidsRequestFromBrowser(
-      &interest_group_to_ad, desired_bid_count, enable_debug_reporting,
-      enable_adtech_code_logging);
+      &interest_group_to_ad, test_config.desired_bid_count,
+      test_config.enable_debug_reporting,
+      test_config.enable_adtech_code_logging);
   ASSERT_TRUE(req.ok()) << req.status();
-  if (component_auction) {
+  if (test_config.component_auction) {
     req.value().set_top_level_seller(kTopLevelSeller);
   }
   *request.mutable_request_ciphertext() = req->SerializeAsString();
@@ -1198,7 +1230,10 @@ void GenerateBidCodeWrapperTestHelper(
           config_client, /* public_key_fetcher= */ nullptr);
 
   BiddingServiceRuntimeConfig runtime_config{
-      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
+      .enable_buyer_debug_url_generation =
+          test_config.enable_buyer_debug_url_generation,
+      .enable_private_aggregate_reporting =
+          test_config.enable_private_aggregate_reporting};
   BiddingService service(
       std::move(generate_bids_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), std::move(runtime_config),
@@ -1212,11 +1247,14 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerDebugUrlGenerationDisabled) {
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = false;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_debug_urls_template,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      test_config);
 
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
@@ -1231,11 +1269,15 @@ TEST_F(GenerateBidsReactorIntegrationTest, EventLevelDebugReportingDisabled) {
   GenerateBidsResponse response;
   bool enable_debug_reporting = false;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
+
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_debug_urls_template,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1250,11 +1292,14 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_debug_urls_template,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1268,15 +1313,92 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 }
 
 TEST_F(GenerateBidsReactorIntegrationTest,
+       ReturnsNumericPAAPIBucketAndValueInTheResponse) {
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = true;
+  bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .enable_private_aggregate_reporting = true};
+  GenerateBidCodeWrapperTestHelper(
+      &response,
+      absl::StrFormat(kBuyerBaseCodeForPrivateAggregation,
+                      kAdRenderUrlPrefixForTest),
+      test_config);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
+    EXPECT_GT(adWithBid.bid(), 0);
+    auto& contributions = adWithBid.private_aggregation_contributions();
+    EXPECT_EQ(contributions.size(), 1);
+    EXPECT_EQ(contributions.at(0).event().event_type(),
+              EventType::EVENT_TYPE_WIN);
+    ASSERT_EQ(
+        contributions.at(0).bucket().bucket_128_bit().bucket_128_bits_size(), 2)
+        << "bucket_128_bit has not been set correctly in the contribution";
+    EXPECT_EQ(
+        contributions.at(0).bucket().bucket_128_bit().bucket_128_bits().at(0),
+        100)
+        << "bucket_128_bit has not been set in the contribution";
+    EXPECT_EQ(contributions.at(0).value().int_value(), 200)
+        << "int_value has not been set correctly in the contribution";
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
+       ReturnsPAAPISignalBucketAndSignalValueInTheResponse) {
+  GenerateBidsResponse response;
+  bool enable_debug_reporting = true;
+  bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .enable_private_aggregate_reporting = true};
+  GenerateBidCodeWrapperTestHelper(
+      &response,
+      absl::StrFormat(kBuyerBaseCodeWithSignalValueAndSignalBucket,
+                      kAdRenderUrlPrefixForTest),
+      test_config);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& adWithBid : raw_response.bids()) {
+    EXPECT_GT(adWithBid.bid(), 0);
+    auto& contributions = adWithBid.private_aggregation_contributions();
+    EXPECT_EQ(contributions.size(), 1);
+    EXPECT_EQ(contributions.at(0).event().event_type(),
+              EventType::EVENT_TYPE_WIN);
+    ASSERT_TRUE(contributions.at(0).bucket().has_signal_bucket())
+        << "SignalBucket has not been set in the contribution";
+    ASSERT_TRUE(contributions.at(0).value().has_extended_value())
+        << "SignalValue has not been set in the contribution";
+    google::protobuf::util::MessageDifferencer diff;
+    std::string diff_output;
+    diff.ReportDifferencesToString(&diff_output);
+    EXPECT_TRUE(diff.Compare(contributions.at(0).bucket().signal_bucket(),
+                             GetExpectedSignalBucket()))
+        << diff_output;
+    EXPECT_TRUE(diff.Compare(contributions.at(0).value().extended_value(),
+                             GetExpectedSignalValue()))
+        << diff_output;
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest,
        GeneratesBidsDoesNotReturnLargeDebugReportingUrls) {
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_very_large_debug_urls,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1296,12 +1418,16 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
   int desired_bid_count = 100;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .desired_bid_count = desired_bid_count};
+
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_very_large_debug_urls,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation, false, "",
-      desired_bid_count);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
 
@@ -1322,11 +1448,15 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+  };
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_global_this_debug_urls_template,
                       kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1344,9 +1474,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+  };
   GenerateBidCodeWrapperTestHelper(
-      &response, js_code_throws_exception_with_debug_urls,
-      enable_debug_reporting, enable_buyer_debug_url_generation);
+      &response, js_code_throws_exception_with_debug_urls, test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -1357,9 +1490,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+  };
   GenerateBidCodeWrapperTestHelper(&response, js_code_throws_exception,
-                                   enable_debug_reporting,
-                                   enable_buyer_debug_url_generation);
+                                   test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
@@ -1370,11 +1506,14 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse response;
   bool enable_debug_reporting = false;
   bool enable_buyer_debug_url_generation = false;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .enable_adtech_code_logging = true};
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(js_code_with_logs_template, kAdRenderUrlPrefixForTest),
-      enable_debug_reporting, enable_buyer_debug_url_generation,
-      /*enable_adtech_code_logging=*/true);
+      test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1388,10 +1527,13 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 
   std::string raw_wasm_bytes;
   ASSERT_TRUE(absl::Base64Unescape(base64_wasm_plus_one, &raw_wasm_bytes));
-  GenerateBidCodeWrapperTestHelper(
-      &response, js_code_runs_wasm_helper, enable_debug_reporting,
-      enable_buyer_debug_url_generation,
-      /*enable_adtech_code_logging=*/true, raw_wasm_bytes);
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = enable_debug_reporting,
+      .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
+      .enable_adtech_code_logging = true,
+      .wasm_blob = raw_wasm_bytes};
+  GenerateBidCodeWrapperTestHelper(&response, js_code_runs_wasm_helper,
+                                   test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
@@ -1402,9 +1544,9 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 
 TEST_F(GenerateBidsReactorIntegrationTest, ParsesFieldsForComponentAuction) {
   GenerateBidsResponse response;
-  GenerateBidCodeWrapperTestHelper(&response, kJsCodeWithTopLevelSeller, false,
-                                   false, false, "", 5,
-                                   /* component_auction = */ true);
+  GenerateBidHelperConfig test_config = {.component_auction = true};
+  GenerateBidCodeWrapperTestHelper(&response, kJsCodeWithTopLevelSeller,
+                                   test_config);
 
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
@@ -1422,9 +1564,9 @@ TEST_F(GenerateBidsReactorIntegrationTest, ParsesFieldsForComponentAuction) {
 TEST_F(GenerateBidsReactorIntegrationTest,
        FiltersUnallowedAdsForComponentAuction) {
   GenerateBidsResponse response;
+  GenerateBidHelperConfig test_config = {.component_auction = true};
   GenerateBidCodeWrapperTestHelper(&response, kJsCodeWithComponentBidNotAllowed,
-                                   false, false, false, "", 5,
-                                   /* component_auction = */ true);
+                                   test_config);
 
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());

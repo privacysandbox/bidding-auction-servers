@@ -77,7 +77,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     auto result = CborDecodeAuctionResultToProto(encoded_data);
     if (result.ok()) {
       log_context_.SetEventMessageField(*result);
-      return result->DebugString();
+      return std::string("exported in EventMessage");
     } else {
       return result.status().ToString();
     }
@@ -91,7 +91,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
             request_->auction_config().top_level_seller(), high_score,
             GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_), error,
             error_handler));
-    PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());
+    PS_VLOG(kPlain, log_context_) << "AuctionResult: " << (decode_lambda());
   } else if (auction_scope_ ==
              AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
     // If this is server component auction, serialize as proto.
@@ -110,8 +110,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     // Serialized the data to bytes array.
     encoded_data = auction_result.SerializeAsString();
 
-    PS_VLOG(kPlain, log_context_) << "AuctionResult:\n"
-                                  << auction_result.ShortDebugString();
+    PS_VLOG(kPlain, log_context_) << "AuctionResult exported in EventMessage";
     log_context_.SetEventMessageField(auction_result);
   } else {
     // SINGLE_SELLER or SERVER_TOP_LEVEL Auction

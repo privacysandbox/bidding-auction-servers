@@ -35,9 +35,11 @@
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "proto/inference_sidecar.pb.h"
 #include "proto/model_metadata.pb.h"
+#include "services/bidding_service/inference/model_fetcher_metric.h"
 #include "services/common/blob_fetch/blob_fetcher_base.h"
 #include "src/logger/request_context_impl.h"
 #include "src/util/status_macro/status_macros.h"
+#include "src/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
@@ -83,15 +85,19 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
   absl::StatusOr<ModelConfig> config = FetchModelConfig();
   if (!config.ok()) {
     PS_LOG(ERROR) << "Failed to fetch model config: " << config.status();
+    ModelFetcherMetric::IncrementCloudFetchFailedCountByStatus(
+        config.status().code());
     return;
   }
 
   BlobFetcherBase::FilterOptions filter_options;
+  std::vector<ModelMetadata> pending_model_metadata;
   for (const ModelMetadata& metadata : config->model_metadata()) {
     const std::string& model_path = metadata.model_path();
     if (!model_path.empty() &&
         current_models_.find(model_path) == current_models_.end()) {
       filter_options.included_prefixes.push_back(model_path);
+      pending_model_metadata.push_back(metadata);
     }
   }
 
@@ -103,16 +109,28 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
   absl::Status cloud_fetch_status = blob_fetcher_->FetchSync(filter_options);
   if (!cloud_fetch_status.ok()) {
     PS_LOG(ERROR) << "Cloud model fetching fails: " << cloud_fetch_status;
+    ModelFetcherMetric::IncrementCloudFetchFailedCountByStatus(
+        cloud_fetch_status.code());
     return;
   }
 
+  ModelFetcherMetric::IncrementCloudFetchSuccessCount();
+
+  // Keeps track of models that are registered successfully and those that are
+  // not for metric purposes.
+  std::vector<std::string> success_models;
+  std::vector<std::string> failure_models;
   const std::vector<BlobFetcherBase::Blob>& bucket_snapshot =
       blob_fetcher_->snapshot();
   // A single model can consist of multiple model files and hence data blobs.
-  for (const ModelMetadata& metadata : config->model_metadata()) {
+  for (const ModelMetadata& metadata : pending_model_metadata) {
     const std::string& model_path = metadata.model_path();
     RegisterModelRequest request;
     request.mutable_model_spec()->set_model_path(model_path);
+    if (!metadata.warm_up_batch_request_json().empty()) {
+      request.set_warm_up_batch_request_json(
+          metadata.warm_up_batch_request_json());
+    }
     PS_VLOG(10) << "Start registering model for: " << model_path;
 
     std::vector<BlobFetcherBase::BlobView> blob_views;
@@ -128,8 +146,11 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
       absl::StatusOr<std::string> model_checksum =
           ComputeChecksumForBlobs(blob_views);
       if (!model_checksum.ok() || *model_checksum != metadata.checksum()) {
-        PS_LOG(INFO) << "Model rejected due to incorrect checksum.";
-        return;
+        PS_LOG(ERROR) << "Model rejected due to incorrect checksum.";
+        failure_models.push_back(model_path);
+        ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
+            absl::StatusCode::kFailedPrecondition);
+        continue;
       }
     }
 
@@ -140,11 +161,18 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
 
     if (!status.ok()) {
       PS_LOG(ERROR) << "Registering model failure for: " << model_path;
+      failure_models.push_back(model_path);
+      ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
+          server_common::ToAbslStatus(status).code());
     } else {
       PS_VLOG(10) << "Registering model success for: " << model_path;
       current_models_.insert(model_path);
+      success_models.push_back(model_path);
     }
   }
+
+  ModelFetcherMetric::UpdateRecentModelRegistrationSuccess(success_models);
+  ModelFetcherMetric::UpdateRecentModelRegistrationFailure(failure_models);
 }
 
 void PeriodicModelFetcher::InternalPeriodicModelFetchAndRegistration() {

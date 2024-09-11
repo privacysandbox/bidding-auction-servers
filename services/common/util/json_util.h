@@ -102,7 +102,21 @@ inline absl::StatusOr<std::shared_ptr<std::string>> SerializeJsonDoc(
   return absl::InternalError("Unknown JSON to string serialization error");
 }
 
-// Converts rapidjson::Value& to a string
+// Converts rapidjson::Document to a string. The reserve_string_len argument
+// helps reserve a large string size up front to prevent reallocation and
+// copying.
+inline absl::StatusOr<std::string> SerializeJsonDocToReservedString(
+    const rapidjson::Document& document, int reserve_string_len) {
+  rapidjson::StringBuffer string_buffer;
+  string_buffer.Reserve(reserve_string_len);
+  rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
+  if (document.Accept(writer)) {
+    return std::string(string_buffer.GetString());
+  }
+  return absl::InternalError("Unknown JSON to string serialization error");
+}
+
+// Converts rapidjson::Value& to a string.
 inline absl::StatusOr<std::string> SerializeJsonDoc(
     const rapidjson::Value& document) {
   rapidjson::StringBuffer string_buffer;
@@ -110,7 +124,7 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
   if (document.Accept(writer)) {
     return std::string(string_buffer.GetString());
   }
-  return absl::InternalError("Error converting inner Json to String.");
+  return absl::InternalError("Error converting inner JSON to String.");
 }
 
 // Converts rapidjson::Document to a string.
@@ -206,6 +220,44 @@ inline absl::StatusOr<int> GetIntMember(const T& document,
   }
 
   return it->value.GetInt();
+}
+
+// Retrieves the double value of the specified member in the document.
+template <typename T>
+inline absl::StatusOr<double> GetDoubleMember(const T& document,
+                                              absl::string_view member_name) {
+  auto it = document.FindMember(member_name.data());
+  if (it == document.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kMissingMember, member_name));
+  }
+
+  if (!it->value.IsDouble()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kNumberType, it->value.GetType()));
+  }
+
+  return it->value.GetDouble();
+}
+
+// Retrieves the boolean value of the specified member in the document.
+template <typename T>
+inline absl::StatusOr<bool> GetBoolMember(const T& document,
+                                          absl::string_view member_name) {
+  auto it = document.FindMember(member_name.data());
+  if (it == document.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kMissingMember, member_name));
+  }
+
+  if (!it->value.IsBool()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat(kUnexpectedMemberType, member_name,
+                        rapidjson::kNumberType, it->value.GetType()));
+  }
+
+  return it->value.GetBool();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

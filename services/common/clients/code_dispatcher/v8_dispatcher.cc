@@ -69,7 +69,8 @@ absl::Status V8Dispatcher::LoadSync(absl::string_view version,
 
 absl::Status V8Dispatcher::Execute(std::unique_ptr<DispatchRequest> request,
                                    DispatchDoneCallback done_callback) {
-  return roma_service_.Execute(std::move(request), std::move(done_callback));
+  return roma_service_.Execute(std::move(request), std::move(done_callback))
+      .status();
 }
 
 absl::Status V8Dispatcher::BatchExecute(

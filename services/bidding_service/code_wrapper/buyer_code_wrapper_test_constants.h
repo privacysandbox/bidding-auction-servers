@@ -40,6 +40,7 @@ constexpr absl::string_view kBuyerBaseCode_template = R"JS_CODE(
       };
     }
 )JS_CODE";
+
 constexpr absl::string_view kBuyerBaseCodeForPrivateAggregation = R"JS_CODE(
     function fibonacci(num) {
       if (num <= 1) return 1;
@@ -63,6 +64,32 @@ constexpr absl::string_view kBuyerBaseCodeForPrivateAggregation = R"JS_CODE(
       };
     }
 )JS_CODE";
+
+constexpr absl::string_view kBuyerBaseCodeWithSignalValueAndSignalBucket =
+    R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+    function generateBid(interest_group, auction_signals,buyer_signals,
+                          trusted_bidding_signals,
+                          device_signals){
+    const bid = fibonacci(Math.floor(Math.random() * 30 + 1));
+    console.log("Logging from generateBid");
+    const contribution = {
+      bucket: {baseValue:"winning-bid",scale:2.0, offset:1},
+      value: {baseValue:"highest-scoring-other-bid",scale:3.0, offset:2},
+    };
+    privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+    return {
+        render: "%s" + interest_group.adRenderIds[0],
+        ad: {"arbitraryMetadataField": 1},
+        bid: bid,
+        allowComponentAuction: false
+      };
+    }
+)JS_CODE";
+
 constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
@@ -102,7 +129,7 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       //Add private aggregate contributions to the response.
       //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
       if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
       }
       ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&
@@ -189,7 +216,7 @@ constexpr absl::string_view
       //Add private aggregate contributions to the response.
       //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
       if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.private_aggregation_contributions;
+        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
       }
       ps_response.response = generate_bid_response
       if( featureFlags.enable_debug_url_generation &&

@@ -24,7 +24,10 @@
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
@@ -81,11 +84,34 @@ BrowserSignals MakeRandomBrowserSignalsForIG(
 // Must manually delete/take ownership of underlying pointer
 std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice();
 
-InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice();
+// Build bidding signals values for given key.
+std::string MakeBiddingSignalsValuesForKey(const std::string& key);
 
-// Build random trusted bidding signals with interest group names.
-absl::StatusOr<std::string> MakeRandomTrustedBiddingSignals(
+// Build bidding signals for an interest group sent from device. Returns a JSON
+// string. Example:
+// {"keys": {"key1": ["val1", "val2"],
+//           "key2": ["val3"]},
+//  "perInterestGroupData": {"ig1": ["val1", "val2", "val3"]}}
+std::string MakeBiddingSignalsForIGFromDevice(
+    const BuyerInput::InterestGroup& interest_group);
+
+// Build trusted bidding signals for an interest group for bidding. Returns a
+// JSON string. Example:
+// {"key1": ["val1", "val2"],
+//  "key2": ["val3"]}
+std::string MakeTrustedBiddingSignalsForIG(
+    const InterestGroupForBidding& interest_group);
+
+// Get bidding signals for all the IGs in given GenerateBidsRawRequest. Returns
+// a JSON string. Example:
+// {"keys": {"key1": ["val1", "val2"],
+//           "key2": ["val3"]},
+//  "perInterestGroupData": {"ig1": ["val1", "val2", "val3"]}
+//                           "ig2": ["val3"]}}
+std::string GetBiddingSignalsFromGenerateBidsRequest(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request);
+
+InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice();
 
 // build_android_signals: If false, will insert random values into
 // browser signals, otherwise will insert random values into android signals.

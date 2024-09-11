@@ -31,6 +31,7 @@
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -319,6 +320,7 @@ RawRequest BuildRawRequest(
 
 static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
   // Setup.
+  CommonTestInit();
   ScoreAdsRequest score_ads_request;
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
@@ -364,6 +366,7 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
 
 static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
   // Setup.
+  CommonTestInit();
   ScoreAdsRequest score_ads_request;
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);

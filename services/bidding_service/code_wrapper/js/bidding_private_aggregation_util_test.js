@@ -55,43 +55,4 @@ testSuite({
       assertTrue(error instanceof TypeError);
     }
   },
-  /** @return {void} */
-  /** @suppress {reportUnknownTypes, checkTypes} */
-  testConvertBaseValueToInt() {
-    // Test defined base values
-    var result = new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt('winning-bid');
-    assertEquals(result, 0);
-    result = new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt('highest-scoring-other-bid');
-    assertEquals(result, 1);
-
-    // Test TBD cases (assuming these return values are defined later)
-    result = new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt('script-run-time');
-    assertEquals(result, 3);
-    result = new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt('signals-fetch-time');
-    assertEquals(result, 4);
-
-    // Test unsupported base value type
-    try {
-      new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt('something-else');
-      fail('Expected TypeError for unsupported base value');
-    } catch (error) {
-      assertTrue(error instanceof TypeError);
-    }
-
-    // Test int (invalid) base value
-    try {
-      new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt(1);
-      fail('Expected TypeError for null base value');
-    } catch (error) {
-      assertTrue(error instanceof TypeError);
-    }
-
-    // Test null base value
-    try {
-      new BiddingPrivateAggregationUtilImpl().convertBaseValueToInt(null);
-      fail('Expected TypeError for null base value');
-    } catch (error) {
-      assertTrue(error instanceof TypeError);
-    }
-  },
 });

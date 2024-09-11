@@ -249,3 +249,8 @@ variable "kv_server_virtual_service_name" {
   type        = string
   default     = "unused"
 }
+
+variable "consented_request_s3_bucket" {
+  description = "s3 bucket to export event message for consented request"
+  type        = string
+}

@@ -66,10 +66,10 @@ ABSL_FLAG(std::optional<std::string>, key_value_signals_host, std::nullopt,
 ABSL_FLAG(std::optional<std::string>, buyer_server_hosts, std::nullopt,
           "Comma seperated list of domain addresses of the BuyerFrontEnd "
           "services for getting bids.");
-ABSL_FLAG(std::optional<bool>, enable_buyer_compression, true,
-          "Flag to enable buyer client compression. True by default.");
-ABSL_FLAG(std::optional<bool>, enable_auction_compression, true,
-          "Flag to enable auction client compression. True by default.");
+ABSL_FLAG(std::optional<bool>, enable_buyer_compression, std::nullopt,
+          "Flag to enable buyer client compression. Turned off by default.");
+ABSL_FLAG(std::optional<bool>, enable_auction_compression, std::nullopt,
+          "Flag to enable auction client compression. Turned off by default.");
 ABSL_FLAG(std::optional<bool>, enable_seller_frontend_benchmarking,
           std::nullopt, "Flag to enable benchmarking.");
 ABSL_FLAG(

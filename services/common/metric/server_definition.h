@@ -27,6 +27,7 @@
 #include "src/metric/context_map.h"
 #include "src/metric/definition.h"
 #include "src/metric/key_fetch.h"
+#include "utils/inference_error_code.h"
 
 // Defines API used by Bidding auction servers, and B&A specific metrics.
 namespace privacy_sandbox::bidding_auction_servers {
@@ -193,6 +194,44 @@ inline constexpr server_common::metrics::Definition<
         "Time taken by Roma callback to execute inference",
         server_common::metrics::kTimeHistogram, 300, 0);
 
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceCloudFetchSuccessCount(
+        "inference.cloud_fetch.success_count",
+        "Success count for fetching model blobs from the cloud bucket");
+
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceCloudFetchFailedCountByStatus(
+        "inference.cloud_fetch.failed_count_by_status",
+        "Failed count for fetching model blobs from the cloud bucket by "
+        "status");
+
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceRecentModelRegistrationSuccess(
+        "inference.model_registration.recent_success_by_model",
+        "Success count for registering models with inference sidecar by model "
+        "in the most recent fetch");
+
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceModelRegistrationFailedCountByStatus(
+        "inference.model_registration.failed_count_by_status",
+        "Failed count for registering models with inference sidecar by status");
+
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceRecentModelRegistrationFailure(
+        "inference.model_registration.recent_failure_by_model",
+        "Failed count for registering models with inference sidecar by model "
+        "in the most recent fetch");
+
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
     kRejectionReasonBidFromGenBidFailedCurrencyCheck,
@@ -325,6 +364,20 @@ inline constexpr server_common::metrics::Definition<
         /*partition_type*/ "error_code",
         /*max_partitions_contributed*/ 1,
         /*public_partitions*/ kSfeErrorCode,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0,
+        /*min_noise_to_output*/ 0.99);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceErrorCountByErrorCode(
+        /*name*/ "inference.errors_count",
+        /*description*/
+        "Number of errors in the inference sidecar by error code",
+        /*partition_type*/ "error_code",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ inference::kInferenceErrorCode,
         /*upper_bound*/ 1,
         /*lower_bound*/ 0,
         /*min_noise_to_output*/ 0.99);
@@ -541,6 +594,46 @@ inline constexpr server_common::metrics::Definition<
         "Size of the inference response going out of the sidecar",
         server_common::metrics::kSizeHistogram, 100'000, 100);
 
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceRequestCountByModel(
+        /*name*/ "inference.request.count_by_model",
+        /*description*/
+        "Total number of inference request per model",
+        /*partition_type*/ "model",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceRequestDurationByModel(
+        /*name*/ "inference.request.duration_ms_by_model",
+        /*description*/
+        "Time taken by inference sidecar to execute inference by model",
+        /*partition_type*/ "model",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 300,
+        /*lower_bound*/ 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceRequestFailedCountByModel(
+        /*name*/ "inference.request.failed_count_by_model",
+        /*description*/
+        "otal number of inference requests resulted in failure partitioned by "
+        "model",
+        /*partition_type*/ "model",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0);
+
 template <typename RequestT>
 struct RequestMetric;
 
@@ -571,11 +664,20 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kJSExecutionErrorCount,
         &kBiddingErrorCountByErrorCode,
         &kBiddingInferenceRequestDuration,
+        &kInferenceCloudFetchSuccessCount,
+        &kInferenceCloudFetchFailedCountByStatus,
+        &kInferenceRecentModelRegistrationSuccess,
+        &kInferenceModelRegistrationFailedCountByStatus,
+        &kInferenceRecentModelRegistrationFailure,
         &kInferenceRequestCount,
         &kInferenceRequestDuration,
         &kInferenceRequestSize,
         &kInferenceResponseSize,
         &kInferenceRequestFailedCountByStatus,
+        &kInferenceErrorCountByErrorCode,
+        &kInferenceRequestCountByModel,
+        &kInferenceRequestDurationByModel,
+        &kInferenceRequestFailedCountByModel,
 };
 
 template <>
@@ -845,6 +947,19 @@ inline void AddBuyerPartition(
                                 buyer_list_view);
   telemetry_config.SetPartition(metric::kSfeInitiatedResponseSizeByBuyer.name_,
                                 buyer_list_view);
+}
+
+inline void AddModelPartition(
+    server_common::telemetry::BuildDependentConfig& telemetry_config,
+    const std::vector<std::string>& model_list) {
+  std::vector<std::string_view> model_list_view = {model_list.begin(),
+                                                   model_list.end()};
+  telemetry_config.SetPartition(metric::kInferenceRequestCountByModel.name_,
+                                model_list_view);
+  telemetry_config.SetPartition(metric::kInferenceRequestDurationByModel.name_,
+                                model_list_view);
+  telemetry_config.SetPartition(
+      metric::kInferenceRequestFailedCountByModel.name_, model_list_view);
 }
 
 inline std::vector<std::string> GetErrorList() {

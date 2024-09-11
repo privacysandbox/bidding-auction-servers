@@ -103,8 +103,13 @@ rapidjson::Document GenerateSellerDeviceSignals(
                      document.GetAllocator());
   document.AddMember(kRenderUrlTag, render_url_value.Move(),
                      document.GetAllocator());
-  double bid = GetEightBitRoundedValue(
-      dispatch_request_data.post_auction_signals.winning_bid);
+  double bid =
+      dispatch_request_data.post_auction_signals
+                  .winning_bid_in_seller_currency > 0
+          ? GetEightBitRoundedValue(dispatch_request_data.post_auction_signals
+                                        .winning_bid_in_seller_currency)
+          : GetEightBitRoundedValue(
+                dispatch_request_data.post_auction_signals.winning_bid);
   if (bid > -1) {
     document.AddMember(kBidTag, bid, document.GetAllocator());
   }

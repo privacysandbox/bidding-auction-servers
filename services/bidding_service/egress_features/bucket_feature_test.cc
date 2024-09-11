@@ -43,7 +43,7 @@ class BucketFeatureTest : public ::testing::Test {
         });
     std::string test_schema = absl::Substitute(R"JSON(
       {
-        "test_wrapper": {"type": "bucket-feature", "value": [ $0 ]}
+        "test_wrapper": {"name": "bucket-feature", "value": [ $0 ]}
       }
       )JSON",
                                                bool_feat_json);

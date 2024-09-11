@@ -48,6 +48,8 @@ namespace {
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
+using ProtectedAppSignalsAdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 using ::testing::AnyNumber;
 
 constexpr absl::string_view kKeyId = "key_id";
@@ -55,6 +57,12 @@ constexpr absl::string_view kSecret = "secret";
 constexpr absl::string_view kTestConsentToken = "testConsentToken";
 constexpr absl::string_view kEurosIsoCode = "EUR";
 constexpr absl::string_view kPublisherHostname = "fenceStreetJournal.com";
+constexpr absl::string_view kEgressPayload =
+    "{\"features\": [{\"type\": \"boolean-feature\", \"value\": true}, "
+    "{\"type\": \"unsigned-integer-feature\", \"value\": 127}]}";
+constexpr absl::string_view kTemporaryUnlimitedEgressPayload =
+    "{\"features\": [{\"type\": \"boolean-feature\", \"value\": "
+    "true},{\"type\": \"unsigned-integer-feature\", \"value\": 2}]}";
 
 AdWithBidMetadata GetTestAdWithBidMetadata(
     const TestScoreAdsRequestConfig& test_score_ads_request_config) {
@@ -139,6 +147,70 @@ ScoreAdsRequest BuildScoreAdsRequest(
   return request;
 }
 
+ProtectedAppSignalsAdWithBidMetadata GetTestAdWithBidMetadataForPAS(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config) {
+  ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata ad;
+  ad.mutable_ad()->mutable_struct_value()->MergeFrom(
+      MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
+  ad.set_bid(1.0);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_ad_cost(
+      test_score_ads_request_config.test_buyer_reporting_signals.ad_cost);
+  ad.set_modeling_signals(test_score_ads_request_config
+                              .test_buyer_reporting_signals.modeling_signals);
+  ad.set_owner(test_score_ads_request_config.test_buyer_reporting_signals
+                   .interest_group_name);
+  ad.set_owner(test_score_ads_request_config.interest_group_owner.c_str());
+  ad.set_render(absl::StrFormat(
+      "%s/ads", test_score_ads_request_config.interest_group_owner));
+  ad.set_egress_payload(kEgressPayload);
+  ad.set_temporary_unlimited_egress_payload(kTemporaryUnlimitedEgressPayload);
+  return ad;
+}
+
+ScoreAdsRequest BuildScoreAdsRequestForPAS(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config,
+    const std::vector<ScoreAdsRequest::ScoreAdsRawRequest::
+                          ProtectedAppSignalsAdWithBidMetadata>& ads) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  std::string trusted_scoring_signals =
+      R"json({"renderUrls":{"placeholder_url":[123])json";
+  for (const auto& ad : ads) {
+    raw_request.mutable_per_buyer_signals()->try_emplace(
+        ad.owner(), test_score_ads_request_config.test_buyer_reporting_signals
+                        .buyer_signals);
+    std::string ad_signal = absl::StrFormat(
+        "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
+    absl::StrAppend(&trusted_scoring_signals,
+                    absl::StrFormat(", %s", ad_signal));
+    *raw_request.mutable_protected_app_signals_ad_bids()->Add() = ad;
+  }
+  absl::StrAppend(&trusted_scoring_signals,
+                  R"json(},"adComponentRenderUrls":{}})json");
+  raw_request.set_scoring_signals(trusted_scoring_signals);
+  if (test_score_ads_request_config.enable_debug_reporting) {
+    raw_request.set_enable_debug_reporting(
+        test_score_ads_request_config.enable_debug_reporting);
+  }
+  raw_request.set_seller("http://seller.com");
+  raw_request.set_publisher_hostname(kPublisherHostname);
+  raw_request.set_auction_signals(
+      test_score_ads_request_config.test_buyer_reporting_signals
+          .auction_signals);
+  raw_request.mutable_consented_debug_config()->set_is_consented(
+      test_score_ads_request_config.is_consented);
+  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  // top_level_seller is expected to be set only for component auctions
+  if (!test_score_ads_request_config.top_level_seller.empty()) {
+    raw_request.set_top_level_seller(
+        test_score_ads_request_config.top_level_seller);
+  }
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
+}
+
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   // Mock the HpkeDecrypt() call on the crypto_client. This is used by the
   // service to decrypt the incoming request.
@@ -173,7 +245,7 @@ void InitV8Dispatcher(V8Dispatcher& dispatcher) {
   ASSERT_TRUE(dispatcher.Init().ok());
 }
 
-void LoadTestSellerUdfWrapper(
+void LoadWrapperWithMockSellerUdf(
     absl::string_view adtech_code_blob,
     const AuctionServiceRuntimeConfig& auction_service_runtime_config,
     V8Dispatcher& dispatcher) {
@@ -184,7 +256,7 @@ void LoadTestSellerUdfWrapper(
   ASSERT_TRUE(dispatcher.LoadSync(kScoreAdBlobVersion, wrapper_js_blob).ok());
 }
 
-void LoadTestBuyerUdfWrapper(
+void LoadWrapperWithMockReportWinUdf(
     V8Dispatcher& dispatcher, const ScoreAdsRequest& request,
     absl::string_view buyer_udf,
     const AuctionServiceRuntimeConfig& auction_service_runtime_config,
@@ -193,15 +265,37 @@ void LoadTestBuyerUdfWrapper(
   ASSERT_TRUE(raw_request.ParseFromString(request.request_ciphertext()));
   if (!auction_service_runtime_config.enable_report_win_url_generation) {
     return;
+  } else if (buyer_udf.empty()) {
+    PS_VLOG(kNoisyInfo) << "No buyer code loaded";
+    return;
   }
   for (const auto& ad_bid : raw_request.ad_bids()) {
-    if (buyer_udf.empty()) {
-      PS_VLOG(kNoisyInfo) << "No buyer code loaded";
-      break;
-    }
-    std::string wrapper_js_blob = GetBuyerWrappedCode(buyer_udf);
+    std::string wrapper_js_blob = GetBuyerWrappedCode(
+        buyer_udf, auction_service_runtime_config.enable_protected_app_signals);
     absl::StatusOr<std::string> version =
         GetBuyerReportWinVersion(ad_bid.interest_group_owner(), auction_type);
+    ASSERT_TRUE(version.ok());
+    ASSERT_TRUE(dispatcher.LoadSync(*version, wrapper_js_blob).ok());
+  }
+}
+
+void LoadWrapperWithMockReportWinUdfForPAS(
+    V8Dispatcher& dispatcher, const ScoreAdsRequest& request,
+    absl::string_view buyer_udf,
+    const AuctionServiceRuntimeConfig& auction_service_runtime_config,
+    AuctionType auction_type) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  ASSERT_TRUE(raw_request.ParseFromString(request.request_ciphertext()));
+  if (!auction_service_runtime_config.enable_report_win_url_generation) {
+    return;
+  } else if (buyer_udf.empty()) {
+    PS_VLOG(kNoisyInfo) << "No buyer code loaded";
+    return;
+  }
+  for (const auto& ad_bid : raw_request.protected_app_signals_ad_bids()) {
+    std::string wrapper_js_blob = GetBuyerWrappedCode(buyer_udf);
+    absl::StatusOr<std::string> version =
+        GetBuyerReportWinVersion(ad_bid.owner(), auction_type);
     ASSERT_TRUE(version.ok());
     ASSERT_TRUE(dispatcher.LoadSync(*version, wrapper_js_blob).ok());
   }
@@ -252,9 +346,21 @@ void LoadPABuyerAndSellerCode(const ScoreAdsRequest& request,
                               absl::string_view buyer_udf,
                               absl::string_view seller_udf) {
   InitV8Dispatcher(dispatcher);
-  LoadTestSellerUdfWrapper(seller_udf, runtime_config, dispatcher);
-  LoadTestBuyerUdfWrapper(dispatcher, request, buyer_udf, runtime_config,
-                          AuctionType::kProtectedAudience);
+  LoadWrapperWithMockSellerUdf(seller_udf, runtime_config, dispatcher);
+  LoadWrapperWithMockReportWinUdf(dispatcher, request, buyer_udf,
+                                  runtime_config,
+                                  AuctionType::kProtectedAudience);
+}
+
+void LoadPASBuyerAndSellerCode(
+    const ScoreAdsRequest& request, V8Dispatcher& dispatcher,
+    const AuctionServiceRuntimeConfig& runtime_config,
+    absl::string_view buyer_udf, absl::string_view seller_udf) {
+  InitV8Dispatcher(dispatcher);
+  LoadWrapperWithMockSellerUdf(seller_udf, runtime_config, dispatcher);
+  LoadWrapperWithMockReportWinUdfForPAS(dispatcher, request, buyer_udf,
+                                        runtime_config,
+                                        AuctionType::kProtectedAppSignals);
 }
 
 }  // namespace
@@ -283,6 +389,22 @@ void LoadAndRunScoreAdsForPA(
       BuildScoreAdsRequest(test_score_ads_request_config, {test_ad});
   LoadPABuyerAndSellerCode(request, dispatcher, runtime_config, buyer_udf,
                            seller_udf);
+  RunTestScoreAds(dispatch_client, request, runtime_config, response);
+}
+
+void LoadAndRunScoreAdsForPAS(
+    const AuctionServiceRuntimeConfig& runtime_config,
+    const TestScoreAdsRequestConfig& test_score_ads_request_config,
+    absl::string_view buyer_udf, absl::string_view seller_udf,
+    ScoreAdsResponse& response) {
+  V8Dispatcher dispatcher;
+  CodeDispatchClient dispatch_client(dispatcher);
+  ProtectedAppSignalsAdWithBidMetadata test_ad =
+      GetTestAdWithBidMetadataForPAS(test_score_ads_request_config);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequestForPAS(test_score_ads_request_config, {test_ad});
+  LoadPASBuyerAndSellerCode(request, dispatcher, runtime_config, buyer_udf,
+                            seller_udf);
   RunTestScoreAds(dispatch_client, request, runtime_config, response);
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

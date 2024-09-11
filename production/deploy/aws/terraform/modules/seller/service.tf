@@ -271,6 +271,8 @@ module "autoscaling_auction" {
   healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
   healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
   healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
+  consented_request_s3_bucket     = var.consented_request_s3_bucket
+
 }
 
 
@@ -347,6 +349,7 @@ module "autoscaling_sfe" {
   healthcheck_healthy_threshold   = var.healthcheck_healthy_threshold
   healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
   healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
+  consented_request_s3_bucket     = var.consented_request_s3_bucket
 }
 
 ################ Parameter Setup ################

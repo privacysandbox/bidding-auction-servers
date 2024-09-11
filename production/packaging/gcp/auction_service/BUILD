@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@container_structure_test//:defs.bzl", "container_structure_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_image",
+    "container_layer",
+)
+load("@io_bazel_rules_docker//contrib:test.bzl", "container_test")
 load(
     "@rules_pkg//pkg:mappings.bzl",
     "pkg_attributes",
@@ -45,11 +49,24 @@ pkg_tar(
     srcs = server_binaries,
 )
 
-oci_image(
+container_layer(
+    name = "server_binary_layer",
+    directory = "/",
+    env = {
+        "GLOG_logtostderr": "1",
+        "GLOG_stderrthreshold": "0",
+        "GRPC_DNS_RESOLVER": "native",
+    },
+    tars = [
+        ":server_binaries_tar",
+    ],
+)
+
+container_image(
     name = "server_docker_image",
     base = select({
-        "@platforms//cpu:arm64": "@runtime-debian-debug-root-arm64//:runtime-debian-debug-root-arm64",
-        "@platforms//cpu:x86_64": "@runtime-debian-debug-root-amd64//:runtime-debian-debug-root-amd64",
+        "@platforms//cpu:arm64": "@runtime-cc-debian-arm64//image",
+        "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
         "--init_config_client=true",
@@ -57,37 +74,26 @@ oci_image(
     entrypoint = [
         "/server/bin/server",
     ],
-    env = {
-        "GLOG_logtostderr": "1",
-        "GLOG_stderrthreshold": "0",
-        "GRPC_DNS_RESOLVER": "native",
-    },
-    exposed_ports = ["50051/tcp"],
     labels = {"tee.launch_policy.log_redirect": "always"},
-    tars = [
-        ":server_binaries_tar",
+    layers = [
+        ":server_binary_layer",
     ] + select({
         "//:e2e_build": [
         ],
         "//conditions:default": [],
     }),
+    ports = ["50051"],
 )
 
-oci_tarball(
-    name = "server_docker_tarball",
-    image = ":server_docker_image",
-    repo_tags = ["bazel/production/packaging/gcp/auction_service:server_docker_image"],
-)
-
-container_structure_test(
+container_test(
     name = "structure_test",
     size = "large",
     configs = ["test/structure.yaml"],
     driver = "tar",
-    image = ":server_docker_tarball",
+    image = ":server_docker_image",
 )
 
-container_structure_test(
+container_test(
     name = "commands_test",
     size = "large",
     configs = ["test/commands.yaml"],
@@ -105,14 +111,14 @@ genrule(
     name = "copy_to_dist",
     srcs = [
         ":server_artifacts",
-        ":server_docker_tarball",
+        ":server_docker_image.tar",
         "//api:bidding_auction_servers_descriptor_set",
     ],
     outs = ["copy_to_dist.bin"],
     cmd_bash = """cat << EOF > '$@'
 mkdir -p dist/debian
 cp $(execpath :server_artifacts) dist/debian/$$(basename $(RULEDIR))_artifacts.zip
-cp $(execpath :server_docker_tarball) dist/debian/$$(basename $(RULEDIR))_image.tar
+cp $(execpath :server_docker_image.tar) dist/debian/$$(basename $(RULEDIR))_image.tar
 cp $(execpath //api:bidding_auction_servers_descriptor_set) dist
 builders/tools/normalize-dist
 EOF""",

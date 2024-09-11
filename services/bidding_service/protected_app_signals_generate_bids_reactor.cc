@@ -369,10 +369,10 @@ ProtectedAppSignalsGenerateBidsReactor::
 absl::StatusOr<std::string>
 ProtectedAppSignalsGenerateBidsReactor::GetSerializedEgressPayload(
     uint32_t schema_version, absl::string_view egress_payload,
-    const EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
+    EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
   PS_VLOG(5) << "Fetching egress schema from cache";
   PS_ASSIGN_OR_RETURN(auto egress_features,
-                      egress_schema_cache_->Get(schema_version));
+                      egress_schema_cache.Get(schema_version));
   PS_VLOG(5) << "Fetched egress schema successfully from cache, retreiving "
                 "features in egress payload: "
              << egress_payload;
@@ -389,7 +389,7 @@ ProtectedAppSignalsGenerateBidsReactor::GetSerializedEgressPayload(
 
 void ProtectedAppSignalsGenerateBidsReactor::PopulateSerializedEgressPayload(
     uint32_t schema_version, std::string& egress_payload_in_proto,
-    const EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
+    EgressSchemaCache& egress_schema_cache, int egress_bit_limit) {
   PS_VLOG(5) << "Egress payload from generateBid: " << egress_payload_in_proto;
   if (egress_payload_in_proto.empty()) {
     PS_VLOG(5) << "Egress payload received from generateBid is empty, "
@@ -616,11 +616,11 @@ void ProtectedAppSignalsGenerateBidsReactor::Execute() {
   }
 
   PS_VLOG(8, log_context_) << __func__;
-  PS_VLOG(kEncrypted, log_context_) << "GenerateBidsRequest:\n"
-                                    << request_->ShortDebugString();
+  PS_VLOG(kEncrypted, log_context_)
+      << "GenerateBidsRequest exported in EventMessage";
   log_context_.SetEventMessageField(*request_);
-  PS_VLOG(kPlain, log_context_) << "GenerateBidsRawRequest:\n"
-                                << raw_request_.ShortDebugString();
+  PS_VLOG(kPlain, log_context_)
+      << "GenerateBidsRawRequest exported in EventMessage";
   log_context_.SetEventMessageField(raw_request_);
 
   if (IsContextualRetrievalRequest()) {
@@ -641,10 +641,10 @@ void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
     grpc::Status status) {
   PS_VLOG(8, log_context_) << __func__;
   PS_VLOG(kPlain, log_context_)
-      << "GenerateProtectedAppSignalsBidsRawResponse:\n"
-      << raw_response_.ShortDebugString();
+      << "GenerateProtectedAppSignalsBidsRawResponse exported in EventMessage";
   log_context_.SetEventMessageField(raw_response_);
-  log_context_.ExportEventMessage();
+  // ExportEventMessage before encrypt response
+  log_context_.ExportEventMessage(/*if_export_consented=*/true);
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)
         << "Failed to encrypt the generate app signals bids response.";

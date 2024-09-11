@@ -46,6 +46,7 @@
 #include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
 #include "services/bidding_service/inference/inference_utils.h"
+#include "services/bidding_service/inference/model_fetcher_metric.h"
 #include "services/bidding_service/inference/periodic_model_fetcher.h"
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/bidding_service/runtime_flags.h"
@@ -274,13 +275,31 @@ absl::string_view GetStringParameterSafe(
   return "";
 }
 
+// TODO(b/356153749): Deprecate once we support dynamic partitioning metrics.
+std::vector<std::string> GetModels(
+    std::string_view inference_model_bucket_paths) {
+  if (!inference_model_bucket_paths.empty()) {
+    std::vector<std::string> models;
+    for (absl::string_view path :
+         absl::StrSplit(inference_model_bucket_paths, ',')) {
+      models.emplace_back(path);
+    }
+    return models;
+  }
+  return {};
+}
+
 // Brings up the gRPC BiddingService on FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
+  const std::string_view inference_model_bucket_paths =
+      GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_PATHS);
+  std::vector<std::string> models = GetModels(inference_model_bucket_paths);
   // InitTelemetry right after config_client being initialized
-  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs);
+  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs,
+                                     /* buyer_list */ {}, models);
   PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
                                    << config_client.DebugString();
 
@@ -386,14 +405,11 @@ absl::Status RunServer() {
     if (init_config_client) {
       std::string_view bucket_name =
           GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_NAME);
-      std::string_view bucket_paths =
-          GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_PATHS);
       std::string_view model_config_path =
           GetStringParameterSafe(config_client, INFERENCE_MODEL_CONFIG_PATH);
 
       // TODO(b/356153749): Deprecate static model fetcher.
-      if (!bucket_name.empty() && !bucket_paths.empty()) {
-        std::vector<std::string> models = absl::StrSplit(bucket_paths, ',');
+      if (!bucket_name.empty() && !inference_model_bucket_paths.empty()) {
         std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
             BlobStorageClientFactory::Create();
         auto blob_fetcher = std::make_unique<BlobFetcher>(
@@ -408,6 +424,8 @@ absl::Status RunServer() {
                        << status.message();
         }
       } else if (!bucket_name.empty() && !model_config_path.empty()) {
+        PS_RETURN_IF_ERROR(inference::AddModelFetcherMetricToBidding())
+            << "Failed to initialize model fetching metrics";
         model_fetcher = std::make_unique<inference::PeriodicModelFetcher>(
             model_config_path,
             std::make_unique<BlobFetcher>(bucket_name, executor.get(),

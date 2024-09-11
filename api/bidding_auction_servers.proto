@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package privacy_sandbox.bidding_auction_servers;
 
+import "api/udf/generate_bid.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "src/logger/logger.proto";
@@ -196,6 +197,7 @@ message BuyerInput {
 }
 
 // Information about an Interest Group passed by the browser.
+// (-- LINT.IfChange(browser_signals_bidding) --)
 message BrowserSignals {
   // Number of times the group was joined in the last 30 days.
   int64 join_count = 1;
@@ -220,9 +222,12 @@ message BrowserSignals {
   // Only one of the recency or recency_ms is expected to present in the request.
   optional int64 recency_ms = 5;
 }
+// (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:browser_signals_generate_bid) --)
 
 // Information passed by Android.
+// (-- LINT.IfChange(android_signals_bidding) --)
 message AndroidSignals {}
+// (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:android_signals_generate_bid) --)
 
 // Specifies type of the ad. It can help differentiate between ads when
 // B&A is supporting multiple ad targeting use cases concurrently.
@@ -448,6 +453,17 @@ message AuctionResult {
     // Proptected App Signal: This refers to the buyer domain.
     string owner = 3;
 
+    // Owner of the IG to which the ad belongs to.
+    // Note: This is only populated for Protected Audience for
+    // Android apps.
+    string origin = 4;
+
+    // Name of the Interest Group (Custom Audience) to which the ghost
+    // winner belongs to.
+    // Note: This is only populated for Protected Audience for
+    // Android apps.
+    string ig_name = 5;
+
     // Private aggregation signals for the ghost winner.
     // Single seller auctions: This would correspond to a ghost winner
     // if available.
@@ -461,7 +477,7 @@ message AuctionResult {
 
       int32 value = 2;
     }
-    optional GhostWinnerPrivateAggregationSignals ghost_winner_private_aggregation_signals = 4;
+    optional GhostWinnerPrivateAggregationSignals ghost_winner_private_aggregation_signals = 6;
 
     // In case of multiseller auction, the associated data for the ghost winner
     // will be returned so that the ghost winning bid can be scored
@@ -496,9 +512,13 @@ message AuctionResult {
       // properties on the browser.
       string buyer_and_seller_reporting_id = 6;
     }
-    optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 5;
+    optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 7;
   }
   repeated KAnonGhostWinner k_anon_ghost_winners = 23;
+
+  // This field will be populated for all seller and buyer contributions in
+  // single seller auctions and server orchestrated multi seller auctions.
+  repeated PrivateAggregateReportingResponse top_level_contributions = 24;
 }
 
 message GetComponentAuctionCiphertextsRequest {
@@ -968,6 +988,7 @@ message PrivateAggregateReportingResponse {
 }
 
 // Bid for an ad candidate.
+// (-- LINT.IfChange(bid_bidding) --)
 message AdWithBid {
   // Metadata of the ad, this will be passed to Seller's scoring function.
   // Represents an opaque object that is eventually passed to seller Adtech
@@ -1016,6 +1037,7 @@ message AdWithBid {
   // Private aggregation object.
   repeated PrivateAggregateContribution private_aggregation_contributions = 12;
 }
+// (-- LINT.ThenChange(bid_generate_bid) --)
 
 // Bidding service operated by buyer.
 service Bidding {
@@ -1051,9 +1073,7 @@ message GenerateBidsRequest {
       string name = 1;
 
       // Used to fetch real time bidding signals from buyer's key/value server
-      // included in the request. The value of each key in this list will be
-      // passed from the bidding signals dictionary to the Interest Group's
-      // GenerateBid() function as the trustedBiddingSignals parameter.
+      // included in the request.
       repeated string trusted_bidding_signals_keys = 2;
 
       // Optional.
@@ -1086,6 +1106,11 @@ message GenerateBidsRequest {
         // information.
         BrowserSignals browser_signals = 7;
       }
+
+      // Real time bidding signals fetched from buyer's key/value service
+      // passed to the Interest Group's GenerateBid() function as the
+      // trustedBiddingSignals parameter.
+      string trusted_bidding_signals = 8;
     }
 
     // Interest Group is an input to bidding code.
@@ -1111,7 +1136,7 @@ message GenerateBidsRequest {
     string buyer_signals = 3;
 
     // Real Time signals fetched from buyer's Key/Value service.
-    string bidding_signals = 4;
+    string bidding_signals = 4 [deprecated = true];
 
     // A boolean value which indicates if event level debug reporting should be
     // enabled or disabled for this request.
@@ -1625,8 +1650,9 @@ message ScoreAdsResponse {
     // Protected Audience only).
     string interest_group_origin = 20;
 
-    // Private Aggregate contributions to be sent to the client
-    PrivateAggregateReportingResponse private_aggregate_reporting_response = 21;
+    // This field will be populated for all seller and buyer contributions in
+    // single seller auctions and server orchestrated multi seller auctions.
+    repeated PrivateAggregateReportingResponse top_level_contributions = 21;
   }
 
   // The response includes the top scored ad along with other related data.
@@ -1667,17 +1693,6 @@ message WinReportingUrls {
   // seller in case of single seller auction and top level seller in case of
   // multi seller auctions. These urls will be pinged from client.
   ReportingUrls top_level_seller_reporting_urls = 3;
-}
-
-// Urls to support debug reporting, when auction is won and auction is lost.
-message DebugReportUrls {
-  // URL to be triggered if the interest group wins the auction.
-  // If undefined or malformed url it will be ignored.
-  string auction_debug_win_url = 1;
-
-  // URL to be triggered if the interest grou losses the auction.
-  // If undefined or malformed url it will be ignored.
-  string auction_debug_loss_url = 2;
 }
 
 // message to store the server request/ response

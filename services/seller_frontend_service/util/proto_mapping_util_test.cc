@@ -51,6 +51,46 @@ AuctionResult::Error MakeAnError() {
   return error;
 }
 
+PrivateAggregateContribution CreateTestPAggContribution(
+    EventType event_type, absl::string_view event_name = "") {
+  // Create the example SignalValue
+  SignalValue signal_value;
+  signal_value.set_base_value(BASE_VALUE_WINNING_BID);  // Set the base_value
+  signal_value.set_offset(10);                          // Set some offset value
+  signal_value.set_scale(1.5);                          // Set scale factor
+
+  // Create the example SignalBucket
+  SignalBucket signal_bucket;
+  signal_bucket.set_base_value(
+      BASE_VALUE_HIGHEST_SCORING_OTHER_BID);  // Set the base_value
+  signal_bucket.set_scale(2.0);               // Set scale factor
+
+  // Create the BucketOffset
+  BucketOffset bucket_offset;
+  bucket_offset.add_value(12345678901234567890ULL);  // Add 64-bit values
+  bucket_offset.add_value(12345678901234567890ULL);  // Add another 64-bit value
+  bucket_offset.set_is_negative(true);               // Set the is_negative flag
+
+  // Set the BucketOffset in SignalBucket
+  *signal_bucket.mutable_offset() = bucket_offset;
+
+  // Create the PrivateAggregationValue with SignalValue
+  PrivateAggregationValue private_aggregation_value;
+  *private_aggregation_value.mutable_extended_value() = signal_value;
+
+  // Create the PrivateAggregationBucket with SignalBucket
+  PrivateAggregationBucket private_aggregation_bucket;
+  *private_aggregation_bucket.mutable_signal_bucket() = signal_bucket;
+
+  // Create a PrivateAggregateContribution and set its fields
+  PrivateAggregateContribution contribution;
+  *contribution.mutable_bucket() = private_aggregation_bucket;
+  *contribution.mutable_value() = private_aggregation_value;
+  contribution.mutable_event()->set_event_type(event_type);
+  contribution.mutable_event()->set_event_name(event_name);
+  return contribution;
+}
+
 AuctionResult MapBasicScoreFieldsToAuctionResult(
     const ScoreAdsResponse::AdScore& high_score) {
   AuctionResult auction_result;
@@ -109,6 +149,16 @@ AuctionResult MapBasicScoreFieldsToAuctionResult(
   return auction_result;
 }
 
+void MapBasicScoreFieldsToAuctionResultForPrivateAggregation(
+    ScoreAdsResponse::AdScore& high_score, AuctionResult& auction_result) {
+  PrivateAggregateContribution contribution =
+      CreateTestPAggContribution(EVENT_TYPE_WIN);
+  PrivateAggregateReportingResponse pagg_response;
+  *pagg_response.add_contributions() = contribution;
+  *auction_result.add_top_level_contributions() = pagg_response;
+  *high_score.add_top_level_contributions() = std::move(pagg_response);
+}
+
 AuctionResult MapBasicErrorFieldsToAuctionResult(
     const AuctionResult::Error& error) {
   AuctionResult auction_result;
@@ -162,6 +212,18 @@ class AdScoreToAuctionResultTest : public testing::Test {
 
 TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForSingleSellerAuction) {
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
+  AuctionResult output = AdScoreToAuctionResult(
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      /*error=*/std::nullopt, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER,
+      empty_seller_, empty_audience_);
+  EXPECT_THAT(expected, EqualsProto(output));
+}
+
+TEST_F(AdScoreToAuctionResultTest,
+       MapsAllFieldsForSingleSellerAuctionWithPAAPIContributions) {
+  AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
+  MapBasicScoreFieldsToAuctionResultForPrivateAggregation(valid_score_,
+                                                          expected);
   AuctionResult output = AdScoreToAuctionResult(
       valid_score_, /*maybe_bidding_groups=*/std::nullopt,
       /*error=*/std::nullopt, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER,
