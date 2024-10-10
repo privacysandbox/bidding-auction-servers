@@ -80,14 +80,14 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
   if (high_score.has_value()) {
     auction_result = AdScoreToAuctionResult(
         high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
-        error, auction_scope_, request_->auction_config().seller(),
-        protected_auction_input_,
+        shared_ig_updates_map_, error, auction_scope_,
+        request_->auction_config().seller(), protected_auction_input_,
         request_->auction_config().top_level_seller());
   } else {
     auction_result = AdScoreToAuctionResult(
-        high_score, /*maybe_bidding_groups=*/std::nullopt, error,
-        auction_scope_, request_->auction_config().seller(),
-        protected_auction_input_,
+        high_score, /*maybe_bidding_groups=*/std::nullopt,
+        shared_ig_updates_map_, error, auction_scope_,
+        request_->auction_config().seller(), protected_auction_input_,
         request_->auction_config().top_level_seller());
   }
   PS_VLOG(kPlain, log_context_) << "AuctionResult exported in EventMessage";
@@ -99,8 +99,9 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
   // Compress the bytes array before framing it with pre-amble and padding.
   absl::StatusOr<std::string> compressed_data = GzipCompress(serialized_result);
   if (!compressed_data.ok()) {
-    std::string error_str = "Failed to compress the serialized response data\n";
-    FinishWithStatus(grpc::Status(grpc::INTERNAL, error_str));
+    PS_LOG(ERROR, log_context_)
+        << "Failed to compress the serialized response data: "
+        << compressed_data.status().message();
     return absl::InternalError("");
   }
 
@@ -225,13 +226,22 @@ SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
 SelectAdReactorForApp::CreateScoreAdsRequest() {
   auto request = SelectAdReactor::CreateScoreAdsRequest();
+  std::visit(
+      [&request, this](const auto& protected_auction_input) {
+        if (enable_kanon_) {
+          request->set_num_allowed_ghost_winners(
+              protected_auction_input.num_k_anon_ghost_winners());
+        }
+      },
+      protected_auction_input_);
   MayPopulateProtectedAppSignalsBids(request.get());
   return request;
 }
 
 ProtectedAppSignalsAdWithBidMetadata
 SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
-    absl::string_view buyer_owner, const ProtectedAppSignalsAdWithBid& input) {
+    absl::string_view buyer_owner, const ProtectedAppSignalsAdWithBid& input,
+    bool k_anon_status) {
   ProtectedAppSignalsAdWithBidMetadata result;
   if (input.has_ad()) {
     *result.mutable_ad() = input.ad();
@@ -245,6 +255,9 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   result.set_egress_payload(input.egress_payload());
   result.set_temporary_unlimited_egress_payload(
       input.temporary_unlimited_egress_payload());
+  if (enable_kanon_) {
+    result.set_k_anon_status(k_anon_status);
+  }
   return result;
 }
 
@@ -262,8 +275,10 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
   for (const auto& [buyer_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
          i++) {
+      const bool k_anon_status = GetKAnonStatusForAdWithBid(/*ad_key=*/"");
       auto ad_with_bid_metadata = BuildProtectedAppSignalsAdWithBidMetadata(
-          buyer_owner, get_bid_response->protected_app_signals_bids().at(i));
+          buyer_owner, get_bid_response->protected_app_signals_bids()[i],
+          k_anon_status);
       score_ads_raw_request->mutable_protected_app_signals_ad_bids()->Add(
           std::move(ad_with_bid_metadata));
     }

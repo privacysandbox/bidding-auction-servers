@@ -291,6 +291,8 @@ absl::StatusOr<std::string> CborEncodeProtectedAuctionProtoHelper(
     PS_RETURN_IF_ERROR(CborSerializeConsentedDebugConfig(
         protected_auction_input.consented_debug_config(), *cbor_internal));
   }
+  PS_RETURN_IF_ERROR(CborSerializeBool(
+      kEnforceKAnon, protected_auction_input.enforce_kanon(), *cbor_internal));
   return SerializeCbor(*cbor_data_root);
 }
 

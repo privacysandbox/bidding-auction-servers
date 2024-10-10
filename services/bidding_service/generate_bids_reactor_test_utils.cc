@@ -176,7 +176,7 @@ std::string CreateGenerateBidsUdfResponse(
 }
 
 void SetupContextualProtectedAppSignalsRomaExpectations(
-    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    MockV8DispatchClient& dispatcher, int& num_roma_dispatches,
     absl::optional<std::string> generate_bid_udf_response) {
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([&num_roma_dispatches, &generate_bid_udf_response](
@@ -193,7 +193,7 @@ void SetupContextualProtectedAppSignalsRomaExpectations(
 }
 
 void SetupProtectedAppSignalsRomaExpectations(
-    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    MockV8DispatchClient& dispatcher, int& num_roma_dispatches,
     const absl::optional<std::string>&
         prepare_data_for_ad_retrieval_udf_response,
     const absl::optional<std::string>& generate_bid_udf_response) {

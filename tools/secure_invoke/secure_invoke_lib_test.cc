@@ -124,7 +124,8 @@ class SecureInvokeLib : public testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GetBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
 
     TrustedServersConfigClient config_client({});
@@ -227,12 +228,10 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
   absl::SetFlag(&FLAGS_json_input_str, kSampleGetBidRequest);
 
   // Verifies that the encrypted request makes it to BFE and the response comes
-  // back. Error is expected because test is not setting up the bidding service.
+  // back. Empty response is expected because trusted bidding signals for IG
+  // are empty.
   auto status = SendRequestToBfe(default_keyset_, false, std::move(stub));
-  EXPECT_FALSE(status.ok()) << status;
-  EXPECT_THAT(status.message(),
-              HasSubstr("Failed to create secure client channel"))
-      << status;
+  EXPECT_TRUE(status.ok()) << status;
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponseWithDebugReportingEnabled) {
@@ -249,13 +248,11 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponseWithDebugReportingEnabled) {
   absl::SetFlag(&FLAGS_json_input_str, kSampleGetBidRequest);
 
   // Verifies that the encrypted request makes it to BFE and the response comes
-  // back. Error is expected because test is not setting up the bidding service.
+  // back. Empty response is expected because trusted bidding signals for IG
+  // are empty.
   auto status = SendRequestToBfe(default_keyset_, enable_debug_reporting,
                                  std::move(stub));
-  EXPECT_FALSE(status.ok()) << status;
-  EXPECT_THAT(status.message(),
-              HasSubstr("Failed to create secure client channel"))
-      << status;
+  EXPECT_TRUE(status.ok()) << status;
 }
 
 TEST_F(SecureInvokeLib, IncludesTopLevelSellerInBfeInput) {
@@ -272,13 +269,11 @@ TEST_F(SecureInvokeLib, IncludesTopLevelSellerInBfeInput) {
   absl::SetFlag(&FLAGS_json_input_str, kSampleComponentGetBidRequest);
 
   // Verifies that the encrypted request makes it to BFE and the response comes
-  // back. Error is expected because test is not setting up the bidding service.
+  // back. Empty response is expected because trusted bidding signals for IG
+  // are empty.
   auto status = SendRequestToBfe(default_keyset_, enable_debug_reporting,
                                  std::move(stub));
-  EXPECT_FALSE(status.ok()) << status;
-  EXPECT_THAT(status.message(),
-              HasSubstr("Failed to create secure client channel"))
-      << status;
+  EXPECT_TRUE(status.ok()) << status;
 }
 
 TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {

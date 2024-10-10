@@ -55,9 +55,11 @@ inline constexpr int kSampleBidCount = 2;
 inline constexpr int kSampleRecency = 3;
 inline constexpr int kSampleRecencyMs = 3000;
 inline constexpr char kSampleIgOwner[] = "foo_owner";
+inline constexpr int kSampleIgIndex = 10;
 inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
 inline constexpr int kSampleRequestMs = 99999;
+inline constexpr bool kSampleEnforceKAnon = true;
 inline constexpr char kSampleErrorMessage[] = "BadError";
 inline constexpr int32_t kSampleErrorCode = 400;
 inline constexpr char kTestEvent1[] = "click";
@@ -71,6 +73,23 @@ inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
 inline constexpr char kUsdIso[] = "USD";
 inline constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+inline constexpr char kSampleAdRenderUrlHash[] = "adRenderUrlHash";
+inline constexpr char kSampleAdRenderUrl[] = "adRenderUrl";
+inline constexpr char kSampleAdComponentRenderUrlsHash[] =
+    "adComponentRenderUrlHash";
+inline constexpr char kSampleAdComponentRenderUrl[] = "adComponentRenderUrl";
+inline constexpr char kReportingIdHash[] = "reportingIdHash";
+inline constexpr char kSampleBucket[] = "bucket";
+inline constexpr int kSampleValue = 21;
+inline constexpr float kSampleModifiedBid = 1.23;
+inline constexpr char kSampleBidCurrency[] = "bidCurrency";
+inline constexpr char kSampleAdMetadata[] = "adMetadata";
+inline constexpr char kSampleBuyerAndSellerReportingId[] =
+    "buyerAndSellerReportingId";
+inline constexpr char kSampleBuyerReportingId[] = "buyerReportingId";
+inline constexpr char kSampleSelectableBuyerAndSellerReportingId[] =
+    "selectableBuyerAndSellerReportingId";
+inline constexpr int kSampleWinnerPositionalIndex = 5;
 
 RequestLogContext log_context{{}, server_common::ConsentedDebugConfiguration()};
 
@@ -251,6 +270,18 @@ ScoreAdsResponse::AdScore MakeARandomComponentAdScore() {
   return winner;
 }
 
+void TestUpdateGroupMap(const UpdateGroupMap& decoded_update_groups,
+                        const UpdateGroupMap& expected_update_groups) {
+  EXPECT_EQ(decoded_update_groups.size(), expected_update_groups.size());
+  for (const auto& [key, message] : expected_update_groups) {
+    std::string difference;
+    google::protobuf::util::MessageDifferencer differencer;
+    differencer.ReportDifferencesToString(&difference);
+    EXPECT_TRUE(differencer.Compare(decoded_update_groups.at(key), message))
+        << difference;
+  }
+}
+
 void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
@@ -264,6 +295,9 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   EXPECT_TRUE(
       cbor_map_add(*protected_auction_input,
                    BuildIntMapPair(kRequestTimestampMs, kSampleRequestMs)));
+  EXPECT_TRUE(
+      cbor_map_add(*protected_auction_input,
+                   BuildBoolMapPair(kEnforceKAnon, kSampleEnforceKAnon)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
   EXPECT_TRUE(cbor_array_push(
@@ -306,6 +340,7 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   expected.set_enable_debug_reporting(true);
   expected.set_generation_id(kSampleGenerationId);
   expected.set_request_timestamp_ms(kSampleRequestMs);
+  expected.set_enforce_kanon(kSampleEnforceKAnon);
 
   BuyerInput::InterestGroup expected_ig;
   expected_ig.set_name(kSampleIgName);
@@ -733,6 +768,7 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
   const int ig_index = 2;
   const float buyer_bid = 10.21;
   const float desirability = 2.35;
+  UpdateGroupMap update_group_map;
   ScoreAdsResponse::AdScore winner;
   winner.set_render(ad_render_url);
   winner.set_desirability(desirability);
@@ -769,8 +805,8 @@ TEST(ChromeResponseUtils, VerifyCborEncodingWithWinReportingUrls) {
   bidding_group_map.try_emplace(interest_group_owner, std::move(ig_indices));
 
   auto response_with_cbor =
-      Encode(winner, bidding_group_map, /*error=*/std::nullopt,
-             [](const grpc::Status& status) {});
+      Encode(winner, bidding_group_map, update_group_map,
+             /*error=*/std::nullopt, [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -834,6 +870,7 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   const int ig_index = 2;
   const float buyer_bid = 10.21;
   const float desirability = 2.35;
+  const int update_if_older_than_ms = 500000;
   ScoreAdsResponse::AdScore winner;
   winner.set_render(ad_render_url);
   winner.set_desirability(desirability);
@@ -846,10 +883,22 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   AuctionResult::InterestGroupIndex ig_indices;
   ig_indices.add_index(ig_index);
   bidding_group_map.try_emplace(interest_group_owner, std::move(ig_indices));
+  // Setup an update group map.
+  UpdateGroupMap update_group_map;
+  UpdateInterestGroupList update_list;
+  UpdateInterestGroup update_first;
+  update_first.set_index(0);
+  update_first.set_update_if_older_than_ms(update_if_older_than_ms);
+  UpdateInterestGroup update_second;
+  update_second.set_index(1);
+  update_second.set_update_if_older_than_ms(update_if_older_than_ms);
+  *update_list.mutable_interest_groups()->Add() = std::move(update_first);
+  *update_list.mutable_interest_groups()->Add() = std::move(update_second);
+  update_group_map.emplace(interest_group_owner, std::move(update_list));
 
   auto response_with_cbor =
-      Encode(winner, bidding_group_map, /*error=*/std::nullopt,
-             [](const grpc::Status& status) {});
+      Encode(winner, bidding_group_map, update_group_map,
+             /*error=*/std::nullopt, [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -865,6 +914,8 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   EXPECT_EQ(observed_owner, interest_group_owner);
   EXPECT_EQ(observed_ig_indices.index_size(), 1);
   EXPECT_EQ(observed_ig_indices.index(0), ig_index);
+
+  TestUpdateGroupMap(decoded_result->update_groups(), update_group_map);
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), ad_render_url);
@@ -912,9 +963,20 @@ TEST(ChromeResponseUtils, CborEncodesComponentAuctionResult) {
   ig_indices.add_index(ig_index);
   bidding_group_map.try_emplace(winner.interest_group_owner(),
                                 std::move(ig_indices));
+  UpdateGroupMap update_group_map;
+  UpdateInterestGroupList update_list;
+  UpdateInterestGroup update_first;
+  update_first.set_index(0);
+  update_first.set_update_if_older_than_ms(1);
+  UpdateInterestGroup update_second;
+  update_second.set_index(1);
+  update_second.set_update_if_older_than_ms(2);
+  *update_list.mutable_interest_groups()->Add() = std::move(update_first);
+  *update_list.mutable_interest_groups()->Add() = std::move(update_second);
+  update_group_map.emplace("test", std::move(update_list));
 
   auto response_with_cbor = EncodeComponent(
-      top_level_seller, winner, bidding_group_map,
+      top_level_seller, winner, bidding_group_map, update_group_map,
       /*error=*/std::nullopt, [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -928,6 +990,8 @@ TEST(ChromeResponseUtils, CborEncodesComponentAuctionResult) {
   EXPECT_EQ(observed_owner, winner.interest_group_owner());
   EXPECT_EQ(observed_ig_indices.index_size(), 1);
   EXPECT_EQ(observed_ig_indices.index(0), ig_index);
+
+  TestUpdateGroupMap(decoded_result->update_groups(), update_group_map);
 
   // Verify that the decoded result has the winning ad correctly set.
   EXPECT_EQ(decoded_result->ad_render_url(), winner.render());
@@ -976,19 +1040,140 @@ TEST(ChromeResponseUtils, VerifyCBOREncodedError) {
   // Setup a bidding group map.
   google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
       bidding_group_map;
+  UpdateGroupMap update_group_map;
+
   AuctionResult::InterestGroupIndex ig_indices;
 
   AuctionResult::Error error;
   error.set_message(kSampleErrorMessage);
   error.set_code(kSampleErrorCode);
-  auto response_with_cbor = Encode(winner, bidding_group_map, error,
-                                   [](const grpc::Status& status) {});
+  auto response_with_cbor = Encode(winner, bidding_group_map, update_group_map,
+                                   error, [](const grpc::Status& status) {});
 
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);
   ASSERT_TRUE(decoded_result.ok()) << decoded_result.status();
   EXPECT_EQ(decoded_result->error().message(), kSampleErrorMessage);
   EXPECT_EQ(decoded_result->error().code(), kSampleErrorCode);
+}
+
+AuctionResult::KAnonJoinCandidate SampleKAnonJoinCandidate() {
+  AuctionResult::KAnonJoinCandidate kanon_winner_join_candidates;
+  kanon_winner_join_candidates.set_ad_render_url_hash(kSampleAdRenderUrlHash);
+  auto* ad_component_render_urls_hash =
+      kanon_winner_join_candidates.mutable_ad_component_render_urls_hash();
+  *ad_component_render_urls_hash->Add() = kSampleAdComponentRenderUrlsHash;
+  kanon_winner_join_candidates.set_reporting_id_hash(kReportingIdHash);
+  return kanon_winner_join_candidates;
+}
+
+KAnonAuctionResultData SampleKAnonAuctionResultData() {
+  // Setup k-anon ghost winners.
+  AuctionResult::KAnonGhostWinner kanon_ghost_winner;
+  *kanon_ghost_winner.mutable_k_anon_join_candidates() =
+      SampleKAnonJoinCandidate();
+  kanon_ghost_winner.set_interest_group_index(kSampleIgIndex);
+  kanon_ghost_winner.set_owner(kSampleIgOwner);
+  // Add private aggregation signals.
+  auto* ghost_winner_private_aggregation_signals =
+      kanon_ghost_winner.mutable_ghost_winner_private_aggregation_signals();
+  ghost_winner_private_aggregation_signals->set_bucket(kSampleBucket);
+  ghost_winner_private_aggregation_signals->set_value(kSampleValue);
+  // Add ghost winner for top level auction.
+  auto* ghost_winner_for_top_level_auction =
+      kanon_ghost_winner.mutable_ghost_winner_for_top_level_auction();
+  ghost_winner_for_top_level_auction->set_ad_render_url(kSampleAdRenderUrl);
+  auto* ad_component_render_urls =
+      ghost_winner_for_top_level_auction->mutable_ad_component_render_urls();
+  *ad_component_render_urls->Add() = kSampleAdComponentRenderUrl;
+  ghost_winner_for_top_level_auction->set_modified_bid(kSampleModifiedBid);
+  ghost_winner_for_top_level_auction->set_bid_currency(kSampleBidCurrency);
+  ghost_winner_for_top_level_auction->set_ad_metadata(kSampleAdMetadata);
+  ghost_winner_for_top_level_auction->set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ghost_winner_for_top_level_auction->set_buyer_reporting_id(
+      kSampleBuyerReportingId);
+  ghost_winner_for_top_level_auction
+      ->set_selectable_buyer_and_seller_reporting_id(
+          kSampleSelectableBuyerAndSellerReportingId);
+
+  return {.kanon_ghost_winners = {std::move(kanon_ghost_winner)},
+          .kanon_winner_join_candidates = SampleKAnonJoinCandidate(),
+          .kanon_winner_positional_index = kSampleWinnerPositionalIndex};
+}
+
+TEST(ChromeResponseUtils, EncodesKAnonData) {
+  KAnonAuctionResultData kanon_auction_result_data =
+      SampleKAnonAuctionResultData();
+
+  ScoreAdsResponse::AdScore winner;
+  auto response_with_cbor = Encode(
+      winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
+      /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      &kanon_auction_result_data);
+  ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
+  absl::StatusOr<AuctionResult> decoded_result =
+      CborDecodeAuctionResultToProto(*response_with_cbor);
+  ASSERT_TRUE(decoded_result.ok()) << decoded_result.status();
+
+  EXPECT_EQ(decoded_result->k_anon_winner_positional_index(),
+            kSampleWinnerPositionalIndex);
+  // Validate winner join candidate.
+  ASSERT_TRUE(decoded_result->has_k_anon_winner_join_candidates());
+  const auto& k_anon_winner_join_candidates =
+      decoded_result->k_anon_winner_join_candidates();
+  EXPECT_EQ(k_anon_winner_join_candidates.ad_render_url_hash(),
+            kSampleAdRenderUrlHash);
+  EXPECT_EQ(k_anon_winner_join_candidates.reporting_id_hash(),
+            kReportingIdHash);
+  const auto& ad_component_render_urls_hash =
+      k_anon_winner_join_candidates.ad_component_render_urls_hash();
+  ASSERT_EQ(ad_component_render_urls_hash.size(), 1);
+  EXPECT_EQ(ad_component_render_urls_hash[0], kSampleAdComponentRenderUrlsHash);
+
+  // Validate ghost winner candidates.
+  ASSERT_EQ(decoded_result->k_anon_ghost_winners_size(), 1);
+  const auto& ghost_winner = decoded_result->k_anon_ghost_winners(0);
+  EXPECT_EQ(ghost_winner.interest_group_index(), kSampleIgIndex);
+  EXPECT_EQ(ghost_winner.owner(), kSampleIgOwner);
+  const auto& ghost_join_candidate = ghost_winner.k_anon_join_candidates();
+  EXPECT_EQ(ghost_join_candidate.ad_render_url_hash(), kSampleAdRenderUrlHash);
+  ASSERT_EQ(ghost_join_candidate.ad_component_render_urls_hash_size(), 1);
+  EXPECT_EQ(ghost_join_candidate.ad_component_render_urls_hash(0),
+            kSampleAdComponentRenderUrlsHash);
+  EXPECT_EQ(ghost_join_candidate.reporting_id_hash(), kReportingIdHash);
+  // Validate private aggregation signals.
+  const auto& observed_ghost_winner_private_aggregation_signals =
+      ghost_winner.ghost_winner_private_aggregation_signals();
+  EXPECT_EQ(observed_ghost_winner_private_aggregation_signals.bucket(),
+            kSampleBucket);
+  EXPECT_EQ(observed_ghost_winner_private_aggregation_signals.value(),
+            kSampleValue);
+  // Validate ghost winner for top level auction.
+  const auto& observed_ghost_winner_for_top_level_auction =
+      ghost_winner.ghost_winner_for_top_level_auction();
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction.ad_render_url(),
+            kSampleAdRenderUrl);
+  ASSERT_EQ(observed_ghost_winner_for_top_level_auction
+                .ad_component_render_urls_size(),
+            1);
+  EXPECT_EQ(
+      observed_ghost_winner_for_top_level_auction.ad_component_render_urls(0),
+      kSampleAdComponentRenderUrl);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction.modified_bid(),
+            kSampleModifiedBid);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction.bid_currency(),
+            kSampleBidCurrency);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction.ad_metadata(),
+            kSampleAdMetadata);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction
+                .buyer_and_seller_reporting_id(),
+            kSampleBuyerAndSellerReportingId);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction.buyer_reporting_id(),
+            kSampleBuyerReportingId);
+  EXPECT_EQ(observed_ghost_winner_for_top_level_auction
+                .selectable_buyer_and_seller_reporting_id(),
+            kSampleSelectableBuyerAndSellerReportingId);
 }
 
 std::string ErrStr(absl::string_view field_name,
@@ -1145,6 +1330,23 @@ TEST(ChromeResponseUtils, UintsAreCompactlyCborEncoded) {
   EXPECT_EQ(*five_bytes, "1affffffff");
 }
 
+TEST(ChromeResponseUtils, NegIntsAreCompactlyCborEncoded) {
+  ScopedCbor single_byte_cbor(cbor_build_int(-23));
+  auto single_byte = SerializeToCbor(*single_byte_cbor);
+  ASSERT_TRUE(single_byte.ok()) << single_byte.status();
+  EXPECT_EQ(*single_byte, "36");
+
+  ScopedCbor two_bytes_cbor(cbor_build_int(-127));
+  auto two_bytes = SerializeToCbor(*two_bytes_cbor);
+  ASSERT_TRUE(two_bytes.ok()) << two_bytes.status();
+  EXPECT_EQ(*two_bytes, "387e");
+
+  ScopedCbor five_bytes_cbor(cbor_build_int(-2147483648));
+  auto five_bytes = SerializeToCbor(*five_bytes_cbor);
+  ASSERT_TRUE(five_bytes.ok()) << five_bytes.status();
+  EXPECT_EQ(*five_bytes, "3a7fffffff");
+}
+
 TEST(ChromeResponseUtils, FloatsAreCompactlyCborEncoded) {
   auto half_precision_cbor = cbor_build_float(0.0);
   ASSERT_TRUE(half_precision_cbor.ok()) << half_precision_cbor.status();
@@ -1223,24 +1425,62 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret = Encode(std::move(winner), bidding_group_map, std::nullopt,
-                    [](auto error) {});
+  auto kanon_auction_result_data = SampleKAnonAuctionResultData();
+
+  UpdateGroupMap update_group_map;
+  UpdateInterestGroupList update_list;
+  UpdateInterestGroup update_interest_group;
+  update_interest_group.set_index(1);
+  update_interest_group.set_update_if_older_than_ms(1000);
+  *update_list.mutable_interest_groups()->Add() =
+      std::move(update_interest_group);
+  update_group_map.emplace(interest_group_owner_1, std::move(update_list));
+
+  auto ret = Encode(
+      std::move(winner), bidding_group_map, update_group_map, std::nullopt,
+      [](auto error) {}, &kanon_auction_result_data);
+
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(
+  EXPECT_THAT(
       absl::BytesToHexString(*ret),
-      "a963626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
-      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
-      "698207026369673182070263696831820702666f776e6572318207027077696e5265706f"
-      "7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c7265706f72"
-      "74696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e74657261"
-      "6374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69"
-      "636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a2"
-      "6c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f"
-      "6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
-      "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d65636967"
-      "3172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
-      "636f6d");
+      testing::StrEq(
+          "ad63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d"
+          "706f6e656e7473806b616452656e64657255524c606c75706461746547726f757073"
+          "a16369673181a265696e646578017375706461746549664f6c6465725468616e4d73"
+          "1903e86d62696464696e6747726f757073a4627a6982070263696731820702636968"
+          "31820702666f776e6572318207027077696e5265706f7274696e6755524c73a27262"
+          "757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c746874"
+          "74703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e526570"
+          "6f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d"
+          "781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a26c726570"
+          "6f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f6d78"
+          "18696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
+          "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
+          "696731716b416e6f6e47686f737457696e6e65727381a5656f776e657269666f6f5f"
+          "6f776e657272696e74657265737447726f7570496e6465780a736b416e6f6e4a6f69"
+          "6e43616e64696461746573a36f616452656e64657255524c486173686f616452656e"
+          "64657255726c486173686f7265706f7274696e674964486173686f7265706f727469"
+          "6e6749644861736878196164436f6d706f6e656e7452656e64657255524c73486173"
+          "688178186164436f6d706f6e656e7452656e64657255726c48617368781d67686f73"
+          "7457696e6e6572466f72546f704c6576656c41756374696f6ea86a61644d65746164"
+          "6174616a61644d657461646174616b616452656e64657255524c6b616452656e6465"
+          "7255726c6b62696443757272656e63796b62696443757272656e63796b6d6f646966"
+          "696564426964fa3f9d70a47062757965725265706f7274696e674964706275796572"
+          "5265706f7274696e674964756164436f6d706f6e656e7452656e64657255524c7381"
+          "746164436f6d706f6e656e7452656e64657255726c78196275796572416e6453656c"
+          "6c65725265706f7274696e67496478196275796572416e6453656c6c65725265706f"
+          "7274696e674964782373656c65637461626c654275796572416e6453656c6c657252"
+          "65706f7274696e674964782373656c65637461626c654275796572416e6453656c6c"
+          "65725265706f7274696e674964782467686f737457696e6e65725072697661746541"
+          "67677265676174696f6e5369676e616c73a26576616c756515666275636b65746662"
+          "75636b657472696e74657265737447726f75704f776e65727268747470733a2f2f61"
+          "64746563682e636f6d78196b416e6f6e57696e6e65724a6f696e43616e6469646174"
+          "6573a36f616452656e64657255524c486173686f616452656e64657255726c486173"
+          "686f7265706f7274696e674964486173686f7265706f7274696e6749644861736878"
+          "196164436f6d706f6e656e7452656e64657255524c73486173688178186164436f6d"
+          "706f6e656e7452656e64657255726c48617368781a6b416e6f6e57696e6e6572506f"
+          "736974696f6e616c496e64657805"));
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {
@@ -1279,27 +1519,39 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret =
-      EncodeComponent("https://top-level-adtech.com", std::move(winner),
-                      bidding_group_map, std::nullopt, [](auto error) {});
+  UpdateGroupMap update_group_map;
+  UpdateInterestGroupList update_list;
+  UpdateInterestGroup update_interest_group;
+  update_interest_group.set_index(1);
+  update_interest_group.set_update_if_older_than_ms(1000);
+  *update_list.mutable_interest_groups()->Add() =
+      std::move(update_interest_group);
+  update_group_map.emplace(interest_group_owner_2, std::move(update_list));
+
+  auto ret = EncodeComponent("https://top-level-adtech.com", std::move(winner),
+                             bidding_group_map, update_group_map, std::nullopt,
+                             [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(
+  EXPECT_THAT(
       absl::BytesToHexString(*ret),
-      "ac63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a61644d6574"
-      "61646174617073616d706c6541644d657461646174616a636f6d706f6e656e7473806b61"
-      "6452656e64657255524c606b62696443757272656e6379635553446d62696464696e6747"
-      "726f757073a4627a698207026369673182070263696831820702666f776e657231820702"
-      "6e746f704c6576656c53656c6c6572781c68747470733a2f2f746f702d6c6576656c2d61"
-      "64746563682e636f6d7077696e5265706f7274696e6755524c73a2726275796572526570"
-      "6f7274696e6755524c73a26c7265706f7274696e6755524c74687474703a2f2f7265706f"
-      "727457696e2e636f6d7818696e746572616374696f6e5265706f7274696e6755524c73a1"
-      "65636c69636b70687474703a2f2f636c69636b2e636f6d781b746f704c6576656c53656c"
-      "6c65725265706f7274696e6755524c73a26c7265706f7274696e6755524c77687474703a"
-      "2f2f7265706f7274526573756c742e636f6d7818696e746572616374696f6e5265706f72"
-      "74696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f6d71696e74"
-      "657265737447726f75704e616d656369673172696e74657265737447726f75704f776e65"
-      "727268747470733a2f2f6164746563682e636f6d");
+      testing::StrEq(
+          "ad63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a61644d"
+          "657461646174617073616d706c6541644d657461646174616a636f6d706f6e656e74"
+          "73806b616452656e64657255524c606b62696443757272656e6379635553446c7570"
+          "6461746547726f757073a1627a6981a265696e646578017375706461746549664f6c"
+          "6465725468616e4d731903e86d62696464696e6747726f757073a4627a6982070263"
+          "69673182070263696831820702666f776e6572318207026e746f704c6576656c5365"
+          "6c6c6572781c68747470733a2f2f746f702d6c6576656c2d6164746563682e636f6d"
+          "7077696e5265706f7274696e6755524c73a27262757965725265706f7274696e6755"
+          "524c73a26c7265706f7274696e6755524c74687474703a2f2f7265706f727457696e"
+          "2e636f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c"
+          "69636b70687474703a2f2f636c69636b2e636f6d781b746f704c6576656c53656c6c"
+          "65725265706f7274696e6755524c73a26c7265706f7274696e6755524c7768747470"
+          "3a2f2f7265706f7274526573756c742e636f6d7818696e746572616374696f6e5265"
+          "706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e636f"
+          "6d71696e74657265737447726f75704e616d656369673172696e7465726573744772"
+          "6f75704f776e65727268747470733a2f2f6164746563682e636f6d"));
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncodingNoBidCurrency) {
@@ -1337,27 +1589,31 @@ TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncodingNoBidCurrency) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret =
-      EncodeComponent("https://top-level-adtech.com", std::move(winner),
-                      bidding_group_map, std::nullopt, [](auto error) {});
+  UpdateGroupMap update_group_map;
+
+  auto ret = EncodeComponent("https://top-level-adtech.com", std::move(winner),
+                             bidding_group_map, update_group_map, std::nullopt,
+                             [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(
+  EXPECT_THAT(
       absl::BytesToHexString(*ret),
-      "ab63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a61644d6574"
-      "61646174617073616d706c6541644d657461646174616a636f6d706f6e656e7473806b61"
-      "6452656e64657255524c606d62696464696e6747726f757073a4627a6982070263696731"
-      "82070263696831820702666f776e6572318207026e746f704c6576656c53656c6c657278"
-      "1c68747470733a2f2f746f702d6c6576656c2d6164746563682e636f6d7077696e526570"
-      "6f7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c7265706f"
-      "7274696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e746572"
-      "616374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c"
-      "69636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73"
-      "a26c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e63"
-      "6f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b70"
-      "687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d656369"
-      "673172696e74657265737447726f75704f776e65727268747470733a2f2f616474656368"
-      "2e636f6d");
+      testing::StrEq(
+          "ac63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a61644d"
+          "657461646174617073616d706c6541644d657461646174616a636f6d706f6e656e74"
+          "73806b616452656e64657255524c606c75706461746547726f757073a06d62696464"
+          "696e6747726f757073a4627a698207026369673182070263696831820702666f776e"
+          "6572318207026e746f704c6576656c53656c6c6572781c68747470733a2f2f746f70"
+          "2d6c6576656c2d6164746563682e636f6d7077696e5265706f7274696e6755524c73"
+          "a27262757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c"
+          "74687474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e"
+          "5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e"
+          "636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a26c"
+          "7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e63"
+          "6f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c6963"
+          "6b70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e61"
+          "6d656369673172696e74657265737447726f75704f776e65727268747470733a2f2f"
+          "6164746563682e636f6d"));
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
@@ -1394,25 +1650,29 @@ TEST(ChromeResponseUtils, VerifyMinimalEncodingWithBuyerReportingId) {
   bidding_group_map.try_emplace(interest_group_owner_3, indices);
   bidding_group_map.try_emplace("owner1", std::move(indices));
 
-  auto ret = Encode(std::move(winner), bidding_group_map, std::nullopt,
-                    [](auto error) {});
+  UpdateGroupMap update_group_map;
+
+  auto ret = Encode(std::move(winner), bidding_group_map, update_group_map,
+                    std::nullopt, [](auto error) {});
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
-  EXPECT_EQ(
+  EXPECT_THAT(
       absl::BytesToHexString(*ret),
-      "aa63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d706f"
-      "6e656e7473806b616452656e64657255524c606d62696464696e6747726f757073a4627a"
-      "698207026369673182070263696831820702666f776e6572318207027062757965725265"
-      "706f7274696e674964747465737442757965725265706f7274696e6749647077696e5265"
-      "706f7274696e6755524c73a27262757965725265706f7274696e6755524c73a26c726570"
-      "6f7274696e6755524c74687474703a2f2f7265706f727457696e2e636f6d7818696e7465"
-      "72616374696f6e5265706f7274696e6755524c73a165636c69636b70687474703a2f2f63"
-      "6c69636b2e636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c"
-      "73a26c7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e"
-      "636f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b"
-      "70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
-      "69673172696e74657265737447726f75704f776e65727268747470733a2f2f6164746563"
-      "682e636f6d");
+      testing::StrEq(
+          "ab63626964fa3e488a0d6573636f7265fa4818fff26769734368616666f46a636f6d"
+          "706f6e656e7473806b616452656e64657255524c606c75706461746547726f757073"
+          "a06d62696464696e6747726f757073a4627a69820702636967318207026369683182"
+          "0702666f776e6572318207027062757965725265706f7274696e6749647474657374"
+          "42757965725265706f7274696e6749647077696e5265706f7274696e6755524c73a2"
+          "7262757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c74"
+          "687474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e52"
+          "65706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e63"
+          "6f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a26c72"
+          "65706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f"
+          "6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b"
+          "70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d"
+          "656369673172696e74657265737447726f75704f776e65727268747470733a2f2f61"
+          "64746563682e636f6d"));
 }
 
 MATCHER_P(ProtoEq, value, "") {
@@ -1423,26 +1683,24 @@ MATCHER_P(ProtoEq, value, "") {
 
 TEST(CborDecodeAuctionResultToProto, ValidAuctionResult) {
   absl::string_view hex_cbor =
-      "A963626964FA41235C296573636F7265FA40166666676973436861"
-      "6666F46B616452656E64657255524C781E68747470733A2F2F61642"
-      "D666F756E642D686572652E636F6D2F61642D316B626964437572726"
-      "56E6379635553446D62696464696E6747726F757073A17819687474"
-      "70733A2F2F69672D6F776E65722E636F6D3A3132333481027077696E"
-      "5265706F7274696E6755524C73A37262757965725265706F7274696E"
-      "6755524C73A26C7265706F7274696E6755524C74687474703A2F2F726"
-      "5706F727457696E2E636F6D7818696E746572616374696F6E5265706F7"
-      "274696E6755524C73A165636C69636B70687474703A2F2F636C69636B2"
-      "E636F6D781B746F704C6576656C53656C6C65725265706F7274696E6755"
-      "524C73A26C7265706F7274696E6755524C77687474703A2F2F7265706F7"
-      "274526573756C742E636F6D7818696E746572616374696F6E5265706F727"
-      "4696E6755524C73A165636C69636B70687474703A2F2F636C69636B2E636"
-      "F6D781C636F6D706F6E656E7453656C6C65725265706F7274696E6755524"
-      "C73A26C7265706F7274696E6755524C77687474703A2F2F7265706F72745"
-      "26573756C742E636F6D7818696E746572616374696F6E5265706F7274696E"
-      "6755524C73A165636C69636B70687474703A2F2F636C69636B2E636F6D7169"
-      "6E74657265737447726F75704E616D656E696E7465726573745F67726F7570"
-      "72696E74657265737447726F75704F776E6572781968747470733A2F2F6967"
-      "2D6F776E65722E636F6D3A31323334";
+      "AA63626964FA41235C296573636F7265FA401666666769734368616666F46B616452656E"
+      "64657255524C781E68747470733A2F2F61642D666F756E642D686572652E636F6D2F6164"
+      "2D316B62696443757272656E6379635553446C75706461746547726F757073A174687474"
+      "70733A2F2F69672D6F776E65722E636F6D81A265696E646578017375706461746549664F"
+      "6C6465725468616E4D731903E86D62696464696E6747726F757073A1781968747470733A"
+      "2F2F69672D6F776E65722E636F6D3A3132333481027077696E5265706F7274696E675552"
+      "4C73A37262757965725265706F7274696E6755524C73A26C7265706F7274696E6755524C"
+      "74687474703A2F2F7265706F727457696E2E636F6D7818696E746572616374696F6E5265"
+      "706F7274696E6755524C73A165636C69636B70687474703A2F2F636C69636B2E636F6D78"
+      "1B746F704C6576656C53656C6C65725265706F7274696E6755524C73A26C7265706F7274"
+      "696E6755524C77687474703A2F2F7265706F7274526573756C742E636F6D7818696E7465"
+      "72616374696F6E5265706F7274696E6755524C73A165636C69636B70687474703A2F2F63"
+      "6C69636B2E636F6D781C636F6D706F6E656E7453656C6C65725265706F7274696E675552"
+      "4C73A26C7265706F7274696E6755524C77687474703A2F2F7265706F7274526573756C74"
+      "2E636F6D7818696E746572616374696F6E5265706F7274696E6755524C73A165636C6963"
+      "6B70687474703A2F2F636C69636B2E636F6D71696E74657265737447726F75704E616D65"
+      "6E696E7465726573745F67726F757072696E74657265737447726F75704F776E65727819"
+      "68747470733A2F2F69672D6F776E65722E636F6D3A31323334";
 
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(absl::HexStringToBytes(hex_cbor));
@@ -1476,6 +1734,12 @@ TEST(CborDecodeAuctionResultToProto, ValidAuctionResult) {
                  key: "click"
                  value: "http://click.com"
                }
+             }
+           }
+           update_groups {
+             key: "https://ig-owner.com"
+             value {
+               interest_groups { index: 1 update_if_older_than_ms: 1000 }
              }
            }
            bidding_groups {

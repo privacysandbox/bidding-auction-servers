@@ -63,9 +63,6 @@ cc_test(
     srcs = [
         "kv_async_client_test.cc",
     ],
-    tags = [
-        "flaky",
-    ],
     deps = [
         ":kv_async_client",
         "//services/common/clients/async_grpc:default_async_grpc_client_integration_test_utils",

@@ -94,7 +94,8 @@ int main(int argc, char** argv) {
   bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);
   std::optional<bool> enable_debug_info =
       absl::GetFlag(FLAGS_enable_debug_info);
-  bool enable_unlimited_egress = absl::GetFlag(FLAGS_enable_unlimited_egress);
+  std::optional<bool> enable_unlimited_egress =
+      absl::GetFlag(FLAGS_enable_unlimited_egress);
   if (op == "encrypt") {
     if (target_service == kSfe) {
       json_input_str =

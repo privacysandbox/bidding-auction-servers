@@ -26,21 +26,26 @@ namespace {
 TEST(Sever, Initialization) {
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-  MetricContextMap<GenerateBidsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+  MetricContextMap<google::protobuf::Message>(
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
   MetricContextMap<GetBidsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
   MetricContextMap<ScoreAdsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
   MetricContextMap<SelectAdRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
 }
 
 TEST(Sever, GetContext) {
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-  auto* bidding = MetricContextMap<GenerateBidsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+  auto* bidding = MetricContextMap<google::protobuf::Message>(
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
   const GenerateBidsRequest request;
   EXPECT_FALSE(bidding->Get(&request).is_decrypted());
   bidding->Get(&request).SetDecrypted();

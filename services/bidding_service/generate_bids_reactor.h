@@ -27,7 +27,7 @@
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/data/runtime_config.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/metric/server_definition.h"
 
@@ -53,18 +53,17 @@ class GenerateBidsReactor
           GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse> {
  public:
   explicit GenerateBidsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const GenerateBidsRequest* request, GenerateBidsResponse* response,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
       const BiddingServiceRuntimeConfig& runtime_config);
 
-  // Initiate the asynchronous execution of the GenerateBidsRequest.
+  // Initiates the asynchronous execution of the GenerateBidsRequest.
   void Execute() override;
 
  private:
-  enum class AuctionScope : int { kSingleSeller, kDeviceComponentSeller };
   // Cleans up and deletes the GenerateBidsReactor. Called by the grpc library
   // after the response has finished.
   void OnDone() override;
@@ -85,14 +84,18 @@ class GenerateBidsReactor
 
   grpc::CallbackServerContext* context_;
 
+  // Dispatches execution requests to a library that runs V8 workers in
+  // separate processes.
+  V8DispatchClient& dispatcher_;
+  std::vector<DispatchRequest> dispatch_requests_;
+
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;
 
   // Specifies whether this is a single seller or component auction.
-  // Impacts the creation of generateBid input params and
-  // parsing of generateBid output.
+  // Impacts the parsing of generateBid output.
   AuctionScope auction_scope_;
 
   // UDF version to use for this request.

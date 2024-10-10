@@ -181,11 +181,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   const bool enable_protected_audience =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  if (!enable_protected_audience && !enable_protected_app_signals) {
-    ABSL_LOG(WARNING) << "Neither Protected Audience nor Protected App Signals "
-                         "support enabled";
-  }
-
+  CHECK(enable_protected_audience || enable_protected_app_signals)
+      << "Neither Protected Audience nor Protected App Signals support "
+         "enabled.";
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << enable_protected_app_signals;
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
@@ -303,7 +301,8 @@ absl::Status RunServer() {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
   }
 
-  if (config_client.HasParameter(HEALTHCHECK_PORT)) {
+  if (config_client.HasParameter(HEALTHCHECK_PORT) &&
+      !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
     CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
           config_client.GetStringParameter(PORT))
         << "Healthcheck port must be unique.";

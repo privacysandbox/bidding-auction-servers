@@ -21,8 +21,7 @@ package privacy_sandbox.bidding_auction_servers.bidding_service;
 import "services/common/blob_fetch/fetch_mode.proto";
 
 message BuyerCodeFetchConfig {
-
-   // The javascript generateBid script.
+   // The js generateBid script.
    string bidding_js_path = 1;
 
    // URL endpoint for fetching AdTech code blob, js file.
@@ -59,32 +58,37 @@ message BuyerCodeFetchConfig {
    // which will be combined with the js file before loading into Roma.
    string prepare_data_for_ads_retrieval_wasm_helper_url = 12;
 
-   // The name of a bucket from which to fetch protected auction code blobs.
-   // All blobs will be fetched from this bucket.
-   // TODO: the concept of a separate wasm_helper blob is not yet supported if using
-   // bucket-based fetching.
+   // The name of a bucket from which to fetch protected auction js/wasm code
+   // blobs. All blobs will be fetched from this bucket.
+   // TODO: The concept of a separate wasm_helper blob is not yet supported if
+   // using bucket-based fetching.
    string protected_auction_bidding_js_bucket = 14;
 
-   // The name of the bucket's default protected auction code blob to use.
-   // The default will be used if the bid request does not specify a version.
+   // The name of the bucket's default protected auction js/wasm code blob to
+   // use. The default will be used if the bid request does not specify a
+   // version.
    string protected_auction_bidding_js_bucket_default_blob = 15;
 
-   // The name of a bucket from which to fetch protected app signal code blobs.
-   // TODO: the concept of a separate wasm_helper blob is not yet supported if using
-   // bucket-based fetching.
+   // The name of a bucket from which to fetch protected app signal js/wasm code
+   // blobs. All blobs will be fetched from this bucket.
+   // TODO: The concept of a separate wasm_helper blob is not yet supported if
+   // using bucket-based fetching.
    string protected_app_signals_bidding_js_bucket = 16;
 
-   // The name of the bucket's default protected app signal code blob to use.
-   // The default will be used if the bid request does not specify a version.
+   // The name of the bucket's default protected app signal js/wasm code blob to
+   // use. The default will be used if the bid request does not specify a
+   // version.
    string protected_app_signals_bidding_js_bucket_default_blob = 17;
 
-   // The name of a bucket from which to fetch prepareDataForAdsRetrieval js.
-   // TODO: the concept of a separate wasm_helper blob is not yet supported if using
-   // bucket-based fetching.
+   // The name of a bucket from which to fetch prepareDataForAdsRetrieval
+   // js/wasm code blobs. All blobs will be fetched from this bucket.
+   // TODO: The concept of a separate wasm_helper blob is not yet supported if
+   // using bucket-based fetching.
    string ads_retrieval_js_bucket = 18;
 
-   // The name of the bucket's default prepareDataForAdsRetrieval code blob to use.
-   // The default will be used if the bid request does not specify a version.
+   // The name of the bucket's default prepareDataForAdsRetrieval js/wasm code
+   // blob to use. The default will be used if the bid request does not specify
+   // a version.
    string ads_retrieval_bucket_default_blob = 19;
 
    blob_fetch.FetchMode fetch_mode = 20;
@@ -92,6 +96,18 @@ message BuyerCodeFetchConfig {
    // Enables private aggregate reporting.
    bool enable_private_aggregate_reporting = 21;
 
+   // The executable generateBid script.
+   string bidding_executable_path = 22;
 
+   // URL endpoint for fetching AdTech code blob, executable file.
+   string bidding_executable_url = 23;
 
+   // The name of a bucket from which to fetch protected auction executable code
+   // blobs. All blobs will be fetched from this bucket.
+   string protected_auction_bidding_executable_bucket = 24;
+
+   // The name of the bucket's default protected auction executable code blob to
+   // use. The default will be used if the bid request does not specify a
+   // version.
+   string protected_auction_bidding_executable_bucket_default_blob = 25;
 }

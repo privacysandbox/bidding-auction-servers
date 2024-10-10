@@ -41,8 +41,10 @@ message PredictResponse {
   bytes output = 1;
   // Consented debugging log.
   InferenceDebugInfo debug_info = 2;
-  // Map of metric names to their values and optional partition.
-  map<string, MetricValue> metrics = 3;
+  // Map of metric names to lists of metric values and optional partition.
+  map<string, MetricValueList> metrics_list = 4;
+
+  reserved 3;
 }
 
 // Metric value of the metric we want to log
@@ -52,6 +54,11 @@ message MetricValue {
   int32 value = 1;
   // Partition specifies a subgroup for the metric to facilitate segmented analysis.
   string partition = 2;
+}
+
+message MetricValueList {
+  // A list of metric values.
+  repeated MetricValue metrics = 1;
 }
 
 message ModelSpec {

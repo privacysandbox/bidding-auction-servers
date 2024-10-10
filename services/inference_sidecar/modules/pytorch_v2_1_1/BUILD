@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -19,6 +20,10 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "inference_sidecar_bin",
     srcs = ["@inference_common//:inference_sidecar_main.cc"],
+    malloc = select({
+        ":use_tcmalloc": "@com_google_tcmalloc//tcmalloc",
+        "//conditions:default": "@bazel_tools//tools/cpp:malloc",
+    }),
     deps = [
         ":pytorch",
         "@inference_common//:grpc_sidecar",
@@ -85,6 +90,7 @@ cc_library(
     hdrs = ["pytorch.h"],
     deps = [
         ":pytorch_parser",
+        ":validator",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -109,14 +115,14 @@ genrule(
 
 genrule(
     name = "test_e2e_model1_target",
-    srcs = ["@inference_common//testdata:models/pytorch_e2e_model1.pt"],
+    srcs = ["@inference_common//testdata:models/pytorch_e2e_model.pt"],
     outs = ["e2e_model1"],
     cmd = "cp $< $@",
 )
 
 genrule(
     name = "test_e2e_model2_target",
-    srcs = ["@inference_common//testdata:models/pytorch_e2e_model2.pt"],
+    srcs = ["@inference_common//testdata:models/pytorch_e2e_model.pt"],
     outs = ["e2e_model2"],
     cmd = "cp $< $@",
 )
@@ -146,6 +152,34 @@ genrule(
     name = "test_mixed_inputs_mixed_outputs_target",
     srcs = ["@inference_common//testdata:models/pytorch_mixed_inputs_mixed_outputs_model.pt"],
     outs = ["mixed_inputs_mixed_outputs_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "test_submodule_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_submodule_model.pt"],
+    outs = ["submodule_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "test_external_function_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_external_function_model.pt"],
+    outs = ["external_function_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "test_external_class_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_external_class_model.pt"],
+    outs = ["external_class_model"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "test_nested_block_model_target",
+    srcs = ["@inference_common//testdata:models/pytorch_nested_block_model.pt"],
+    outs = ["nested_block_model"],
     cmd = "cp $< $@",
 )
 
@@ -212,6 +246,40 @@ cc_test(
     ],
 )
 
+cc_library(
+    name = "validator",
+    srcs = ["validator.cc"],
+    hdrs = [
+        "validator.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/log",
+        "@inference_common//model:validator",
+        "@pytorch_v2_1_1//:torch",
+    ],
+)
+
+cc_test(
+    name = "validator_test",
+    size = "small",
+    srcs = ["validator_test.cc"],
+    data = [
+        ":test_external_class_model_target",
+        ":test_external_function_model_target",
+        ":test_nested_block_model_target",
+        ":test_simple_model_target",
+        ":test_stateful_model_target",
+        ":test_submodule_model_target",
+    ],
+    deps = [
+        ":validator",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@pytorch_v2_1_1//:torch",
+    ],
+)
+
 cc_test(
     name = "module_concurrency_test",
     size = "small",
@@ -219,6 +287,10 @@ cc_test(
     data = [
         ":test_model_target",
     ],
+    malloc = select({
+        ":use_tcmalloc": "@com_google_tcmalloc//tcmalloc",
+        "//conditions:default": "@bazel_tools//tools/cpp:malloc",
+    }),
     deps = [
         ":pytorch",
         "@com_google_absl//absl/status",
@@ -230,6 +302,23 @@ cc_test(
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
     ],
+)
+
+string_flag(
+    name = "tcmalloc_build",
+    build_setting_default = "no",
+    values = [
+        "yes",
+        "no",
+    ],
+)
+
+config_setting(
+    name = "use_tcmalloc",
+    flag_values = {
+        ":tcmalloc_build": "yes",
+    },
+    visibility = ["//visibility:public"],
 )
 
 genrule(

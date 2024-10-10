@@ -33,7 +33,7 @@ pkg_files(
         "//services/buyer_frontend_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
-    prefix = "/",
+    prefix = "/server/bin/",
 )
 
 # Create a symlink between where kmstool_enclave_cli expects shell to be
@@ -83,7 +83,7 @@ container_image(
     cmd = [
         "/proxify",
         "--",
-        "/server",
+        "/server/bin/server",
         "--init_config_client=true",
     ],
     entrypoint = [

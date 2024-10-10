@@ -64,7 +64,7 @@ class ScoreAdsReactorTopLevelAuctionTest : public ::testing::Test {
 };
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest, SendsComponentAuctionsToDispatcher) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionResult car_1 =
       MakeARandomComponentAuctionResult(kTestGenerationId, kTestTopLevelSeller);
   AuctionResult car_2 =
@@ -91,7 +91,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, SendsComponentAuctionsToDispatcher) {
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
        DoesNotRunAuctionForMismatchedGenerationId) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
                                                           kTestTopLevelSeller);
   AuctionResult car_2 = MakeARandomComponentAuctionResult(MakeARandomString(),
@@ -108,7 +108,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
        ReturnsWinnerWithComponentUrlsWhenReportingDisabled) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   TestComponentAuctionResultData component_auction_result_data = {
       .test_component_seller = kTestComponentSeller,
       .generation_id = kTestGenerationId,
@@ -206,7 +206,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
        ReturnsWinningAdFromDispatcherWithReportingEnabled) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   TestComponentAuctionResultData component_auction_result_data = {
       .test_component_seller = kTestComponentSeller,
       .generation_id = kTestGenerationId,
@@ -293,7 +293,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
        NoUrlsReturnedWhenNoComponentUrlsPresent) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
                                                           kTestTopLevelSeller);
   RawRequest raw_request = BuildTopLevelAuctionRawRequest(
@@ -371,7 +371,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
 }
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest, DoesNotPopulateHighestOtherBid) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionResult car_1 =
       MakeARandomComponentAuctionResult(kTestGenerationId, kTestTopLevelSeller);
   AuctionResult car_2 =
@@ -423,7 +423,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, DoesNotPopulateHighestOtherBid) {
 }
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest, DoesNotPerformDebugReporting) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionResult car_1 = MakeARandomComponentAuctionResult(MakeARandomString(),
                                                           kTestTopLevelSeller);
   RawRequest raw_request = BuildTopLevelAuctionRawRequest(

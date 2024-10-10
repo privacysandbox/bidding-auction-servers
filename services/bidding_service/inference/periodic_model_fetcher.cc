@@ -16,6 +16,7 @@
 
 #include "services/bidding_service/inference/periodic_model_fetcher.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <utility>
@@ -42,6 +43,9 @@
 #include "src/util/status_macro/status_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
+
+// Currently max proto message is at 2 Gib per message.
+constexpr size_t kMaxProtoMessageSize = 2ULL * 1024ULL * 1024ULL * 1024ULL;
 
 PeriodicModelFetcher::PeriodicModelFetcher(
     absl::string_view config_path,
@@ -140,6 +144,17 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
         blob_views.push_back(blob.CreateBlobView());
       }
     }
+    // Check if file size is over allowed proto message limit size.
+    if (request.ByteSizeLong() > kMaxProtoMessageSize) {
+      PS_LOG(ERROR) << "Skip registering model for: " << model_path
+                    << " Detect oversized model have size:"
+                    << request.ByteSizeLong()
+                    << " and allowed max proto size:" << kMaxProtoMessageSize;
+      ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
+          absl::StatusCode::kFailedPrecondition);
+      failure_models.push_back(model_path);
+      continue;
+    }
 
     // Model checksum is currently an optional field for loading a model.
     if (!metadata.checksum().empty()) {
@@ -172,7 +187,15 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
   }
 
   ModelFetcherMetric::UpdateRecentModelRegistrationSuccess(success_models);
+  // We only reset the metrics partitioned by model when new models are loaded.
+  if (!success_models.empty()) {
+    SetModelPartition(std::vector<std::string>{current_models_.begin(),
+                                               current_models_.end()});
+  }
+
   ModelFetcherMetric::UpdateRecentModelRegistrationFailure(failure_models);
+  ModelFetcherMetric::UpdateAvailableModels(
+      {current_models_.begin(), current_models_.end()});
 }
 
 void PeriodicModelFetcher::InternalPeriodicModelFetchAndRegistration() {

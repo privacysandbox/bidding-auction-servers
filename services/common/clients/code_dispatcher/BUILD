@@ -17,11 +17,20 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//:__subpackages__"])
 
 cc_library(
+    name = "udf_code_loader_interface",
+    hdrs = ["udf_code_loader_interface.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+    ],
+)
+
+cc_library(
     name = "v8_dispatcher",
     srcs = ["v8_dispatcher.cc"],
     hdrs = ["v8_dispatcher.h"],
     deps = [
         ":request_context",
+        ":udf_code_loader_interface",
         "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
@@ -31,9 +40,9 @@ cc_library(
 )
 
 cc_library(
-    name = "code_dispatch_client",
-    srcs = ["code_dispatch_client.cc"],
-    hdrs = ["code_dispatch_client.h"],
+    name = "v8_dispatch_client",
+    srcs = ["v8_dispatch_client.cc"],
+    hdrs = ["v8_dispatch_client.h"],
     deps = [
         ":v8_dispatcher",
         "@com_google_absl//absl/functional:any_invocable",
@@ -43,11 +52,11 @@ cc_library(
 )
 
 cc_test(
-    name = "code_dispatch_client_test",
+    name = "v8_dispatch_client_test",
     size = "small",
-    srcs = ["code_dispatch_client_test.cc"],
+    srcs = ["v8_dispatch_client_test.cc"],
     deps = [
-        ":code_dispatch_client",
+        ":v8_dispatch_client",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
@@ -58,11 +67,11 @@ cc_test(
 )
 
 cc_test(
-    name = "code_dispatch_client_integration_test",
+    name = "v8_dispatch_client_integration_test",
     size = "large",
-    srcs = ["code_dispatch_client_integration_test.cc"],
+    srcs = ["v8_dispatch_client_integration_test.cc"],
     deps = [
-        ":code_dispatch_client",
+        ":v8_dispatch_client",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/test/utils:test_init",
         "@com_github_grpc_grpc//:grpc++",

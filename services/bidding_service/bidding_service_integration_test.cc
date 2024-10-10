@@ -27,7 +27,7 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
 #include "services/bidding_service/egress_schema_cache.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
@@ -498,10 +498,10 @@ void SetupV8Dispatcher(V8Dispatcher* dispatcher, absl::string_view adtech_js,
       .ad_tech_wasm = std::move(adtech_wasm),
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
   std::string wrapper_blob = GetBuyerWrappedCode(adtech_js, wrapper_config);
-  ASSERT_TRUE(
-      dispatcher
-          ->LoadSync(kProtectedAudienceGenerateBidBlobVersion, wrapper_blob)
-          .ok());
+  ASSERT_TRUE(dispatcher
+                  ->LoadSync(kProtectedAudienceGenerateBidBlobVersion,
+                             std::move(wrapper_blob))
+                  .ok());
 }
 
 absl::StatusOr<GenerateBidsRequest::GenerateBidsRawRequest>
@@ -536,8 +536,9 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
     // initialize
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::MetricContextMap<GenerateBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+    metric::MetricContextMap<google::protobuf::Message>(
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     server_common::log::ServerToken(kTestConsentToken);
 
     TrustedServersConfigClient config_client({});
@@ -557,7 +558,7 @@ class GenerateBidsReactorIntegrationTest : public ::testing::Test {
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(&dispatcher, absl::StrFormat(js_code_template,
                                                  kAdRenderUrlPrefixForTest));
 
@@ -647,7 +648,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
 TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   std::string test_buyer_reporting_id = "testBuyerReportingId";
   SetupV8Dispatcher(
       &dispatcher,
@@ -725,7 +726,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
        GeneratesBidsWithParsedUserBiddingSignals) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(
       &dispatcher,
       absl::StrFormat(js_code_requiring_parsed_user_bidding_signals_template,
@@ -814,7 +815,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(
       &dispatcher,
       absl::StrFormat(js_code_requiring_trusted_bidding_signals_template,
@@ -828,11 +829,10 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
   ASSERT_TRUE(req.ok()) << req.status();
   auto raw_request = *std::move(req);
   request.set_request_ciphertext(raw_request.SerializeAsString());
-  ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_GT(raw_request.interest_group_for_bidding(0)
-                .trusted_bidding_signals()
-                .length(),
-            0);
+  ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 5);
+  for (const auto& ig : raw_request.interest_group_for_bidding()) {
+    ASSERT_GT(ig.trusted_bidding_signals().length(), 0);
+  }
 
   auto generate_bids_reactor_factory =
       [&client](grpc::CallbackServerContext* context,
@@ -891,7 +891,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
 TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(
       &dispatcher,
       absl::StrFormat(js_code_requiring_trusted_bidding_signals_keys_template,
@@ -979,7 +979,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
        FailsToGenerateBidsWhenMissingUserBiddingSignals) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(
       &dispatcher,
       absl::StrFormat(js_code_requiring_user_bidding_signals_template,
@@ -1064,7 +1064,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(&dispatcher, absl::StrFormat(js_code_template,
                                                  kAdRenderUrlPrefixForTest));
   int desired_bid_count = 1;
@@ -1172,7 +1172,7 @@ void GenerateBidCodeWrapperTestHelper(
     const GenerateBidHelperConfig& test_config) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   SetupV8Dispatcher(&dispatcher, js_blob, test_config.wasm_blob,
                     test_config.enable_private_aggregate_reporting);
   GenerateBidsRequest request;

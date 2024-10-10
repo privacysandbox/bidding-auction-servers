@@ -96,10 +96,11 @@ TEST_F(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
                                           client_config);
   ScoreAdsRequest::ScoreAdsRawRequest request;
 
+  grpc::ClientContext context;
   absl::Notification notification;
   absl::Status execute_result = class_under_test.ExecuteInternal(
       std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(std::move(request)),
-      {},
+      &context,
       [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
               callback_response,
           ResponseMetadata response_metadata) {
@@ -148,8 +149,9 @@ TEST_F(ScoringAsyncClientTest,
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
                                           client_config);
 
+  grpc::ClientContext context;
   absl::Status execute_result = class_under_test.ExecuteInternal(
-      std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(), {},
+      std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(), &context,
       [](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
              callback_response,
          ResponseMetadata response_metadata) {  // Never called
@@ -207,10 +209,11 @@ TEST_F(ScoringAsyncClientTest,
                                           client_config);
   ScoreAdsRequest::ScoreAdsRawRequest request;
 
+  grpc::ClientContext context;
   absl::Notification notification;
   absl::Status execute_result = class_under_test.ExecuteInternal(
       std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>(std::move(request)),
-      {},
+      &context,
       [&](absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
               callback_response,
           ResponseMetadata response_metadata) {

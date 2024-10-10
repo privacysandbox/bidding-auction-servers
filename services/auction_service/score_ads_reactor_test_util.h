@@ -61,7 +61,7 @@ class ScoreAdsReactorTestHelper {
 
   ScoreAdsResponse ExecuteScoreAds(
       const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-      MockCodeDispatchClient& dispatcher,
+      MockV8DispatchClient& dispatcher,
       const AuctionServiceRuntimeConfig& runtime_config =
           AuctionServiceRuntimeConfig());
   ScoreAdsRequest request_;

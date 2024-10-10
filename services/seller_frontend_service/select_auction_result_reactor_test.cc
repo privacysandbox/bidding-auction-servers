@@ -61,7 +61,8 @@ class SelectAuctionResultReactorTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
   }
 
@@ -143,6 +144,7 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
                  i < score_ads_request->component_auction_results_size(); i++) {
               // bidding groups are not sent to Auction server.
               this->component_auction_results_[i].clear_bidding_groups();
+              this->component_auction_results_[i].clear_update_groups();
               EXPECT_THAT(score_ads_request->component_auction_results(i),
                           EqualsProto(this->component_auction_results_[i]));
             }

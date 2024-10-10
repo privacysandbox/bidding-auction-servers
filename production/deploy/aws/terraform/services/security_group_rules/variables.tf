@@ -66,3 +66,14 @@ variable "ssh_source_cidr_blocks" {
   description = "Source ips allowed to send ssh traffic to the ssh instance."
   type        = set(string)
 }
+
+variable "tee_kv_servers_port" {
+  description = "Port on which the TEE KV server accepts connections."
+  type        = number
+  default     = 50051
+}
+
+variable "use_service_mesh" {
+  description = "use mesh if true, else if false use load balancers"
+  type        = bool
+}

@@ -41,23 +41,23 @@ struct RequestOptions {
 absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting,
                               std::optional<bool> enable_debug_info,
-                              bool enable_unlimited_egress);
+                              std::optional<bool> enable_unlimited_egress);
 
 // Sends a request to BFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
 absl::Status SendRequestToBfe(
     const HpkeKeyset& keyset, bool enable_debug_reporting,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr,
-    bool enable_unlimited_egress = false);
+    std::optional<bool> enable_unlimited_egress = std::nullopt);
 
 // Gets contents of the provided file path.
 std::string LoadFile(absl::string_view file_path);
 
 // Returns a JSON string of the OHTTP encrypted of the input GetBidsRawRequest
 // to the secure invoke tool.
-std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
-                                                 bool enable_debug_reporting,
-                                                 bool enable_unlimited_egress);
+std::string PackagePlainTextGetBidsRequestToJson(
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
+    std::optional<bool> enable_unlimited_egress);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

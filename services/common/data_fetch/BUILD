@@ -50,7 +50,7 @@ cc_library(
     hdrs = ["periodic_code_fetcher.h"],
     deps = [
         ":periodic_url_fetcher",
-        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
@@ -94,7 +94,7 @@ cc_library(
     hdrs = ["periodic_bucket_code_fetcher.h"],
     deps = [
         ":periodic_bucket_fetcher",
-        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
@@ -120,7 +120,7 @@ cc_test(
     deps = [
         ":fetcher_interface",
         ":periodic_code_fetcher",
-        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
@@ -138,7 +138,7 @@ cc_test(
     deps = [
         ":fetcher_interface",
         ":periodic_bucket_code_fetcher",
-        "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",

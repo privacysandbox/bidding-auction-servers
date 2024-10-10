@@ -83,12 +83,12 @@ class BuyerFrontEndAsyncGrpcClient
 
   // Decodes/Parses GetBidsResponses as per the old response format.
   void OnGetBidsDoneChaffingDisabled(
-      absl::string_view decrypted_payload, const grpc::Status& status,
+      std::string decrypted_payload, const grpc::Status& status,
       BuyerFrontendRawClientParams* params) const;
   // Decodes/Parses GetBidsResponses as per the new response format.
-  // See the documentation on EncodeGetBidsPayload() in transcoding_utils.h
-  // for the format.
-  void OnGetBidsDoneChaffingEnabled(absl::string_view decrypted_payload,
+  // See the documentation on EncodeAndCompressGetBidsPayload() in
+  // transcoding_utils.h for the format.
+  void OnGetBidsDoneChaffingEnabled(std::string decrypted_payload,
                                     const grpc::Status& status,
                                     BuyerFrontendRawClientParams* params) const;
 

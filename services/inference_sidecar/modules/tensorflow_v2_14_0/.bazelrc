@@ -29,6 +29,14 @@ build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
 # Makes thread safety analysis warnings into errors.
 build:clang --copt=-Werror=thread-safety
 
+# https://github.com/google/tcmalloc/blob/master/docs/tuning.md#build-time-optimizations
+build:tcmalloc --cxxopt=-fsized-deallocation
+build:tcmalloc --host_cxxopt=-fsized-deallocation
+build:tcmalloc --cxxopt=-fnew-alignment=8
+build:tcmalloc --host_cxxopt=-fnew-alignment=8
+build:tcmalloc --per_file_copt=api/udf/.*@-fconstexpr-steps=1271242
+build:tcmalloc --//:tcmalloc_build=yes
+
 build --copt=-I.
 build --per_file_copt='^external/tensorflow_v2_14_0*'/@-w
 # Ignores thread-safety warnings from the TensorFlow repo.
@@ -49,6 +57,7 @@ build:asan --copt=-fno-omit-frame-pointer
 build:asan --linkopt=-fsanitize=address
 build:asan --linkopt=-fuse-ld=lld
 build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
+build:asan --custom_malloc=@bazel_tools//tools/cpp:malloc
 
 # Thread sanitizer, set action_env to segregate cache entries
 build:tsan --action_env=PRIVACY_SANDBOX_SERVERS_TSAN=1

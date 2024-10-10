@@ -34,7 +34,7 @@
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -253,7 +253,9 @@ void LoadWrapperWithMockSellerUdf(
       adtech_code_blob,
       auction_service_runtime_config.enable_report_result_url_generation,
       auction_service_runtime_config.enable_private_aggregate_reporting);
-  ASSERT_TRUE(dispatcher.LoadSync(kScoreAdBlobVersion, wrapper_js_blob).ok());
+  ASSERT_TRUE(
+      dispatcher.LoadSync(kScoreAdBlobVersion, std::move(wrapper_js_blob))
+          .ok());
 }
 
 void LoadWrapperWithMockReportWinUdf(
@@ -275,7 +277,7 @@ void LoadWrapperWithMockReportWinUdf(
     absl::StatusOr<std::string> version =
         GetBuyerReportWinVersion(ad_bid.interest_group_owner(), auction_type);
     ASSERT_TRUE(version.ok());
-    ASSERT_TRUE(dispatcher.LoadSync(*version, wrapper_js_blob).ok());
+    ASSERT_TRUE(dispatcher.LoadSync(*version, std::move(wrapper_js_blob)).ok());
   }
 }
 
@@ -297,12 +299,12 @@ void LoadWrapperWithMockReportWinUdfForPAS(
     absl::StatusOr<std::string> version =
         GetBuyerReportWinVersion(ad_bid.owner(), auction_type);
     ASSERT_TRUE(version.ok());
-    ASSERT_TRUE(dispatcher.LoadSync(*version, wrapper_js_blob).ok());
+    ASSERT_TRUE(dispatcher.LoadSync(*version, std::move(wrapper_js_blob)).ok());
   }
 }
 
 void RunTestScoreAds(
-    CodeDispatchClient& client, ScoreAdsRequest& request,
+    V8DispatchClient& client, ScoreAdsRequest& request,
     const AuctionServiceRuntimeConfig& auction_service_runtime_config,
     ScoreAdsResponse& response) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
@@ -382,7 +384,7 @@ void LoadAndRunScoreAdsForPA(
     absl::string_view buyer_udf, absl::string_view seller_udf,
     ScoreAdsResponse& response) {
   V8Dispatcher dispatcher;
-  CodeDispatchClient dispatch_client(dispatcher);
+  V8DispatchClient dispatch_client(dispatcher);
   AdWithBidMetadata test_ad =
       GetTestAdWithBidMetadata(test_score_ads_request_config);
   ScoreAdsRequest request =
@@ -398,7 +400,7 @@ void LoadAndRunScoreAdsForPAS(
     absl::string_view buyer_udf, absl::string_view seller_udf,
     ScoreAdsResponse& response) {
   V8Dispatcher dispatcher;
-  CodeDispatchClient dispatch_client(dispatcher);
+  V8DispatchClient dispatch_client(dispatcher);
   ProtectedAppSignalsAdWithBidMetadata test_ad =
       GetTestAdWithBidMetadataForPAS(test_score_ads_request_config);
   ScoreAdsRequest request =

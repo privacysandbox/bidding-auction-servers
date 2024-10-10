@@ -54,6 +54,10 @@ inline constexpr absl::string_view kServerName[]{
 
 constexpr int kMaxBuyersSolicited = 2;
 
+// Metrics with dynamic partitions cannot have empty static partitions.
+inline constexpr std::array<std::string_view, 1> kDefaultDynamicPartition = {
+    "default"};
+
 // Metric Definitions that are specific to bidding & auction servers.
 
 inline constexpr server_common::metrics::Definition<
@@ -76,6 +80,22 @@ inline constexpr server_common::metrics::Definition<
     kJSExecutionDuration("js_execution.duration_ms",
                          "Time taken to execute the JS dispatcher",
                          server_common::metrics::kTimeHistogram, 300, 10);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kPASGenerateBidJSExecutionDuration(
+        "pas_generate_bid_js_execution.duration_ms",
+        "Time taken to execute the PAS GenerateBid JS dispatcher",
+        server_common::metrics::kTimeHistogram, 300, 10);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kPASPrepareDataForRetrievalJSExecutionDuration(
+        "pas_prepare_data_for_retrieval_js_execution.duration_ms",
+        "Time taken to execute the PAS PrepareDataForAdRetrieval JS dispatcher",
+        server_common::metrics::kTimeHistogram, 300, 10);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
@@ -231,6 +251,12 @@ inline constexpr server_common::metrics::Definition<
         "inference.model_registration.recent_failure_by_model",
         "Failed count for registering models with inference sidecar by model "
         "in the most recent fetch");
+
+inline constexpr server_common::metrics::Definition<
+    double, server_common::metrics::Privacy::kNonImpacting,
+    server_common::metrics::Instrument::kGauge>
+    kInferenceAvailableModels("inference.model_registration.available_models",
+                              "List of all currently available models");
 
 inline constexpr absl::string_view kSellerRejectReasons[] = {
     kRejectionReasonBidBelowAuctionFloor,
@@ -603,7 +629,7 @@ inline constexpr server_common::metrics::Definition<
         "Total number of inference request per model",
         /*partition_type*/ "model",
         /*max_partitions_contributed*/ 1,
-        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*public_partitions*/ kDefaultDynamicPartition,
         /*upper_bound*/ 1,
         /*lower_bound*/ 0);
 
@@ -616,7 +642,7 @@ inline constexpr server_common::metrics::Definition<
         "Time taken by inference sidecar to execute inference by model",
         /*partition_type*/ "model",
         /*max_partitions_contributed*/ 1,
-        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*public_partitions*/ kDefaultDynamicPartition,
         /*upper_bound*/ 300,
         /*lower_bound*/ 0);
 
@@ -626,12 +652,25 @@ inline constexpr server_common::metrics::Definition<
     kInferenceRequestFailedCountByModel(
         /*name*/ "inference.request.failed_count_by_model",
         /*description*/
-        "otal number of inference requests resulted in failure partitioned by "
+        "Total number of inference requests resulted in failure partitioned by "
         "model",
         /*partition_type*/ "model",
         /*max_partitions_contributed*/ 1,
-        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*public_partitions*/ kDefaultDynamicPartition,
         /*upper_bound*/ 1,
+        /*lower_bound*/ 0);
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kInferenceRequestBatchCountByModel(
+        /*name*/ "inference.request.batch_count_by_model",
+        /*description*/
+        "Total number of inference requests input batch size by model",
+        /*partition_type*/ "model",
+        /*max_partitions_contributed*/ 1,
+        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 50,
         /*lower_bound*/ 0);
 
 template <typename RequestT>
@@ -639,8 +678,8 @@ struct RequestMetric;
 
 template <typename RequestT>
 inline auto* MetricContextMap(
-    std::optional<server_common::telemetry::BuildDependentConfig> config =
-        std::nullopt,
+    std::unique_ptr<server_common::telemetry::BuildDependentConfig> config =
+        nullptr,
     std::unique_ptr<opentelemetry::metrics::MeterProvider> provider = nullptr,
     absl::string_view service = "", absl::string_view version = "") {
   return server_common::metrics::GetContextMap<const RequestT,
@@ -669,6 +708,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInferenceRecentModelRegistrationSuccess,
         &kInferenceModelRegistrationFailedCountByStatus,
         &kInferenceRecentModelRegistrationFailure,
+        &kInferenceAvailableModels,
         &kInferenceRequestCount,
         &kInferenceRequestDuration,
         &kInferenceRequestSize,
@@ -678,19 +718,22 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInferenceRequestCountByModel,
         &kInferenceRequestDurationByModel,
         &kInferenceRequestFailedCountByModel,
+        &kPASGenerateBidJSExecutionDuration,
+        &kPASPrepareDataForRetrievalJSExecutionDuration,
+        &kInferenceRequestBatchCountByModel,
 };
 
 template <>
-struct RequestMetric<GenerateBidsRequest> {
+struct RequestMetric<google::protobuf::Message> {
   static constexpr absl::Span<
       const server_common::metrics::DefinitionName* const>
       kList = kBiddingMetricList;
   using ContextType = server_common::metrics::ServerContext<kList>;
 };
 inline auto* BiddingContextMap() {
-  return MetricContextMap<GenerateBidsRequest>();
+  return MetricContextMap<google::protobuf::Message>();
 }
-using BiddingContext = RequestMetric<GenerateBidsRequest>::ContextType;
+using BiddingContext = RequestMetric<google::protobuf::Message>::ContextType;
 
 // API to get `Context` for BFE server to log metric
 inline constexpr const server_common::metrics::DefinitionName*
@@ -960,6 +1003,8 @@ inline void AddModelPartition(
                                 model_list_view);
   telemetry_config.SetPartition(
       metric::kInferenceRequestFailedCountByModel.name_, model_list_view);
+  telemetry_config.SetPartition(
+      metric::kInferenceRequestBatchCountByModel.name_, model_list_view);
 }
 
 inline std::vector<std::string> GetErrorList() {

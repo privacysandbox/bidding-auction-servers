@@ -15,8 +15,8 @@
     "reportingUrlsDef": {
       "type": "object",
       "properties": {
-        "reportingUrl": { "type": "string" },
-        "interactionReportingUrls": {
+        "reportingURL": { "type": "string" },
+        "interactionReportingURLs": {
           "patternProperties": {
             ".*": {
               "type": "string"
@@ -27,17 +27,17 @@
     },
     "winReportingUrlsDef": {
       "type": "object",
-      "buyerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
-      "componentSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" },
-      "topLevelSellerReportingUrls": { "$ref": "#/$defs/reportingUrlsDef" }
+      "buyerReportingURLs": { "$ref": "#/$defs/reportingUrlsDef" },
+      "componentSellerReportingURLs": { "$ref": "#/$defs/reportingUrlsDef" },
+      "topLevelSellerReportingURLs": { "$ref": "#/$defs/reportingUrlsDef" }
     },
     "KAnonJoinCandidate": {
         "properties": {
-            "adRenderUrlHash": {
+            "adRenderURLHash": {
                 "type": "string",
                 "description": "Protected Audience: - SHA-256 hash of the tuple: render_url, interest group owner, reportWin()   UDF endpoint. Protected App Signals: - SHA-256 hash of render_url, reportWin UDF endpoint. NOTE: The buyer's reportWin() UDF url endpoint must match with what Chrome has. Refer to the spec to create key hashes-   https://wicg.github.io/turtledove/#query-ad-k-anonymity-count"
             },
-            "adComponentRenderUrlsHash": {
+            "adComponentRenderURLsHash": {
                 "items": {
                     "type": "string"
                 },
@@ -56,11 +56,11 @@
     },
     "GhostWinnerForTopLevelAuction": {
         "properties": {
-            "adRenderUrl": {
+            "adRenderURL": {
                 "type": "string",
                 "description": "The ad render url corresponding to ghost winner."
             },
-            "adComponentRenderUrls": {
+            "adComponentRenderURLs": {
                 "items": {
                     "type": "string"
                 },
@@ -78,6 +78,14 @@
             "adMetadata": {
                 "type": "string",
                 "description": "Arbitrary metadata associated with ghost winner to pass to the top-level seller during top level auction."
+            },
+            "buyerReportingId": {
+                "type": "string",
+                "description": "BuyerReportingId of the ghost winning Ad. This will be verified with the buyerAndSellerReportingId in the Ad properties on the browser."
+            },
+            "selectableBuyerAndSellerReportingId": {
+                "type": "string",
+                "description": "SelectableBuyerAndSellerReportingId of the ghost winning Ad. This will be verified with the buyerAndSellerReportingId in the Ad properties on the browser."
             },
             "buyerAndSellerReportingId": {
                 "type": "string",
@@ -193,7 +201,7 @@
       "type": "boolean",
       "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."
     },
-    "winReportingUrls": { "$ref": "#/$defs/winReportingUrlsDef" },
+    "winReportingURLs": { "$ref": "#/$defs/winReportingUrlsDef" },
     "error": { "$ref": "#/$defs/errorDef" },
     "adMetadata": {
       "type": "string",

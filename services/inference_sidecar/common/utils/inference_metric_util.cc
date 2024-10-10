@@ -24,12 +24,12 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 
 void AddMetric(PredictResponse& response, const std::string& key, int32_t value,
                std::optional<std::string> partition) {
-  MetricValue metric;
-  metric.set_value(value);
+  MetricValueList& metric_list = (*response.mutable_metrics_list())[key];
+  MetricValue* metric = metric_list.add_metrics();
+  metric->set_value(value);
   if (partition) {
-    metric.set_partition(*partition);
+    metric->set_partition(*partition);
   }
-  response.mutable_metrics()->insert({key, metric});
 }
 
 std::string ExtractErrorCodeFromMessage(absl::string_view errorMessage) {

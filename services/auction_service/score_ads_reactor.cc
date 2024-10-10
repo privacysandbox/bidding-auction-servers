@@ -182,12 +182,12 @@ void PopulateComponentReportingUrlsInTopLevelResponse(
 }
 
 // If this is a component auction, and a seller currency is set,
-// and a modified bid is set, and a currency for that modofied bid is set,
+// and a modified bid is set, and a currency for that modified bid is set,
 // it must match the seller currency. If not, reject the bid.
-bool IsBidCurrencyMismatched(AuctionScope auction_scope,
-                             absl::string_view seller_currency,
-                             float modified_bid,
-                             absl::string_view modified_bid_currency) {
+inline bool IsBidCurrencyMismatched(AuctionScope auction_scope,
+                                    absl::string_view seller_currency,
+                                    float modified_bid,
+                                    absl::string_view modified_bid_currency) {
   return (auction_scope ==
               AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER ||
           auction_scope ==
@@ -264,7 +264,7 @@ void ScoringData::UpdateWinner(int index,
 }
 
 ScoreAdsReactor::ScoreAdsReactor(
-    grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+    grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
     const ScoreAdsRequest* request, ScoreAdsResponse* response,
     std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -274,8 +274,9 @@ ScoreAdsReactor::ScoreAdsReactor(
     : CodeDispatchReactor<ScoreAdsRequest, ScoreAdsRequest::ScoreAdsRawRequest,
                           ScoreAdsResponse,
                           ScoreAdsResponse::ScoreAdsRawResponse>(
-          dispatcher, request, response, key_fetcher_manager, crypto_client),
+          request, response, key_fetcher_manager, crypto_client),
       context_(context),
+      dispatcher_(dispatcher),
       benchmarking_logger_(std::move(benchmarking_logger)),
       async_reporter_(*async_reporter),
       enable_seller_debug_url_generation_(
@@ -596,8 +597,6 @@ void ScoreAdsReactor::Execute() {
     PS_LOG(ERROR, log_context_)
         << "Execution request failed for batch: " << raw_request_.DebugString()
         << status.ToString(absl::StatusToStringMode::kWithEverything);
-    LogIfError(
-        metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
     FinishWithStatus(
         grpc::Status(grpc::StatusCode::UNKNOWN, status.ToString()));
   }
@@ -858,8 +857,7 @@ void ScoreAdsReactor::HandleScoredAd(int index, float buyer_bid,
     // 2. scoreAd returned an object but the reject reason was not
     // populated.
     // 3. scoreAd returned an object and the reject reason was explicitly
-    // set to
-    //    "not-available".
+    // set to "not-available".
     // Only consider valid bids for populating other highest bids.
     scoring_data.score_ad_map[ad_score.desirability()].push_back(index);
     return;
@@ -912,6 +910,8 @@ ScoringData ScoreAdsReactor::FindWinningAd(
           << "Invalid execution (possibly invalid input): "
           << responses[index].status().ToString(
                  absl::StatusToStringMode::kWithEverything);
+      LogIfError(
+          metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
       continue;
     }
 

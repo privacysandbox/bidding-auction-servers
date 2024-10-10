@@ -14,15 +14,9 @@
 # limitations under the License.
 
 source $(dirname "$0")/common
-export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-declare -a -r DOCKER_RUN_ARGS=(
-  "--volume=${PROJECT_ROOT}/bazel-bin/services/seller_frontend_service/server:/server"
-  "--name=sfe"
-)
-export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
 export SERVER_START_CMD=$(cat << END
-/server \
+/server/bin/server \
 --init_config_client="false" --port=50053 \
 --auction_server_host="127.0.0.1:50061" \
 --key_value_signals_host="${KEY_VALUE_SIGNALS_HOST}" \
@@ -52,9 +46,21 @@ END
 )
 
 if [[ $1 == "--gdb" ]]; then
+  export PROJECT_ROOT=$(git rev-parse --show-toplevel)
+  declare -a -r DOCKER_RUN_ARGS=(
+    "--volume=${PROJECT_ROOT}/bazel-bin/services/seller_frontend_service/server:/server/bin/server"
+    "--name=sfe"
+  )
+  export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined  --docker-network host --image build-debian --cmd  "${SERVER_START_CMD}"
+  docker_image_uri="$(docker load -i dist/debian/seller_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  declare -a DOCKER_RUN_ARGS=(
+      "--network=host"
+      "--security-opt=seccomp=unconfined"
+      "--security-opt=apparmor=unconfined"
+  )
+  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

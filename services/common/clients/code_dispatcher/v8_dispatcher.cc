@@ -42,11 +42,10 @@ V8Dispatcher::~V8Dispatcher() {
 
 absl::Status V8Dispatcher::Init() { return roma_service_.Init(); }
 
-absl::Status V8Dispatcher::LoadSync(absl::string_view version,
-                                    absl::string_view js) {
+absl::Status V8Dispatcher::LoadSync(std::string version, std::string code) {
   auto request = std::make_unique<LoadRequest>(LoadRequest{
-      .version_string = std::string(version),
-      .js = std::string(js),
+      .version_string = std::move(version),
+      .js = std::move(code),
   });
   absl::Notification load_finished;
   absl::Status load_status;

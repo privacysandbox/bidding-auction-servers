@@ -154,6 +154,30 @@ resource "aws_security_group_rule" "allow_ec2_app_mesh_egress" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
+resource "aws_security_group_rule" "allow_tkv_xlb_to_ec2_ingress" {
+  # Only create if NOT using service mesh and port is NOT one for which we alredy have rules.
+  count = ((var.tee_kv_servers_port != 443) && (var.tee_kv_servers_port != 22) && (var.tee_kv_servers_port != 50051) && (var.tee_kv_servers_port != 80) && (var.tee_kv_servers_port != 1900) && (var.tee_kv_servers_port != 2100) && !var.use_service_mesh) ? 1 : 0
+
+  from_port         = var.tee_kv_servers_port
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = var.tee_kv_servers_port
+  type              = "ingress"
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "allow_ec2_tkv_xlb_egress" {
+  # Only create if NOT using service mesh and port is NOT one for which we alredy have rules.
+  count = ((var.tee_kv_servers_port != 443) && (var.tee_kv_servers_port != 22) && (var.tee_kv_servers_port != 50051) && (var.tee_kv_servers_port != 80) && (var.tee_kv_servers_port != 1900) && (var.tee_kv_servers_port != 2100) && !var.use_service_mesh) ? 1 : 0
+
+  from_port         = var.tee_kv_servers_port
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = var.tee_kv_servers_port
+  type              = "egress"
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
 # Ingress and egress rules for backend vpc interface endpoints.
 resource "aws_security_group_rule" "allow_ec2_to_vpce_ingress" {
   from_port                = 443

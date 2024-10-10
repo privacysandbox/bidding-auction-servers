@@ -74,7 +74,16 @@ constexpr int kTestModelingSignals2 = 3;
 constexpr char kTestRender2[] = "https://test-render-2.com";
 constexpr char kTestCurrency2[] = "RS";
 constexpr char bidding_signals_to_be_returned[] =
-    R"JSON({"keys":{"key":[123,456]}})JSON";
+    R"JSON({
+    "keys": {
+        "key":[123,456]
+    },
+    "perInterestGroupData": {
+        "test_ig": {
+            "updateIfOlderThanMs": 123
+        }
+    }
+})JSON";
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
@@ -129,7 +138,8 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GetBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
     get_bids_config_.is_protected_app_signals_enabled = false;
     get_bids_config_.is_protected_audience_enabled = true;
@@ -143,7 +153,7 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     raw_request_ = MakeARandomGetBidsRawRequest();
     auto interest_group =
         raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
-    interest_group->set_name("ig_name");
+    interest_group->set_name(kTestInterestGroupName);
     interest_group->add_bidding_signals_keys("key");
     request_.set_request_ciphertext(raw_request_.SerializeAsString());
     request_.set_key_id(MakeARandomString());
@@ -200,6 +210,58 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
+}
+
+TEST_F(GetBidUnaryReactorTest,
+       AddsUpdateInterestGroupListToGetBidsRawResponse) {
+  SetupBiddingProviderMock(
+      /*provider=*/bidding_signals_provider_,
+      /*bidding_signals_value=*/bidding_signals_to_be_returned,
+      /*repeated_get_allowed=*/false,
+      /*server_error_to_return=*/std::nullopt);
+
+  absl::Notification notification;
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<grpc::ClientContext*>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
+      .WillOnce([&notification](
+                    std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+                        get_values_raw_request,
+                    grpc::ClientContext* context, auto on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(
+            std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>(),
+            /* response_metadata= */ {});
+        notification.Notify();
+        return absl::OkStatus();
+      });
+
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
+      crypto_client_.get());
+  class_under_test.Execute();
+  // Wait for reactor to set response_.
+  notification.WaitForNotification();
+
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_FALSE(
+      raw_response.update_interest_group_list().interest_groups().empty());
+  EXPECT_EQ(
+      raw_response.update_interest_group_list().interest_groups()[0].index(),
+      0);
+  EXPECT_EQ(raw_response.update_interest_group_list()
+                .interest_groups()[0]
+                .update_if_older_than_ms(),
+            123);
 }
 
 TEST_F(GetBidUnaryReactorTest,
@@ -299,13 +361,15 @@ TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
   raw_request.set_is_chaff(true);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
   GetBidsRequest request;
-  request.set_request_ciphertext(EncodeGetBidsPayload(raw_request, 999));
+  request.set_request_ciphertext(*EncodeAndCompressGetBidsPayload(
+      raw_request, CompressionType::kGzip, 999));
   request.set_key_id(MakeARandomString());
 
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
   metric::MetricContextMap<GetBidsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto))
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto))
       ->Get(&request);
 
   GetBidsUnaryReactor class_under_test(
@@ -322,7 +386,8 @@ TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
 
   ASSERT_TRUE(decoded_payload.ok());
   // For now, we don't support any version/compression bytes besides 0.
-  EXPECT_EQ(decoded_payload->version_and_compression_num, 0);
+  EXPECT_EQ(decoded_payload->version, 0);
+  EXPECT_EQ(decoded_payload->compression_type, CompressionType::kGzip);
   // Empty proto is sent back; the payload should be all padding.
   EXPECT_EQ(decoded_payload->get_bids_proto.ByteSizeLong(), 0);
   // Verify the response has the expected padding.
@@ -336,7 +401,8 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GetBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
 
     get_bids_config_.is_protected_app_signals_enabled = true;

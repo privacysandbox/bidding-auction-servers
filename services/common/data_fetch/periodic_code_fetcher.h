@@ -24,7 +24,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/data_fetch/periodic_url_fetcher.h"
 #include "src/concurrent/executor.h"
@@ -41,7 +41,7 @@ class PeriodicCodeFetcher : public PeriodicUrlFetcher {
   // curl_http_fetcher: a pointer to a libcurl wrapper client that performs code
   // fetching with FetchUrl(). Does not take ownership; pointer must outlive
   // PeriodicCodeFetcher.
-  // dispatcher: a Roma wrapper client that code blob is passed to.
+  // loader: a Roma wrapper client that code blob is passed to.
   // executor: a raw pointer that takes in a reference of the
   // executor owned by the servers where the instance of this class is also
   // declared. The same executor should be used to construct a HttpFetcherAsync
@@ -54,7 +54,7 @@ class PeriodicCodeFetcher : public PeriodicUrlFetcher {
   // Roma.
   explicit PeriodicCodeFetcher(
       std::vector<std::string> url_endpoints, absl::Duration fetch_period_ms,
-      HttpFetcherAsync* curl_http_fetcher, V8Dispatcher* dispatcher,
+      HttpFetcherAsync* curl_http_fetcher, UdfCodeLoaderInterface* loader,
       server_common::Executor* executor, absl::Duration time_out_ms,
       WrapCodeForDispatch wrap_code, std::string version);
 
@@ -69,7 +69,7 @@ class PeriodicCodeFetcher : public PeriodicUrlFetcher {
   bool OnFetch(const std::vector<std::string>& fetched_data) override;
 
  private:
-  V8Dispatcher& dispatcher_;
+  UdfCodeLoaderInterface& loader_;
   WrapCodeForDispatch wrap_code_;
   // Callers should ensure that this version matches with the version provided
   // during the dispatch call. Different versions can help run different code

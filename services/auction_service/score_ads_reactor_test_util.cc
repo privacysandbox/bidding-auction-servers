@@ -85,7 +85,8 @@ void SetupTelemetryCheck(const ScoreAdsRequest& request) {
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
   metric::MetricContextMap<ScoreAdsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto))
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto))
       ->Get(&request);
 }
 
@@ -99,7 +100,7 @@ ScoreAdsReactorTestHelper::ScoreAdsReactorTestHelper() {
 
 ScoreAdsResponse ScoreAdsReactorTestHelper::ExecuteScoreAds(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-    MockCodeDispatchClient& dispatcher,
+    MockV8DispatchClient& dispatcher,
     const AuctionServiceRuntimeConfig& runtime_config) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client_);
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();

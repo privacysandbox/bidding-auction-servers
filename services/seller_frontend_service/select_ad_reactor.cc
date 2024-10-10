@@ -48,12 +48,23 @@ namespace {
 
 constexpr int kMillisInMinute = 60000;
 constexpr int kSecsInMinute = 60;
+constexpr int kNumAllowedChromGhostWinners = 1;
 using ScoreAdsRawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 using AdScore = ScoreAdsResponse::AdScore;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
+
+inline void RecordInterestGroupUpdates(
+    std::string buyer, UpdateGroupMap& all_updates,
+    GetBidsResponse::GetBidsRawResponse& response) {
+  if (!response.update_interest_group_list().interest_groups().empty()) {
+    all_updates.emplace(
+        std::move(buyer),
+        std::move(*response.mutable_update_interest_group_list()));
+  }
+}
 }  // namespace
 
 SelectAdReactor::SelectAdReactor(
@@ -86,6 +97,7 @@ SelectAdReactor::SelectAdReactor(
                                 ? kMaxBuyersSolicitedChaffingEnabled
                                 : max_buyers_solicited),
       enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
+      enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -104,7 +116,8 @@ SelectAdReactor::SelectAdReactor(
 }
 
 AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
-    const AdWithBid& input, absl::string_view interest_group_owner) {
+    const AdWithBid& input, absl::string_view interest_group_owner,
+    bool k_anon_status) {
   AdWithBidMetadata result;
   // First copy all the fields that can be copied directly.
   if (input.has_ad()) {
@@ -147,8 +160,19 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
       break;
     }
   }
+  if (enable_kanon_) {
+    result.set_k_anon_status(k_anon_status);
+  }
   if (!input.buyer_reporting_id().empty()) {
     result.set_buyer_reporting_id(input.buyer_reporting_id());
+  }
+  if (!input.buyer_and_seller_reporting_id().empty()) {
+    result.set_buyer_and_seller_reporting_id(
+        input.buyer_and_seller_reporting_id());
+  }
+  if (!input.selectable_buyer_and_seller_reporting_id().empty()) {
+    result.set_selectable_buyer_and_seller_reporting_id(
+        input.selectable_buyer_and_seller_reporting_id());
   }
   return result;
 }
@@ -219,14 +243,15 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   std::visit(
       [this](auto& input) {
         buyer_inputs_ = GetDecodedBuyerinputs(input.buyer_input());
+        enforce_kanon_ = input.enforce_kanon();
       },
       protected_auction_input_);
 
   if (chaffing_enabled_) {
     std::visit(
         [this](const auto& protected_auction_input) {
-          std::size_t hash = absl::Hash<std::string>{}(
-              protected_auction_input.generation_id());
+          std::size_t hash =
+              std::hash<std::string>{}(protected_auction_input.generation_id());
           generator_ = std::mt19937(hash);
         },
         protected_auction_input_);
@@ -616,14 +641,18 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
       get_bids_request->set_buyer_signals(
           per_buyer_config_itr->second.buyer_signals());
     }
+    if (enable_kanon_) {
+      get_bids_request->set_multi_bid_limit(
+          per_buyer_config_itr->second.per_buyer_multi_bid_limit());
+    }
   }
 
   *get_bids_request->mutable_buyer_input() = buyer_input;
   get_bids_request->set_top_level_seller(
       request_->auction_config().top_level_seller());
   std::visit(
-      [&get_bids_request,
-       &buyer_debug_id](const auto& protected_auction_input) {
+      [&get_bids_request, &buyer_debug_id,
+       this](const auto& protected_auction_input) {
         get_bids_request->set_publisher_name(
             protected_auction_input.publisher_name());
         get_bids_request->set_enable_debug_reporting(
@@ -637,6 +666,10 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
         }
         get_bids_request->set_enable_unlimited_egress(
             protected_auction_input.enable_unlimited_egress());
+        if (enable_kanon_) {
+          get_bids_request->set_enforce_kanon(
+              protected_auction_input.enforce_kanon());
+        }
       },
       protected_auction_input_);
 
@@ -682,7 +715,6 @@ void SelectAdReactor::FetchBid(
       metric::MakeInitiatedRequest(metric::kBfe, metric_context_.get())
           .release();
   bfe_request->SetBuyer(buyer_ig_owner);
-  bfe_request->SetRequestSize((int)get_bids_request->ByteSizeLong());
 
   size_t chaff_request_size = 0;
   if (chaffing_enabled_ && get_bids_request->is_chaff()) {
@@ -691,10 +723,21 @@ void SelectAdReactor::FetchBid(
     chaff_request_size = request_size_dist(*generator_);
   }
 
-  RequestConfig request_config = {.chaff_request_size = chaff_request_size};
+  RequestConfig request_config = {.chaff_request_size = chaff_request_size,
+                                  .compression_type = CompressionType::kGzip};
 
-  grpc::ClientContext* client_context = client_contexts_.Add(buyer_metadata_);
+  // If using the old request format, add a gRPC header to signal the payload is
+  // compressed.
+  RequestMetadata buyer_metadata_copy = buyer_metadata_;
+  if (!chaffing_enabled_) {
+    int compression_type_int =
+        static_cast<int>(request_config.compression_type);
+    buyer_metadata_copy.insert({kBiddingAuctionCompressionHeader.data(),
+                                std::to_string(compression_type_int)});
+  }
 
+  grpc::ClientContext* client_context =
+      client_contexts_.Add(buyer_metadata_copy);
   absl::Status execute_result = buyer_client->ExecuteInternal(
       std::move(get_bids_request), client_context,
       CancellationWrapper(
@@ -705,9 +748,9 @@ void SelectAdReactor::FetchBid(
                   response,
               ResponseMetadata response_metadata) mutable {
             {
-              int response_size =
-                  std::max(0UL, response_metadata.response_size);
-              bfe_request->SetResponseSize(response_size);
+              bfe_request->SetRequestSize((int)response_metadata.request_size);
+              bfe_request->SetResponseSize(
+                  (int)response_metadata.response_size);
 
               // destruct bfe_request, destructor measures request time
               delete bfe_request;
@@ -722,6 +765,7 @@ void SelectAdReactor::FetchBid(
           }),
       timeout, request_config);
   if (!execute_result.ok()) {
+    delete bfe_request;
     LogIfError(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeGetBidsFailedToCall));
@@ -780,11 +824,18 @@ void SelectAdReactor::OnFetchBidsDone(
       PS_VLOG(kNoisyWarn, log_context_) << "Skipping buyer " << buyer_ig_owner
                                         << " due to empty GetBidsResponse.";
 
-      async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
+      async_task_tracker_.TaskCompleted(
+          TaskStatus::EMPTY_RESPONSE,
+          [this, &buyer_ig_owner, response = *std::move(response)]() mutable {
+            RecordInterestGroupUpdates(buyer_ig_owner, shared_ig_updates_map_,
+                                       *response);
+          });
     } else {
       async_task_tracker_.TaskCompleted(
           TaskStatus::SUCCESS,
           [this, &buyer_ig_owner, response = *std::move(response)]() mutable {
+            RecordInterestGroupUpdates(buyer_ig_owner, shared_ig_updates_map_,
+                                       *response);
             shared_buyer_bids_map_.try_emplace(buyer_ig_owner,
                                                std::move(response));
           });
@@ -1016,6 +1067,16 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
   ScoreAds();
 }
 
+bool SelectAdReactor::GetKAnonStatusForAdWithBid(absl::string_view ad_key) {
+  if (!enable_kanon_ || !enforce_kanon_) {
+    PS_VLOG(5) << "k-anon is not enabled or not enforced";
+    return true;
+  }
+
+  // Not implemented yet.
+  return false;
+}
+
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
 SelectAdReactor::CreateScoreAdsRequest() {
   auto raw_request = std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>();
@@ -1026,8 +1087,9 @@ SelectAdReactor::CreateScoreAdsRequest() {
     for (const auto& [buyer_ig_owner, get_bid_response] :
          shared_buyer_bids_map_) {
       for (const AdWithBid& ad_with_bid : get_bid_response->bids()) {
+        const bool k_anon_status = GetKAnonStatusForAdWithBid(/*ad_key=*/"");
         raw_request->mutable_ad_bids()->Add(
-            BuildAdWithBidMetadata(ad_with_bid, buyer_ig_owner));
+            BuildAdWithBidMetadata(ad_with_bid, buyer_ig_owner, k_anon_status));
       }
     }
   }
@@ -1057,6 +1119,12 @@ SelectAdReactor::CreateScoreAdsRequest() {
         if (protected_auction_input.has_consented_debug_config()) {
           *raw_request->mutable_consented_debug_config() =
               protected_auction_input.consented_debug_config();
+        }
+        if (enable_kanon_) {
+          raw_request->set_num_allowed_ghost_winners(
+              kNumAllowedChromGhostWinners);
+          raw_request->set_enforce_kanon(
+              protected_auction_input.enforce_kanon());
         }
       },
       protected_auction_input_);
@@ -1103,6 +1171,7 @@ void SelectAdReactor::CancellableScoreAds() {
         OnScoreAdsDone(std::move(result));
       },
       [this, auction_request]() {
+        // Do not log request/response size metrics for cancelled requests.
         delete auction_request;
         FinishWithStatus(
             grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
@@ -1115,6 +1184,7 @@ void SelectAdReactor::CancellableScoreAds() {
       absl::Milliseconds(
           config_client_.GetIntParameter(SCORE_ADS_RPC_TIMEOUT_MS)));
   if (!execute_result.ok()) {
+    delete auction_request;
     LogIfError(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
             1, metric::kSfeScoreAdsFailedToCall));
@@ -1199,6 +1269,7 @@ void SelectAdReactor::OnScoreAdsDone(
   absl::StatusOr<std::string> non_encrypted_response =
       GetNonEncryptedResponse(high_score, error);
   if (!non_encrypted_response.ok()) {
+    FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
     return;
   }
 

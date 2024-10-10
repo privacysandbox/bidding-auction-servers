@@ -196,15 +196,20 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  if (!enable_protected_app_signals && !enable_protected_audience) {
-    ABSL_LOG(WARNING) << "Neither protected audience nor protected app signals "
-                         "is enabled";
-  }
+  CHECK(enable_protected_audience || enable_protected_app_signals)
+      << "Neither Protected Audience nor Protected App Signals support "
+         "enabled.";
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
                << enable_protected_audience;
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << enable_protected_app_signals;
   PS_LOG(INFO) << "Successfully constructed the config client.";
+
+// For security reasons, chaffing must always be enabled in a prod build.
+#if (PS_IS_PROD_BUILD)
+  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
+#endif
+
   return config_client;
 }
 
@@ -264,7 +269,8 @@ absl::Status RunServer() {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
   }
 
-  if (config_client.HasParameter(HEALTHCHECK_PORT)) {
+  if (config_client.HasParameter(HEALTHCHECK_PORT) &&
+      !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
     CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
           config_client.GetStringParameter(PORT))
         << "Healthcheck port must be unique.";

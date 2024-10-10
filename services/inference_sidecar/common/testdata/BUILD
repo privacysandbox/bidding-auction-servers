@@ -19,9 +19,7 @@ exports_files([
     # This PyTorch model inputs a float and returns the same float.
     "models/pytorch_simple_model.pt",
     # This PyTorch model uses a realistic input/output format for e2e test flow.
-    "models/pytorch_e2e_model1.pt",
-    # Same architecture as e2e_model1 with different parameters.
-    "models/pytorch_e2e_model2.pt",
+    "models/pytorch_e2e_model.pt",
     # This pytorch model takes one int64 value and three floats as input. It
     # returns two tensors: a float embedding of size 4 and one int64 value.
     "models/pytorch_mixed_inputs_mixed_outputs_model.pt",
@@ -31,4 +29,12 @@ exports_files([
     "models/pytorch_unfreezable_model.pt",
     # This PyTorch model returns is already frozen.
     "models/pytorch_frozen_model.pt",
+    # This PyTorch model performs external I/O from its submodule.
+    "models/pytorch_submodule_model.pt",
+    # This PyTorch model performs external I/O from an external function.
+    "models/pytorch_external_function_model.pt",
+    # This PyTorch model performs external I/O from an external class.
+    "models/pytorch_external_class_model.pt",
+    # This PyTorch model performs external I/O from nested blocks.
+    "models/pytorch_nested_block_model.pt",
 ])

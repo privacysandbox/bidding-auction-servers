@@ -25,7 +25,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/data_fetch/fetcher_interface.h"
 #include "services/common/data_fetch/periodic_bucket_fetcher.h"
 #include "src/concurrent/executor.h"
@@ -38,7 +38,7 @@ class PeriodicBucketCodeFetcher : public PeriodicBucketFetcher {
   // Constructs a new PeriodicBucketFether.
   explicit PeriodicBucketCodeFetcher(
       absl::string_view bucket_name, absl::Duration fetch_period_ms,
-      V8Dispatcher* dispatcher, server_common::Executor* executor,
+      UdfCodeLoaderInterface* loader, server_common::Executor* executor,
       WrapCodeForDispatch wrap_code,
       google::scp::cpio::BlobStorageClientInterface* blob_storage_client);
 
@@ -71,7 +71,7 @@ class PeriodicBucketCodeFetcher : public PeriodicBucketFetcher {
           context);
 
   WrapCodeForDispatch wrap_code_;
-  V8Dispatcher& dispatcher_;
+  UdfCodeLoaderInterface& loader_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -28,7 +28,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/auction_service:auction_constants",
         "//services/auction_service/code_wrapper:seller_code_wrapper",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/common/util:reporting_util",

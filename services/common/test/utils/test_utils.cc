@@ -27,6 +27,8 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
   raw_request.set_seller(kTestSeller);
   raw_request.set_enable_debug_reporting(true);
   raw_request.set_enable_unlimited_egress(true);
+  raw_request.set_enforce_kanon(true);
+  raw_request.set_multi_bid_limit(kTestMultiBidLimit);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
   raw_request.mutable_log_context()->set_adtech_debug_id(kTestAdTechDebugId);
   raw_request.mutable_consented_debug_config()->set_is_consented(true);

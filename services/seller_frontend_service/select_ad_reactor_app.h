@@ -78,7 +78,8 @@ class SelectAdReactorForApp : public SelectAdReactor {
 
   ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata
   BuildProtectedAppSignalsAdWithBidMetadata(
-      absl::string_view buyer, const ProtectedAppSignalsAdWithBid& input);
+      absl::string_view buyer, const ProtectedAppSignalsAdWithBid& input,
+      bool k_anon_status);
 
   std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> CreateScoreAdsRequest()
       override;

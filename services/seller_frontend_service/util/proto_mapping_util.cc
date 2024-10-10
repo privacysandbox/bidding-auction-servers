@@ -113,6 +113,7 @@ absl::StatusOr<std::string> PackageAuctionResultCiphertext(
 absl::StatusOr<std::string> PackageAuctionResultForWeb(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<IgsWithBidsMap>& maybe_bidding_group_map,
+    const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context) {
@@ -132,7 +133,7 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
       Encode(high_score,
              maybe_bidding_group_map.has_value() ? *maybe_bidding_group_map
                                                  : IgsWithBidsMap(),
-             error, error_handler);
+             update_group_map, error, error_handler);
   if (!serialized_data.ok()) {
     wait_for_error_callback.WaitForNotification();
     return absl::Status(serialized_data.status().code(), error_msg);
@@ -179,7 +180,7 @@ absl::StatusOr<std::string> PackageAuctionResultForInvalid(
 
 AuctionResult AdScoreToAuctionResult(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    std::optional<IgsWithBidsMap> bidding_groups,
+    std::optional<IgsWithBidsMap> bidding_groups, UpdateGroupMap& update_groups,
     const std::optional<AuctionResult::Error>& error,
     AuctionScope auction_scope, absl::string_view seller,
     const std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
@@ -201,6 +202,10 @@ AuctionResult AdScoreToAuctionResult(
     auction_result.set_top_level_seller(top_level_seller);
     if (bidding_groups.has_value()) {
       *auction_result.mutable_bidding_groups() = (*std::move(bidding_groups));
+    }
+
+    for (auto& [ig_owner, updates] : update_groups) {
+      (*auction_result.mutable_update_groups())[ig_owner] = std::move(updates);
     }
   }
   return auction_result;
@@ -249,7 +254,8 @@ CreateTopLevelScoreAdsRawRequest(
 absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
     const ScoreAdsResponse::AdScore& ad_score,
     const std::optional<IgsWithBidsMap>& bidding_group_map,
-    ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+    const UpdateGroupMap& update_group_map, ClientType client_type,
+    OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context) {
   absl::StatusOr<std::string> auction_result_ciphertext;
   switch (client_type) {
@@ -257,9 +263,9 @@ absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
       return PackageAuctionResultForApp(ad_score, /*error =*/std::nullopt,
                                         decrypted_request, log_context);
     case CLIENT_TYPE_BROWSER:
-      return PackageAuctionResultForWeb(ad_score, bidding_group_map,
-                                        /*error =*/std::nullopt,
-                                        decrypted_request, log_context);
+      return PackageAuctionResultForWeb(
+          ad_score, bidding_group_map, update_group_map,
+          /*error =*/std::nullopt, decrypted_request, log_context);
     default:
       return PackageAuctionResultForInvalid(client_type);
   }
@@ -277,7 +283,8 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
           /*high_score=*/std::nullopt, /*maybe_bidding_group_map=*/std::nullopt,
-          auction_error, decrypted_request, log_context);
+          /*update_group_map=*/{}, auction_error, decrypted_request,
+          log_context);
     default:
       return PackageAuctionResultForInvalid(client_type);
   }
@@ -294,6 +301,7 @@ absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
           /*high_score=*/std::nullopt, /*maybe_bidding_group_map=*/std::nullopt,
+          /*update_group_map=*/{},
           /*error =*/std::nullopt, decrypted_request, log_context);
     default:
       return PackageAuctionResultForInvalid(client_type);

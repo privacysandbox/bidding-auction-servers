@@ -56,7 +56,6 @@ using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse;
 using ::google::scp::core::AsyncContext;
 using ::google::scp::core::FailureExecutionResult;
 using ::google::scp::core::SuccessExecutionResult;
-using ::google::scp::core::errors::GetErrorMessage;
 using ::google::scp::cpio::BlobStorageClientFactory;
 using ::google::scp::cpio::BlobStorageClientInterface;
 using ::google::scp::cpio::Cpio;
@@ -70,8 +69,8 @@ class PeriodicBucketCodeFetcherTest : public ::testing::Test {
   void SetUp() override { CommonTestInit(); }
 };
 
-TEST_F(PeriodicBucketCodeFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
-  MockV8Dispatcher dispatcher;
+TEST_F(PeriodicBucketCodeFetcherTest, LoadsWrappedResultIntoCodeLoader) {
+  MockUdfCodeLoaderInterface dispatcher;
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
   std::string wrapper_string = "_wrapper_";
@@ -139,7 +138,7 @@ TEST_F(PeriodicBucketCodeFetcherTest, LoadsWrappedResultIntoV8Dispatcher) {
 }
 
 TEST_F(PeriodicBucketCodeFetcherTest, LoadsAllBlobsInBucket) {
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
 
@@ -221,7 +220,7 @@ TEST_F(PeriodicBucketCodeFetcherTest, LoadsAllBlobsInBucket) {
 }
 
 TEST_F(PeriodicBucketCodeFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
 
@@ -300,7 +299,7 @@ TEST_F(PeriodicBucketCodeFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
 }
 
 TEST_F(PeriodicBucketCodeFetcherTest, FailsStartupIfNoBlobLoadedSuccessfully) {
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   auto executor = std::make_unique<MockExecutor>();
   auto blob_storage_client = std::make_unique<MockBlobStorageClient>();
   auto wrapper = [](const std::vector<std::string>& blobs) {

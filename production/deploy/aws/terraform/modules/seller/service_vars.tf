@@ -254,3 +254,8 @@ variable "consented_request_s3_bucket" {
   description = "s3 bucket to export event message for consented request"
   type        = string
 }
+
+variable "tee_kv_servers_port" {
+  description = "Port on which the TEE KV server accepts connections."
+  type        = number
+}

@@ -27,7 +27,7 @@
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper_test_constants.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -480,14 +480,15 @@ class AuctionServiceIntegrationTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
   }
 };
 
 TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   ASSERT_TRUE(dispatcher.Init().ok());
   ASSERT_TRUE(dispatcher
                   .LoadSync(kScoreAdBlobVersion,
@@ -567,7 +568,7 @@ void SellerCodeWrappingTestHelper(
     bool enable_report_win_input_noising = false) {
   grpc::CallbackServerContext context;
   V8Dispatcher dispatcher;
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   ASSERT_TRUE(dispatcher.Init().ok());
   std::unique_ptr<MockAsyncReporter> async_reporter_ =
       std::make_unique<MockAsyncReporter>(
@@ -589,7 +590,9 @@ void SellerCodeWrappingTestHelper(
   std::string wrapper_js_blob = GetSellerWrappedCode(
       adtech_code_blob, enable_report_result_url_generation,
       enable_report_win_url_generation, buyer_origin_code_map);
-  ASSERT_TRUE(dispatcher.LoadSync(kScoreAdBlobVersion, wrapper_js_blob).ok());
+  ASSERT_TRUE(
+      dispatcher.LoadSync(kScoreAdBlobVersion, std::move(wrapper_js_blob))
+          .ok());
 
   auto score_ads_reactor_factory =
       [&client, async_reporter_ = std::move(async_reporter_)](
@@ -801,6 +804,8 @@ TEST_F(AuctionServiceIntegrationTest,
   EXPECT_GT(scoredAd.desirability(), 0);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsReturnsSuccessFullyWithReportingEnabled) {
   bool enable_seller_debug_url_generation = false;
@@ -846,6 +851,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        AdScoreIncludesWinReportingUrlsAndBuyerReportingId) {
   bool enable_seller_debug_url_generation = false;
@@ -892,6 +899,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest, ReportingSuccessfulWithNoising) {
   bool enable_seller_debug_url_generation = false;
   bool enable_debug_reporting = false;
@@ -935,6 +944,8 @@ TEST_F(AuctionServiceIntegrationTest, ReportingSuccessfulWithNoising) {
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        SuccessfulReportingWithProtectedAppSignalsEnabled) {
   bool enable_seller_debug_url_generation = false;
@@ -980,6 +991,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsReturnsSuccessfullyWithReportingForComponentAuctions) {
   bool enable_seller_debug_url_generation = false;
@@ -1036,6 +1049,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsReturnsSuccessfullyWithReportingForTopLevelAuctions) {
   bool enable_seller_debug_url_generation = false;
@@ -1096,6 +1111,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestComponentInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ModifiedBidSetToBuyerBidInComponentAuctionsReportUrlIfNotPresent) {
   bool enable_seller_debug_url_generation = false;
@@ -1141,6 +1158,8 @@ TEST_F(AuctionServiceIntegrationTest,
             kTestInteractionReportingUrl);
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ReportingUrlsForBuyerEmptyWhenSellerInputIsMissing) {
   bool enable_seller_debug_url_generation = false;
@@ -1181,6 +1200,8 @@ TEST_F(AuctionServiceIntegrationTest,
                   .empty());
 }
 
+// [[deprecated("DEPRECATED. Please use the tests in
+// auction_service_reporting_integration_test instead")]]
 TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsReturnsSuccessFullyWithReportWinDisabled) {
   bool enable_seller_debug_url_generation = false;

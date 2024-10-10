@@ -41,7 +41,7 @@ inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
 //- Event level and fenced frame reporting for buyer: reportWin() function
 // execution
 //- Exporting console.logs from the AdTech script execution
-inline constexpr absl::string_view kReportingEntryFunction =
+[[deprecated]] inline constexpr absl::string_view kReportingEntryFunction =
     R"JS_CODE(
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
@@ -131,7 +131,7 @@ inline constexpr absl::string_view kReportingEntryFunction =
     }
 )JS_CODE";
 
-inline constexpr absl::string_view kReportingWinWrapperTemplate =
+[[deprecated]] inline constexpr absl::string_view kReportingWinWrapperTemplate =
     R"JS_CODE(
     // Handler method to call adTech provided reportWin method and wrap the
     // response with reportWin url and interaction reporting urls.
@@ -191,11 +191,11 @@ inline constexpr absl::string_view kReportingWinWrapperTemplate =
 // - Generation of event level reporting urls for all the Buyers
 // - Generation of event level debug reporting
 // - Exporting console.logs from the AdTech execution.
-std::string GetSellerWrappedCode(
+[[deprecated]] std::string GetSellerWrappedCode(
     absl::string_view seller_js_code, bool enable_report_result_url_generation,
     bool enable_report_win_url_generation,
     const absl::flat_hash_map<std::string, std::string>& buyer_origin_code_map);
-std::string GetSellerWrappedCode(
+[[deprecated]] std::string GetSellerWrappedCode(
     absl::string_view seller_js_code, bool enable_report_result_url_generation,
     bool enable_protected_app_signals, bool enable_report_win_url_generation,
     const absl::flat_hash_map<std::string, std::string>& buyer_origin_code_map,

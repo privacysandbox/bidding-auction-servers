@@ -27,6 +27,7 @@
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/reporting_test_util.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 

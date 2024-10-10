@@ -26,7 +26,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 grpc::ServerUnaryReactor* BiddingService::GenerateBids(
     grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
     GenerateBidsResponse* response) {
-  LogCommonMetric(request, response);
+  LogCommonMetric(static_cast<const google::protobuf::Message*>(request),
+                  response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = generate_bids_reactor_factory_(
       context, request, response, key_fetcher_manager_.get(),
@@ -39,6 +40,8 @@ grpc::ServerUnaryReactor* BiddingService::GenerateProtectedAppSignalsBids(
     grpc::CallbackServerContext* context,
     const GenerateProtectedAppSignalsBidsRequest* request,
     GenerateProtectedAppSignalsBidsResponse* response) {
+  LogCommonMetric(static_cast<const google::protobuf::Message*>(request),
+                  response);
   // Heap allocate the reactor. Deleted in reactor's OnDone call.
   auto* reactor = protected_app_signals_generate_bids_reactor_factory_(
       context, request, runtime_config_, response, key_fetcher_manager_.get(),

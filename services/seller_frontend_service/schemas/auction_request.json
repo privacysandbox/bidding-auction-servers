@@ -19,7 +19,8 @@
       "format": "uuid"
     },
     "enableDebugReporting": { "type": "boolean" },
-    "requestTimestampMs": { "type": "number" }
+    "requestTimestampMs": { "type": "number" },
+    "enforceKAnon": { "type": "boolean" }
   },
   "required": ["version", "interestGroups", "publisher", "generationId"],
   "additionalProperties": false

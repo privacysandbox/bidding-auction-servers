@@ -53,46 +53,69 @@
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
 void LogMetrics(
-    const google::protobuf::Map<std::string, MetricValue>& metrics_map,
+    const google::protobuf::Map<std::string, MetricValueList>& metrics_map,
     metric::BiddingContext* metric_context, RequestLogContext& log_context) {
-  for (const auto& [key, metric_value] : metrics_map) {
+  for (const auto& [key, metric_value_list] : metrics_map) {
     absl::Status log_status;
     if (key == "kInferenceRequestCount") {
-      log_status =
-          metric_context->AccumulateMetric<metric::kInferenceRequestCount>(
-              metric_value.value());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context->AccumulateMetric<metric::kInferenceRequestCount>(
+                metric_value.value());
+      }
     } else if (key == "kInferenceRequestDuration") {
-      log_status =
-          metric_context->AccumulateMetric<metric::kInferenceRequestDuration>(
-              metric_value.value());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context->AccumulateMetric<metric::kInferenceRequestDuration>(
+                metric_value.value());
+      }
     } else if (key == "kInferenceRequestSize") {
-      log_status =
-          metric_context->AccumulateMetric<metric::kInferenceRequestSize>(
-              metric_value.value());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context->AccumulateMetric<metric::kInferenceRequestSize>(
+                metric_value.value());
+      }
     } else if (key == "kInferenceResponseSize") {
-      log_status =
-          metric_context->AccumulateMetric<metric::kInferenceResponseSize>(
-              metric_value.value());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context->AccumulateMetric<metric::kInferenceResponseSize>(
+                metric_value.value());
+      }
     } else if (key == "kInferenceErrorCountByErrorCode") {
-      log_status =
-          metric_context
-              ->AccumulateMetric<metric::kInferenceErrorCountByErrorCode>(
-                  metric_value.value(), metric_value.partition());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context
+                ->AccumulateMetric<metric::kInferenceErrorCountByErrorCode>(
+                    metric_value.value(), metric_value.partition());
+      }
     } else if (key == "kInferenceRequestCountByModel") {
-      log_status =
-          metric_context
-              ->AccumulateMetric<metric::kInferenceRequestCountByModel>(
-                  metric_value.value(), metric_value.partition());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context
+                ->AccumulateMetric<metric::kInferenceRequestCountByModel>(
+                    metric_value.value(), metric_value.partition());
+      }
     } else if (key == "kInferenceRequestDurationByModel") {
-      log_status =
-          metric_context
-              ->AccumulateMetric<metric::kInferenceRequestDurationByModel>(
-                  metric_value.value(), metric_value.partition());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context
+                ->AccumulateMetric<metric::kInferenceRequestDurationByModel>(
+                    metric_value.value(), metric_value.partition());
+      }
     } else if (key == "kInferenceRequestFailedCountByModel") {
-      log_status =
-          metric_context
-              ->AccumulateMetric<metric::kInferenceRequestFailedCountByModel>(
-                  metric_value.value(), metric_value.partition());
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context
+                ->AccumulateMetric<metric::kInferenceRequestFailedCountByModel>(
+                    metric_value.value(), metric_value.partition());
+      }
+    } else if (key == "kInferenceRequestBatchCountByModel") {
+      for (const auto& metric_value : metric_value_list.metrics()) {
+        log_status =
+            metric_context
+                ->AccumulateMetric<metric::kInferenceRequestBatchCountByModel>(
+                    metric_value.value(), metric_value.partition());
+      }
     } else {
       log_status = absl::NotFoundError("Unrecognized metric key: " + key);
     }
@@ -241,8 +264,8 @@ void RunInference(
               (*roma_request_context)->GetMetricContext();
           inference_metric_context.ok()) {
         auto metric_context = inference_metric_context.value();
-        LogMetrics(predict_response.metrics(), metric_context, log_context);
-
+        LogMetrics(predict_response.metrics_list(), metric_context,
+                   log_context);
         int inference_execution_time_ms =
             (absl::Now() - start_inference_execution_time) /
             absl::Milliseconds(1);

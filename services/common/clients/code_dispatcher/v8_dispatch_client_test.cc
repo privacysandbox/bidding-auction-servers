@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 
 #include <utility>
 
@@ -24,7 +24,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-TEST(CodeDispatchClient, DelegatesToCodeDispatchLibrary) {
+TEST(V8DispatchClient, DelegatesToCodeDispatchLibrary) {
   CommonTestInit();
   MockV8Dispatcher dispatcher;
   DispatchRequest foo{"foo"};
@@ -44,7 +44,7 @@ TEST(CodeDispatchClient, DelegatesToCodeDispatchLibrary) {
         batch_callback({});
         return absl::OkStatus();
       });
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   EXPECT_TRUE(client.BatchExecute(requests, std::move(callback)).ok());
   done.Wait();
 }

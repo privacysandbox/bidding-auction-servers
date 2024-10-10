@@ -55,7 +55,7 @@ class BiddingServiceTest : public ::testing::Test {
     config_.SetOverride(kTrue, TEST_MODE);
   }
 
-  MockCodeDispatchClient code_dispatch_client_;
+  MockV8DispatchClient v8_dispatch_client_;
   std::unique_ptr<BiddingBenchmarkingLogger> benchmarking_logger_ =
       std::make_unique<BiddingNoOpLogger>();
   TrustedServersConfigClient config_{{}};
@@ -71,8 +71,9 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
   // initialize
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-  metric::MetricContextMap<GenerateBidsRequest>(
-      server_common::telemetry::BuildDependentConfig(config_proto));
+  metric::MetricContextMap<google::protobuf::Message>(
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_proto));
   std::unique_ptr<NiceMock<MockCryptoClientWrapper>> crypto_client =
       std::make_unique<NiceMock<MockCryptoClientWrapper>>();
   BiddingService service(
@@ -85,7 +86,7 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
         std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
             std::make_unique<BiddingNoOpLogger>();
         auto mock = std::make_unique<MockGenerateBidsReactor>(
-            context, code_dispatch_client_, request, response, "",
+            context, v8_dispatch_client_, request, response, "",
             std::move(benchmarkingLogger), key_fetcher_manager, crypto_client,
             runtime_config);
         EXPECT_CALL(*mock, Execute).Times(1);
@@ -106,9 +107,9 @@ TEST_F(BiddingServiceTest, InstantiatesGenerateBidsReactor) {
              EgressSchemaCache* limited_egress_schema_cache) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
-                context, code_dispatch_client_, runtime_config, request,
-                response, key_fetcher_manager, crypto_client,
-                ad_retrieval_async_client, kv_async_client, egress_schema_cache,
+                context, v8_dispatch_client_, runtime_config, request, response,
+                key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+                kv_async_client, egress_schema_cache,
                 limited_egress_schema_cache);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
@@ -133,7 +134,7 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
           CryptoClientWrapperInterface* crypto_client,
           const BiddingServiceRuntimeConfig& runtime_config) {
         auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-            context, code_dispatch_client_, request, response,
+            context, v8_dispatch_client_, request, response,
             std::move(benchmarking_logger_), key_fetcher_manager, crypto_client,
             runtime_config);
         init_pending.DecrementCount();
@@ -153,9 +154,9 @@ TEST_F(BiddingServiceTest, EncryptsResponseEvenOnException) {
              EgressSchemaCache* limited_egress_schema_cache) {
         auto mock =
             std::make_unique<GenerateProtectedAppSignalsMockBidsReactor>(
-                context, code_dispatch_client_, runtime_config, request,
-                response, key_fetcher_manager, crypto_client,
-                ad_retrieval_async_client, kv_async_client, egress_schema_cache,
+                context, v8_dispatch_client_, runtime_config, request, response,
+                key_fetcher_manager, crypto_client, ad_retrieval_async_client,
+                kv_async_client, egress_schema_cache,
                 limited_egress_schema_cache);
         EXPECT_CALL(*mock, Execute).Times(0);
         return mock.release();
@@ -190,7 +191,7 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
                CryptoClientWrapperInterface* crypto_client,
                const BiddingServiceRuntimeConfig& runtime_config) {
           auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-              context, code_dispatch_client_, request, response,
+              context, v8_dispatch_client_, request, response,
               std::move(benchmarking_logger_), key_fetcher_manager,
               crypto_client, runtime_config);
           return generate_bids_reactor.release();
@@ -209,7 +210,7 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
                EgressSchemaCache* limited_egress_schema_cache) {
           auto reactor =
               std::make_unique<ProtectedAppSignalsGenerateBidsReactor>(
-                  context, code_dispatch_client_, runtime_config, request,
+                  context, v8_dispatch_client_, runtime_config, request,
                   response, key_fetcher_manager, crypto_client,
                   ad_retrieval_async_client, kv_async_client,
                   egress_schema_cache, limited_egress_schema_cache);
@@ -227,6 +228,15 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
     return std::make_unique<EgressSchemaCacheMock>(std::move(cddl_spec_cache));
   }
 
+  void SetPASMetricContext(GenerateProtectedAppSignalsBidsRequest& request) {
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::MetricContextMap<google::protobuf::Message>(
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
+        ->Get(&request);
+  }
+
   std::unique_ptr<KVAsyncClientMock> ad_retrieval_client_ =
       std::make_unique<KVAsyncClientMock>();
   std::unique_ptr<EgressSchemaCacheMock> egress_schema_cache_ =
@@ -238,7 +248,7 @@ class BiddingProtectedAppSignalsTest : public BiddingServiceTest {
 
 TEST_F(BiddingProtectedAppSignalsTest, NormalWorkflowWorks) {
   SetupProtectedAppSignalsRomaExpectations(
-      code_dispatch_client_, num_roma_requests_,
+      v8_dispatch_client_, num_roma_requests_,
       CreatePrepareDataForAdsRetrievalResponse(),
       CreateGenerateBidsUdfResponse(kTestRenderUrl, kTestWinningBid));
   SetupAdRetrievalClientExpectations(*ad_retrieval_client_);
@@ -251,8 +261,9 @@ TEST_F(BiddingProtectedAppSignalsTest, NormalWorkflowWorks) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto request = CreateProtectedAppSignalsRequest(raw_request);
+  SetPASMetricContext(request);
   GenerateProtectedAppSignalsBidsResponse response;
   grpc::Status status =
       stub->GenerateProtectedAppSignalsBids(&context, request, &response);
@@ -268,7 +279,7 @@ TEST_F(BiddingProtectedAppSignalsTest, NormalWorkflowWorks) {
 
 TEST_F(BiddingProtectedAppSignalsTest,
        BadPrepareDataForAdRetrievalResponseFinishesRpc) {
-  EXPECT_CALL(code_dispatch_client_, BatchExecute)
+  EXPECT_CALL(v8_dispatch_client_, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback batch_callback) {
         // First dispatch happens for `prepareDataForAdRetrieval` UDF.
@@ -284,8 +295,9 @@ TEST_F(BiddingProtectedAppSignalsTest,
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto request = CreateProtectedAppSignalsRequest(raw_request);
+  SetPASMetricContext(request);
   GenerateProtectedAppSignalsBidsResponse response;
   grpc::Status status =
       stub->GenerateProtectedAppSignalsBids(&context, request, &response);
@@ -294,7 +306,7 @@ TEST_F(BiddingProtectedAppSignalsTest,
 }
 
 TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
-  EXPECT_CALL(code_dispatch_client_, BatchExecute)
+  EXPECT_CALL(v8_dispatch_client_, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback batch_callback) {
         // First dispatch happens for `prepareDataForAdRetrieval` UDF.
@@ -322,8 +334,9 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto request = CreateProtectedAppSignalsRequest(raw_request);
+  SetPASMetricContext(request);
   GenerateProtectedAppSignalsBidsResponse response;
   grpc::Status status =
       stub->GenerateProtectedAppSignalsBids(&context, request, &response);
@@ -332,7 +345,7 @@ TEST_F(BiddingProtectedAppSignalsTest, BadAdRetrievalResponseFinishesRpc) {
 }
 
 TEST_F(BiddingProtectedAppSignalsTest, BadGenerateBidResponseFinishesRpc) {
-  EXPECT_CALL(code_dispatch_client_, BatchExecute)
+  EXPECT_CALL(v8_dispatch_client_, BatchExecute)
       .WillRepeatedly([this](std::vector<DispatchRequest>& batch,
                              BatchDispatchDoneCallback batch_callback) {
         ++num_roma_requests_;
@@ -358,8 +371,9 @@ TEST_F(BiddingProtectedAppSignalsTest, BadGenerateBidResponseFinishesRpc) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto request = CreateProtectedAppSignalsRequest(raw_request);
+  SetPASMetricContext(request);
   GenerateProtectedAppSignalsBidsResponse response;
   grpc::Status status =
       stub->GenerateProtectedAppSignalsBids(&context, request, &response);

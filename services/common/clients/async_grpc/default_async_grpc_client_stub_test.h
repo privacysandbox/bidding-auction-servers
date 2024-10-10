@@ -173,11 +173,13 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
                               client_config);
   absl::Notification notification;
 
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
-          ResponseMetadata response_metadata) { notification.Notify(); });
+          ResponseMetadata response_metadata) { notification.Notify(); },
+      kMaxClientTimeout);
   CHECK_OK(status);
   notification.WaitForNotification();
   EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
@@ -237,7 +239,8 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
       std::make_unique<RawRequest>(), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
-          ResponseMetadata response_metadata) { notification.Notify(); });
+          ResponseMetadata response_metadata) { notification.Notify(); },
+      kMaxClientTimeout);
   CHECK_OK(status);
   notification.WaitForNotification();
 
@@ -284,15 +287,17 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
                               client_config);
   absl::Notification notification;
 
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
         EXPECT_EQ(get_values_response.status().code(),
                   absl::StatusCode::kInvalidArgument);
         notification.Notify();
-      });
+      },
+      kMaxClientTimeout);
   CHECK_OK(status);
   notification.WaitForNotification();
 }
@@ -342,8 +347,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
                               nullptr);
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config);
+
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) { notification.Notify(); },
@@ -392,15 +399,17 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   absl::Notification notification;
   std::unique_ptr<Response> output;
 
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification, &expected_output](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
         EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
             **get_values_response, expected_output));
         notification.Notify();
-      });
+      },
+      kMaxClientTimeout);
   CHECK_OK(status);
   notification.WaitForNotification();
 }
@@ -441,8 +450,9 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
   absl::Notification notification;
   std::unique_ptr<Response> output;
 
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {
@@ -491,8 +501,9 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   absl::Notification notification;
   std::unique_ptr<Response> output;
 
+  grpc::ClientContext context;
   auto status = class_under_test.ExecuteInternal(
-      std::move(input_request_ptr), {},
+      std::move(input_request_ptr), &context,
       [&notification](
           absl::StatusOr<std::unique_ptr<RawResponse>> get_values_response,
           ResponseMetadata response_metadata) {

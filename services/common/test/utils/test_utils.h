@@ -52,6 +52,7 @@ constexpr char kTestRender2[] = "https://test-render-2.com";
 constexpr char kTestMetadataKey2[] = "test_metadata_key_2";
 constexpr char kTestCurrency2[] = "RS";
 constexpr int kTestMetadataValue2 = 51;
+constexpr int kTestMultiBidLimit = 3;
 
 // Creates a GetBidsRawRequest using hardcoded test data.
 GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(

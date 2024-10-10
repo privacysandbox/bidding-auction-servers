@@ -211,9 +211,10 @@ class AdScoreToAuctionResultTest : public testing::Test {
 };
 
 TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForSingleSellerAuction) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER,
       empty_seller_, empty_audience_);
   EXPECT_THAT(expected, EqualsProto(output));
@@ -221,20 +222,22 @@ TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForSingleSellerAuction) {
 
 TEST_F(AdScoreToAuctionResultTest,
        MapsAllFieldsForSingleSellerAuctionWithPAAPIContributions) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   MapBasicScoreFieldsToAuctionResultForPrivateAggregation(valid_score_,
                                                           expected);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER,
       empty_seller_, empty_audience_);
   EXPECT_THAT(expected, EqualsProto(output));
 }
 
 TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForTopLevelAuction) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt,
       AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER, empty_seller_,
       empty_audience_);
@@ -242,9 +245,10 @@ TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForTopLevelAuction) {
 }
 
 TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForDeviceComponentAuction) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt,
       AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER, empty_seller_,
       empty_audience_);
@@ -253,11 +257,12 @@ TEST_F(AdScoreToAuctionResultTest, MapsAllFieldsForDeviceComponentAuction) {
 
 TEST_F(AdScoreToAuctionResultTest,
        MapsAllFieldsForServerAuctionForProtectedAuctionInput) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   MapServerComponentAuctionFieldsToAuctionResult(&expected, valid_seller_,
                                                  valid_auction_input_);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt,
       AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER, valid_seller_,
       valid_auction_input_);
@@ -266,11 +271,12 @@ TEST_F(AdScoreToAuctionResultTest,
 
 TEST_F(AdScoreToAuctionResultTest,
        MapsAllFieldsForServerAuctionForProtectedAudienceInput) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicScoreFieldsToAuctionResult(valid_score_);
   MapServerComponentAuctionFieldsToAuctionResult(&expected, valid_seller_,
                                                  valid_audience_input_);
   AuctionResult output = AdScoreToAuctionResult(
-      valid_score_, /*maybe_bidding_groups=*/std::nullopt,
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
       /*error=*/std::nullopt,
       AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER, valid_seller_,
       valid_audience_input_);
@@ -278,10 +284,11 @@ TEST_F(AdScoreToAuctionResultTest,
 }
 
 TEST_F(AdScoreToAuctionResultTest, MapsErrorOverAdScoreIfPresent) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected = MapBasicErrorFieldsToAuctionResult(valid_error_);
   AuctionResult output = AdScoreToAuctionResult(
-      std::nullopt, /*maybe_bidding_groups=*/std::nullopt, valid_error_,
-      AuctionScope::AUCTION_SCOPE_SINGLE_SELLER, empty_seller_,
+      std::nullopt, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
+      valid_error_, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER, empty_seller_,
       empty_audience_);
   EXPECT_THAT(expected, EqualsProto(output));
 }
@@ -460,8 +467,9 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
   void SetUp() override {
     valid_score_ = MakeAnAdScore();
     valid_error_ = MakeAnError();
-    bidding_group_map_ =
-        MakeARandomSingleSellerAuctionResult().bidding_groups();
+    AuctionResult random_result = MakeARandomSingleSellerAuctionResult();
+    bidding_group_map_ = random_result.bidding_groups();
+    update_group_map_ = random_result.update_groups();
     absl::btree_map<std::string, std::string> context_map;
     log_context_ = std::make_unique<RequestLogContext>(
         context_map, server_common::ConsentedDebugConfiguration());
@@ -471,6 +479,7 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
   ScoreAdsResponse::AdScore valid_score_;
   AuctionResult::Error valid_error_;
   IgsWithBidsMap bidding_group_map_;
+  UpdateGroupMap update_group_map_;
   std::unique_ptr<RequestLogContext> log_context_;
   std::unique_ptr<OhttpHpkeDecryptedMessage> MakeDecryptedMessage() {
     auto [request, context] =
@@ -483,12 +492,13 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
 };
 
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
+  UpdateGroupMap empty_updates;
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, std::nullopt, ClientType::CLIENT_TYPE_ANDROID,
-      *decrypted_message, *this->log_context_);
+      this->valid_score_, std::nullopt, empty_updates,
+      ClientType::CLIENT_TYPE_ANDROID, *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_THAT(DecryptAppProtoAuctionResult(*output, decrypted_message->context),
@@ -502,9 +512,11 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   expected.clear_interest_group_origin();
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),
                                             this->bidding_group_map_.end());
+  expected.mutable_update_groups()->insert(this->update_group_map_.begin(),
+                                           this->update_group_map_.end());
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, this->bidding_group_map_,
+      this->valid_score_, this->bidding_group_map_, this->update_group_map_,
       ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
@@ -513,9 +525,10 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
 }
 
 TEST_F(CreateAuctionResultCiphertextTest, ReturnsErrorForInvalidClientAdScore) {
+  UpdateGroupMap empty_updates;
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, this->bidding_group_map_,
+      this->valid_score_, this->bidding_group_map_, empty_updates,
       ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message, *this->log_context_);
 
   ASSERT_FALSE(output.ok());

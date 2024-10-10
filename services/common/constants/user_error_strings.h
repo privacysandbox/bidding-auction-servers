@@ -24,6 +24,7 @@ inline constexpr char kEmptyKeyIdError[] = "key_id must be non-null.";
 inline constexpr char kEmptyCiphertextError[] =
     "request_ciphertext must be non-null.";
 inline constexpr char kInvalidKeyIdError[] = "Invalid key_id.";
+inline constexpr char kMalformedRequest[] = "Malformed request.";
 inline constexpr char kMalformedCiphertext[] = "Malformed request ciphertext.";
 inline constexpr char kMissingInputs[] = "Missing inputs";
 

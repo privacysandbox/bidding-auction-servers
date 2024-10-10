@@ -71,7 +71,7 @@ ABSL_FLAG(
     std::optional<std::string>, seller_code_fetch_config, std::nullopt,
     "The JSON string for config fields necessary for AdTech code fetching.");
 ABSL_FLAG(
-    std::optional<std::int64_t>, js_num_workers, std::nullopt,
+    std::optional<std::int64_t>, udf_num_workers, std::nullopt,
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
@@ -143,7 +143,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
   config_client.SetFlag(FLAGS_seller_code_fetch_config,
                         SELLER_CODE_FETCH_CONFIG);
-  config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_udf_num_workers, UDF_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
   config_client.SetFlag(FLAGS_enable_report_win_input_noising,
                         ENABLE_REPORT_WIN_INPUT_NOISING);
@@ -152,6 +152,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         ENABLE_OTEL_BASED_LOGGING);
   config_client.SetFlag(FLAGS_enable_protected_app_signals,
                         ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetFlag(FLAGS_enable_protected_audience,
+                        ENABLE_PROTECTED_AUDIENCE);
   config_client.SetFlag(FLAGS_ps_verbosity, PS_VERBOSITY);
   config_client.SetFlag(FLAGS_max_allowed_size_debug_url_bytes,
                         MAX_ALLOWED_SIZE_DEBUG_URL_BYTES);
@@ -162,6 +164,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_auction_tcmalloc_max_total_thread_cache_bytes,
                         AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -170,9 +173,17 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   server_common::log::SetGlobalPSVLogLevel(
       config_client.GetIntParameter(PS_VERBOSITY));
 
+  const bool enable_protected_audience =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
+  const bool enable_protected_app_signals =
+      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  CHECK(enable_protected_audience || enable_protected_app_signals)
+      << "Neither Protected Audience nor Protected App Signals support "
+         "enabled.";
+  PS_LOG(INFO) << "Protected Audience support enabled on the service: "
+               << enable_protected_audience;
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
-               << config_client.GetBooleanParameter(
-                      ENABLE_PROTECTED_APP_SIGNALS);
+               << enable_protected_app_signals;
   PS_LOG(INFO) << "Successfully constructed the config client.";
   return config_client;
 }
@@ -202,10 +213,10 @@ absl::Status RunServer() {
     DispatchConfig config;
     config.worker_queue_max_items =
         config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
-    config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
+    config.number_of_workers = config_client.GetIntParameter(UDF_NUM_WORKERS);
     return config;
   }());
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
 
   PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
 
@@ -323,7 +334,8 @@ absl::Status RunServer() {
   // deployed behind an HTTPS load balancer that terminates TLS.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
 
-  if (config_client.HasParameter(HEALTHCHECK_PORT)) {
+  if (config_client.HasParameter(HEALTHCHECK_PORT) &&
+      !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
     CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
           config_client.GetStringParameter(PORT))
         << "Healthcheck port must be unique.";

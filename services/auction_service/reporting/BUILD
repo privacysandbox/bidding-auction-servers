@@ -38,7 +38,7 @@ cc_library(
         ":reporting_response",
         "//services/auction_service:auction_constants",
         "//services/common:feature_flags",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
@@ -99,7 +99,7 @@ cc_test(
     deps = [
         ":reporting_helper",
         ":reporting_response",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",

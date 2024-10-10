@@ -69,7 +69,6 @@ inline constexpr char kEnableReportWinUrlGeneration[] =
 inline constexpr char kEnableProtectedAppSignals[] =
     "enableProtectedAppSignals";
 inline constexpr char kModelingSignalsTag[] = "modelingSignals";
-inline constexpr char kModifiedBid[] = "modifiedBid";
 inline constexpr char kReportWinResponse[] = "reportWinResponse";
 inline constexpr char kReportWinUrl[] = "reportWinUrl";
 inline constexpr char kBuyerSignals[] = "perBuyerSignals";
@@ -88,6 +87,9 @@ inline constexpr char kJoinCountTag[] = "joinCount";
 inline constexpr char kRecencyTag[] = "recency";
 constexpr int kStochasticalRoundingBits = 8;
 
+// [[deprecated("DEPRECATED. Please use
+// SellerReportingDispatchRequestData or BuyerReportingDispatchRequestData
+// instead")]]
 enum class ReportingArgs : int {
   kAuctionConfig = 0,
   kSellerReportingSignals,
@@ -102,6 +104,8 @@ inline constexpr int ReportingArgIndex(const ReportingArgs& arg) {
   return static_cast<std::underlying_type_t<ReportingArgs>>(arg);
 }
 
+// [[deprecated("DEPRECATED. Please use
+// BuyerReportingDispatchRequestData instead")]]
 struct BuyerReportingMetadata {
   std::string buyer_signals;
   std::optional<int> join_count;
@@ -131,8 +135,9 @@ struct ReportingDispatchRequestConfig {
   std::string roma_timeout_ms;
 };
 
-// Data required to build the inputs required to dispatch
-// reporting function execution.
+// [[deprecated("DEPRECATED. Please use
+// SellerReportingDispatchRequestData or BuyerReportingDispatchRequestData
+// instead")]]
 struct ReportingDispatchRequestData {
   std::string handler_name;
   std::shared_ptr<std::string> auction_config;
@@ -145,7 +150,8 @@ struct ReportingDispatchRequestData {
   absl::string_view temporary_egress_payload;
 };
 
-// Bid metadata passed as input to reportResult and reportWin
+// [[deprecated("DEPRECATED. Please use
+// SellerReportingDispatchRequestData instead")]]
 struct SellerReportingMetadata {
   std::string top_window_hostname;
   std::string top_level_seller;
@@ -208,17 +214,17 @@ inline const std::string kDefaultComponentReportingMetadata = absl::StrFormat(
 
 // Parses json object returned from execution of reportingEntryFunction in Roma
 // and returns the ReportingResponse.
-absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
+[[deprecated]] absl::StatusOr<ReportingResponse> ParseAndGetReportingResponse(
     bool enable_adtech_code_logging, const std::string& response);
 
 // Creates the input arguments required for executing reportingEntryFunction in
 // Roma.
-std::vector<std::shared_ptr<std::string>> GetReportingInput(
+[[deprecated]] std::vector<std::shared_ptr<std::string>> GetReportingInput(
     const ReportingDispatchRequestConfig& dispatch_request_config,
     const ReportingDispatchRequestData& dispatch_request_data);
 
 // Creates the DispatchRequest for calling reportingEntryFunction in Roma
-DispatchRequest GetReportingDispatchRequest(
+[[deprecated]] DispatchRequest GetReportingDispatchRequest(
     const ReportingDispatchRequestConfig& dispatch_request_config,
     const ReportingDispatchRequestData& dispatch_request_data);
 

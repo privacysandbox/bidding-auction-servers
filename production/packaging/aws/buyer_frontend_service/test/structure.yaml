@@ -27,7 +27,7 @@ fileExistenceTests:
     shouldExist: true
 
   - name: server
-    path: /server
+    path: /server/bin/server
     shouldExist: true
     isExecutableBy: any
 

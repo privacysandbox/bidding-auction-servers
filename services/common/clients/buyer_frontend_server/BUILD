@@ -26,6 +26,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/async_grpc:default_async_grpc_client",
+        "//services/common/util:request_response_constants",
         "@com_github_google_quiche//quiche:quiche_unstable_api",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/functional:any_invocable",
@@ -40,9 +41,6 @@ cc_test(
     size = "large",
     srcs = [
         "buyer_frontend_async_grpc_client_stub_test.cc",
-    ],
-    tags = [
-        "flaky",
     ],
     deps = [
         ":buyer_frontend_async_client",

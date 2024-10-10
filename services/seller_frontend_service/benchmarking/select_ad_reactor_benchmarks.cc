@@ -376,7 +376,8 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
     grpc::CallbackServerContext context;
     SelectAdResponse response;
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, clients,
                                   config_client);
@@ -430,7 +431,8 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
     grpc::CallbackServerContext context;
     SelectAdResponse response;
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, clients,
                                   config_client);

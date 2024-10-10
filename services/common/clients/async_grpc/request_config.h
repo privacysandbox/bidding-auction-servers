@@ -17,6 +17,8 @@
 
 #include <cstddef>
 
+#include "services/common/compression/compression_utils.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 // This can be extended such that each service can have its own specific
@@ -24,9 +26,13 @@ namespace privacy_sandbox::bidding_auction_servers {
 // template to avoid casting issues
 struct RequestConfig {
   size_t chaff_request_size = 0;
+  CompressionType compression_type = CompressionType::kUncompressed;
 };
 
 struct ResponseMetadata {
+  // The size of the *compressed and encrypted* request.
+  size_t request_size = 0;
+
   size_t response_size = 0;
 };
 

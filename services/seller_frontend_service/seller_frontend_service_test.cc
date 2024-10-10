@@ -99,7 +99,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     config_.SetOverride(kEmptyValue, ENABLE_SELLER_FRONTEND_BENCHMARKING);
     config_.SetOverride(kEmptyValue, SELLER_ORIGIN_DOMAIN);
     config_.SetOverride("0", GET_BID_RPC_TIMEOUT_MS);

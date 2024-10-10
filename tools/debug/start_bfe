@@ -14,15 +14,10 @@
 # limitations under the License.
 
 source $(dirname "$0")/common
-export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-declare -a -r DOCKER_RUN_ARGS=(
-  "--volume=${PROJECT_ROOT}/bazel-bin/services/buyer_frontend_service/server:/server"
-  "--name=bfe"
-)
 export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
 export SERVER_START_CMD=$(cat << END
-/server \
+/server/bin/server \
 --init_config_client="false" --port=50051 \
 --bidding_server_addr="127.0.0.1:50057" \
 --buyer_kv_server_addr="${BUYER_KV_SERVER_ADDR}" \
@@ -31,7 +26,7 @@ export SERVER_START_CMD=$(cat << END
 --protected_app_signals_generate_bid_timeout_ms=60000 \
 --create_new_event_engine="false" \
 --test_mode="true" \
---telemetry_config="mode: EXPERIMENT" \
+--telemetry_config="mode: OFF" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --ps_verbosity=2 \
@@ -44,9 +39,20 @@ END
 )
 
 if [[ $1 == "--gdb" ]]; then
+  export PROJECT_ROOT=$(git rev-parse --show-toplevel)
+  declare -a -r DOCKER_RUN_ARGS=(
+    "--volume=${PROJECT_ROOT}/bazel-bin/services/buyer_frontend_service/server:/server/bin/server"
+    "--name=bfe"
+  )
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined  --docker-network host --image build-debian --cmd  "${SERVER_START_CMD}"
+  docker_image_uri="$(docker load -i dist/debian/buyer_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  declare -a DOCKER_RUN_ARGS=(
+      "--network=host"
+      "--security-opt=seccomp=unconfined"
+      "--security-opt=apparmor=unconfined"
+  )
+  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

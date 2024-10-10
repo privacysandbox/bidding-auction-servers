@@ -46,13 +46,12 @@ class BaseGenerateBidsReactor
     : public CodeDispatchReactor<Request, RawRequest, Response, RawResponse> {
  public:
   explicit BaseGenerateBidsReactor(
-      CodeDispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config, const Request* request,
       Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client)
       : CodeDispatchReactor<Request, RawRequest, Response, RawResponse>(
-            dispatcher, request, response, key_fetcher_manager, crypto_client),
+            request, response, key_fetcher_manager, crypto_client),
         enable_buyer_debug_url_generation_(
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
@@ -81,11 +80,6 @@ class BaseGenerateBidsReactor
     const auto& logging_context = generate_bids_request.log_context();
     return {{kGenerationId, logging_context.generation_id()},
             {kAdtechDebugId, logging_context.adtech_debug_id()}};
-  }
-
-  template <typename BidType>
-  bool IsValidBid(BidType bid) {
-    return bid.bid() != 0.0f;
   }
 
   bool enable_buyer_debug_url_generation_;

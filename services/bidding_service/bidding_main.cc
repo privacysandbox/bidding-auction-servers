@@ -34,10 +34,12 @@
 #include "sandbox/sandbox_executor.h"
 #include "sandboxed_api/sandbox2/comms.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
-#include "services/bidding_service/benchmarking/bidding_no_op_logger.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
+#include "services/bidding_service/bidding_service_factories.h"
 #include "services/bidding_service/buyer_code_fetch_manager.h"
+#include "services/bidding_service/byob/buyer_code_fetch_manager_byob.h"
+#include "services/bidding_service/byob/generate_bid_byob_dispatch_client.h"
 #include "services/bidding_service/cddl_spec_cache.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
@@ -51,7 +53,7 @@
 #include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/bidding_service/runtime_flags.h"
 #include "services/common/blob_fetch/blob_fetcher.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
@@ -88,7 +90,7 @@ ABSL_FLAG(std::optional<std::string>, egress_schema_fetch_config, std::nullopt,
           "The JSON string for config fields necessary for AdTech egress "
           "schema fetching.");
 ABSL_FLAG(
-    std::optional<std::int64_t>, js_num_workers, std::nullopt,
+    std::optional<std::int64_t>, udf_num_workers, std::nullopt,
     "The number of workers/threads for executing AdTech code in parallel.");
 ABSL_FLAG(std::optional<std::int64_t>, js_worker_queue_len, std::nullopt,
           "The length of queue size for a single JS execution worker.");
@@ -201,7 +203,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_buyer_code_fetch_config, BUYER_CODE_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_egress_schema_fetch_config,
                         EGRESS_SCHEMA_FETCH_CONFIG);
-  config_client.SetFlag(FLAGS_js_num_workers, JS_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_udf_num_workers, UDF_NUM_WORKERS);
   config_client.SetFlag(FLAGS_js_worker_queue_len, JS_WORKER_QUEUE_LEN);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
@@ -242,6 +244,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_bidding_tcmalloc_max_total_thread_cache_bytes,
                         BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -254,11 +257,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   const bool enable_protected_audience =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  if (!enable_protected_audience && !enable_protected_app_signals) {
-    ABSL_LOG(WARNING) << "Neither Protected Audience nor Protected App Signals "
-                         "support enabled";
-  }
-
+  CHECK(enable_protected_audience || enable_protected_app_signals)
+      << "Neither Protected Audience nor Protected App Signals support "
+         "enabled.";
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << enable_protected_app_signals;
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
@@ -273,6 +274,65 @@ absl::string_view GetStringParameterSafe(
     return client.GetStringParameter(name);
   }
   return "";
+}
+
+inline bool UdfConfigHasByob(
+    const bidding_service::BuyerCodeFetchConfig& udf_config) {
+  return (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_LOCAL &&
+          !udf_config.bidding_executable_path().empty()) ||
+         (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET &&
+          !udf_config.protected_auction_bidding_executable_bucket().empty() &&
+          !udf_config.protected_auction_bidding_executable_bucket_default_blob()
+               .empty()) ||
+         (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_URL &&
+          !udf_config.bidding_executable_url().empty());
+}
+
+DispatchConfig GetV8DispatchConfig(
+    const TrustedServersConfigClient& config_client, bool enable_inference) {
+  return [&config_client, &enable_inference]() {
+    DispatchConfig config;
+    config.worker_queue_max_items =
+        config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
+    config.number_of_workers = config_client.GetIntParameter(UDF_NUM_WORKERS);
+    if (enable_inference) {
+      PS_LOG(INFO) << "Register runInference API.";
+      auto run_inference_function_object =
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContextBidding>>();
+      run_inference_function_object->function_name =
+          std::string(inference::kInferenceFunctionName);
+      run_inference_function_object->function = inference::RunInference;
+      config.RegisterFunctionBinding(std::move(run_inference_function_object));
+      PS_LOG(INFO) << "RunInference registered.";
+
+      PS_LOG(INFO) << "Register getModelPaths API.";
+      auto get_model_paths_function_object =
+          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+              RomaRequestSharedContextBidding>>();
+      get_model_paths_function_object->function_name =
+          std::string(inference::kGetModelPathsFunctionName);
+      get_model_paths_function_object->function = inference::GetModelPaths;
+      config.RegisterFunctionBinding(
+          std::move(get_model_paths_function_object));
+      PS_LOG(INFO) << "getModelPaths registered.";
+
+      PS_LOG(INFO) << "Start the inference sidecar.";
+      // This usage of the following two flags is not consistent with rest
+      // of the codebase, where we use the parameter from the config client
+      // directly instead of passing it back to the absl flag.
+      absl::SetFlag(
+          &FLAGS_inference_sidecar_binary_path,
+          GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH));
+      absl::SetFlag(&FLAGS_inference_sidecar_runtime_config,
+                    GetStringParameterSafe(config_client,
+                                           INFERENCE_SIDECAR_RUNTIME_CONFIG));
+      inference::SandboxExecutor& inference_executor = inference::Executor();
+      CHECK_EQ(inference_executor.StartSandboxee().code(),
+               absl::StatusCode::kOk);
+    }
+    return config;
+  }();
 }
 
 // TODO(b/356153749): Deprecate once we support dynamic partitioning metrics.
@@ -298,8 +358,8 @@ absl::Status RunServer() {
       GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_PATHS);
   std::vector<std::string> models = GetModels(inference_model_bucket_paths);
   // InitTelemetry right after config_client being initialized
-  InitTelemetry<GenerateBidsRequest>(config_util, config_client, metric::kBs,
-                                     /* buyer_list */ {}, models);
+  InitTelemetry<google::protobuf::Message>(
+      config_util, config_client, metric::kBs, /* buyer_list */ {}, models);
   PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
                                    << config_client.DebugString();
 
@@ -310,66 +370,9 @@ absl::Status RunServer() {
   std::string_view port = config_client.GetStringParameter(PORT);
   std::string server_address = absl::StrCat("0.0.0.0:", port);
 
+  // Convert Json string into a BiddingCodeBlobFetcherConfig proto
   CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty())
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
-
-  std::string_view inference_sidecar_binary_path =
-      GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH);
-  const bool enable_inference = !inference_sidecar_binary_path.empty();
-
-  auto dispatcher = V8Dispatcher([&config_client, &enable_inference]() {
-    DispatchConfig config;
-    config.worker_queue_max_items =
-        config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
-    config.number_of_workers = config_client.GetIntParameter(JS_NUM_WORKERS);
-
-    if (enable_inference) {
-      PS_LOG(INFO) << "Register runInference API.";
-      auto run_inference_function_object =
-          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContextBidding>>();
-      run_inference_function_object->function_name =
-          std::string(inference::kInferenceFunctionName);
-      run_inference_function_object->function = inference::RunInference;
-      config.RegisterFunctionBinding(std::move(run_inference_function_object));
-      PS_LOG(INFO) << "RunInference registered.";
-
-      PS_LOG(INFO) << "Register getModelPaths API.";
-      auto get_model_paths_function_object =
-          std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContextBidding>>();
-      get_model_paths_function_object->function_name =
-          std::string(inference::kGetModelPathsFunctionName);
-      get_model_paths_function_object->function = inference::GetModelPaths;
-      config.RegisterFunctionBinding(
-          std::move(get_model_paths_function_object));
-      PS_LOG(INFO) << "getModelPaths registered.";
-
-      PS_LOG(INFO) << "Start the inference sidecar.";
-      // This usage of the following two flags is not consistent with rest of
-      // the codebase, where we use the parameter from the config client
-      // directly instead of passing it back to the absl flag.
-      absl::SetFlag(
-          &FLAGS_inference_sidecar_binary_path,
-          GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH));
-      absl::SetFlag(&FLAGS_inference_sidecar_runtime_config,
-                    GetStringParameterSafe(config_client,
-                                           INFERENCE_SIDECAR_RUNTIME_CONFIG));
-      inference::SandboxExecutor& inference_executor = inference::Executor();
-      CHECK_EQ(inference_executor.StartSandboxee().code(),
-               absl::StatusCode::kOk);
-    }
-    return config;
-  }());
-  CodeDispatchClient client(dispatcher);
-  PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
-
-  server_common::GrpcInit gprc_init;
-  std::unique_ptr<server_common::Executor> executor =
-      std::make_unique<server_common::EventEngineExecutor>(
-          grpc_event_engine::experimental::CreateEventEngine());
-
-  // Convert Json string into a BiddingCodeBlobFetcherConfig proto
   BuyerCodeFetchConfig udf_config;
   absl::Status result = google::protobuf::util::JsonStringToMessage(
       config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).data(),
@@ -379,27 +382,80 @@ absl::Status RunServer() {
          "a proto message: "
       << result.message();
 
-  bool enable_buyer_debug_url_generation =
-      udf_config.enable_buyer_debug_url_generation();
+  server_common::GrpcInit gprc_init;
+  std::unique_ptr<server_common::Executor> executor =
+      std::make_unique<server_common::EventEngineExecutor>(
+          grpc_event_engine::experimental::CreateEventEngine());
+  auto http_fetcher_async =
+      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
+
+  std::string_view inference_sidecar_binary_path =
+      GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH);
+  const bool enable_inference = !inference_sidecar_binary_path.empty();
   const bool enable_protected_audience =
       config_client.HasParameter(ENABLE_PROTECTED_AUDIENCE) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
   const bool enable_protected_app_signals =
       config_client.HasParameter(ENABLE_PROTECTED_APP_SIGNALS) &&
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
+  const bool enable_bidding_service_benchmark =
+      config_client.HasParameter(ENABLE_BIDDING_SERVICE_BENCHMARK) &&
+      config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
+  const bool enable_buyer_debug_url_generation =
+      udf_config.enable_buyer_debug_url_generation();
   const bool enable_private_aggregate_reporting =
       udf_config.enable_private_aggregate_reporting();
 
-  auto http_fetcher_async =
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
-  BuyerCodeFetchManager udf_fetcher(
-      executor.get(), http_fetcher_async.get(), &dispatcher,
-      BlobStorageClientFactory::Create(), udf_config, enable_protected_audience,
-      enable_protected_app_signals);
-  PS_RETURN_IF_ERROR(udf_fetcher.Init()) << "Failed to initialize UDF fetch.";
+  std::unique_ptr<GenerateBidByobDispatchClient> byob_client;
+  std::unique_ptr<V8Dispatcher> v8_dispatcher;
+  std::unique_ptr<V8DispatchClient> v8_client;
+  std::unique_ptr<BuyerCodeFetchManager> udf_fetcher;
+
+  GenerateBidsReactorFactory generate_bids_reactor_factory;
+  ProtectedAppSignalsGenerateBidsReactorFactory
+      protected_app_signals_generate_bids_reactor_factory;
+
+  if (UdfConfigHasByob(udf_config)) {
+    CHECK(enable_protected_audience) << kProtectedAudienceMustBeEnabled;
+    CHECK(!enable_protected_app_signals) << kProtectedAppSignalsMustBeDisabled;
+
+    PS_ASSIGN_OR_RETURN(auto temp_client,
+                        GenerateBidByobDispatchClient::Create(
+                            config_client.GetIntParameter(UDF_NUM_WORKERS)));
+    byob_client =
+        std::make_unique<GenerateBidByobDispatchClient>(std::move(temp_client));
+
+    udf_fetcher = std::make_unique<BuyerCodeFetchManagerByob>(
+        executor.get(), http_fetcher_async.get(), byob_client.get(),
+        BlobStorageClientFactory::Create(), udf_config);
+    PS_RETURN_IF_ERROR(udf_fetcher->Init())
+        << "Failed to initialize UDF fetch.";
+
+    generate_bids_reactor_factory =
+        GetProtectedAudienceByobReactorFactory(*byob_client, executor.get());
+    protected_app_signals_generate_bids_reactor_factory =
+        GetProtectedAppSignalsByobReactorFactory();
+  } else {
+    v8_dispatcher = std::make_unique<V8Dispatcher>(
+        GetV8DispatchConfig(config_client, enable_inference));
+    v8_client = std::make_unique<V8DispatchClient>(*v8_dispatcher.get());
+    PS_RETURN_IF_ERROR(v8_dispatcher->Init())
+        << "Could not start V8 dispatcher.";
+
+    udf_fetcher = std::make_unique<BuyerCodeFetchManager>(
+        executor.get(), http_fetcher_async.get(), v8_dispatcher.get(),
+        BlobStorageClientFactory::Create(), udf_config,
+        enable_protected_audience, enable_protected_app_signals);
+    PS_RETURN_IF_ERROR(udf_fetcher->Init())
+        << "Failed to initialize UDF fetch.";
+
+    generate_bids_reactor_factory = GetProtectedAudienceV8ReactorFactory(
+        *v8_client, enable_bidding_service_benchmark);
+    protected_app_signals_generate_bids_reactor_factory =
+        GetProtectedAppSignalsV8ReactorFactory(*v8_client);
+  }
 
   bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
-
   std::unique_ptr<inference::PeriodicModelFetcher> model_fetcher;
   if (enable_inference) {
     if (init_config_client) {
@@ -455,32 +511,6 @@ absl::Status RunServer() {
     }
   }
 
-  bool enable_bidding_service_benchmark =
-      config_client.GetBooleanParameter(ENABLE_BIDDING_SERVICE_BENCHMARK);
-
-  auto generate_bids_reactor_factory =
-      [&client, enable_bidding_service_benchmark](
-          grpc::CallbackServerContext* context,
-          const GenerateBidsRequest* request, GenerateBidsResponse* response,
-          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
-          const BiddingServiceRuntimeConfig& runtime_config) {
-        DCHECK(runtime_config.is_protected_audience_enabled);
-        std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger;
-        if (enable_bidding_service_benchmark) {
-          benchmarkingLogger = std::make_unique<BiddingBenchmarkingLogger>(
-              FormatTime(absl::Now()));
-        } else {
-          benchmarkingLogger = std::make_unique<BiddingNoOpLogger>();
-        }
-        auto generate_bids_reactor = std::make_unique<GenerateBidsReactor>(
-            context, client, request, response, std::move(benchmarkingLogger),
-            key_fetcher_manager, crypto_client, runtime_config);
-        return generate_bids_reactor.release();
-      };
-
-  const bool is_protected_app_signals_enabled =
-      config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   std::string tee_ad_retrieval_kv_server_addr = std::string(
       config_client.GetStringParameter(TEE_AD_RETRIEVAL_KV_SERVER_ADDR));
   std::string tee_ad_retrieval_kv_server_grpc_arg_default_authority =
@@ -491,12 +521,11 @@ absl::Status RunServer() {
   std::string tee_kv_server_grpc_arg_default_authority =
       std::string(config_client.GetStringParameter(
           TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY));
-  if (is_protected_app_signals_enabled &&
-      tee_ad_retrieval_kv_server_addr.empty() && tee_kv_server_addr.empty()) {
+  if (enable_protected_app_signals && tee_ad_retrieval_kv_server_addr.empty() &&
+      tee_kv_server_addr.empty()) {
     return absl::InvalidArgumentError(
-        "Missing: Ad Retrieval server address "
-        "and KV server address. Must specify at "
-        "least one.");
+        "Missing: Ad Retrieval server address and KV server address. Must "
+        "specify at least one.");
   }
 
   BiddingServiceRuntimeConfig runtime_config = {
@@ -549,7 +578,7 @@ absl::Status RunServer() {
   const bool enable_temporary_unlimited_egress =
       absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
   absl::StatusOr<EgressInfo> egress_info = absl::UnimplementedError("");
-  if (enable_temporary_unlimited_egress) {
+  if (enable_temporary_unlimited_egress && enable_protected_app_signals) {
     PS_LOG(INFO) << "Temporary egress feature is enabled in the binary";
     if (egress_info = StartEgressSchemaFetch(
             config_client,
@@ -580,26 +609,7 @@ absl::Status RunServer() {
   } else {
     PS_LOG(INFO) << "Limited egress feature is not enabled in the binary";
   }
-  auto protected_app_signals_generate_bids_reactor_factory =
-      [&client](grpc::CallbackServerContext* context,
-                const GenerateProtectedAppSignalsBidsRequest* request,
-                const BiddingServiceRuntimeConfig& runtime_config,
-                GenerateProtectedAppSignalsBidsResponse* response,
-                server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-                CryptoClientWrapperInterface* crypto_client,
-                KVAsyncClient* ad_retrieval_client,
-                KVAsyncClient* kv_async_client,
-                EgressSchemaCache* egress_schema_cache,
-                EgressSchemaCache* limited_egress_schema_cache) {
-        DCHECK(runtime_config.is_protected_app_signals_enabled);
-        auto generate_bids_reactor =
-            std::make_unique<ProtectedAppSignalsGenerateBidsReactor>(
-                context, client, runtime_config, request, response,
-                key_fetcher_manager, crypto_client, ad_retrieval_client,
-                kv_async_client, egress_schema_cache,
-                limited_egress_schema_cache);
-        return generate_bids_reactor.release();
-      };
+
   PS_VLOG(5) << "Creating bidding service instance";
   BiddingService bidding_service(
       std::move(generate_bids_reactor_factory),
@@ -626,7 +636,8 @@ absl::Status RunServer() {
   // deployed behind an HTTPS load balancer that terminates TLS.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
 
-  if (config_client.HasParameter(HEALTHCHECK_PORT)) {
+  if (config_client.HasParameter(HEALTHCHECK_PORT) &&
+      !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
     CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
           config_client.GetStringParameter(PORT))
         << "Healthcheck port must be unique.";

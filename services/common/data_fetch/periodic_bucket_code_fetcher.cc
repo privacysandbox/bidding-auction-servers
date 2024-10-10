@@ -53,17 +53,17 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 PeriodicBucketCodeFetcher::PeriodicBucketCodeFetcher(
     absl::string_view bucket_name, absl::Duration fetch_period_ms,
-    V8Dispatcher* dispatcher, server_common::Executor* executor,
+    UdfCodeLoaderInterface* loader, server_common::Executor* executor,
     WrapCodeForDispatch wrap_code,
     BlobStorageClientInterface* blob_storage_client)
     : PeriodicBucketFetcher(bucket_name, fetch_period_ms, executor,
                             blob_storage_client),
       wrap_code_(std::move(wrap_code)),
-      dispatcher_(*dispatcher) {}
+      loader_(*loader) {}
 
 bool PeriodicBucketCodeFetcher::OnFetch(
     const AsyncContext<GetBlobRequest, GetBlobResponse>& context) {
-  absl::string_view version = context.request->blob_metadata().blob_name();
+  const std::string version = context.request->blob_metadata().blob_name();
   if (!context.result.Successful()) {
     PS_LOG(ERROR, SystemLogContext())
         << "Failed to fetch blob: " << version
@@ -72,15 +72,18 @@ bool PeriodicBucketCodeFetcher::OnFetch(
   }
   auto result_value = {context.response->blob().data()};
   std::string wrapped_code = wrap_code_(result_value);
-  absl::Status roma_result = dispatcher_.LoadSync(version, wrapped_code);
+  // Construct the success log message before calling LoadSync so that we can
+  // move the code.
+  std::string success_log_message =
+      absl::StrCat("Current code loaded into Roma for version ", version, ":\n",
+                   wrapped_code);
+  absl::Status roma_result = loader_.LoadSync(version, std::move(wrapped_code));
   if (!roma_result.ok()) {
     PS_LOG(ERROR, SystemLogContext())
         << "Roma failed to load blob: " << roma_result;
     return false;
   }
-  PS_VLOG(kSuccess) << "Current code loaded into Roma for version " << version
-                    << ":\n"
-                    << wrapped_code;
+  PS_VLOG(kSuccess) << success_log_message;
   return true;
 }
 

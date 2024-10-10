@@ -162,6 +162,12 @@ class ModelStore {
     inference_notification_.Notify();
   }
 
+  // Constructs and returns model by invoking the model constructor.
+  absl::StatusOr<std::shared_ptr<ModelType>> ConstructModel(
+      const RegisterModelRequest& request) const {
+    return model_constructor_(config_, request);
+  }
+
  protected:
   // Used for test only, the caller needs to ensure thread-safety.
   void SetModelConstructorForTestOnly(ModelConstructor model_constructor) {

@@ -32,7 +32,6 @@ using ::grpc_event_engine::experimental::EventEngine;
 
 namespace {
 
-constexpr int log_level = 2;
 struct CurlTimeStats {
   double time_namelookup = -1;
   double time_connect = -1;
@@ -49,7 +48,7 @@ struct CurlTimeStats {
   curl_off_t queue_time_us = -1;
 };
 void GetTraceFromCurl(CURL* handle) {
-  if (server_common::log::PS_VLOG_IS_ON(log_level)) {
+  if (server_common::log::PS_VLOG_IS_ON(kStats)) {
     CurlTimeStats curl_time_stats;
     char* request_url = nullptr;
     curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);
@@ -80,7 +79,7 @@ void GetTraceFromCurl(CURL* handle) {
     curl_easy_getinfo(handle, CURLINFO_QUEUE_TIME_T,
                       &curl_time_stats.queue_time_us);
 
-    PS_VLOG(log_level)
+    PS_VLOG(kStats)
         << "Curl request " << absl::StrCat(request_url) << " stats: \n"
         << "time_namelookup:  " << curl_time_stats.time_namelookup << "\n"
         << "time_connect:  " << curl_time_stats.time_connect << "\n"

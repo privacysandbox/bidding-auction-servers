@@ -83,7 +83,8 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
@@ -276,7 +277,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
   EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
       .WillOnce(Return(google::cmrt::sdk::public_key_service::v1::PublicKey()));
   MockCryptoClientWrapper crypto_client;
-  SetupMockCrytoClient(crypto_client);
+  SetupMockCryptoClient(crypto_client);
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
@@ -456,7 +457,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
@@ -502,7 +504,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
       absl::string_view seller_origin_domain, bool add_interest_group = true,
       bool add_protected_app_signals = true,
       std::optional<absl::string_view> app_install_signals = std::nullopt,
-      bool add_contextual_pas_ad_render_ids = false) {
+      bool add_contextual_pas_ad_render_ids = false,
+      bool enforce_kanon = false) {
     BuyerInput buyer_input;
 
     if (add_interest_group) {
@@ -527,6 +530,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
         GetProtoEncodedBuyerInputs(decoded_buyer_inputs);
 
     ProtectedAuctionInput protected_auction_input;
+    protected_auction_input.set_enforce_kanon(enforce_kanon);
     protected_auction_input.set_generation_id(kSampleGenerationId);
     *protected_auction_input.mutable_buyer_input() =
         std::move(encoded_buyer_inputs);
@@ -560,10 +564,12 @@ class SelectAdReactorPASTest : public ::testing::Test {
   CreateSelectAdRequest(
       absl::string_view seller_origin_domain, bool add_interest_group = true,
       bool add_protected_app_signals = true,
-      std::optional<absl::string_view> app_install_signals = std::nullopt) {
+      std::optional<absl::string_view> app_install_signals = std::nullopt,
+      bool enforce_kanon = false) {
     auto [request, protected_auction_input] = CreateRawSelectAdRequest(
         seller_origin_domain, add_interest_group, add_protected_app_signals,
-        app_install_signals);
+        app_install_signals, /*add_contextual_pas_ad_render_ids=*/false,
+        enforce_kanon);
     auto [encrypted_request, context] =
         GetProtoEncodedEncryptedInputAndOhttpContext(protected_auction_input);
     *request.mutable_protected_auction_ciphertext() =
@@ -681,7 +687,13 @@ TEST_F(SelectAdReactorPASTest, PASBuyerInputIsClearedIfFeatureNotAvailable) {
 }
 
 TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
-  auto request_with_context = CreateSelectAdRequest(kSellerOriginDomain);
+  absl::SetFlag(&FLAGS_enable_kanon, true);
+  auto request_with_context =
+      CreateSelectAdRequest(kSellerOriginDomain,
+                            /*add_interest_group=*/true,
+                            /*add_protected_app_signals=*/true,
+                            /*app_install_signals=*/std::nullopt,
+                            /*enforce_kanon=*/true);
   const auto& select_ad_req = request_with_context.select_ad_request;
   const auto& protected_auction_input =
       request_with_context.protected_auction_input;
@@ -742,6 +754,11 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
             EXPECT_EQ(observed_bid_with_metadata.owner(), kSampleBuyer);
             EXPECT_TRUE(MessageDifferencer::Equals(
                 observed_bid_with_metadata.ad(), expected_bid.ad()));
+            // k-anon status is not implemented yet and if k-anon is enabled and
+            // enforced, we default the k-anon status to false for the bid.
+            EXPECT_FALSE(observed_bid_with_metadata.k_anon_status());
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
             return absl::OkStatus();
           });
 
@@ -796,6 +813,27 @@ TEST_F(SelectAdReactorPASTest,
           config_, clients_, request_with_context.select_ad_request);
 }
 
+void VerifySelectedAdResponseSuccess(
+    quiche::ObliviousHttpRequest::Context& context,
+    SelectAdResponse& encrypted_response) {
+  EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(), context,
+      kBiddingAuctionOhttpResponseLabel);
+  EXPECT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok())
+      << decompressed_response.status().message();
+
+  AuctionResult auction_result;
+  EXPECT_TRUE(auction_result.ParseFromArray(decompressed_response->data(),
+                                            decompressed_response->size()));
+  EXPECT_FALSE(auction_result.has_error());
+}
+
 TEST_F(SelectAdReactorPASTest, PASOnlyBuyerInputIsAllowed) {
   auto request_with_context =
       CreateSelectAdRequest(kSellerOriginDomain, /*add_interest_group=*/false);
@@ -835,10 +873,8 @@ TEST_F(SelectAdReactorPASTest, PASOnlyBuyerInputIsAllowed) {
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config_, clients_, request_with_context.select_ad_request);
-  AuctionResult auction_result;
-  auction_result.ParseFromString(
-      encrypted_response.auction_result_ciphertext());
-  EXPECT_FALSE(auction_result.has_error());
+  VerifySelectedAdResponseSuccess(request_with_context.context,
+                                  encrypted_response);
 }
 
 TEST_F(SelectAdReactorPASTest, BothPASAndPAInputsMissingIsAnError) {
@@ -944,10 +980,8 @@ TEST_F(SelectAdReactorPASTest,
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config_, clients_, request_with_context.select_ad_request);
-  AuctionResult auction_result;
-  auction_result.ParseFromString(
-      encrypted_response.auction_result_ciphertext());
-  EXPECT_FALSE(auction_result.has_error());
+  VerifySelectedAdResponseSuccess(request_with_context.context,
+                                  encrypted_response);
 }
 
 TEST_F(SelectAdReactorPASTest,
@@ -987,10 +1021,9 @@ TEST_F(SelectAdReactorPASTest,
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config_, clients_, request_with_context.select_ad_request);
-  AuctionResult auction_result;
-  auction_result.ParseFromString(
-      encrypted_response.auction_result_ciphertext());
-  EXPECT_FALSE(auction_result.has_error());
+
+  VerifySelectedAdResponseSuccess(request_with_context.context,
+                                  encrypted_response);
 }
 
 TEST_F(SelectAdReactorPASTest,
@@ -1121,10 +1154,8 @@ TEST_F(SelectAdReactorPASTest,
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config_, clients_, request_with_context.select_ad_request);
-  AuctionResult auction_result;
-  auction_result.ParseFromString(
-      encrypted_response.auction_result_ciphertext());
-  EXPECT_FALSE(auction_result.has_error());
+  VerifySelectedAdResponseSuccess(request_with_context.context,
+                                  encrypted_response);
 }
 
 }  // namespace

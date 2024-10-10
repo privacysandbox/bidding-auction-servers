@@ -12,12 +12,12 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 
 #include <utility>
 
 namespace privacy_sandbox::bidding_auction_servers {
-absl::Status CodeDispatchClient::BatchExecute(
+absl::Status V8DispatchClient::BatchExecute(
     std::vector<DispatchRequest>& batch,
     BatchDispatchDoneCallback batch_callback) {
   return dispatcher_.BatchExecute(batch, std::move(batch_callback));

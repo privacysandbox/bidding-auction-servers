@@ -21,19 +21,29 @@ namespace {
 
 TEST(AddMetricTest, AddSimpleMetric) {
   PredictResponse response;
-  AddMetric(response, "total_requests", 100);
-
-  ASSERT_TRUE(response.metrics().contains("total_requests"));
-  EXPECT_EQ(response.metrics().at("total_requests").value(), 100);
+  AddMetric(response, "total_requests", 1);
+  AddMetric(response, "total_requests", 2);
+  AddMetric(response, "total_requests", 3);
+  ASSERT_TRUE(response.metrics_list().contains("total_requests"));
+  EXPECT_EQ(response.metrics_list().at("total_requests").metrics().size(), 3);
+  EXPECT_EQ(
+      response.metrics_list().at("total_requests").metrics().at(0).value(), 1);
+  EXPECT_EQ(
+      response.metrics_list().at("total_requests").metrics().at(1).value(), 2);
+  EXPECT_EQ(
+      response.metrics_list().at("total_requests").metrics().at(2).value(), 3);
 }
 
 TEST(AddMetricTest, AddPartitionedMetric) {
   PredictResponse response;
   AddMetric(response, "error_count", 5, "Not Found");
 
-  ASSERT_TRUE(response.metrics().contains("error_count"));
-  EXPECT_EQ(response.metrics().at("error_count").value(), 5);
-  EXPECT_EQ(response.metrics().at("error_count").partition(), "Not Found");
+  ASSERT_TRUE(response.metrics_list().contains("error_count"));
+  EXPECT_EQ(response.metrics_list().at("error_count").metrics().at(0).value(),
+            5);
+  EXPECT_EQ(
+      response.metrics_list().at("error_count").metrics().at(0).partition(),
+      "Not Found");
 }
 
 TEST(AddMetricTest, MultipleMetrics) {
@@ -41,12 +51,30 @@ TEST(AddMetricTest, MultipleMetrics) {
   AddMetric(response, "total_requests", 150);
   AddMetric(response, "success_count", 140);
   AddMetric(response, "failure_count", 10, "Not Found");
+  AddMetric(response, "model_batch", 2, "model 1");
+  AddMetric(response, "model_batch", 1, "model 2");
 
-  ASSERT_EQ(response.metrics_size(), 3);
-  EXPECT_EQ(response.metrics().at("total_requests").value(), 150);
-  EXPECT_EQ(response.metrics().at("success_count").value(), 140);
-  EXPECT_EQ(response.metrics().at("failure_count").value(), 10);
-  EXPECT_EQ(response.metrics().at("failure_count").partition(), "Not Found");
+  ASSERT_EQ(response.metrics_list_size(), 4);
+  EXPECT_EQ(
+      response.metrics_list().at("total_requests").metrics().at(0).value(),
+      150);
+  EXPECT_EQ(response.metrics_list().at("success_count").metrics().at(0).value(),
+            140);
+  EXPECT_EQ(response.metrics_list().at("failure_count").metrics().at(0).value(),
+            10);
+  EXPECT_EQ(
+      response.metrics_list().at("failure_count").metrics().at(0).partition(),
+      "Not Found");
+  EXPECT_EQ(response.metrics_list().at("model_batch").metrics().at(0).value(),
+            2);
+  EXPECT_EQ(
+      response.metrics_list().at("model_batch").metrics().at(0).partition(),
+      "model 1");
+  EXPECT_EQ(response.metrics_list().at("model_batch").metrics().at(1).value(),
+            1);
+  EXPECT_EQ(
+      response.metrics_list().at("model_batch").metrics().at(1).partition(),
+      "model 2");
 }
 
 }  // namespace

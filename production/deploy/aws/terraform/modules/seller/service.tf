@@ -90,6 +90,8 @@ module "security_group_rules" {
   vpce_security_group_id            = module.security_groups.vpc_endpoint_security_group_id
   gateway_endpoints_prefix_list_ids = module.backend_services.gateway_endpoints_prefix_list_ids
   ssh_source_cidr_blocks            = var.ssh_source_cidr_blocks
+  use_service_mesh                  = var.use_service_mesh
+  tee_kv_servers_port               = var.tee_kv_servers_port
 }
 
 module "iam_role_policies" {

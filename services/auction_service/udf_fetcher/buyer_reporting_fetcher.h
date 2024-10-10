@@ -36,7 +36,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // of the urls.
 class BuyerReportingFetcher : public FetcherInterface {
  public:
-  explicit BuyerReportingFetcher(
+  [[deprecated]] explicit BuyerReportingFetcher(
       const auction_service::SellerCodeFetchConfig& config,
       HttpFetcherAsync* http_fetcher, server_common::Executor* executor)
       : config_(config), http_fetcher_(*http_fetcher), executor_(*executor) {}
@@ -44,27 +44,28 @@ class BuyerReportingFetcher : public FetcherInterface {
   ~BuyerReportingFetcher() { End(); }
 
   // Not copyable or movable.
-  BuyerReportingFetcher(const BuyerReportingFetcher&) = delete;
-  BuyerReportingFetcher& operator=(const BuyerReportingFetcher&) = delete;
+  [[deprecated]] BuyerReportingFetcher(const BuyerReportingFetcher&) = delete;
+  [[deprecated]] BuyerReportingFetcher& operator=(
+      const BuyerReportingFetcher&) = delete;
 
   // Starts a periodic code blob fetching process by fetching url with
   // MultiCurlHttpFetcherAsync and loading the updated content into a publicly
   // accessible map.
-  absl::Status Start() override;
+  [[deprecated]] absl::Status Start() override;
 
   // Ends the periodic fetching process by canceling the last scheduled task
   // using task_id_.
-  void End() override;
+  [[deprecated]] void End() override;
 
   // WARNING: do not use in critical paths, this returns a copy of a map.
   // return a map of buyer origin to reporting blob
-  absl::flat_hash_map<std::string, std::string>
+  [[deprecated]] absl::flat_hash_map<std::string, std::string>
   GetProtectedAuctionReportingByOrigin()
       ABSL_LOCKS_EXCLUDED(code_blob_per_origin_mu_);
 
   // WARNING: do not use in critical paths, this returns a copy of a map.
   // return a map of buyer origin to reporting blob
-  absl::flat_hash_map<std::string, std::string>
+  [[deprecated]] absl::flat_hash_map<std::string, std::string>
   GetProtectedAppSignalsReportingByOrigin()
       ABSL_LOCKS_EXCLUDED(code_blob_per_origin_mu_);
 

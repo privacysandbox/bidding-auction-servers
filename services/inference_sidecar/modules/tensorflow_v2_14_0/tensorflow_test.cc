@@ -11,9 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include "tensorflow.h"
+
 #include <gmock/gmock-matchers.h>
 
 #include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -26,6 +31,7 @@
 #include "proto/inference_sidecar.pb.h"
 #include "utils/file_util.h"
 #include "utils/inference_metric_util.h"
+#include "utils/log.h"
 #include "utils/test_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -33,9 +39,14 @@ namespace {
 
 using ::testing::HasSubstr;
 using ::testing::StartsWith;
+constexpr absl::string_view kRamFileSystemScheme = "ram://";
 constexpr absl::string_view kModel1Dir = "./benchmark_models/pcvr";
+constexpr absl::string_view kFrozenModel1Dir = "./benchmark_models/frozen_pcvr";
 constexpr absl::string_view kModel2Dir = "./benchmark_models/pctr";
+constexpr absl::string_view kFrozenModel2Dir = "./benchmark_models/frozen_pctr";
 constexpr absl::string_view kEmbeddingModelDir = "./benchmark_models/embedding";
+constexpr absl::string_view kFrozenEmbeddingModelDir =
+    "./benchmark_models/frozen_embedding";
 constexpr absl::string_view kStatefulModelDir = "./benchmark_models/stateful";
 
 TEST(TensorflowModuleTest, Failure_RegisterModelWithEmptyPath) {
@@ -60,7 +71,7 @@ TEST(TensorflowModuleTest, Failure_RegisterModelAlreadyRegistered) {
   // First model registration
   RegisterModelRequest register_request_1;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(kModel1Dir, register_request_1).ok());
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request_1).ok());
   absl::StatusOr<RegisterModelResponse> response_1 =
       tensorflow_module->RegisterModel(register_request_1);
   ASSERT_TRUE(response_1.ok());
@@ -69,13 +80,14 @@ TEST(TensorflowModuleTest, Failure_RegisterModelAlreadyRegistered) {
   RegisterModelRequest register_request_2;
   // Same model path as the first attempt
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(kModel1Dir, register_request_2).ok());
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request_2).ok());
   absl::StatusOr<RegisterModelResponse> response_2 =
       tensorflow_module->RegisterModel(register_request_2);
 
   ASSERT_FALSE(response_2.ok());
   EXPECT_EQ(response_2.status().code(), absl::StatusCode::kAlreadyExists);
-  EXPECT_EQ(response_2.status().message(), "Model " + std::string(kModel1Dir) +
+  EXPECT_EQ(response_2.status().message(), "Model " +
+                                               std::string(kFrozenModel1Dir) +
                                                " has already been registered");
 }
 
@@ -98,15 +110,39 @@ TEST(TensorflowModuleTest, Failure_RegisterModelLoadError) {
             status_or.status().message().find("Error loading model: ./pcvr"));
 }
 
+TEST(TensorflowModuleTest, Failure_RegisterModel_FreezeError) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+
+  std::vector<absl::string_view> model_dirs = {kModel1Dir, kModel2Dir,
+                                               kEmbeddingModelDir};
+
+  for (const auto& model_dir : model_dirs) {
+    RegisterModelRequest register_request;
+    ASSERT_TRUE(PopulateRegisterModelRequest(model_dir, register_request).ok());
+    absl::StatusOr<RegisterModelResponse> status_or =
+        tensorflow_module->RegisterModel(register_request);
+
+    // Verifying that the registration fails with an InternalError due to
+    // freezing failure.
+    ASSERT_FALSE(status_or.ok());
+    EXPECT_EQ(status_or.status().code(), absl::StatusCode::kInternal);
+    EXPECT_NE(std::string::npos, status_or.status().message().find(absl::StrCat(
+                                     "Error freezing model: ", model_dir)));
+  }
+}
+
 TEST(TensorflowModuleTest, Success_RegisterModel) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   absl::StatusOr<RegisterModelResponse> status_or =
       tensorflow_module->RegisterModel(register_request);
-  ASSERT_TRUE(status_or.ok());
+  ASSERT_TRUE(status_or.ok()) << status_or.status();
 }
 
 TEST(TensorflowModuleTest, JsonError_PredictInvalidJson) {
@@ -194,7 +230,77 @@ constexpr absl::string_view kPcvrResponse =
     "{\"response\":[{\"model_path\":\"./benchmark_models/"
     "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
     "0\",\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_"
-    "content\":[0.019116628915071489]}]}]}";
+    "content\":[0.011748060584068299]}]}]}";
+
+constexpr char kFrozenPcvrJsonRequest[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/frozen_pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_1:0",
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_2:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["7"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_3:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["7"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_4:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["7"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["7"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_6:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["7"]
+    }
+  ]
+}]
+    })json";
+
+constexpr absl::string_view kFrozenPcvrResponse =
+    "{\"response\":[{\"model_path\":\"./benchmark_models/"
+    "frozen_pcvr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
+    "0\",\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_"
+    "content\":[0.011748060584068299]}]}]}";
 
 TEST(TensorflowModuleTest, JsonError_PredictModelNotRegistered) {
   InferenceSidecarRuntimeConfig config;
@@ -219,46 +325,93 @@ TEST(TensorflowModuleTest, Success_Predict) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-  predict_request.set_input(kPcvrJsonRequest);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  ASSERT_EQ(response.output(), kPcvrResponse);
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+  predict_request.set_input(kFrozenPcvrJsonRequest);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_EQ(predict_response->output(), kFrozenPcvrResponse);
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
+
+constexpr char kPcvrJsonRequest2Models[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},{
+    "model_path" : "./benchmark_models/pcvr1",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+
+    }
+  ]
+}
+]
+    })json";
 
 TEST(TensorflowModuleTest, Success_Predict_ValidateMetrics) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-  predict_request.set_input(kPcvrJsonRequest);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  ASSERT_EQ(response.output(), kPcvrResponse);
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
-  CheckMetric(response.metrics(), "kInferenceRequestCount", 1);
-  CheckMetric(response.metrics(), "kInferenceRequestSize", 1435);
-  CheckMetric(response.metrics(), "kInferenceResponseSize", 415);
+  predict_request.set_input(kFrozenPcvrJsonRequest);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_EQ(predict_response->output(), kFrozenPcvrResponse);
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
+  CheckMetricList(predict_response->metrics_list(), "kInferenceRequestCount", 0,
+                  1);
+  CheckMetricList(predict_response->metrics_list(), "kInferenceRequestSize", 0,
+                  1432);
+  CheckMetricList(predict_response->metrics_list(), "kInferenceResponseSize", 0,
+                  514);
+  CheckMetricList(predict_response->metrics_list(),
+                  "kInferenceRequestBatchCountByModel", 0, 1);
 
-  auto it = response.metrics().find("kInferenceRequestDuration");
-  ASSERT_NE(it, response.metrics().end())
+  auto it = predict_response->metrics_list().find("kInferenceRequestDuration");
+  ASSERT_NE(it, predict_response->metrics_list().end())
       << "kInferenceRequestDuration metric is missing.";
-  EXPECT_GT(it->second.value(), 0)
+  EXPECT_GT(it->second.metrics().at(0).value(), 0)
       << "kInferenceRequestDuration should be greater than zero.";
+
+  predict_request.set_input(kPcvrJsonRequest2Models);
+  predict_response = tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  // Don't accumulate metrics for unregistered models.
+  ASSERT_TRUE(
+      predict_response->metrics_list().find("./benchmark_models/pcvr") ==
+      predict_response->metrics_list().end());
 }
 
 TEST(TensorflowModuleTest, Success_PredictWithConsentedRequest) {
@@ -266,27 +419,28 @@ TEST(TensorflowModuleTest, Success_PredictWithConsentedRequest) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-  predict_request.set_input(kPcvrJsonRequest);
+  predict_request.set_input(kFrozenPcvrJsonRequest);
   predict_request.set_is_consented(true);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  ASSERT_EQ(response.output(), kPcvrResponse);
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_EQ(predict_response->output(), kFrozenPcvrResponse);
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
 
-constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
+constexpr char kFrozenPcvrJsonRequestBatchSize2[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -294,7 +448,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -302,7 +456,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -310,7 +464,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -318,7 +472,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -326,7 +480,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -334,7 +488,7 @@ constexpr char kPcvrJsonRequestBatchSize2[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -350,22 +504,23 @@ TEST(TensorflowModuleTest, Success_PredictBatchSize2) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
-  predict_request.set_input(kPcvrJsonRequestBatchSize2);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  ASSERT_EQ(response.output(),
+  predict_request.set_input(kFrozenPcvrJsonRequestBatchSize2);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_EQ(predict_response->output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
+            "frozen_pcvr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
-            "content\":[0.019116630777716638,0.1847093403339386]}]}]}");
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+            "content\":[0.011748060584068299,0.10649197548627854]}]}]}");
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
 
 TEST(TensorflowModuleTest, Success_RegisterModelWithWarmUpData) {
@@ -373,8 +528,10 @@ TEST(TensorflowModuleTest, Success_RegisterModelWithWarmUpData) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
-  register_request.set_warm_up_batch_request_json(kPcvrJsonRequestBatchSize2);
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
+  register_request.set_warm_up_batch_request_json(
+      kFrozenPcvrJsonRequestBatchSize2);
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 }
 
@@ -523,7 +680,7 @@ TEST(TensorflowModuleTest, Failure_RegisterModelWithInvalidWarmUpData) {
 
 constexpr char kPcvrJsonRequestMissingTensorName[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
       "data_type": "INT64",
@@ -541,7 +698,8 @@ TEST(TensorflowModuleTest, JsonError_PredictMissingTensorName) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
@@ -553,15 +711,15 @@ TEST(TensorflowModuleTest, JsonError_PredictMissingTensorName) {
   EXPECT_THAT(
       predict_response->output(),
       StartsWith(
-          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"INPUT_PARSING","description")"));
+          R"({"response":[{"model_path":"./benchmark_models/frozen_pcvr","error":{"error_type":"INPUT_PARSING","description")"));
 }
 
 constexpr char kPcvrJsonRequestInvalidTensor[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "FLOAT",
       "tensor_shape": [
         1, 1
@@ -577,7 +735,8 @@ TEST(TensorflowModuleTest, JsonError_PredictInvalidTensor) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
@@ -589,15 +748,15 @@ TEST(TensorflowModuleTest, JsonError_PredictInvalidTensor) {
   EXPECT_THAT(
       predict_response->output(),
       StartsWith(
-          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"INPUT_PARSING","description")"));
+          R"({"response":[{"model_path":"./benchmark_models/frozen_pcvr","error":{"error_type":"INPUT_PARSING","description")"));
 }
 
 constexpr char kPcvrJsonRequestWrongInputTensor[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "FLOAT",
       "tensor_shape": [
         2, 2
@@ -613,7 +772,8 @@ TEST(TensorflowModuleTest, JsonError_PredictModelExecutionError) {
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
@@ -625,15 +785,15 @@ TEST(TensorflowModuleTest, JsonError_PredictModelExecutionError) {
   EXPECT_THAT(
       predict_response->output(),
       StartsWith(
-          R"({"response":[{"model_path":"./benchmark_models/pcvr","error":{"error_type":"MODEL_EXECUTION","description")"));
+          R"({"response":[{"model_path":"./benchmark_models/frozen_pcvr","error":{"error_type":"MODEL_EXECUTION","description")"));
 }
 
 constexpr char kPcvrJsonRequestWith2Model[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -641,7 +801,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -649,7 +809,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -657,7 +817,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -665,7 +825,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -673,7 +833,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -681,7 +841,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -691,10 +851,10 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
   ]
 },
 {
-    "model_path" : "./benchmark_models/pctr",
+    "model_path" : "./benchmark_models/frozen_pctr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -702,7 +862,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -710,7 +870,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -718,7 +878,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["8", "4"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -726,7 +886,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["8", "4"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -734,7 +894,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["8", "4"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -742,7 +902,7 @@ constexpr char kPcvrJsonRequestWith2Model[] = R"json({
       "tensor_content": ["8", "4"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -759,39 +919,39 @@ TEST(TensorflowModuleTest, Success_PredictWith2Models) {
       ModuleInterface::Create(config);
   RegisterModelRequest register_request_1;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(kModel1Dir, register_request_1).ok());
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request_1).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_1).ok());
 
   RegisterModelRequest register_request_2;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(kModel2Dir, register_request_2).ok());
+      PopulateRegisterModelRequest(kFrozenModel2Dir, register_request_2).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
 
   PredictRequest predict_request;
   predict_request.set_input(kPcvrJsonRequestWith2Model);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  EXPECT_EQ(response.output(),
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  EXPECT_EQ(predict_response->output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
+            "frozen_pcvr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
-            "content\":[0.019116630777716638,0.1847093403339386]}]},{\"model_"
+            "content\":[0.011748060584068299,0.10649197548627854]}]},{\"model_"
             "path\":\"./benchmark_models/"
-            "pctr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
+            "frozen_pctr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
-            "content\":[0.14649735391139985,0.2522672712802887]}]}]}");
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+            "content\":[0.8405165076255798,0.7376009225845337]}]}]}");
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
 
 constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -799,7 +959,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         2, 10
@@ -807,7 +967,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -815,7 +975,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -823,7 +983,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -831,7 +991,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -839,7 +999,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["7", "3"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -849,10 +1009,10 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
   ]
 },
 {
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -860,7 +1020,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -868,7 +1028,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -876,7 +1036,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -884,7 +1044,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -892,7 +1052,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -900,7 +1060,7 @@ constexpr char kPcvrJsonRequestWith1ModelVariedSize[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -917,36 +1077,36 @@ TEST(TensorflowModuleTest,
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
-  ASSERT_TRUE(
-      PopulateRegisterModelRequest(std::string(kModel1Dir), register_request)
-          .ok());
+  ASSERT_TRUE(PopulateRegisterModelRequest(std::string(kFrozenModel1Dir),
+                                           register_request)
+                  .ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
   predict_request.set_input(kPcvrJsonRequestWith1ModelVariedSize);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
-  EXPECT_EQ(response.output(),
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  EXPECT_EQ(predict_response->output(),
             "{\"response\":[{\"model_path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
+            "frozen_pcvr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
             "0\",\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
-            "content\":[0.019116630777716638,0.1847093403339386]}]},{\"model_"
+            "content\":[0.011748060584068299,0.10649197548627854]}]},{\"model_"
             "path\":\"./benchmark_models/"
-            "pcvr\",\"tensors\":[{\"tensor_name\":\"StatefulPartitionedCall:"
+            "frozen_pcvr\",\"tensors\":[{\"tensor_name\":\"PartitionedCall:"
             "0\",\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_"
-            "content\":[0.010360434651374817]}]}]}");
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+            "content\":[0.006647615227848291]}]}]}");
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
 
 constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/embedding",
+    "model_path" : "./benchmark_models/frozen_embedding",
     "tensors" : [
     {
-      "tensor_name": "serving_default_ad_embed:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -954,7 +1114,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_pub_embed:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -962,7 +1122,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.32", "0.12", "0.98", "0.11"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -970,7 +1130,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["7"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -978,7 +1138,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["7"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -986,7 +1146,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["7"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -994,7 +1154,7 @@ constexpr char kPcvrJsonRequestEmbeddingModel[] = R"json({
       "tensor_content": ["7"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1011,37 +1171,38 @@ TEST(TensorflowModuleTest, Success_PredictEmbed) {
       ModuleInterface::Create(config);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(kEmbeddingModelDir, register_request).ok());
+      PopulateRegisterModelRequest(kFrozenEmbeddingModelDir, register_request)
+          .ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
 
   PredictRequest predict_request;
   predict_request.set_input(kPcvrJsonRequestEmbeddingModel);
-  absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-  ASSERT_TRUE(predict_status.ok());
-  PredictResponse response = predict_status.value();
-  ASSERT_FALSE(response.output().empty());
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
   // The order of output tensors in Tensorflow is not constant so we check ech
   // tensor output separately.
   EXPECT_TRUE(absl::StrContains(
-      response.output(),
-      "{\"tensor_name\":\"StatefulPartitionedCall:0\",\"tensor_shape\":[1,6],"
+      predict_response->output(),
+      "{\"tensor_name\":\"PartitionedCall:0\",\"tensor_shape\":[1,6],"
       "\"data_type\":\"FLOAT\",\"tensor_content\":[0.7276111245155335,0."
       "0728105902671814,0.11053494364023209,0.6876803636550903,0."
       "3626940846443176,0.13941356539726258]}"));
   EXPECT_TRUE(absl::StrContains(
-      response.output(),
-      "{\"tensor_name\":\"StatefulPartitionedCall:1\",\"tensor_shape\":[1,1],"
+      predict_response->output(),
+      "{\"tensor_name\":\"PartitionedCall:1\",\"tensor_shape\":[1,1],"
       "\"data_type\":\"INT32\",\"tensor_content\":[0]}"));
-  ASSERT_FALSE(response.metrics().empty());
-  EXPECT_EQ(response.metrics().size(), 6);
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
 }
 
 constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
   "request" : [{
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "INT64",
       "tensor_shape": [
         2, 1
@@ -1064,10 +1225,10 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
   ]
 },
 {
-    "model_path" : "./benchmark_models/pcvr",
+    "model_path" : "./benchmark_models/frozen_pcvr",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "serving_default_args_0:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -1075,7 +1236,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_double2:0",
+      "tensor_name": "serving_default_args_0_1:0",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1, 10
@@ -1083,7 +1244,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
     },
     {
-      "tensor_name": "serving_default_int_input1:0",
+      "tensor_name": "serving_default_args_0_2:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1091,7 +1252,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input2:0",
+      "tensor_name": "serving_default_args_0_3:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1099,7 +1260,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input3:0",
+      "tensor_name": "serving_default_args_0_4:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1107,7 +1268,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input4:0",
+      "tensor_name": "serving_default_args_0_5:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1115,7 +1276,7 @@ constexpr char kMixedValidInvalidBatchJsonRequest[] = R"json({
       "tensor_content": ["8"]
     },
     {
-      "tensor_name": "serving_default_int_input5:0",
+      "tensor_name": "serving_default_args_0_6:0",
       "data_type": "INT64",
       "tensor_shape": [
         1, 1
@@ -1132,13 +1293,11 @@ TEST(TensorflowModuleTest, CanReturnPartialBatchOutputWithError) {
       ModuleInterface::Create(config);
   RegisterModelRequest register_request_1;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(std::string(kModel1Dir), register_request_1)
-          .ok());
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request_1).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_1).ok());
   RegisterModelRequest register_request_2;
   ASSERT_TRUE(
-      PopulateRegisterModelRequest(std::string(kModel2Dir), register_request_2)
-          .ok());
+      PopulateRegisterModelRequest(kFrozenModel2Dir, register_request_2).ok());
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
 
   PredictRequest predict_request;
@@ -1166,64 +1325,126 @@ constexpr char kJsonRequestStatefulModel[] = R"json({
 }]
     })json";
 
-TEST(TensorflowModuleTest, Success_NoReset_StatefulModel) {
-  const int kIterations = 100;
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(0.0);
+}  // namespace
 
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create(config);
+// This test suite verifies the behavior of TensorFlow models when model
+// freezing is disabled.
+//
+// Necessity:
+//  - Enables testing stateful models, which are inherently not freezable.
+//    This allows for validating the model reset feature.
+//
+//  - Ensures consistent inference results between frozen and non-frozen models.
+class NoFreezeTensorflowTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    InferenceSidecarRuntimeConfig config;
+    tensorflow_module_ = std::make_unique<TensorflowModule>(config);
+    tensorflow_module_->SetModelStoreForTestOnly(
+        std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
+            config, MockModelConstructor));
+  }
+
+  void SetResetProbability(float probability) {
+    InferenceSidecarRuntimeConfig config;
+    config.set_model_reset_probability(probability);
+    tensorflow_module_->SetModelStoreForTestOnly(
+        std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
+            config, MockModelConstructor));
+  }
+
+  // No model freezing to allow stateful models to be loaded.
+  static absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>>
+  MockModelConstructor(const InferenceSidecarRuntimeConfig& config,
+                       const RegisterModelRequest& request) {
+    for (const auto& pair : request.model_files()) {
+      const std::string& path = absl::StrCat(kRamFileSystemScheme, pair.first);
+      const std::string& bytes = pair.second;
+      PS_RETURN_IF_ERROR(
+          tsl::WriteStringToFile(tsl::Env::Default(), path, bytes));
+    }
+    tensorflow::SessionOptions session_options;
+    const std::unordered_set<std::string> tags = {"serve"};
+    const auto& model_path = request.model_spec().model_path();
+    auto model_bundle = std::make_shared<tensorflow::SavedModelBundle>();
+    if (auto status = tensorflow::LoadSavedModel(
+            session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
+            tags, model_bundle.get());
+        !status.ok()) {
+      return absl::InternalError(
+          absl::StrCat("Error loading model: ", model_path));
+    }
+    return model_bundle;
+  }
+
+  std::unique_ptr<TensorflowModule> tensorflow_module_;
+};
+
+TEST_F(NoFreezeTensorflowTest, Success_NoReset_StatefulModel) {
+  const int kIterations = 100;
+  SetResetProbability(0.0);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
-  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+  ASSERT_TRUE(tensorflow_module_->RegisterModel(register_request).ok());
 
   for (int count = 2; count < kIterations; count++) {
     PredictRequest predict_request;
     predict_request.set_input(kJsonRequestStatefulModel);
-    absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-    ASSERT_TRUE(predict_status.ok());
-    PredictResponse response = predict_status.value();
-    ASSERT_FALSE(response.output().empty());
+    absl::StatusOr<PredictResponse> predict_response =
+        tensorflow_module_->Predict(predict_request, RequestContext());
+    ASSERT_TRUE(predict_response.ok());
+    ASSERT_FALSE(predict_response->output().empty());
 
     EXPECT_TRUE(absl::StrContains(
-        response.output(),
+        predict_response->output(),
         absl::StrCat("{\"tensor_name\":\"StatefulPartitionedCall:0\",\"tensor_"
                      "shape\":[],"
                      "\"data_type\":\"INT32\",\"tensor_content\":[",
                      count, "]}")))
-        << response.output();
+        << predict_response->output();
   }
 }
 
-TEST(TensorflowModuleTest, Success_Reset_StatefulModel) {
+TEST_F(NoFreezeTensorflowTest, Success_Reset_StatefulModel) {
   const int kIterations = 10;
-  InferenceSidecarRuntimeConfig config;
-  config.set_model_reset_probability(1.0);
-
-  std::unique_ptr<ModuleInterface> tensorflow_module =
-      ModuleInterface::Create(config);
+  SetResetProbability(1.0);
   RegisterModelRequest register_request;
   ASSERT_TRUE(
       PopulateRegisterModelRequest(kStatefulModelDir, register_request).ok());
-  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+  ASSERT_TRUE(tensorflow_module_->RegisterModel(register_request).ok());
 
   for (int i = 0; i < kIterations; i++) {
     PredictRequest predict_request;
     predict_request.set_input(kJsonRequestStatefulModel);
-    absl::StatusOr predict_status = tensorflow_module->Predict(predict_request);
-    ASSERT_TRUE(predict_status.ok());
-    PredictResponse response = predict_status.value();
-    ASSERT_FALSE(response.output().empty());
+    absl::StatusOr<PredictResponse> predict_response =
+        tensorflow_module_->Predict(predict_request, RequestContext());
+    ASSERT_TRUE(predict_response.ok());
+    ASSERT_FALSE(predict_response->output().empty());
 
     EXPECT_TRUE(absl::StrContains(
-        response.output(),
+        predict_response->output(),
         "{\"tensor_name\":\"StatefulPartitionedCall:0\",\"tensor_shape\":[],"
         "\"data_type\":\"INT32\",\"tensor_content\":[2]}"))
-        << response.output();
+        << predict_response->output();
     absl::SleepFor(absl::Seconds(1));
   }
 }
 
-}  // namespace
+TEST_F(NoFreezeTensorflowTest, Success_Predict) {
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(PopulateRegisterModelRequest(kModel1Dir, register_request).ok());
+  ASSERT_TRUE(tensorflow_module_->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kPcvrJsonRequest);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module_->Predict(predict_request, RequestContext());
+  ASSERT_TRUE(predict_response.ok());
+  ASSERT_FALSE(predict_response->output().empty());
+  ASSERT_EQ(predict_response->output(), kPcvrResponse);
+  ASSERT_FALSE(predict_response->metrics_list().empty());
+  EXPECT_EQ(predict_response->metrics_list().size(), 7);
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

@@ -21,9 +21,8 @@
 #include <grpcpp/grpcpp.h>
 
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/egress_schema_cache.h"
-#include "services/bidding_service/generate_bids_reactor.h"
-#include "services/bidding_service/protected_app_signals_generate_bids_reactor.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
@@ -35,15 +34,22 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr char kGenerateBids[] = "GenerateBids";
 
-using GenerateBidsReactorFactory = absl::AnyInvocable<GenerateBidsReactor*(
+using GenerateBidsReactorFactory = absl::AnyInvocable<BaseGenerateBidsReactor<
+    GenerateBidsRequest, GenerateBidsRequest::GenerateBidsRawRequest,
+    GenerateBidsResponse, GenerateBidsResponse::GenerateBidsRawResponse>*(
     grpc::CallbackServerContext* context, const GenerateBidsRequest* request,
     GenerateBidsResponse* response,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client,
     const BiddingServiceRuntimeConfig& runtime_config)>;
 
-using ProtectedAppSignalsGenerateBidsReactorFactory =
-    absl::AnyInvocable<ProtectedAppSignalsGenerateBidsReactor*(
+using ProtectedAppSignalsGenerateBidsReactorFactory = absl::AnyInvocable<
+    BaseGenerateBidsReactor<GenerateProtectedAppSignalsBidsRequest,
+                            GenerateProtectedAppSignalsBidsRequest::
+                                GenerateProtectedAppSignalsBidsRawRequest,
+                            GenerateProtectedAppSignalsBidsResponse,
+                            GenerateProtectedAppSignalsBidsResponse::
+                                GenerateProtectedAppSignalsBidsRawResponse>*(
         grpc::CallbackServerContext* context,
         const GenerateProtectedAppSignalsBidsRequest* request,
         const BiddingServiceRuntimeConfig& runtime_config,

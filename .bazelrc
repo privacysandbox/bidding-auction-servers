@@ -25,7 +25,7 @@ build:clang --host_cxxopt=-std=c++17
 build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
 # Makes thread safety analysis warnings into errors.
 build:clang --copt=-Werror=thread-safety
-#disable the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
+# Disables the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
 build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
 # https://github.com/google/tcmalloc/blob/master/docs/tuning.md#build-time-optimizations
 build:clang --cxxopt=-fsized-deallocation

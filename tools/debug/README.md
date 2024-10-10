@@ -5,26 +5,57 @@ sanity testing B&A locally or for debugging B&A code in test_mode. The scripts u
 binaries to start the servers on local ports without HTTPS. The logs will be output to
 stderr/stdout.
 
-## Usage
+## Start Buyer stack with generateBid binary
 
-### Build with local bazel
+### Using docker (recommended)
 
 #### Prerequisites
 
-Install Python 3 Clang (if not installed).
+Docker daemon should be up and running.
+
+#### Build stack
 
 ```bash
-sudo apt install python3-clang
+./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path buyer_frontend_service --instance local --platform gcp --build-flavor non_prod --gcp-skip-image-upload
 ```
 
-#### Build Buyer stack
+#### Start stack
 
 ```bash
-builders/tools/bazel-debian build //services/bidding_service:server
-builders/tools/bazel-debian build //services/buyer_frontend_service:server
+# Edit the run time flags in the scripts:
+# Eg. change the biddingExecutableUrl in tools/debug/start_bidding_byob for custom generateBid script.
+# Eg. change the buyer_kv_server_addr in tools/debug/start_bfe for custom KV server.
+# Eg. change the GLOG_v value to increase/decrease log level.
+
+# Open two new terminals at B&A project root.
+# Start the Bidding server in terminal 1:
+./tools/debug/start_bidding_byob
+# You should see some logs in each server as it displays HTTP metrics for the first call to the generateBid executable endpoint and some errors for OTEL collectors not found.
+
+# Start the BuyerFrontEnd server in terminal 2:
+./tools/debug/start_bfe
+# You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
-#### Start Buyer stack
+### Using local bazel
+
+Not supported.
+
+## Start Buyer stack with generateBid JS/WASM
+
+### Using docker (recommended)
+
+#### Prerequisites
+
+Docker daemon should be up and running.
+
+#### Build stack
+
+```bash
+./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path buyer_frontend_service --instance local --platform aws --build-flavor non_prod
+```
+
+#### Start stack
 
 ```bash
 # Edit the run time flags in the scripts:
@@ -42,44 +73,24 @@ builders/tools/bazel-debian build //services/buyer_frontend_service:server
 # You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
-#### Build Seller stack
-
-```bash
-builders/tools/bazel-debian build //services/auction_service:server
-builders/tools/bazel-debian build //services/seller_frontend_service:server
-```
-
-#### Start Seller stack
-
-```bash
-# Edit the run time flags in the scripts:
-# Eg. change the auctionJsUrl in tools/debug/start_auction for custom scoreAd script.
-# Eg. change the key_value_signals_host in tools/debug/start_sfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
-
-# Open two new terminals at B&A project root.
-# Start the Auction server in terminal 1:
-./tools/debug/start_auction
-# You should see some logs in each server as it displays HTTP metrics for the first call to the scoreAd JS endpoint and some errors for OTEL collectors not found.
-
-# Start the SellerFrontEnd server in terminal 2:
-./tools/debug/start_sfe
-# You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
-```
-
-### Build with docker
+### Using local bazel
 
 #### Prerequisites
 
-Docker daemon should be up and running.
-
-#### Build Buyer stack
+Install Python 3 Clang (if not installed).
 
 ```bash
-./production/packaging/build_and_test_all_in_docker --service-path bidding_service --service-path buyer_frontend_service --instance local --platform aws --build-flavor non_prod
+sudo apt install python3-clang
 ```
 
-#### Start Buyer stack
+#### Build stack
+
+```bash
+builders/tools/bazel-debian build //services/bidding_service:server
+builders/tools/bazel-debian build //services/buyer_frontend_service:server
+```
+
+#### Start stack
 
 ```bash
 # Edit the run time flags in the scripts:
@@ -89,21 +100,65 @@ Docker daemon should be up and running.
 
 # Open two new terminals at B&A project root.
 # Start the Bidding server in terminal 1 with bazel build folder:
-./tools/debug/start_bidding
+./tools/debug/start_bidding --gdb
 # You should see some logs in each server as it displays HTTP metrics for the first call to the generateBid JS endpoint and some errors for OTEL collectors not found.
 
 # Start the BuyerFrontEnd server in terminal 2 with bazel build folder:
-./tools/debug/start_bfe
+./tools/debug/start_bfe --gdb
 # You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
-#### Build Seller stack
+## Start Seller stack
+
+### Using docker (recommended)
+
+#### Prerequisites
+
+Docker daemon should be up and running.
+
+#### Build stack
 
 ```bash
 ./production/packaging/build_and_test_all_in_docker --service-path seller_frontend_service --service-path auction_service --instance local --platform aws --build-flavor non_prod
 ```
 
-#### Start Seller stack
+#### Start stack
+
+```bash
+# Edit the run time flags in the scripts:
+# Eg. change the auctionJsUrl in tools/debug/start_auction for custom scoreAd script.
+# Eg. change the key_value_signals_host in tools/debug/start_sfe for custom KV server.
+# Eg. change the GLOG_v value to increase/decrease log level.
+
+# Open two new terminals at B&A project root.
+
+# Start the Auction server in terminal 1:
+./tools/debug/start_auction
+# You should see some logs in each server as it displays HTTP metrics for the first call to the scoreAd JS endpoint and some errors for OTEL collectors not found.
+
+# Start the SellerFrontEnd server in terminal 2:
+./tools/debug/start_sfe
+# You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
+```
+
+### Using local bazel
+
+#### Prerequisites
+
+Install Python 3 Clang (if not installed).
+
+```bash
+sudo apt install python3-clang
+```
+
+#### Build stack
+
+```bash
+builders/tools/bazel-debian build //services/auction_service:server
+builders/tools/bazel-debian build //services/seller_frontend_service:server
+```
+
+#### Start stack
 
 ```bash
 # Edit the run time flags in the scripts:
@@ -113,17 +168,17 @@ Docker daemon should be up and running.
 
 # Open two new terminals at B&A project root.
 # Start the Auction server in terminal 1 with bazel build folder:
-./tools/debug/start_auction
+./tools/debug/start_auction --gdb
 # You should see some logs in each server as it displays HTTP metrics for the first call to the scoreAd JS endpoint and some errors for OTEL collectors not found.
 
 # Start the SellerFrontEnd server in terminal 2 with bazel build folder:
-./tools/debug/start_sfe
+./tools/debug/start_sfe --gdb
 # You should see some logs in each server as it displays HTTP metrics for the first call to the KV server and some errors for OTEL collectors not found.
 ```
 
-### Test Buyer stack
+## Test Buyer stack
 
-#### Plaintext request
+### Plaintext request
 
 Plaintext requests need to be created manually. For a Buyer stack, this should be a valid
 GetBidsRawRequest object.
@@ -149,14 +204,14 @@ DOCKER_NETWORK=host ./builders/tools/bazel-debian run //tools/secure_invoke:invo
     -insecure=true
 ```
 
-#### Encrypted request
+### Encrypted request
 
 Encrypted request must be a valid GetBidsRequest with an encrypted request_ciphertext. Currently,
 there is no recommended way to get an encrypted ciphertext for testing.
 
-### Test Seller stack
+## Test Seller stack
 
-#### Plaintext SelectAdRequest
+### Plaintext SelectAdRequest
 
 Plaintext requests need to be created manually. For the expected format for this request, please
 refer to the [secure_invoke] section.
@@ -180,7 +235,7 @@ DOCKER_NETWORK=host ./builders/tools/bazel-debian run //tools/secure_invoke:invo
     -insecure=true
 ```
 
-#### Encrypted SelectAdRequest
+### Encrypted SelectAdRequest
 
 Encrypted requests must be valid SelectAdRequests with an encrypted protectedAudienceCiphertext. The
 ciphertext can be obtained from the client side (Chrome/Android), and the auction config has to be
@@ -206,7 +261,7 @@ populated manually. There are two ways to send encrypted requests to local serve
     curl --url localhost:51052/v1/selectAd -H 'X-BnA-Client-IP:<Valid IP address>' -H 'X-User-Agent:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36' -H 'x-accept-language: en-US,en;q=0.9' -d "@select_ads_request.json"
     ```
 
-#### GetComponentAuctionCiphertexts
+### GetComponentAuctionCiphertexts
 
 Requests must be valid GetComponentAuctionCiphertextsRequest with an encrypted
 protectedAuctionCiphertext. The encrypted ciphertext can be obtained using the [secure_invoke] tool

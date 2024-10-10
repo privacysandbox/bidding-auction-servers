@@ -70,6 +70,10 @@ message ProtectedAudienceInput {
   // populate the field if and only if they want to override for
   //experimentation.
   optional int32 num_k_anon_ghost_winners = 8;
+
+  // Clients can indicate whether K-Anonymity is enforced for the traffic.
+  // By default, this would be false, i.e. K-Anonymity is not enforced.
+  bool enforce_kanon = 9;
 }
 
 // ProtectedAuctionInput is generated and encrypted by the client,
@@ -120,6 +124,10 @@ message ProtectedAuctionInput {
   // populate the field if and only if they want to override for
   //experimentation.
   optional int32 num_k_anon_ghost_winners = 8;
+
+  // Clients can indicate whether K-Anonymity is enforced for the traffic.
+  // By default, this would be false, i.e. K-Anonymity is not enforced.
+  bool enforce_kanon = 9;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -197,6 +205,10 @@ message BuyerInput {
 }
 
 // Information about an Interest Group passed by the browser.
+//
+// NOTE: Any changes made to this proto should be manually copied over to
+// api/udf/generate_bid.proto. Otherwise, there will be discrepancies between JS
+// and BYOB functionality.
 // (-- LINT.IfChange(browser_signals_bidding) --)
 message BrowserSignals {
   // Number of times the group was joined in the last 30 days.
@@ -225,6 +237,10 @@ message BrowserSignals {
 // (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:browser_signals_generate_bid) --)
 
 // Information passed by Android.
+//
+// NOTE: Any changes made to this proto should be manually copied over to
+// api/udf/generate_bid.proto. Otherwise, there will be discrepancies between JS
+// and BYOB functionality.
 // (-- LINT.IfChange(android_signals_bidding) --)
 message AndroidSignals {}
 // (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:android_signals_generate_bid) --)
@@ -254,6 +270,21 @@ enum ClientType {
   // Any browser.
   // Note: This covers browsers on Android and desktop.
   CLIENT_TYPE_BROWSER = 2;
+}
+
+message UpdateInterestGroup {
+  // Index of interest group in the original request for this owner that
+  // submitted a bid for this auction.
+  // Note that we send the index instead of the name for payload optimization.
+  int32 index = 1;
+
+  // Browser should update the interest group represented by 'index' if its
+  // on-device last updated time is greater than this.
+  int32 update_if_older_than_ms = 2;
+}
+
+message UpdateInterestGroupList {
+  repeated UpdateInterestGroup interest_groups = 1;
 }
 
 // Protected Audience auction result returned from SellerFrontEnd to the client
@@ -314,6 +345,12 @@ message AuctionResult {
   // originating from mobile devices (CLIENT_TYPE_ANDROID).
   map<string, InterestGroupIndex> bidding_groups = 11;
 
+  // Map from interest group owner to a list of interest groups that want to
+  // update after this auction.
+  // Note: This is currently not populated for auctions
+  // originating from mobile devices (CLIENT_TYPE_ANDROID).
+  map<string, UpdateInterestGroupList> update_groups = 25;
+
   // In the event of an error during the SelectAd request, an Error object will
   // be returned as a part of the AuctionResult to indicate what went wrong.
   message Error {
@@ -373,6 +410,11 @@ message AuctionResult {
   // This will be verified with the buyerAndSellerReportingId in the Ad
   // properties on the browser.
   string buyer_and_seller_reporting_id = 20;
+
+  // SelectableBuyerAndSellerReportingId of the winning Ad.
+  // This will be verified with the buyerAndSellerReportingId in the Ad
+  // properties on the browser.
+  string selectable_buyer_and_seller_reporting_id = 26;
 
   // Join candidates for K-Anonymity for the winner. This should include
   // key hashes corresponding to the winning ad only.
@@ -507,10 +549,20 @@ message AuctionResult {
       // top-level seller during top level auction.
       string ad_metadata = 5;
 
+      // BuyerReportingId of the ghost winning Ad.
+      // This will be verified with the buyerAndSellerReportingId in the Ad
+      // properties on the browser.
+      string buyer_reporting_id = 6;
+
+      // SelectableBuyerAndSellerReportingId of the ghost winning Ad.
+      // This will be verified with the buyerAndSellerReportingId in the Ad
+      // properties on the browser.
+      string selectable_buyer_and_seller_reporting_id = 7;
+
       // BuyerAndSellerReportingId of the ghost winning Ad.
       // This will be verified with the buyerAndSellerReportingId in the Ad
       // properties on the browser.
-      string buyer_and_seller_reporting_id = 6;
+      string buyer_and_seller_reporting_id = 8;
     }
     optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 7;
   }
@@ -672,10 +724,20 @@ message SelectAdRequest {
       // Contextual data related to PAS ads.
       ContextualProtectedAppSignalsData contextual_protected_app_signals_data = 8;
 
-      // A limit by sellers on total number of bids that can be passed by a
-      // buyer to seller with multi-bid generation required for K-Anonymity.
-      // Multi bid generation refers to generateBid() returning more than one
-      // bid, in case of web more than one bid per IG.
+      // A limit enforced by sellers on number of bids returned by each
+      // generateBid() execution.
+      //
+      // With K-Anonymity integration, each generateBid() can return multiple
+      // bids instead of one, this is referred to as multi-bid generation. This
+      // limit is required to enforce a limit with multi-bid generation.
+      //
+      // For Protected Audience, the limit would be enforced on generateBid()
+      // execution per Interest Group.
+      // For Protected App Signals (PAS), the limit would be enforced per buyer
+      // generateBid() execution.
+      //
+      // If the seller doesn't set the limit, a default would be set by the
+      // Bidding server.
       int32 per_buyer_multi_bid_limit = 9;
     }
 
@@ -793,7 +855,12 @@ message SelectAdResponse {
   // or chaff, depending on ScoreAd() outcomes.
   bytes auction_result_ciphertext = 1;
 
-  // Debug logs for sfe and downstream servers (only in non_prod)
+  // Debug logs for sfe and downstream servers (only in non_prod).
+  // When debug_info bit is turned on in server request, Debug Info will be
+  // included in server response. To use this feature, secure_invoke can be used
+  // to send request with debug_info bit.
+  // see secure_invoke at: https://github.com/privacysandbox/bidding-auction-servers/tree/main/tools/secure_invoke
+  // see debug_info bit at: https://github.com/privacysandbox/data-plane-shared-libraries/blob/99e1450e883bc20a67afcef72e983efc91e8b642/src/logger/logger.proto#L33
   server_common.DebugInfo debug_info = 2;
 
   // Optional. Only populated for server orchestrated component auctions.
@@ -889,6 +956,26 @@ message GetBidsRequest {
     // A boolean value which indicates whether temporary unlimited egress should
     // be enabled.
     bool enable_unlimited_egress = 14;
+
+    // A limit enforced by sellers on number of bids returned by each
+    // generateBid() execution.
+    //
+    // With K-Anonymity integration, each generateBid() can return multiple
+    // bids instead of one, this is referred to as multi-bid generation. This
+    // limit is required to enforce a limit with multi-bid generation.
+    //
+    // For Protected Audience, the limit would be enforced on generateBid()
+    // execution per Interest Group.
+    // For Protected App Signals (PAS), the limit would be enforced per buyer
+    // generateBid() execution.
+    //
+    // If the seller doesn't set the limit, a default would be set by the
+    // Bidding server.
+    int32 multi_bid_limit = 15;
+
+    // Clients can indicate whether K-Anonymity is enforced for the traffic.
+    // By default, this would be false, i.e. K-Anonymity is not enforced.
+    bool enforce_kanon = 16;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -912,70 +999,14 @@ message GetBidsResponse {
     // Represents a JSON object.
     repeated ProtectedAppSignalsAdWithBid protected_app_signals_bids = 2;
 
+    UpdateInterestGroupList update_interest_group_list = 3;
+
     // Debug logs for bfe and downstream servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
   }
 
   // Encrypted GetBidsRawResponse.
   bytes response_ciphertext = 1;
-}
-
-message Bucket128Bit {
-  // Bucket should support 128 bit int value. The 1st 64 bits
-  // are pushed into the array followed by 2nd 64 bits.
-  repeated uint64 bucket_128_bits = 1;
-}
-
-message BucketOffset {
-  // Optional offset to add to the auction result value. Default value for
-  // offset will be 0. This can be a 128 bit number. The 1st 64 bits are pushed
-  // into the array followed by 2nd 64 bits.
-  repeated uint64 value = 1;
-  bool is_negative = 2;
-}
-
-message SignalBucket {
-  BaseValue base_value = 1;
-  // Optional scale factor for the bucket. Default value will be 1.0
-  double scale = 2;
-  BucketOffset offset = 3;
-}
-
-message PrivateAggregationBucket {
-  oneof bucket {
-    // The name of the auction result value we want to report.
-    // For instance, /winning-bid.
-    SignalBucket signal_bucket = 1;
-    Bucket128Bit bucket_128_bit = 2;
-  }
-}
-
-// Event types to indicate the event for which contribution was made.
-enum EventType {
-  EVENT_TYPE_UNSPECIFIED = 0;
-  // Event type for contributions made via reserved.win event type.
-  EVENT_TYPE_WIN = 1;
-  // Event type for contributions made via reserved.loss event type.
-  EVENT_TYPE_LOSS = 2;
-  // Event type for contributions made via reserved.always event type.
-  EVENT_TYPE_ALWAYS = 3;
-  // Event type for contributions made with a custom event name.
-  EVENT_TYPE_CUSTOM = 4;
-}
-
-message PrivateAggregationEvent {
-  EventType event_type = 1;
-  // Only populated in case of CUSTOM events.
-  string event_name = 2;
-}
-
-message PrivateAggregateContribution {
-  PrivateAggregationBucket bucket = 1;
-  PrivateAggregationValue value = 2;
-  // Populated only for component multi seller auctions and response from BFE.
-  // This is not expected to be sent to the client for single seller and
-  // server orchestrated multi seller auctions.
-  PrivateAggregationEvent event = 3;
 }
 
 message PrivateAggregateReportingResponse {
@@ -988,6 +1019,10 @@ message PrivateAggregateReportingResponse {
 }
 
 // Bid for an ad candidate.
+//
+// NOTE: Any changes made to this proto should be manually copied over to
+// api/udf/generate_bid.proto. Otherwise, there will be discrepancies between JS
+// and BYOB functionality.
 // (-- LINT.IfChange(bid_bidding) --)
 message AdWithBid {
   // Metadata of the ad, this will be passed to Seller's scoring function.
@@ -1036,6 +1071,14 @@ message AdWithBid {
 
   // Private aggregation object.
   repeated PrivateAggregateContribution private_aggregation_contributions = 12;
+
+  // If provided, and selectableBuyerAndSellerReportingId is not set then
+  // this will be substituted for interestGroupName.
+  string buyer_and_seller_reporting_id = 13;
+
+  // Optional. selectableBuyerAndSellerReportingId in buyerReportingMetadata of
+  // reportWin(). If provided, this will be substituted for interestGroupName.
+  string selectable_buyer_and_seller_reporting_id = 14;
 }
 // (-- LINT.ThenChange(bid_generate_bid) --)
 
@@ -1065,6 +1108,10 @@ message GenerateBidsRequest {
   // Unencrypted request.
   message GenerateBidsRawRequest {
     // Custom Audience (a.k.a Interest Group) for bidding.
+    //
+    // NOTE: Any changes made to this proto might need to be manually copied
+    // over to api/udf/generate_bid.proto. Otherwise, there may be
+    // discrepancies between JS and BYOB functionality.
     message InterestGroupForBidding {
       // Unique string that identifies the Custom Audience (a.k.a Interest
       // Group) for a buyer.
@@ -1159,6 +1206,26 @@ message GenerateBidsRequest {
     // Top level seller passed in case of component auctions. This is forwarded
     // to generateBid.
     string top_level_seller = 10;
+
+    // A limit enforced by sellers on number of bids returned by each
+    // generateBid() execution.
+    //
+    // With K-Anonymity integration, each generateBid() can return multiple
+    // bids instead of one, this is referred to as multi-bid generation. This
+    // limit is required to enforce a limit with multi-bid generation.
+    //
+    // For Protected Audience, the limit would be enforced on generateBid()
+    // execution per Interest Group.
+    // For Protected App Signals (PAS), the limit would be enforced per buyer
+    // generateBid() execution.
+    //
+    // If the seller doesn't set the limit, a default would be set by the
+    // Bidding server.
+    int32 multi_bid_limit = 11;
+
+    // Clients can indicate whether K-Anonymity is enforced for the traffic.
+    // By default, this would be false, i.e. K-Anonymity is not enforced.
+    bool enforce_kanon = 12;
   }
 
   // Encrypted GenerateBidsRawRequest.
@@ -1240,6 +1307,26 @@ message GenerateProtectedAppSignalsBidsRequest {
     // A boolean value which indicates whether temporary unlimited egress should
     // be enabled.
     bool enable_unlimited_egress = 10;
+
+    // A limit enforced by sellers on number of bids returned by each
+    // generateBid() execution.
+    //
+    // With K-Anonymity integration, each generateBid() can return multiple
+    // bids instead of one, this is referred to as multi-bid generation. This
+    // limit is required to enforce a limit with multi-bid generation.
+    //
+    // For Protected Audience, the limit would be enforced on generateBid()
+    // execution per Interest Group.
+    // For Protected App Signals (PAS), the limit would be enforced per buyer
+    // generateBid() execution.
+    //
+    // If the seller doesn't set the limit, a default would be set by the
+    // Bidding server.
+    int32 multi_bid_limit = 11;
+
+    // Clients can indicate whether K-Anonymity is enforced for the traffic.
+    // By default, this would be false, i.e. K-Anonymity is not enforced.
+    bool enforce_kanon = 12;
   }
 
   // Encrypted GenerateProtectedAppSignalsBidsRawRequest.
@@ -1380,7 +1467,23 @@ message ScoreAdsRequest {
 
       // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
       string buyer_reporting_id = 14;
+
+      // Optional. buyerAndSellerReportingId in buyerReportingMetadata
+      // of reportWin(). If provided, and selectableBuyerAndSellerReportingId
+      // is not set then this will be substituted for interestGroupName.
+      string buyer_and_seller_reporting_id = 15;
+
+      // Optional. selectableBuyerAndSellerReportingId in buyerReportingMetadata
+      // of reportWin(). If provided, this will be substituted for
+      // interestGroupName.
+      string selectable_buyer_and_seller_reporting_id = 16;
+
+      // Indicates whether or not the ad meets the k-anonymity threshold.
+      bool k_anon_status = 17;
+
+      reserved 18;
     }
+
     // Ad with bid.
     repeated AdWithBidMetadata ad_bids = 1;
 
@@ -1475,6 +1578,11 @@ message ScoreAdsRequest {
       // Temporary unlimited size egress features. Meant for experimentation
       // only.
       string temporary_unlimited_egress_payload = 10;
+
+      // Indicates whether or not the ad meets the k-anonymity threshold.
+      bool k_anon_status = 11;
+
+      reserved 12;
     }
 
     // Ad with bid for protected app signals.
@@ -1495,6 +1603,15 @@ message ScoreAdsRequest {
     // If this field is present, this auction is considered a top level auction
     // and any protected_app_signals_ad_bids or ad_bids are ignored.
     repeated AuctionResult component_auction_results = 14;
+
+    // Optional. Maximum number of allowed ghost winners to be passed to the
+    // auction service. This will always be set to 1 initially for all the
+    // platforms.
+    int32 num_allowed_ghost_winners = 15;
+
+    // Clients can indicate whether K-Anonymity is enforced for the traffic.
+    // By default, this would be false, i.e. K-Anonymity is not enforced.
+    bool enforce_kanon = 16;
   }
 
   // Encrypted ScoreAdsRawRequest.
@@ -1626,7 +1743,7 @@ message ScoreAdsResponse {
 
     // Required for waterfall mediation on Android
     // and browser-orchestrated component auction.
-    // Currency of the of the bid if present
+    // Currency of the bid if present
     // (expressed as ISO 4217 alpha code).
     // If the seller specified a seller_currency in the AuctionConfig,
     // this value, if specified, must match it. If not, the bid is rejected.
@@ -1655,11 +1772,18 @@ message ScoreAdsResponse {
     repeated PrivateAggregateReportingResponse top_level_contributions = 21;
   }
 
-  // The response includes the top scored ad along with other related data.
+  // The response includes the top scored ad, optionally ghost winner(s), along
+  // with other related data.
   // Unencrypted response.
   message ScoreAdsRawResponse {
     // Score of the winning ad in the auction.
     AdScore ad_score = 1;
+
+    // Information about the ghost winners. Initially only a single
+    // ghost winner, if present, will be populated and this will be scaled
+    // later based on num_k_anon_ghost_winners in the incoming
+    // SelectAdRequest from device.
+    repeated AdScore ghost_winning_ad_scores = 2;
 
     // Debug logs for auction servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
@@ -1734,37 +1858,4 @@ message EventMessage {
   ScoreAdsResponse.ScoreAdsRawResponse score_ad_raw_response = 33;
 
   KvSignal kv_signal = 41;
-}
-
-// The message to store Private Aggregation Value that has final value dependent
-// on post auction information. For more information, see
-// https://github.com/WICG/turtledove/blob/main/FLEDGE_extended_PA_reporting.md#example-2-getting-the-average-bid-gap-for-an-ad.
-message SignalValue {
-  BaseValue base_value = 1;
-  int32 offset = 2;
-  // Optional scale factor by which we want to
-  // multiply the auction result value.
-  // Default value will be 1.0
-  double scale = 3;
-}
-
-// The message to store either
-// numerical or signalValue Private Aggregation Value.
-message PrivateAggregationValue {
-  oneof value {
-    int32 int_value = 1;
-    SignalValue extended_value = 2;
-  }
-}
-
-// Available base values for signalBucket and signalValue.
-// For more information, see
-// https://github.com/WICG/turtledove/blob/44a00e4e8f02ec03c05075fd994a8abad7b2a6cd/FLEDGE_extended_PA_reporting.md?plain=1#L192
-enum BaseValue {
-  BASE_VALUE_UNSPECIFIED = 0;
-  BASE_VALUE_WINNING_BID = 1;
-  BASE_VALUE_HIGHEST_SCORING_OTHER_BID = 2;
-  BASE_VALUE_SCRIPT_RUN_TIME = 3;
-  BASE_VALUE_SIGNALS_FETCH_TIME = 4;
-  BASE_VALUE_BID_REJECTION_REASON = 5;
 }

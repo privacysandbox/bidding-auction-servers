@@ -21,6 +21,7 @@
 
 #include "absl/status/status.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
+#include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "src/roma/interface/roma.h"
 #include "src/roma/roma_service/roma_service.h"
 
@@ -44,14 +45,14 @@ using DispatchConfig = DispatchService::Config;
 
 // This class is a wrapper around Roma, a library which provides an interface
 // for multi-process javascript and wasm execution in V8.
-class V8Dispatcher {
+class V8Dispatcher : public UdfCodeLoaderInterface {
  public:
   explicit V8Dispatcher(DispatchConfig&& config = DispatchConfig());
 
   virtual ~V8Dispatcher();
 
-  // Init the dispatcher. Note that this call may bring up multiple processes,
-  // which can be slow and should only happen on server startup.
+  // Initializes the dispatcher. Note that this call may bring up multiple
+  // processes, which can be slow and should only happen on server startup.
   //
   // config: This represents all configurable params of the config. Please
   // pass in an empty struct '{}' to use default options (auto-scale).
@@ -59,16 +60,15 @@ class V8Dispatcher {
   // fails, a client may retry.
   absl::Status Init();
 
-  // Load new execution code synchronously. This is a blocking wrapper around
+  // Loads new execution code synchronously. This is a blocking wrapper around
   // the google::scp::roma::LoadCodeObj method.
   //
   // version: the new version string of the code to load
-  // js: the js string to load
+  // code: the js code string to load
   // return: a status indicating whether the code load was successful.
-  virtual absl::Status LoadSync(absl::string_view version,
-                                absl::string_view js);
+  absl::Status LoadSync(std::string version, std::string code) override;
 
-  // Execute a single request asynchronously.
+  // Executes a single request asynchronously.
   //
   // request: a unique pointer to the wrapper object containing all the
   // details necessary to execute the request.
@@ -80,7 +80,7 @@ class V8Dispatcher {
   virtual absl::Status Execute(std::unique_ptr<DispatchRequest> request,
                                DispatchDoneCallback done_callback);
 
-  // Execute a batch of requests asynchronously. There are no guarantees
+  // Executes a batch of requests asynchronously. There are no guarantees
   // on the order of request processing.
   //
   // batch: a vector of requests, each executed independently and in parallel

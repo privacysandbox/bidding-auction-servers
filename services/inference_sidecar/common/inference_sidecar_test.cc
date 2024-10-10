@@ -39,7 +39,7 @@ constexpr char kJsonString[] = R"json({
     "model_path" : "test_model",
     "tensors" : [
     {
-      "tensor_name": "serving_default_double1:0",
+      "tensor_name": "double1",
       "data_type": "DOUBLE",
       "tensor_shape": [
         1,

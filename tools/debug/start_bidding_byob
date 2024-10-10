@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Copyright 2024 Google LLC
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+export BIDDING_EXECUTABLE_URL=""
+export BIDDING_EXECUTABLE_PATH="/sample_udf/bin/sample_generate_bid_udf"
+
+if [[ -z "$BIDDING_EXECUTABLE_URL" ]]; then
+  export FETCH_MODE=2
+else
+  export FETCH_MODE=0
+fi
+
+export SERVER_START_CMD=$(cat << END
+/server/bin/server \
+--enable_bidding_service_benchmark="true" \
+--init_config_client="false" \
+--port=50057 \
+--udf_num_workers=4 \
+--js_worker_queue_len=100 \
+--test_mode="true" \
+--telemetry_config="mode: OFF" \
+--roma_timeout_ms="120000" \
+--egress_schema_fetch_config='{
+      "fetchMode": 0,
+      "egressSchemaPath": "",
+      "egressSchemaUrl": "",
+      "urlFetchPeriodMs": 13000000,
+      "urlFetchTimeoutMs": 30000,
+    }' \
+--buyer_code_fetch_config='{
+      "fetchMode": ${FETCH_MODE},
+      "biddingExecutableUrl": "${BIDDING_EXECUTABLE_URL}",
+      "biddingExecutablePath": "${BIDDING_EXECUTABLE_PATH}",
+      "urlFetchPeriodMs": 13000000,
+      "urlFetchTimeoutMs": 30000,
+      "enableBuyerDebugUrlGeneration": true,
+      "enablePrivateAggregateReporting": false
+    }' \
+--enable_protected_audience="true" \
+--enable_protected_app_signals="false" \
+--enable_otel_based_logging="false" \
+--consented_debug_token="test_token" \
+--tee_ad_retrieval_kv_server_addr="localhost:50057" \
+--ps_verbosity=3 \
+--bidding_tcmalloc_background_release_rate_bytes_per_second=4096 \
+--bidding_tcmalloc_max_total_thread_cache_bytes=10737418240 \
+--ad_retrieval_timeout_ms="60000" && exit
+END
+)
+
+docker load -i dist/debian/bidding_service_image.tar
+
+docker run --network=host --security-opt=seccomp=unconfined \
+--security-opt=apparmor=unconfined --cap-add=CAP_SYS_ADMIN \
+-it bazel/production/packaging/gcp/bidding_service:server_docker_image \
+-c "${SERVER_START_CMD}"

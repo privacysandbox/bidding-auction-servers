@@ -107,6 +107,9 @@ TEST_F(KVAsyncGrpcTest, CallsServerWithMetadata) {
                               CreateStub(fake_service_thread->GetServerAddr()));
   absl::Notification notification;
   grpc::ClientContext context;
+  for (auto& [key, value] : sent_metadata) {
+    context.AddMetadata(key, value);
+  }
 
   RawRequest raw_request;
   absl::Status status = class_under_test.ExecuteInternal(

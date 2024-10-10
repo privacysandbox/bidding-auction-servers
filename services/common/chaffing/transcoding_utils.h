@@ -21,11 +21,12 @@
 #include <string>
 #include <utility>
 
-#include "api/bidding_auction_servers.grpc.pb.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "quiche/common/quiche_data_reader.h"
 #include "quiche/common/quiche_data_writer.h"
+#include "services/common/compression/compression_utils.h"
 #include "src/logger/request_context_impl.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -34,9 +35,13 @@ inline constexpr int kDataSizeBytes = 4;
 inline constexpr int kTotalMetadataSizeBytes =
     kVersionAndCompressionTypeSizeBytes + kDataSizeBytes;
 
+inline constexpr uint8_t kCompressionTypeMask = 0b00001111;
+inline constexpr uint8_t kPayloadVersionMask = 0b11110000;
+
 template <typename GetBidsProto>
 struct DecodedGetBidsPayload {
-  uint8_t version_and_compression_num;
+  uint8_t version;
+  CompressionType compression_type;
   uint32_t payload_length;
   GetBidsProto get_bids_proto;
 };
@@ -49,8 +54,9 @@ struct DecodedGetBidsPayload {
 // - X bytes of data (e.g. the payload)
 // - Y bytes of padding
 template <typename GetBidsProto>
-std::string EncodeGetBidsPayload(const GetBidsProto& raw_proto,
-                                 size_t padded_request_size = 0) {
+absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
+    const GetBidsProto& raw_proto, CompressionType compression_type,
+    size_t padded_request_size = 0) {
   const bool is_get_bids_proto =
       std::is_base_of<GetBidsRequest::GetBidsRawRequest, GetBidsProto>::value ||
       std::is_base_of<GetBidsResponse::GetBidsRawResponse, GetBidsProto>::value;
@@ -58,9 +64,11 @@ std::string EncodeGetBidsPayload(const GetBidsProto& raw_proto,
       is_get_bids_proto,
       "raw_proto should be either a GetBids RawRequest or RawResponse");
 
-  std::string plaintext = raw_proto.SerializeAsString();
   int payload_size = kTotalMetadataSizeBytes;
-  payload_size += std::max(plaintext.length(), padded_request_size);
+  PS_ASSIGN_OR_RETURN(
+      std::string compressed_payload,
+      Compress(raw_proto.SerializeAsString(), compression_type));
+  payload_size += std::max(compressed_payload.length(), padded_request_size);
 
   // Create backing array for QuicheDataWriter and initialize the writer with
   // it.
@@ -68,16 +76,17 @@ std::string EncodeGetBidsPayload(const GetBidsProto& raw_proto,
   char encoded_payload[kEncodedDataSize];
   quiche::QuicheDataWriter writer(kEncodedDataSize, encoded_payload);
 
-  // Write '0' byte for version and compression algorithm.
-  writer.WriteUInt8('\0');
+  // Write 1 byte for version and compression algorithm.
+  int8_t framing_and_compression_byte = compression_type;
+  writer.WriteUInt8(framing_and_compression_byte);
   // Write the length of the payload using 4 bytes.
-  writer.WriteUInt32(plaintext.length());
+  writer.WriteUInt32(compressed_payload.length());
   // Write the actual payload.
-  writer.WriteStringPiece(plaintext);
+  writer.WriteStringPiece(compressed_payload);
   // Fill the rest of the array with padding.
   writer.WritePadding();
 
-  PS_VLOG(5) << "Payload successfully encoded...";
+  PS_VLOG(8) << "Payload successfully encoded...";
   return std::string(encoded_payload, kEncodedDataSize);
 }
 
@@ -107,14 +116,28 @@ absl::StatusOr<DecodedGetBidsPayload<GetBidsProto>> DecodeGetBidsPayload(
     return absl::InvalidArgumentError("Cannot read payload");
   }
 
+  PS_ASSIGN_OR_RETURN(CompressionType compression_type,
+                      ToCompressionType(first_byte & kCompressionTypeMask));
+
   GetBidsProto get_bids_proto;
-  if (!get_bids_proto.ParseFromString(payload)) {
-    return absl::InvalidArgumentError(
-        "Cannot parse proto from GetBids payload");
+  if (compression_type != CompressionType::kUncompressed) {
+    PS_ASSIGN_OR_RETURN(std::string decompressed,
+                        Decompress(compression_type, payload));
+    if (!get_bids_proto.ParseFromString(decompressed)) {
+      return absl::InvalidArgumentError(
+          "Cannot parse proto from GetBids payload");
+    }
+  } else {
+    if (!get_bids_proto.ParseFromArray(payload.data(), payload.length())) {
+      return absl::InvalidArgumentError(
+          "Cannot parse proto from GetBids payload");
+    }
   }
 
+  uint8_t version = first_byte & kPayloadVersionMask;
   DecodedGetBidsPayload<GetBidsProto> decoded_payload = {
-      .version_and_compression_num = first_byte,
+      .version = version,
+      .compression_type = compression_type,
       .payload_length = payload_length,
       .get_bids_proto = std::move(get_bids_proto)};
 

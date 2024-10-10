@@ -314,7 +314,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       const std::string& msg, ErrorCode error_code);
 
   ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata BuildAdWithBidMetadata(
-      const AdWithBid& input, absl::string_view interest_group_owner);
+      const AdWithBid& input, absl::string_view interest_group_owner,
+      bool k_anon_status);
+
+  bool GetKAnonStatusForAdWithBid(absl::string_view ad_key);
 
   CLASS_CANCELLATION_WRAPPER(FetchScoringSignals, enable_cancellation_,
                              request_context_, FinishWithStatus)
@@ -345,6 +348,15 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // The map can be freely used without a lock after all the bids have
   // completed.
   BuyerBidsResponseMap shared_buyer_bids_map_;
+
+  // Similar to BuyerBidsResponseMap, but holds copies of
+  // UpdateInterestGroupList and can represent buyers that have returned 0 bids.
+  // Multiple threads can be writing buyer ig update responses
+  // so this map gets locked when async_task_tracker_ updates the state of
+  // pending bids. The map can be freely used without a lock after all pending
+  // GetBidsResponses have completed -- fields from the map, and the map itself,
+  // may be moved in order to build the response.
+  UpdateGroupMap shared_ig_updates_map_;
 
   // Benchmarking Logger to benchmark the service
   std::unique_ptr<BenchmarkingLogger> benchmarking_logger_;
@@ -388,6 +400,10 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   const int max_buyers_solicited_;
 
   const bool enable_cancellation_;
+
+  const bool enable_kanon_;
+
+  bool enforce_kanon_;
 
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;

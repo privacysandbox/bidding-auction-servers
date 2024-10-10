@@ -52,6 +52,7 @@ constexpr int kAdRenderIdsIndex = 0;
 constexpr int kNumAdRetrievalUdfArguments = 4;
 constexpr int kNumKVLookupUdfArguments = 1;
 constexpr char kTestAdRenderId[] = "TestAdId";
+constexpr absl::string_view kTestConsentToken = "testConsentToken";
 
 using Request = GenerateProtectedAppSignalsBidsRequest;
 using RawRequest = GenerateProtectedAppSignalsBidsRequest::
@@ -121,6 +122,7 @@ class GenerateBidsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     CommonTestInit();
+
     TrustedServersConfigClient config_client({});
     config_client.SetOverride(kTrue, TEST_MODE);
     config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
@@ -156,6 +158,13 @@ class GenerateBidsReactorTest : public ::testing::Test {
     }
     // Create a request.
     auto request = CreateProtectedAppSignalsRequest(raw_request);
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::MetricContextMap<::google::protobuf::Message>(
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
+        ->Get(&request);
+    server_common::log::ServerToken(kTestConsentToken);
 
     // Run the request through the reactor and return the response.
     Response response;
@@ -170,9 +179,10 @@ class GenerateBidsReactorTest : public ::testing::Test {
     return raw_response;
   }
 
+  Request request_;
   grpc::CallbackServerContext context_;
   MockCryptoClientWrapper crypto_client_;
-  MockCodeDispatchClient dispatcher_;
+  MockV8DispatchClient dispatcher_;
   KVAsyncClientMock ad_retrieval_client_;
   KVAsyncClientMock kv_async_client_;
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
@@ -204,7 +214,7 @@ TEST_F(GenerateBidsReactorTest, WinningBidIsGenerated) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -238,7 +248,7 @@ TEST_F(GenerateBidsReactorTest, AdsRetrievalTimeoutIsUsed) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   RunReactorWithRequest(
       raw_request, BiddingServiceRuntimeConfig({
                        .enable_buyer_debug_url_generation = false,
@@ -286,7 +296,7 @@ TEST_F(GenerateBidsReactorTest, PrepareDataForAdRetrievalInputIsCorrect) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   RunReactorWithRequest(raw_request);
 }
 
@@ -335,7 +345,7 @@ TEST_F(GenerateBidsReactorTest, AdRetrievalClientInputIsCorrect) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -408,7 +418,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -440,7 +450,7 @@ TEST_F(GenerateBidsReactorTest, EgressPayloadAreNotPopulated) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -500,7 +510,7 @@ TEST_F(GenerateBidsReactorTest, ZeroBidsAreFiltered) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -548,7 +558,7 @@ TEST_F(GenerateBidsReactorTest,
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName);
+      kTestSeller, kTestPublisherName);
   RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and no dispatch to
@@ -580,7 +590,7 @@ TEST_F(GenerateBidsReactorTest, NoContextualAdsMeansAdRetrievalServiceInvoked) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, std::move(contextual_pas_data));
+      kTestSeller, kTestPublisherName, std::move(contextual_pas_data));
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
@@ -620,7 +630,7 @@ TEST_F(GenerateBidsReactorTest, ContextualAdsMeansKVServiceInvoked) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, std::move(contextual_pas_data));
+      kTestSeller, kTestPublisherName, std::move(contextual_pas_data));
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // One dispatch to `generateBids` is expected.
@@ -668,7 +678,7 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, std::move(contextual_pas_data));
+      kTestSeller, kTestPublisherName, std::move(contextual_pas_data));
   auto raw_response = RunReactorWithRequest(raw_request);
 
   // Only a single dispatch to `generateBids` is expected.
@@ -730,7 +740,7 @@ TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -771,7 +781,7 @@ TEST_F(GenerateBidsReactorTest,
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/false);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -812,7 +822,7 @@ TEST_F(GenerateBidsReactorTest,
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -876,7 +886,7 @@ TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -946,7 +956,7 @@ TEST_F(GenerateBidsReactorTest, SerializesMultipleFeatures) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -1004,7 +1014,7 @@ TEST_F(GenerateBidsReactorTest, EgressClearedIfOverLimit) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 
@@ -1051,7 +1061,7 @@ TEST_F(GenerateBidsReactorTest, ReturnsEmptyEgressVectorWhenNonePresent) {
   auto raw_request = CreateRawProtectedAppSignalsRequest(
       kTestAuctionSignals, kTestBuyerSignals,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
-      kSeller, kPublisherName, /*contextual_pas_data=*/absl::nullopt,
+      kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
   auto raw_response = RunReactorWithRequest(raw_request);
 

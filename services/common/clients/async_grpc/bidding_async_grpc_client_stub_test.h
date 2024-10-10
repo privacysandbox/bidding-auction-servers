@@ -216,6 +216,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
                               client_config, stub.get());
   absl::Notification notification;
   grpc::ClientContext context;
+  for (auto& [key, value] : sent_metadata) {
+    context.AddMetadata(key, value);
+  }
+
   auto status = class_under_test.ExecuteInternal(
       std::make_unique<RawRequest>(), &context,
       [&notification](

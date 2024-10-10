@@ -1,4 +1,4 @@
-# GCP Code Build for Bidding and Auction Services
+# GCP Cloud Build for Bidding and Auction Services
 
 ## Overview
 
@@ -13,13 +13,14 @@ be directly used for the
 The Bidding and Auction services can take around 2 hours (with 32 cores) to build. If you create an
 automated build pipeline that builds new Bidding and Auction service releases, you can avoid manual
 labor and increase operational efficiency. Binaries and docker images will be provided directly in
-the future.
+the future. The images built by Cloud Build replace the
+[build and packaging](https://github.com/privacysandbox/fledge-docs/blob/main/bidding_auction_services_gcp_guide.md#step-1-packaging)
+steps, but also require you to update the `bidding_image`, `auction_image`, `buyer_frontend_image`,
+and `seller_frontend_image` fields in your terraform to point to an image built by this process.
 
 ## Cloud Build Configuration
 
-### Prerequisites
-
-#### Connecting to Github
+### Connecting to Github
 
 First, follow the steps to
 [connect a Github repository](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen)
@@ -28,60 +29,28 @@ and create a host connection. You will need to clone the
 Github account before you can connect it to your GCP project's Cloud Build. Make sure that your
 fork, if updated automatically, also fetches the tags from the upstream repo -- that way, you can
 build directly from the semantically versioned tags. See [here](sync_bidding_auction_repo.yaml) for
-an example Github Action that handles syncing.
+an example
+[Github Action](https://docs.github.com/en/actions/writing-workflows/quickstart#creating-your-first-workflow)
+that handles syncing.
 
-#### Configuring an Image Repo
+Note: [Optional] you can express this step in
+[terraform](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger#example-usage---cloudbuild-trigger-repo)
+by modifing [cloud_build.tf](./cloud_build.tf) to take as input the necessary information to create
+a parent connection and your github repo.
 
-Please create an [Artifact Registry](https://cloud.google.com/artifact-registry) repo to hold all of
-the Bidding and Auction service images that will be created. Four directories will be created in the
-repo (`auction_serivce`, `bidding_service`, `seller_frontend_service`, and
-`buyer_frontend_service`). We suggest a default repo name of
-`us-docker.pkg.dev/${PROJECT_ID}/services`.
+### Terraform
 
-#### Service Account Permissions
+Fill out the `backend` block in [terraform.tf](./terraform.tf) and all fields in
+[cloud_build.auto.tfvars.json](./cloud_build.auto.tfvars.json).
 
-Navigate to the Cloud Build page in the GCP GUI and click on Settings. Make sure the service account
-permissions have 'Service Account User' enabled. Then, in IAM, additionally make sure that the
-service account has Artifact Registry Writer permissions. The build script will attempt to push
-images to the image repo specified using the service account for permissions.
+Then, in the same directory as this README, run:
 
-### Create a Trigger
+```bash
+terraform init
+terraform apply # You will have to type 'yes' if you approve of the plan.
+```
 
-#### Source
-
-You must create a build trigger. Starting with a
-[manual](https://cloud.google.com/build/docs/triggers#manual) or
-[Github](https://cloud.google.com/build/docs/triggers#github) trigger is recommended. Please make
-sure to use a '2nd gen' repository source type.
-
-Recommendation 1: Use a `Push a new tag` Event to build `.*` tags.
-
-Recommendation 2: Create a separate trigger for each `_BUILD_FLAVOR` (see below).
-
-#### Configuration
-
-1. Type: Cloud Build configuration file (yaml or json)
-1. Location: Repository
-
-    ```plaintext
-    production/packaging/gcp/cloud_build/cloudbuild.yaml
-    ```
-
-1. Substitution Variables
-
-    Note: these will override variables in the cloudbuild.yaml.
-
-    ```plaintext
-     key: _BUILD_FLAVOR
-     value: prod or non_prod. While 'prod' allows for attestation against production private keys, non_prod has enhanced logging.
-
-     key: _GCP_IMAGE_REPO
-     value: service images repo URI from prerequisites (default: us-docker.pkg.dev/${PROJECT_ID}/services)
-
-     key: _GCP_IMAGE_TAG
-     value: any tag (default: ${GIT_TAG}, only useful if building from a tag directly)
-    ```
-
-1. Service account: Use the account created [previously](#service-account-permissions).
-
-After configuring your Trigger, click Save. You may manually run it from the Triggers page.
+This will create triggers that automatically build `prod` and `non_prod` images of the Bidding and
+Auction Services every time a new release (tag) is pushed to the
+[connected repo](#connecting-to-github). The images will be pushed to an Artifact Registry of your
+choice, using the default compute service account.
