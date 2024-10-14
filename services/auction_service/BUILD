@@ -84,7 +84,7 @@ cc_library(
         "//services/auction_service/reporting/seller:seller_reporting_manager",
         "//services/auction_service/reporting/seller:top_level_seller_reporting_manager",
         "//services/auction_service/utils:proto_utils",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",

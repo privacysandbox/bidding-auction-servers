@@ -118,7 +118,10 @@ cc_library(
         "//services:__subpackages__",
         "//tools/secure_invoke:__subpackages__",
     ],
-    deps = ["@com_google_absl//absl/strings"],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "@com_google_absl//absl/strings",
+    ],
 )
 
 cc_test(

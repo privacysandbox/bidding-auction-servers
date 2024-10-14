@@ -40,6 +40,7 @@
 #include "utils/request_parser.h"
 
 #include "pytorch_parser.h"
+#include "validator.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -196,14 +197,11 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
     const InferenceRequest& inference_request = (*parsed_requests)[task_id];
     const std::string& model_key = inference_request.model_path;
-    AddMetric(predict_response, "kInferenceRequestCountByModel", 1, model_key);
     INFERENCE_LOG(INFO, request_context)
         << "Received inference request to model: " << model_key;
     absl::StatusOr<std::shared_ptr<torch::jit::script::Module>> model =
         store_->GetModel(model_key, request.is_consented());
     if (!model.ok()) {
-      AddMetric(predict_response, "kInferenceRequestFailedCountByModel", 1,
-                model_key);
       AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
                 std::string(kInferenceModelNotFoundError));
       INFERENCE_LOG(ERROR, request_context)
@@ -214,6 +212,13 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
           .error = Error{.error_type = Error::MODEL_NOT_FOUND,
                          .description = std::string(model.status().message())}};
     } else {
+      // Only log count by model for available models since there is no metric
+      // partition for unregistered models.
+      AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
+                model_key);
+      int batch_count = inference_request.inputs[0].tensor_shape[0];
+      AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
+                batch_count, model_key);
       tasks[task_id] = std::async(std::launch::async, &PredictInternal, *model,
                                   inference_request);
     }
@@ -296,6 +301,16 @@ absl::StatusOr<RegisterModelResponse> PyTorchModule::RegisterModel(
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_key, " has already been registered"));
   }
+
+  PS_ASSIGN_OR_RETURN(std::shared_ptr<torch::jit::script::Module> model,
+                      store_->ConstructModel(request));
+  if (!PyTorchGraphValidator(model->get_method("forward").graph())
+           .IsGraphAllowed()) {
+    return absl::InternalError(
+        absl::StrCat("Error: model ", model_key,
+                     " is not allowed due to using a disallowed operator"));
+  }
+
   PS_RETURN_IF_ERROR(store_->PutModel(model_key, request));
   return RegisterModelResponse();
 }

@@ -24,7 +24,7 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/seller/seller_reporting_manager.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -41,7 +41,7 @@ absl::Status PerformReportResultForComponentAuction(
     absl::AnyInvocable<
         void(const std::vector<absl::StatusOr<DispatchResponse>>&)>
         report_result_callback,
-    CodeDispatchClient& dispatcher);
+    V8DispatchClient& dispatcher);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif

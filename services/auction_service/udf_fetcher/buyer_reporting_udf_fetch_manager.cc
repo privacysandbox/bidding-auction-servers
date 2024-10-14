@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
@@ -107,14 +108,18 @@ absl::flat_hash_map<std::string, std::string> BuyerReportingUdfFetchManager::
 void BuyerReportingUdfFetchManager::LoadBuyerCode(
     const std::string& version, const std::string& fetched_blob) {
   std::string wrapped_code = buyer_code_wrapper_(fetched_blob);
-  absl::Status syncResult = dispatcher_.LoadSync(version, wrapped_code);
+  // Construct the success log message before calling LoadSync so that we can
+  // move the code.
+  std::string success_log_message =
+      absl::StrCat("Roma loaded buyer reporting udf version: ", version,
+                   " with contents:\n", wrapped_code);
+  absl::Status syncResult =
+      dispatcher_.LoadSync(version, std::move(wrapped_code));
   if (syncResult.ok()) {
-    PS_VLOG(kSuccess) << "Roma loaded buyer reporting udf version: " << version
-                      << " with contents:\n"
-                      << wrapped_code;
+    PS_VLOG(kSuccess) << success_log_message;
   } else {
     PS_LOG(ERROR, SystemLogContext())
-        << "Roma  LoadSync fail for buyer: " << syncResult;
+        << "Roma LoadSync fail for buyer: " << syncResult;
   }
 }
 

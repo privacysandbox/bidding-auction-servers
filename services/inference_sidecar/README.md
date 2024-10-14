@@ -92,8 +92,9 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
 
 -   In the B&A deployment terraform configuration, set runtime flags:
 
-    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/inference_sidecar_<module_name>` for AWS platform.
-        the suffix module name support currently are `pytorch_v2_1_1` and `tensorflow_v2_14_0`.
+    -   Set `INFERENCE_SIDECAR_BINARY_PATH` to `/server/bin/inference_sidecar_<module_name>` for AWS
+        platform. the suffix module name support currently are `pytorch_v2_1_1` and
+        `tensorflow_v2_14_0`.
     -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the S3 bucket that you have created. Note
         that this _not_ a url. For example, the bucket name can be "test_models".
     -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
@@ -113,6 +114,15 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
 
         `module_name` flag is required and should be one of "test", "tensorflow_v2_14_0", or
         "pytorch_v2_1_1". All other flags are optional.
+
+### Note on AWS B&A deployment with static model loading
+
+-   When using static model loading on AWS, the loading time directly correlates with the file size
+    in the S3 bucket. If loading times are prolonged, increasing the Terraform configuration value
+    `healthcheck_grace_period_sec` may be necessary to allow the model to fully load. Without this
+    adjustment, the instance may be rebooted by autoscaling.
+-   Currently we set `healthcheck_grace_period_sec` to 180s. Buyer module take 120s+ for bidding
+    initialization with loading 9 Gib model bucket.
 
 ### Note on B&A deployment without inference
 

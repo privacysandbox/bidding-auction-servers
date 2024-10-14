@@ -10,22 +10,22 @@
   "score": 2.12,
   "bid": 1.32,
   "isChaff": false,
-  "winReportingUrls": {
-    "buyerReportingUrls": {
-      "reportingUrl": "http://buying-ad-tech.com/report/ad1",
-      "interactionReportingUrls": {
+  "winReportingURLs": {
+    "buyerReportingURLs": {
+      "reportingURL": "http://buying-ad-tech.com/report/ad1",
+      "interactionReportingURLs": {
         "key1": "uri1"
       }
     },
-    "componentSellerReportingUrls": {
-      "reportingUrl": "http://selling-ad-tech.com/report/ad1-component-1",
-      "interactionReportingUrls": {
+    "componentSellerReportingURLs": {
+      "reportingURL": "http://selling-ad-tech.com/report/ad1-component-1",
+      "interactionReportingURLs": {
         "key1": "uri2"
       }
     },
-    "topLevelSellerReportingUrls": {
-      "reportingUrl": "http://toplevelseller.com/report/ad1",
-      "interactionReportingUrls": {
+    "topLevelSellerReportingURLs": {
+      "reportingURL": "http://toplevelseller.com/report/ad1",
+      "interactionReportingURLs": {
         "key1": "uri3"
       }
     }
@@ -35,16 +35,16 @@
     "message": "Success"
   },
   "kAnonWinnerJoinCandidates": {
-    "adRenderUrlHash": "ad-render-url-hash",
-    "adComponentRenderUrlsHash": ["ad-component-render-urls-hash"],
+    "adRenderURLHash": "ad-render-url-hash",
+    "adComponentRenderURLsHash": ["ad-component-render-urls-hash"],
     "reportingIdHash": "reporting-id-hash"
   },
   "kAnonWinnerPositionalIndex": 0,
   "kAnonGhostWinners": [
     {
       "kAnonJoinCandidates": {
-        "adRenderUrlHash": "ad-render-url-hash",
-        "adComponentRenderUrlsHash": ["ad-component-render-urls-hash"],
+        "adRenderURLHash": "ad-render-url-hash",
+        "adComponentRenderURLsHash": ["ad-component-render-urls-hash"],
         "reportingIdHash": "reporting-id-hash"
       },
       "interestGroupIndex": 23,
@@ -54,12 +54,14 @@
         "value": 51
       },
       "ghostWinnerForTopLevelAuction": {
-        "adRenderUrl": "an-ad-render-url",
-        "adComponentRenderUrls": ["ad-component-render-url1"],
+        "adRenderURL": "an-ad-render-url",
+        "adComponentRenderURLs": ["ad-component-render-url1"],
         "modifiedBid": 123.1234,
         "bidCurrency": "USD",
         "adMetadata": "arbitrary-data",
-        "buyerAndSellerReportingId": "test-id"
+        "buyerReportingId": "buyer-reporting-test-id",
+        "buyerAndSellerReportingId": "test-id",
+        "selectableBuyerAndSellerReportingId": "selectable-buyer-and-seller-test-id"
       }
     }
   ]

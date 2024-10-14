@@ -65,7 +65,6 @@ cc_library(
     ],
 )
 
-# TODO(b/327907675): Enable the concurrency test for TensorFlow.
 # TODO(b/327860817): Enable ASAN/TSAN continuous tests for inference.
 cc_test(
     name = "module_concurrency_test",

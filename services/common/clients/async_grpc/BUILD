@@ -21,6 +21,7 @@ cc_library(
     hdrs = [
         "request_config.h",
     ],
+    deps = ["//services/common/compression:compression_utils"],
 )
 
 cc_library(

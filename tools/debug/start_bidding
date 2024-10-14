@@ -17,15 +17,17 @@ print_usage() {
     cat << USAGE
 Usage:
   <options>
-  --enable_inference           Enable bidding with inference capabilities
-  --gdb                        Run with GDB
-  -h, --help                   Print usage information
+  --enable_inference                    Enable bidding with inference capabilities
+  --gdb                                 Run with GDB
+  --use-with-generateBid-file <path>    Use the provided generateBid file for bidding. Path MUST be relative to project root.
+  -h, --help                            Print usage information
 USAGE
     exit 0
 }
 
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
+declare GENERATE_BID_FILEPATH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     --gdb)
       USE_GDB=1
       shift
+      ;;
+    --use-with-generateBid-file)
+      GENERATE_BID_FILEPATH="$2"
+      shift 2
       ;;
     -h | --help) print_usage ;;
     *) print_usage ;;
@@ -61,28 +67,13 @@ function get_libcddl_path() {
   done
 }
 
-cddl_path=$(get_libcddl_path)
-echo "Using libcddl path: ${cddl_path}"
-
-source $(dirname "$0")/common
-declare -a -r DOCKER_RUN_ARGS=(
-  "--volume=${cddl_path}:/usr/lib/libcddl.so"
-  "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server"
-  "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
-  "--volume=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar_pytorch_v2_1_1:/inference_sidecar_pytorch_v2_1_1"
-  "--volume=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt:/generate_bid_model"
-  "--name=bidding"
-)
-export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
-
-echo $EXTRA_DOCKER_RUN_ARGS
-
 export INFERENCE_BIDDING_JS_PATH="/src/workspace/services/inference_sidecar/common/tools/debug/generateBidRunInference.js"
 
+# Set default buyer code fetch config
 export BUYER_CODE_FETCH_CONFIG=$(cat << END
 {
   "fetchMode": 0,
-  "biddingJsPath": "",
+  "biddingJsPath": "/generateBid.js",
   "biddingJsUrl": "${BIDDING_JS_URL}",
   "protectedAppSignalsBiddingJsUrl": "${BIDDING_JS_URL}",
   "biddingWasmHelperUrl": "",
@@ -90,7 +81,7 @@ export BUYER_CODE_FETCH_CONFIG=$(cat << END
   "urlFetchPeriodMs": 13000000,
   "urlFetchTimeoutMs": 30000,
   "enableBuyerDebugUrlGeneration": true,
-  "prepareDataForAdsRetrievalJsUrl": "",
+  "prepareDataForAdsRetrievalJsUrl": "${BIDDING_JS_URL}",
   "prepareDataForAdsRetrievalWasmHelperUrl": "",
   "enablePrivateAggregateReporting": false
 }
@@ -99,9 +90,15 @@ END
 
 export INFERENCE_ARGS=""
 
+# Update buyer code fetch config if using JS file
+if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
+  BUYER_CODE_FETCH_CONFIG=$(echo ${BUYER_CODE_FETCH_CONFIG} | ${PROJECT_ROOT}/builders/tools/jq '.fetchMode = 2')
+fi
+
+# Update buyer code fetch config if enabling inference
 if [[ ${ENABLE_INFERENCE} -eq 1 ]]; then
   INFERENCE_ARGS=$(cat << END
---inference_sidecar_binary_path="/inference_sidecar_pytorch_v2_1_1" \
+--inference_sidecar_binary_path="/server/bin/inference_sidecar_pytorch_v2_1_1" \
 --inference_sidecar_runtime_config='{
   "num_interop_threads": 4,
   "num_intraop_threads": 4,
@@ -123,13 +120,13 @@ END
 fi
 
 export SERVER_START_CMD=$(cat << END
-/server \
+/server/bin/server \
 --enable_bidding_service_benchmark="true" \
 --init_config_client="false" --port=50057 \
---js_num_workers=4 \
+--udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
---telemetry_config="mode: EXPERIMENT" \
+--telemetry_config="mode: OFF" \
 --roma_timeout_ms="120000" \
 --egress_schema_fetch_config='{
       "fetchMode": 0,
@@ -139,8 +136,8 @@ export SERVER_START_CMD=$(cat << END
       "urlFetchTimeoutMs": 30000,
     }' \
 --buyer_code_fetch_config='${BUYER_CODE_FETCH_CONFIG}' \
---enable_protected_app_signals="true" \
---enable_otel_based_logging="true" \
+--enable_protected_app_signals="false" \
+--enable_otel_based_logging="false" \
 --consented_debug_token="test_token" \
 --enable_protected_audience="true" \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \
@@ -153,9 +150,37 @@ END
 )
 
 if [[ ${USE_GDB} -eq 1 ]]; then
+  cddl_path=$(get_libcddl_path)
+  echo "Using libcddl path: ${cddl_path}"
+
+  source $(dirname "$0")/common
+  declare -a -r DOCKER_RUN_ARGS=(
+    "--volume=${cddl_path}:/usr/lib/libcddl.so"
+    "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server/bin/server"
+    "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
+    "--volume=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar_pytorch_v2_1_1:/server/bin/inference_sidecar_pytorch_v2_1_1"
+    "--volume=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt:/generate_bid_model"
+    "--name=bidding"
+  )
+  if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
+    DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
+  fi
+
+  export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
+
+  echo $EXTRA_DOCKER_RUN_ARGS
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined  --docker-network host --image build-debian --cmd  "${SERVER_START_CMD}"
+  docker_image_uri="$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  declare -a DOCKER_RUN_ARGS=(
+      "--network=host"
+      "--security-opt=seccomp=unconfined"
+      "--security-opt=apparmor=unconfined"
+  )
+  if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
+    DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
+  fi
+  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

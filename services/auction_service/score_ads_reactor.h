@@ -34,7 +34,7 @@
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/loggers/request_log_context.h"
@@ -92,7 +92,7 @@ class ScoreAdsReactor
           ScoreAdsResponse, ScoreAdsResponse::ScoreAdsRawResponse> {
  public:
   explicit ScoreAdsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const ScoreAdsRequest* request, ScoreAdsResponse* response,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -167,8 +167,9 @@ class ScoreAdsReactor
 
   void DispatchReportingRequest(
       const ReportingDispatchRequestData& dispatch_request_data);
-  // [[deprecated("DEPRECATED for Protected Audience. Please use
-  // PerformReportingWithSellerAndBuyerCodeIsolation instead")]]
+  [[deprecated(
+      "DEPRECATED for Protected Audience. Please use "
+      "PerformReportingWithSellerAndBuyerCodeIsolation instead")]]
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
 
@@ -269,6 +270,11 @@ class ScoreAdsReactor
                              context_, FinishWithStatus)
 
   grpc::CallbackServerContext* context_;
+
+  // Dispatches execution requests to a library that runs V8 workers in
+  // separate processes.
+  V8DispatchClient& dispatcher_;
+  std::vector<DispatchRequest> dispatch_requests_;
 
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's

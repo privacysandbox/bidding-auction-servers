@@ -29,6 +29,7 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/utils/egress.h"
+#include "services/bidding_service/utils/validation.h"
 #include "services/common/feature_flags.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/error_categories.h"
@@ -66,13 +67,6 @@ inline void PopulateArgInRomaRequest(
     absl::string_view arg, int index,
     std::vector<std::shared_ptr<std::string>>& request) {
   request[index] = std::make_shared<std::string>((arg.empty()) ? "\"\"" : arg);
-}
-
-// Gets string information about a bid's well-formed-ness.
-inline std::string GetBidDebugInfo(const ProtectedAppSignalsAdWithBid& bid) {
-  return absl::StrCat("Is non-zero bid: ", bid.bid() > 0.0f,
-                      ", Num egress bytes: ", bid.egress_payload().size(),
-                      ", has debug report urls: ", bid.has_debug_report_urls());
 }
 
 absl::Status PopulateValuesForEgressFeatures(
@@ -178,7 +172,7 @@ absl::StatusOr<std::string> SerializeEgressFeatures(
 }  // namespace
 
 ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
-    grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+    grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
     const BiddingServiceRuntimeConfig& runtime_config,
     const GenerateProtectedAppSignalsBidsRequest* request,
     GenerateProtectedAppSignalsBidsResponse* response,
@@ -193,9 +187,10 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
                               GenerateProtectedAppSignalsBidsResponse,
                               GenerateProtectedAppSignalsBidsResponse::
                                   GenerateProtectedAppSignalsBidsRawResponse>(
-          dispatcher, runtime_config, request, response, key_fetcher_manager,
+          runtime_config, request, response, key_fetcher_manager,
           crypto_client),
       context_(context),
+      dispatcher_(dispatcher),
       ad_retrieval_async_client_(ad_retrieval_async_client),
       kv_async_client_(kv_async_client),
       ad_bids_retrieval_timeout_ms_(runtime_config.ad_retrieval_timeout_ms),
@@ -207,6 +202,14 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
       egress_schema_cache_(egress_schema_cache),
       limited_egress_schema_cache_(limited_egress_schema_cache) {
   DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
+  CHECK_OK([this]() {
+    PS_ASSIGN_OR_RETURN(metric_context_,
+                        metric::BiddingContextMap()->Remove(request_));
+    if (log_context_.is_consented()) {
+      metric_context_->SetConsented(raw_request_.log_context().generation_id());
+    }
+    return absl::OkStatus();
+  }()) << "BiddingContextMap()->Get(request) should have been called";
 }
 
 absl::Status ProtectedAppSignalsGenerateBidsReactor::ValidateRomaResponse(
@@ -427,16 +430,28 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
 
   dispatch_requests_.emplace_back(CreateGenerateBidsRequest(
       std::move(result), prepare_data_for_ads_retrieval_response));
+  absl::Time start_js_execution_time = absl::Now();
   ExecuteRomaRequests<ProtectedAppSignalsAdWithBid>(
       dispatch_requests_, kDispatchHandlerFunctionNameWithCodeWrapper,
-      [this](const std::string& response) {
+      [this, start_js_execution_time](const std::string& response) {
+        int js_execution_time_ms =
+            (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
+        LogIfError(
+            metric_context_
+                ->LogHistogram<metric::kPASGenerateBidJSExecutionDuration>(
+                    js_execution_time_ms));
         return ParseProtectedSignalsGenerateBidsResponse(response);
       },
       [this](const ProtectedAppSignalsAdWithBid& bid) {
-        if (!IsValidBid(bid)) {
-          PS_VLOG(kNoisyWarn, log_context_)
-              << "Skipping protected app signals bid (" << GetBidDebugInfo(bid)
-              << ")";
+        LogIfError(
+            metric_context_->AccumulateMetric<metric::kBiddingTotalBidsCount>(
+                1));
+        if (absl::Status validation_status = IsValidProtectedAppSignalsBid(bid);
+            !validation_status.ok()) {
+          LogIfError(
+              metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
+                  1.0));
+          PS_VLOG(kNoisyWarn, log_context_) << validation_status.message();
         } else {
           PS_VLOG(kNoisyInfo, log_context_)
               << "Successful non-zero protected app signals bid received";
@@ -516,9 +531,16 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
 void ProtectedAppSignalsGenerateBidsReactor::StartNonContextualAdsRetrieval() {
   PS_VLOG(8, log_context_) << __func__;
   embeddings_requests_.emplace_back(CreatePrepareDataForAdsRetrievalRequest());
+  absl::Time start_js_execution_time = absl::Now();
   ExecuteRomaRequests<std::string>(
       embeddings_requests_, kPrepareDataForAdRetrievalHandler,
-      [](const std::string& response) -> absl::StatusOr<std::string> {
+      [this, start_js_execution_time](
+          const std::string& response) -> absl::StatusOr<std::string> {
+        int js_execution_time_ms =
+            (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
+        LogIfError(metric_context_->LogHistogram<
+                   metric::kPASPrepareDataForRetrievalJSExecutionDuration>(
+            js_execution_time_ms));
         PS_ASSIGN_OR_RETURN(rapidjson::Document document,
                             ParseJsonString(response));
         return SerializeJsonDoc(document["response"]);

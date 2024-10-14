@@ -34,11 +34,13 @@ using GenerateProtectedAppSignalsBidsRawRequest =
         GenerateProtectedAppSignalsBidsRawRequest;
 using kv_server::v2::GetValuesResponse;
 
+constexpr char kTestConsentToken[] = "testConsentToken";
 constexpr char kTestAuctionSignals[] =
     R"json({"auction_signal": "test 1"})json";
 constexpr char kTestBuyerSignals[] = R"json({"buyer_signal": "test 2"})json";
-constexpr char kSeller[] = "https://www.example-ssp.com";
-constexpr char kPublisherName[] = "www.example-publisher.com";
+constexpr char kTestSeller[] = "https://www.example-ssp.com";
+constexpr char kTestTopLevelSeller[] = "https://www.example-top-ssp.com";
+constexpr char kTestPublisherName[] = "www.example-publisher.com";
 constexpr char kKeyId[] = "key_id";
 constexpr char kSecret[] = "secret";
 constexpr char kTestRenderUrl[] = "https://adTech.com/ad?id=123";
@@ -133,7 +135,7 @@ absl::Status MockRomaExecution(std::vector<DispatchRequest>& batch,
 // Sets up expectations for the batch requests for UDFs that are to be run in
 // Roma for Protected App Signals workflow.
 void SetupProtectedAppSignalsRomaExpectations(
-    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    MockV8DispatchClient& dispatcher, int& num_roma_dispatches,
     const absl::optional<std::string>&
         prepare_data_for_ad_retrieval_udf_response = absl::nullopt,
     const absl::optional<std::string>& generate_bid_udf_response =
@@ -142,7 +144,7 @@ void SetupProtectedAppSignalsRomaExpectations(
 // Sets up expectations for the batch requests for UDFs that are to be run in
 // Roma for Protected App Signals contextual ads workflow.
 void SetupContextualProtectedAppSignalsRomaExpectations(
-    MockCodeDispatchClient& dispatcher, int& num_roma_dispatches,
+    MockV8DispatchClient& dispatcher, int& num_roma_dispatches,
     absl::optional<std::string> generate_bid_udf_response = absl::nullopt);
 
 // Sets up expectations on the ad retrieval client mock.

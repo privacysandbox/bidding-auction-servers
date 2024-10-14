@@ -27,7 +27,7 @@ Note the following while building and deploying the services:
         are usually recommended to be more compute optimized.
     -   **Min_replicas_per_service_region**
     -   **Max_replicas_per_service_region**
-    -   **JS_NUM_WORKERS** : Specify the number Roma workers (equal to the vCPUs in the machine)
+    -   **UDF_NUM_WORKERS** : Specify the number Roma workers (equal to the vCPUs in the machine)
     -   **JS_WORKER_QUEUE_LEN**: Specify the Roma queue length.
 
         The recommended configurations for scaling will be provided in a different explainer.

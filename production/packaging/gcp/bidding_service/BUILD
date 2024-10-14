@@ -13,6 +13,8 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@google_privacysandbox_servers_common//src/roma/byob/config:container.bzl", "roma_container_dir", "roma_container_root_dir")
+load("@google_privacysandbox_servers_common//third_party:container_deps.bzl", "get_user")
 load(
     "@io_bazel_rules_docker//container:container.bzl",
     "container_image",
@@ -26,6 +28,8 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+
+user = get_user("root")
 
 pkg_files(
     name = "server_executables",
@@ -128,6 +132,41 @@ container_layer(
     ],
 )
 
+# gVisor dependencies
+pkg_files(
+    name = "gvisor_config_file",
+    srcs = ["@google_privacysandbox_servers_common//src/roma/byob/container:container_config"],
+    attributes = pkg_attributes(mode = "0600"),
+)
+
+pkg_tar(
+    name = "gvisor_config_tar",
+    srcs = [":gvisor_config_file"],
+    owner = "{}.{}".format(
+        user.uid,
+        user.gid,
+    ),
+)
+
+container_layer(
+    name = "gvisor_config_layer",
+    directory = "{}".format(roma_container_dir),
+    tars = [
+        ":gvisor_config_tar",
+    ],
+)
+
+container_layer(
+    name = "byob_server_container_layer",
+    directory = "{roma_container_dir}/{root_dir}".format(
+        roma_container_dir = roma_container_dir,
+        root_dir = roma_container_root_dir,
+    ),
+    tars = [
+        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_server_container_{user}.tar".format(user = user.user),
+    ],
+)
+
 container_image(
     name = "server_docker_image",
     base = select({
@@ -145,12 +184,21 @@ container_image(
         ":cddl_lib_layer",
         ":cddl_specs_layer",
         ":server_binary_layer",
+        ":byob_server_container_layer",
+        ":gvisor_config_layer",
     ] + select({
         "//:e2e_build": [
         ],
         "//conditions:default": [],
     }),
     ports = ["50051"],
+    tars = [
+        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
+        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
+        "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
+        "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_tar_{user}".format(user = user.user),
+        "//tools/udf_samples:sample_udf_execs_tar",
+    ],
 )
 
 container_test(

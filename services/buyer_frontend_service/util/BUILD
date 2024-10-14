@@ -31,8 +31,44 @@ cc_library(
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+    ],
+)
+
+cc_library(
+    name = "bidding_signals",
+    srcs = [
+        "bidding_signals.cc",
+    ],
+    hdrs = [
+        "bidding_signals.h",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/buyer_frontend_service/data:buyer_frontend_data",
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "bidding_signals_test",
+    size = "small",
+    testonly = True,
+    srcs = [
+        "bidding_signals_test.cc",
+    ],
+    deps = [
+        ":bidding_signals",
+        "//services/common/test:random",
+        "//services/common/test/utils:test_utils",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -44,6 +80,7 @@ cc_test(
         "proto_factory_test.cc",
     ],
     deps = [
+        ":bidding_signals",
         ":buyer_frontend_utils",
         "//services/common/test:random",
         "//services/common/test/utils:test_utils",

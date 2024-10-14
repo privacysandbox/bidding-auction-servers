@@ -63,6 +63,12 @@ class ModelFetcherMetric {
     return model_registration_failure_count_by_error_code_;
   }
 
+  static absl::flat_hash_map<std::string, double> GetAvailableModels()
+      ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    return available_models_;
+  }
+
   static void IncrementCloudFetchFailedCountByStatus(
       absl::StatusCode error_code) ABSL_LOCKS_EXCLUDED(mu_) {
     absl::MutexLock lock(&mu_);
@@ -100,6 +106,15 @@ class ModelFetcherMetric {
         error_code)];
   }
 
+  static void UpdateAvailableModels(const std::vector<std::string>& models)
+      ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    available_models_.clear();
+    for (const auto& model : models) {
+      ++available_models_[model];
+    }
+  }
+
  private:
   ABSL_CONST_INIT static inline absl::Mutex mu_{absl::kConstInit};
 
@@ -116,6 +131,9 @@ class ModelFetcherMetric {
 
   static inline absl::flat_hash_map<std::string, double>
       model_registration_failure_count_by_error_code_ ABSL_GUARDED_BY(mu_){};
+
+  static inline absl::flat_hash_map<std::string, double> available_models_
+      ABSL_GUARDED_BY(mu_){};
 };
 
 // Adds model fetcher metrics to a metric context map to bidding server.
@@ -133,9 +151,21 @@ inline absl::Status AddModelFetcherMetricToBidding() {
   PS_RETURN_IF_ERROR(context_map->AddObserverable(
       metric::kInferenceRecentModelRegistrationFailure,
       inference::ModelFetcherMetric::GetRecentModelRegistrationFailure));
+  PS_RETURN_IF_ERROR(context_map->AddObserverable(
+      metric::kInferenceAvailableModels,
+      inference::ModelFetcherMetric::GetAvailableModels));
   return context_map->AddObserverable(
       metric::kInferenceModelRegistrationFailedCountByStatus,
       inference::ModelFetcherMetric::GetModelRegistrationFailedCountByStatus);
+}
+
+inline void SetModelPartition(const std::vector<std::string>& partitions) {
+  auto* context_map = metric::BiddingContextMap();
+  context_map->ResetPartitionAsync(
+      {metric::kInferenceRequestCountByModel.name_,
+       metric::kInferenceRequestDurationByModel.name_,
+       metric::kInferenceRequestFailedCountByModel.name_},
+      partitions, partitions.size());
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

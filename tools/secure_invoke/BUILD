@@ -87,9 +87,6 @@ cc_test(
     name = "secure_invoke_lib_test",
     size = "large",
     srcs = ["secure_invoke_lib_test.cc"],
-    tags = [
-        "flaky",
-    ],
     deps = [
         ":flags",
         ":secure_invoke_lib",

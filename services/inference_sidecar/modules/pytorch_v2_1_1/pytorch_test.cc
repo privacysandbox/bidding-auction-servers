@@ -277,9 +277,39 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess) {
       torch_module->Predict(predict_request);
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
+
+constexpr char kSimpleRequest2Models[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},{
+    "model_path" : "./benchmark_models/pcvr1",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+
+    }
+  ]
+}
+]
+    })json";
 
 TEST(PyTorchModulePredictTest, PredictSimpleSuccess_ValidateMetrics) {
   InferenceSidecarRuntimeConfig config;
@@ -297,14 +327,26 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess_ValidateMetrics) {
       torch_module->Predict(predict_request);
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
-  CheckMetric(result->metrics(), "kInferenceRequestCount", 1);
-  CheckMetric(result->metrics(), "kInferenceRequestSize", 204);
-  CheckMetric(result->metrics(), "kInferenceResponseSize", 318);
-  auto it = result->metrics().find("kInferenceRequestDuration");
-  ASSERT_NE(it, result->metrics().end())
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
+  CheckMetricList(result->metrics_list(), "kInferenceRequestCount", 0, 1);
+  CheckMetricList(result->metrics_list(), "kInferenceRequestSize", 0, 204);
+  CheckMetricList(result->metrics_list(), "kInferenceResponseSize", 0, 386);
+  CheckMetricList(result->metrics_list(), "kInferenceRequestBatchCountByModel",
+                  0, 1);
+  auto it = result->metrics_list().find("kInferenceRequestDuration");
+  ASSERT_NE(it, result->metrics_list().end())
       << "kInferenceRequestDuration metric is missing.";
+
+  predict_request.set_input(kSimpleRequest2Models);
+  const absl::StatusOr<PredictResponse> result2 =
+      torch_module->Predict(predict_request);
+  ASSERT_TRUE(result2.ok());
+  ASSERT_FALSE(result2->output().empty());
+  ASSERT_FALSE(result2->metrics_list().empty());
+  // Don't accumulate metrics for unregistered models.
+  ASSERT_TRUE(result2->metrics_list().find("./benchmark_models/pcvr") ==
+              result2->metrics_list().end());
 }
 
 TEST(PyTorchModulePredictTest, PredictConsentedRequestSuccess) {
@@ -324,8 +366,8 @@ TEST(PyTorchModulePredictTest, PredictConsentedRequestSuccess) {
       torch_module->Predict(predict_request);
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result->output(), kSimpleRequestResponse);
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kNotRegisteredModelRequest[] = R"json({
@@ -414,8 +456,8 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccessShape1x2) {
             "{\"response\":[{\"model_path\":\"simple_model\",\"tensors\":[{"
             "\"tensor_shape\":[1,2],\"data_type\":\"DOUBLE\",\"tensor_"
             "content\":[3.14,2.718]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kSimpleRequestBatchSize2[] = R"json({
@@ -452,8 +494,8 @@ TEST(PyTorchModulePredictTest, PredictSimpleBatchSize2Success) {
             "{\"response\":[{\"model_path\":\"simple_model\",\"tensors\":[{"
             "\"tensor_shape\":[2,1],\"data_type\":\"DOUBLE\",\"tensor_"
             "content\":[3.14,2.718]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kSameModelSameBatchSizeMultipleRequests[] = R"json({
@@ -505,8 +547,8 @@ TEST(PyTorchModulePredictTest,
       "shape\":[1],\"data_type\":\"DOUBLE\",\"tensor_content\":[3.14]}]},{"
       "\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_shape\":[1],"
       "\"data_type\":\"DOUBLE\",\"tensor_content\":[2.718]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kSameModelVariedBatchSizesMultipleRequests[] = R"json({
@@ -558,8 +600,8 @@ TEST(PyTorchModulePredictTest,
       "shape\":[2,1],\"data_type\":\"DOUBLE\",\"tensor_content\":[3.14,1.0]}]},"
       "{\"model_path\":\"simple_model\",\"tensors\":[{\"tensor_shape\":[3,1],"
       "\"data_type\":\"DOUBLE\",\"tensor_content\":[2.718,1.0,1.0]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kRequestsWithMultipleInvalidInputs[] = R"json({
@@ -740,8 +782,8 @@ TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize1Success) {
             "{\"response\":[{\"model_path\":\"e2e_model1\",\"tensors\":[{"
             "\"tensor_shape\":[1,1],\"data_type\":\"FLOAT\",\"tensor_content\":"
             "[0.4846605658531189]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kVariedInputsRequestBatchSize2[] = R"json({
@@ -836,8 +878,8 @@ TEST(PyTorchModulePredictTest, PredictVariedInputsBatchSize2Success) {
             "{\"response\":[{\"model_path\":\"e2e_model1\",\"tensors\":[{"
             "\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_content\":"
             "[0.5412338972091675,0.4757022559642792]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 TEST(PyTorchModulePredictTest, RegisterModelWithWarmupDataSuccess) {
@@ -1052,8 +1094,8 @@ TEST(PyTorchModulePredictTest, PredictMixedInputsMixedOutputsSuccess) {
       "21080102026462556,-0.2136428952217102]},{\"tensor_shape\":[1,1],"
       "\"data_"
       "type\":\"INT64\",\"tensor_content\":[0]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kVariedInputsMultipleModelsRequest[] = R"json({
@@ -1176,9 +1218,9 @@ constexpr char kVariedInputsMultipleModelsRequest[] = R"json({
         2, 10
       ],
       "tensor_content": [
-        "0.7862", "0.6386", "0.9695", "0.0469", "0.5807", "0.8201", "0.8321",
-        "0.1021", "0.6779", "0.2152", "0.4805", "0.3957", "0.0825", "0.0230",
-        "0.1711", "0.7269", "0.7287", "0.0651", "0.3122", "0.5082"
+        "0.0677", "0.7817", "0.9529", "0.5884", "0.1285", "0.6166", "0.6815",
+        "0.8959", "0.2340", "0.0520", "0.7197", "0.5311", "0.3371", "0.2905",
+        "0.2422", "0.9047", "0.4137", "0.8606", "0.9463", "0.5633"
       ]
     },
     {
@@ -1188,9 +1230,9 @@ constexpr char kVariedInputsMultipleModelsRequest[] = R"json({
         2, 10
       ],
       "tensor_content": [
-        "0.0677", "0.7817", "0.9529", "0.5884", "0.1285", "0.6166", "0.6815",
-        "0.8959", "0.2340", "0.0520", "0.7197", "0.5311", "0.3371", "0.2905",
-        "0.2422", "0.9047", "0.4137", "0.8606", "0.9463", "0.5633"
+        "0.7862", "0.6386", "0.9695", "0.0469", "0.5807", "0.8201", "0.8321",
+        "0.1021", "0.6779", "0.2152", "0.4805", "0.3957", "0.0825", "0.0230",
+        "0.1711", "0.7269", "0.7287", "0.0651", "0.3122", "0.5082"
       ]
     }
   ]
@@ -1225,9 +1267,9 @@ TEST(PyTorchModulePredictTest,
       "shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_content\":[0."
       "5412338972091675,0.4757022559642792]}]},{\"model_path\":\"e2e_model2\","
       "\"tensors\":[{\"tensor_shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_"
-      "content\":[0.3857767879962921,0.458008348941803]}]}]}");
-  ASSERT_FALSE(result->metrics().empty());
-  EXPECT_EQ(result->metrics().size(), 6);
+      "content\":[0.5315820574760437,0.48445120453834536]}]}]}");
+  ASSERT_FALSE(result->metrics_list().empty());
+  EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
 constexpr char kStatefulModelRequest[] = R"json({
@@ -1307,8 +1349,8 @@ TEST(PyTorchModuleConcurrencyTest,
                   "{\"response\":[{\"model_path\":\"simple_model\",\"tensors\":"
                   "[{\"tensor_shape\":[1],\"data_type\":\"DOUBLE\",\"tensor_"
                   "content\":[3.14]}]}]}");
-        ASSERT_FALSE(result->metrics().empty());
-        EXPECT_EQ(result->metrics().size(), 6);
+        ASSERT_FALSE(result->metrics_list().empty());
+        EXPECT_EQ(result->metrics_list().size(), 7);
       }
     }));
   }
@@ -1358,9 +1400,9 @@ TEST(PyTorchModuleConcurrencyTest,
                   "content\":[0.5412338972091675,0.4757022559642792]}]},{"
                   "\"model_path\":\"e2e_model2\",\"tensors\":[{\"tensor_"
                   "shape\":[2,1],\"data_type\":\"FLOAT\",\"tensor_content\":[0."
-                  "3857767879962921,0.458008348941803]}]}]}");
-        ASSERT_FALSE(result->metrics().empty());
-        EXPECT_EQ(result->metrics().size(), 6);
+                  "5315820574760437,0.48445120453834536]}]}]}");
+        ASSERT_FALSE(result->metrics_list().empty());
+        EXPECT_EQ(result->metrics_list().size(), 7);
       }
     }));
   }
@@ -1431,8 +1473,8 @@ TEST_F(PyTorchModuleResetModelTest, NoResetWithStatefulModel) {
             "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[",
             count, "]}")))
         << response.output();
-    ASSERT_FALSE(response.metrics().empty());
-    EXPECT_EQ(response.metrics().size(), 6);
+    ASSERT_FALSE(response.metrics_list().empty());
+    EXPECT_EQ(response.metrics_list().size(), 7);
   }
 }
 
@@ -1459,8 +1501,8 @@ TEST_F(PyTorchModuleResetModelTest, ResetSuccessWithStatefulModel) {
         response.output(),
         "{\"tensor_shape\":[],\"data_type\":\"INT32\",\"tensor_content\":[1]}"))
         << response.output();
-    ASSERT_FALSE(response.metrics().empty());
-    EXPECT_EQ(response.metrics().size(), 6);
+    ASSERT_FALSE(response.metrics_list().empty());
+    EXPECT_EQ(response.metrics_list().size(), 7);
     absl::SleepFor(absl::Seconds(1));
   }
 }

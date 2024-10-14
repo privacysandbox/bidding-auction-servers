@@ -47,7 +47,16 @@ namespace {
 constexpr char kTestTrustedBiddingSignals[] =
     R"json({"trusted_bidding_signal_key": "some_trusted_bidding_signal_value"})json";
 constexpr char kTopLevelSeller[] = "https://www.example-top-ssp.com";
-constexpr char kTestConsentToken[] = "testConsentToken";
+constexpr char kUserBiddingSignals[] =
+    R"JSON({"userBiddingSignalKey": 123})JSON";
+constexpr char bar_browser_signals[] =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
+constexpr char kExpectedBrowserSignalsWithRecencyMs[] =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
+absl::string_view kComponentBrowserSignals =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
+absl::string_view kComponentBrowserSignalsWithRecencyMs =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
 
 using ::google::protobuf::TextFormat;
 using ::google::protobuf::util::MessageToJsonString;
@@ -204,7 +213,7 @@ std::string GetComponentAuctionResponse(
 // TODO(b/257649113): Incorporate new fields in InterestGroupForBidding.
 class GenerateBidsReactorTest : public testing::Test {
  public:
-  MockCodeDispatchClient dispatcher_;
+  MockV8DispatchClient dispatcher_;
 
  protected:
   void SetUp() override {
@@ -212,8 +221,9 @@ class GenerateBidsReactorTest : public testing::Test {
     CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
-    metric::MetricContextMap<GenerateBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+    metric::MetricContextMap<google::protobuf::Message>(
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
     server_common::log::ServerToken(kTestConsentToken);
 
@@ -262,9 +272,6 @@ class GenerateBidsReactorTest : public testing::Test {
       key_fetcher_manager_;
 };
 
-constexpr char kUserBiddingSignals[] =
-    R"JSON({"userBiddingSignalKey": 123})JSON";
-
 IGForBidding GetIGForBiddingFoo() {
   IGForBidding interest_group;
   interest_group.set_name("ig_name_Foo");
@@ -283,11 +290,6 @@ IGForBidding GetIGForBiddingFoo() {
       MakeRandomPreviousWins(interest_group.ad_render_ids(), true));
   return interest_group;
 }
-
-absl::string_view kComponentBrowserSignals =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
-absl::string_view kComponentBrowserSignalsWithRecencyMs =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
 
 IGForBidding GetIGForBiddingBar(bool make_browser_signals = true) {
   IGForBidding interest_group;
@@ -308,11 +310,6 @@ IGForBidding GetIGForBiddingBar(bool make_browser_signals = true) {
   }
   return interest_group;
 }
-
-constexpr char bar_browser_signals[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
-constexpr char kExpectedBrowserSignalsWithRecencyMs[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
 
 // Allows re-serialization.
 void CheckForAndReplaceUBSWithEmptyString(
@@ -370,8 +367,8 @@ void BuildRawRequest(const std::vector<IGForBidding>& interest_groups_to_add,
   raw_request.set_auction_signals(auction_signals);
   raw_request.set_buyer_signals(buyer_signals);
   raw_request.set_enable_debug_reporting(enable_debug_reporting);
-  raw_request.set_seller(kSeller);
-  raw_request.set_publisher_name(kPublisherName);
+  raw_request.set_seller(kTestSeller);
+  raw_request.set_publisher_name(kTestPublisherName);
   if (enable_adtech_code_logging) {
     raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
     raw_request.mutable_consented_debug_config()->set_is_consented(true);

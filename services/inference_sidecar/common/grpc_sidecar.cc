@@ -45,6 +45,10 @@
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
+// Uses 600000 ms for 10 mins.
+constexpr int kGrpcServerHandshakeTimeoutMs = 600000;
+constexpr int kGrpcKeepAliveTimeoutMs = 600000;
+
 // Inference service implementation.
 class InferenceServiceImpl final : public InferenceService::Service {
  public:
@@ -81,8 +85,8 @@ class InferenceServiceImpl final : public InferenceService::Service {
       ABSL_LOG(ERROR) << predict_response.status().message();
       return server_common::FromAbslStatus(predict_response.status());
     }
-    *(response->mutable_metrics()) =
-        std::move(*predict_response->mutable_metrics());
+    *(response->mutable_metrics_list()) =
+        std::move(*predict_response->mutable_metrics_list());
     response->set_output(std::move(*predict_response->mutable_output()));
 
     return grpc::Status::OK;
@@ -132,7 +136,16 @@ absl::Status EnforceModelResetProbability(
 absl::Status Run(const InferenceSidecarRuntimeConfig& config) {
   SandboxWorker worker;
   grpc::ServerBuilder builder;
-  // Set the max receive size to unlimited; The default max size is only 4MB.
+  // Sets timeouts to prevent connection closure during slow model loading.
+  // Along with the keepalive timeout, a handshake timeout is necessary
+  // to handle cases where cloud model fetching on the bidding server delays the
+  // handshake process, ensuring the server doesn't time out while waiting for
+  // the handshake.
+  builder.AddChannelArgument(GRPC_ARG_SERVER_HANDSHAKE_TIMEOUT_MS,
+                             kGrpcServerHandshakeTimeoutMs);
+  builder.AddChannelArgument(GRPC_ARG_KEEPALIVE_TIMEOUT_MS,
+                             kGrpcKeepAliveTimeoutMs);
+  // Sets the max receive size to unlimited; The default max size is only 4MB.
   builder.SetMaxReceiveMessageSize(-1);
 
   if (!config.module_name().empty() &&

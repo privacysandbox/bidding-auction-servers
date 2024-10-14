@@ -157,10 +157,10 @@ void AsyncReporterStub::DoReport(
     absl::AnyInvocable<void(absl::StatusOr<absl::string_view>) &&>
         done_callback) const {}
 
-class CodeDispatchClientStub : public CodeDispatchClient {
+class V8DispatchClientStub : public V8DispatchClient {
  public:
-  CodeDispatchClientStub() : CodeDispatchClient(dispatcher_) {}
-  virtual ~CodeDispatchClientStub() = default;
+  V8DispatchClientStub() : V8DispatchClient(dispatcher_) {}
+  virtual ~V8DispatchClientStub() = default;
   absl::Status BatchExecute(std::vector<DispatchRequest>& batch,
                             BatchDispatchDoneCallback batch_callback) override;
 
@@ -168,7 +168,7 @@ class CodeDispatchClientStub : public CodeDispatchClient {
   MockV8Dispatcher dispatcher_;
 };
 
-absl::Status CodeDispatchClientStub::BatchExecute(
+absl::Status V8DispatchClientStub::BatchExecute(
     std::vector<DispatchRequest>& batch,
     BatchDispatchDoneCallback batch_callback) {
   std::vector<absl::StatusOr<DispatchResponse>> responses;
@@ -349,12 +349,13 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
   score_ads_request.set_key_id(kTestKeyId);
 
   ScoreAdsResponse response;
-  CodeDispatchClientStub dispatcher;
+  V8DispatchClientStub dispatcher;
   grpc::CallbackServerContext context;
   for (auto _ : state) {
     // This code gets timed.
     metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&score_ads_request);
     ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),
@@ -397,12 +398,13 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
   score_ads_request.set_key_id(kTestKeyId);
 
   ScoreAdsResponse response;
-  CodeDispatchClientStub dispatcher;
+  V8DispatchClientStub dispatcher;
   grpc::CallbackServerContext context;
   for (auto _ : state) {
     // This code gets timed.
     metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&score_ads_request);
     ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),

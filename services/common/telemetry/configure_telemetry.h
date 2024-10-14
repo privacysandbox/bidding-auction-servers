@@ -67,15 +67,16 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
       config_util.GetAttribute();
   resource_attributes.insert(zone_attribute.begin(), zone_attribute.end());
 
-  server_common::telemetry::BuildDependentConfig telemetry_config(
-      config_client
-          .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
-              TELEMETRY_CONFIG)
-          .server_config);
+  auto telemetry_config =
+      std::make_unique<server_common::telemetry::BuildDependentConfig>(
+          config_client
+              .GetCustomParameter<server_common::telemetry::TelemetryFlag>(
+                  TELEMETRY_CONFIG)
+              .server_config);
   std::string collector_endpoint =
       config_client.GetStringParameter(COLLECTOR_ENDPOINT).data();
   bool consented_log_enabled =
-      telemetry_config.LogsAllowed() &&
+      telemetry_config->LogsAllowed() &&
       config_client.GetBooleanParameter(ENABLE_OTEL_BASED_LOGGING);
   if (consented_log_enabled) {
     server_common::log::ServerToken(
@@ -83,7 +84,7 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
   }
   server_common::InitTelemetry(
       config_util.GetService().data(), kOpenTelemetryVersion.data(),
-      telemetry_config.TraceAllowed(), telemetry_config.MetricAllowed(),
+      telemetry_config->TraceAllowed(), telemetry_config->MetricAllowed(),
       consented_log_enabled);
   Resource server_info = Resource::Create(resource_attributes);
 
@@ -95,9 +96,9 @@ void InitTelemetry(const TrustedServerConfigUtil& config_util,
       log_provider->GetLogger(config_util.GetService().data()).get();
 
   auto metric_export_interval =
-      std::chrono::milliseconds(telemetry_config.metric_export_interval_ms());
+      std::chrono::milliseconds(telemetry_config->metric_export_interval_ms());
   auto* context_map = metric::MetricContextMap<T>(
-      telemetry_config,
+      std::move(telemetry_config),
       server_common::ConfigurePrivateMetrics(
           server_info,
           PeriodicExportingMetricReaderOptions{

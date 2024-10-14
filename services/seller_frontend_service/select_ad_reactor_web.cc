@@ -89,8 +89,8 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
         encoded_data,
         EncodeComponent(
             request_->auction_config().top_level_seller(), high_score,
-            GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_), error,
-            error_handler));
+            GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
+            shared_ig_updates_map_, error, error_handler));
     PS_VLOG(kPlain, log_context_) << "AuctionResult: " << (decode_lambda());
   } else if (auction_scope_ ==
              AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
@@ -99,13 +99,14 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     if (high_score.has_value()) {
       auction_result = AdScoreToAuctionResult(
           high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
-          error, auction_scope_, request_->auction_config().seller(),
-          protected_auction_input_,
+          shared_ig_updates_map_, error, auction_scope_,
+          request_->auction_config().seller(), protected_auction_input_,
           request_->auction_config().top_level_seller());
     } else {
       auction_result = AdScoreToAuctionResult(
-          high_score, std::nullopt, error, auction_scope_,
-          request_->auction_config().seller(), protected_auction_input_);
+          high_score, std::nullopt, shared_ig_updates_map_, error,
+          auction_scope_, request_->auction_config().seller(),
+          protected_auction_input_);
     }
     // Serialized the data to bytes array.
     encoded_data = auction_result.SerializeAsString();
@@ -117,8 +118,8 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     PS_ASSIGN_OR_RETURN(
         encoded_data,
         Encode(high_score,
-               GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_), error,
-               error_handler));
+               GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
+               shared_ig_updates_map_, error, error_handler));
     PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());
   }
 
@@ -130,8 +131,6 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     PS_LOG(ERROR, log_context_)
         << "Failed to compress the CBOR serialized data: "
         << compressed_data.status().message();
-    FinishWithStatus(
-        grpc::Status(grpc::INTERNAL, "Failed to compress CBOR data"));
     return absl::InternalError("");
   }
 

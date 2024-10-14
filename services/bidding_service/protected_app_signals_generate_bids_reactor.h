@@ -28,6 +28,7 @@
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/bidding_service/egress_schema_cache.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/util/cancellation_wrapper.h"
@@ -46,7 +47,7 @@ class ProtectedAppSignalsGenerateBidsReactor
               GenerateProtectedAppSignalsBidsRawResponse> {
  public:
   explicit ProtectedAppSignalsGenerateBidsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config,
       const GenerateProtectedAppSignalsBidsRequest* request,
       GenerateProtectedAppSignalsBidsResponse* response,
@@ -190,6 +191,12 @@ class ProtectedAppSignalsGenerateBidsReactor
   }
 
   grpc::CallbackServerContext* context_;
+
+  // Dispatches execution requests to a library that runs V8 workers in
+  // separate processes.
+  V8DispatchClient& dispatcher_;
+  std::vector<DispatchRequest> dispatch_requests_;
+
   KVAsyncClient* ad_retrieval_async_client_;
   KVAsyncClient* kv_async_client_;
   int ad_bids_retrieval_timeout_ms_;
@@ -208,6 +215,9 @@ class ProtectedAppSignalsGenerateBidsReactor
   // given version.
   EgressSchemaCache* egress_schema_cache_;
   EgressSchemaCache* limited_egress_schema_cache_;
+
+  // Used to log metric, same life time as reactor.
+  std::unique_ptr<metric::BiddingContext> metric_context_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -35,6 +35,7 @@
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/encryption_util.h"
 #include "services/seller_frontend_service/util/proto_mapping_util.h"
+#include "services/seller_frontend_service/util/web_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 // Marker to set state of request in metric context.
@@ -80,6 +81,7 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
   absl::string_view request_generation_id_;
   bool is_protected_auction_request_;
   std::vector<IgsWithBidsMap> component_auction_bidding_groups_;
+  UpdateGroupMap component_auction_update_groups_;
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
 

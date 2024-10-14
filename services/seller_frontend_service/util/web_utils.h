@@ -105,6 +105,7 @@ inline constexpr char kConsentedDebugConfigIsDebugInfoInResponse[] =
 // Constants for data types in CBOR payload
 inline constexpr char kString[] = "string";
 inline constexpr char kArray[] = "array";
+inline constexpr char kBool[] = "bool";
 inline constexpr char kMap[] = "map";
 inline constexpr char kInt[] = "int";
 inline constexpr char kByteString[] = "bytestring";
@@ -130,14 +131,24 @@ inline constexpr auto kComparator = [](absl::string_view a,
     return to_return;                                                         \
   }
 
+// Data related to k-anon winner/ghost winner that is to be populated in the
+// AuctionResult returned to the client.
+struct KAnonAuctionResultData {
+  std::vector<AuctionResult::KAnonGhostWinner> kanon_ghost_winners;
+  AuctionResult::KAnonJoinCandidate kanon_winner_join_candidates;
+  int kanon_winner_positional_index = -1;
+};
+
 // Encodes the data into a CBOR-serialized AuctionResult response for single
 // seller auction.
 absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
+    const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
-    const std::function<void(const grpc::Status&)>& error_handler);
+    const std::function<void(const grpc::Status&)>& error_handler,
+    const KAnonAuctionResultData* kanon_auction_result_data = nullptr);
 
 // Encodes the data into a CBOR-serialized AuctionResult response for component
 // seller auction.
@@ -146,6 +157,7 @@ absl::StatusOr<std::string> EncodeComponent(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
+    const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler);
 
@@ -263,6 +275,17 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
         }
         break;
       }
+      case 7: {  // Enforce k-Anon.
+        bool is_valid_enforce_k_anon_type =
+            IsTypeValid(&cbor_is_bool, entry.value, kEnforceKAnon, kBool,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_enforce_k_anon_type) {
+          output.set_enforce_kanon(cbor_get_bool(entry.value));
+        }
+        break;
+      }
       default:
         break;
     }
@@ -300,6 +323,21 @@ absl::Status CborSerializeBiddingGroups(
     const std::function<void(const grpc::Status&)>& error_handler,
     cbor_item_t& root);
 
+// Serializes the interest groups groups to CBOR. This structure is represented
+// by the following CDDL:
+// updateGroups = {
+//   * interestGroupOwner => [* {
+//        index : int,
+//        updateIfOlderThanMs : int
+//      }]
+// }
+// Note: this should not be used directly and is only here to
+// facilitate testing.
+absl::Status CborSerializeUpdateGroups(
+    const UpdateGroupMap& update_groups,
+    const std::function<void(const grpc::Status&)>& error_handler,
+    cbor_item_t& root);
+
 // Decodes the decompressed but CBOR encoded BuyerInput map to a mapping from
 // owner => BuyerInput. Errors are reported to `error_accumulator`.
 absl::flat_hash_map<absl::string_view, BuyerInput> DecodeBuyerInputs(
@@ -315,7 +353,11 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
 
 // Minimally encodes an unsigned int into CBOR. Caller is responsible for
 // decrementing the reference once done with the returned int.
-cbor_item_t* cbor_build_uint(uint32_t input);
+cbor_item_t* cbor_build_uint(uint input);
+
+// Minimally encodes an int (positive or negative) into CBOR. Caller is
+// responsible for decrementing the reference once done with the returned int.
+cbor_item_t* cbor_build_int(int input);
 
 // Minimally encodes a float into CBOR. Caller is responsible for decrementing
 // the reference once done with the returned int.
@@ -345,20 +387,24 @@ inline std::string CborDecodeString(cbor_item_t* input) {
 
 inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
     kAuctionResultKeys = {
-        kScore,               // 0
-        kBid,                 // 1
-        kChaff,               // 2
-        kAdRenderUrl,         // 3
-        kBiddingGroups,       // 4
-        kInterestGroupName,   // 5
-        kInterestGroupOwner,  // 6
-        kAdComponents,        // 7
-        kError,               // 8
-        kWinReportingUrls,    // 9
-        kAdMetadata,          // 10
-        kTopLevelSeller,      // 11
-        kBidCurrency,         // 12
-        kBuyerReportingId     // 13
+        kScore,                       // 0
+        kBid,                         // 1
+        kChaff,                       // 2
+        kAdRenderUrl,                 // 3
+        kBiddingGroups,               // 4
+        kInterestGroupName,           // 5
+        kInterestGroupOwner,          // 6
+        kAdComponents,                // 7
+        kError,                       // 8
+        kWinReportingUrls,            // 9
+        kAdMetadata,                  // 10
+        kTopLevelSeller,              // 11
+        kBidCurrency,                 // 12
+        kBuyerReportingId,            // 13
+        kKAnonGhostWinners,           // 14
+        kKAnonWinnerJoinCandidates,   // 15
+        kKAnonWinnerPositionalIndex,  // 16
+        kUpdateGroups                 // 17
 };
 
 template <std::size_t Size>

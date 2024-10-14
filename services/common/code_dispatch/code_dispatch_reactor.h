@@ -27,7 +27,6 @@
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/async_client.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/feature_flags.h"
@@ -46,16 +45,15 @@ template <typename Request, typename RawRequest, typename Response,
 class CodeDispatchReactor : public grpc::ServerUnaryReactor {
  public:
   explicit CodeDispatchReactor(
-      CodeDispatchClient& dispatcher, const Request* request,
-      Response* response,
+      const Request* request, Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client)
-      : dispatcher_(dispatcher),
-        request_(request),
+      : request_(request),
         response_(response),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
-        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)) {
+        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
+        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)) {
     PS_VLOG(5) << "Encryption is enabled, decrypting request now";
     if (DecryptRequest()) {
       PS_VLOG(5) << "Decrypted request: " << raw_request_.DebugString();
@@ -68,7 +66,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   virtual ~CodeDispatchReactor() = default;
 
   // Initiate the asynchronous execution of the Request.
-  // The function will call CodeDispatchClient and
+  // The function will call the client that dispatches code and
   // will eventually modify the response_ member. When done, Execute will
   // call Finish(grpc::Status).
   virtual void Execute() = 0;
@@ -145,11 +143,6 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
     return true;
   }
 
-  // Dispatches execution requests to a library that runs V8 workers in
-  // separate processes.
-  CodeDispatchClient& dispatcher_;
-  std::vector<DispatchRequest> dispatch_requests_;
-
   // The client request, lifecycle managed by gRPC.
   const Request* request_;
   RawRequest raw_request_;
@@ -165,6 +158,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   ClientContexts client_contexts_;
 
   const bool enable_cancellation_;
+  const bool enable_kanon_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -51,9 +51,6 @@ cc_test(
     srcs = [
         "bidding_async_grpc_client_stub_test.cc",
     ],
-    tags = [
-        "flaky",
-    ],
     deps = [
         ":async_client",
         "//services/common/clients/async_grpc:bidding_async_grpc_client_integration_test_utils",

@@ -19,7 +19,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "gtest/gtest.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -61,17 +61,17 @@ void CheckResponses(
   }
 }
 
-class CodeDispatchClientTest : public ::testing::Test {
+class V8DispatchClientTest : public ::testing::Test {
  protected:
   void SetUp() override { CommonTestInit(); }
 };
 
-TEST_F(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
+TEST_F(V8DispatchClientTest, PassesJavascriptResultToCallback) {
   V8Dispatcher dispatcher;
   ASSERT_TRUE(dispatcher.Init().ok());
   const std::string version = "v1";
   ASSERT_TRUE(dispatcher.LoadSync(version, BuildCodeToLoad(version)).ok());
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
   int request_count = 100;
   std::vector<DispatchRequest> requests = BuildRequests(request_count, version);
 
@@ -87,10 +87,10 @@ TEST_F(CodeDispatchClientTest, PassesJavascriptResultToCallback) {
   done.Wait();
 }
 
-TEST_F(CodeDispatchClientTest, RunsLatestCodeVersion) {
+TEST_F(V8DispatchClientTest, RunsLatestCodeVersion) {
   V8Dispatcher dispatcher;
   ASSERT_TRUE(dispatcher.Init().ok());
-  CodeDispatchClient client(dispatcher);
+  V8DispatchClient client(dispatcher);
 
   int version_count = 3;
   int request_count = 10;

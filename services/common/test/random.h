@@ -30,7 +30,9 @@
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "api/udf/generate_bid_udf_interface.pb.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -42,6 +44,8 @@ using InterestGroupForBidding =
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
 
 std::string MakeARandomString();
+
+std::string MakeARandomStringOfLength(size_t length);
 
 std::string MakeARandomUrl();
 
@@ -126,10 +130,12 @@ InterestGroupForBidding MakeARandomInterestGroupForBiddingFromAndroid();
 InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser();
 
 GenerateBidsRequest::GenerateBidsRawRequest
-MakeARandomGenerateBidsRawRequestForAndroid();
+MakeARandomGenerateBidsRawRequestForAndroid(
+    bool enforce_kanon = false, int multi_bid_limit = kDefaultMultiBidLimit);
 
 GenerateBidsRequest::GenerateBidsRawRequest
-MakeARandomGenerateBidsRequestForBrowser();
+MakeARandomGenerateBidsRequestForBrowser(
+    bool enforce_kanon = false, int multi_bid_limit = kDefaultMultiBidLimit);
 
 ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
 MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
@@ -149,6 +155,15 @@ WinReportingUrls MakeARandomWinReportingUrls();
 
 AdWithBid MakeARandomAdWithBid(float min_bid, float max_bid,
                                int num_ad_components = 5);
+
+AdWithBid MakeARandomAdWithBid(int64_t seed, bool debug_reporting_enabled,
+                               bool allow_component_auction);
+
+roma_service::ProtectedAudienceBid MakeARandomRomaProtectedAudienceBid(
+    int64_t seed, bool debug_reporting_enabled, bool allow_component_auction);
+
+PrivateAggregateContribution MakeARandomPrivateAggregationContribution(
+    int64_t seed);
 
 GenerateBidsResponse::GenerateBidsRawResponse
 MakeARandomGenerateBidsRawResponse();

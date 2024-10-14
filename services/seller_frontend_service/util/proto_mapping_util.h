@@ -40,9 +40,11 @@ using IgsWithBidsMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 
 // Map fields from an AdScore proto to an Auction Result proto object.
+// Will move fields from update_groups.
 AuctionResult AdScoreToAuctionResult(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     std::optional<IgsWithBidsMap> maybe_bidding_groups,
+    UpdateGroupMap& update_groups,
     const std::optional<AuctionResult::Error>& error,
     AuctionScope auction_scope, absl::string_view seller,
     const std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
@@ -65,7 +67,8 @@ CreateTopLevelScoreAdsRawRequest(
 absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
     const ScoreAdsResponse::AdScore& high_score,
     const std::optional<IgsWithBidsMap>& bidding_group_maps,
-    ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+    const UpdateGroupMap& update_group_map, ClientType client_type,
+    OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context);
 
 // Encodes, compresses and encrypts client error

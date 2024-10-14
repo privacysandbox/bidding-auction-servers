@@ -62,7 +62,7 @@ absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
   return buyer_to_ad_url;
 }
 
-void SetupMockCrytoClient(MockCryptoClientWrapper& crypto_client) {
+void SetupMockCryptoClient(MockCryptoClientWrapper& crypto_client) {
   EXPECT_CALL(crypto_client, HpkeEncrypt)
       .WillOnce([](const PublicKey& key, const std::string& plaintext_payload) {
         // Mock the HpkeEncrypt() call on the crypto client.
@@ -93,11 +93,14 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
     const absl::optional<std::string>& bid_currency,
-    absl::string_view buyer_reporting_id) {
+    absl::string_view buyer_reporting_id,
+    absl::string_view buyer_and_seller_reporting_id,
+    absl::string_view selectable_buyer_and_seller_reporting_id) {
   AdWithBid bid = BuildNewAdWithBid(
       ad_url, std::move(interest_group_name), bid_value,
       enable_event_level_debug_reporting, number_ad_component_render_urls,
-      bid_currency, buyer_reporting_id);
+      bid_currency, buyer_reporting_id, buyer_and_seller_reporting_id,
+      selectable_buyer_and_seller_reporting_id);
   GetBidsResponse::GetBidsRawResponse response;
   response.mutable_bids()->Add(std::move(bid));
   return response;
@@ -148,9 +151,11 @@ void SetupBuyerClientMock(
       .WillRepeatedly(MockBuyerFactoryCall);
 }
 
-void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
-                                         AdWithBid* result,
-                                         absl::string_view buyer_reporting_id) {
+void BuildAdWithBidFromAdWithBidMetadata(
+    const AdWithBidMetadata& input, AdWithBid* result,
+    absl::string_view buyer_reporting_id,
+    absl::string_view buyer_and_seller_reporting_id,
+    absl::string_view selectable_buyer_and_seller_reporting_id) {
   if (input.has_ad()) {
     *result->mutable_ad() = input.ad();
   }
@@ -165,6 +170,13 @@ void BuildAdWithBidFromAdWithBidMetadata(const AdWithBidMetadata& input,
   if (!buyer_reporting_id.empty()) {
     result->set_buyer_reporting_id(buyer_reporting_id);
   }
+  if (!buyer_and_seller_reporting_id.empty()) {
+    result->set_buyer_and_seller_reporting_id(buyer_and_seller_reporting_id);
+  }
+  if (!selectable_buyer_and_seller_reporting_id.empty()) {
+    result->set_selectable_buyer_and_seller_reporting_id(
+        selectable_buyer_and_seller_reporting_id);
+  }
 }
 
 AdWithBid BuildNewAdWithBid(
@@ -174,7 +186,9 @@ AdWithBid BuildNewAdWithBid(
     const bool enable_event_level_debug_reporting,
     int number_ad_component_render_urls,
     const absl::optional<absl::string_view>& bid_currency,
-    absl::string_view buyer_reporting_id) {
+    absl::string_view buyer_reporting_id,
+    absl::string_view buyer_and_seller_reporting_id,
+    absl::string_view selectable_buyer_and_seller_reporting_id) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -203,6 +217,13 @@ AdWithBid BuildNewAdWithBid(
   }
   if (!buyer_reporting_id.empty()) {
     bid.set_buyer_reporting_id(buyer_reporting_id);
+  }
+  if (!buyer_and_seller_reporting_id.empty()) {
+    bid.set_buyer_and_seller_reporting_id(buyer_and_seller_reporting_id);
+  }
+  if (!selectable_buyer_and_seller_reporting_id.empty()) {
+    bid.set_selectable_buyer_and_seller_reporting_id(
+        selectable_buyer_and_seller_reporting_id);
   }
   return bid;
 }

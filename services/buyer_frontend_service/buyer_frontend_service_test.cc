@@ -150,7 +150,8 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GetBidsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto))
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto))
         ->Get(&request_);
   }
 
@@ -711,19 +712,23 @@ TEST_F(BuyerFrontEndServiceTest,
   auto protected_app_signals_bidding_async_client =
       GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
 
+  GetBidsConfig config = CreateGetBidsConfig();
+  config.is_chaffing_enabled = true;
   BuyerFrontEndService buyer_frontend_service(
       CreateClientRegistry(
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateGetBidsConfig());
+      config);
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
-  std::string encoded_payload = EncodeGetBidsPayload(raw_request, 999);
-  encoded_payload[1] = 'q';
-  *request_.mutable_request_ciphertext() = std::move(encoded_payload);
+  absl::StatusOr<std::string> encoded_payload =
+      EncodeAndCompressGetBidsPayload(raw_request, CompressionType::kGzip, 999);
+  for (int i = 0; i < 5; i++) (*encoded_payload)[i] = 'q';
+
+  *request_.mutable_request_ciphertext() = *std::move(encoded_payload);
   *request_.mutable_key_id() = "key_id";
 
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -733,7 +738,6 @@ TEST_F(BuyerFrontEndServiceTest,
   absl::Status absl_status = server_common::ToAbslStatus(status);
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
-  EXPECT_THAT(status.error_message(), HasSubstr(kMalformedCiphertext));
 }
 
 }  // namespace

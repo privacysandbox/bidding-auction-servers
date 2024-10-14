@@ -41,6 +41,10 @@ using ErrorHandler = const std::function<void(const grpc::Status&)>&;
 using RepeatedStringProto = ::google::protobuf::RepeatedPtrField<std::string>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using GhostWinnerForTopLevelAuction =
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction;
+using GhostWinnerPrivateAggregationSignals =
+    AuctionResult::KAnonGhostWinner::GhostWinnerPrivateAggregationSignals;
 
 // Array for mapping from the CBOR data type enum (a number) to a concrete data
 // type. Used for returning helpful error messages when clients incorrectly
@@ -287,6 +291,20 @@ absl::Status CborSerializeBool(absl::string_view key, bool value,
   return absl::OkStatus();
 }
 
+absl::Status CborSerializeInt(absl::string_view key, int value,
+                              ErrorHandler error_handler, cbor_item_t& root) {
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = cbor_move(cbor_build_int(value))};
+  if (!cbor_map_add(&root, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
+    return absl::InternalError("");
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status CborSerializeAdComponentUrls(
     absl::string_view key, const RepeatedStringProto& component_renders,
     ErrorHandler error_handler, cbor_item_t& root) {
@@ -316,10 +334,209 @@ absl::Status CborSerializeAdComponentUrls(
   return absl::OkStatus();
 }
 
+absl::Status CborSerializekAnonJoinCandidates(
+    absl::string_view key,
+    const AuctionResult::KAnonJoinCandidate& kanon_join_candidate,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_kanon_join_candidates(
+      cbor_new_definite_map(kNumKAnonJoinCandidateKeys));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kAdRenderUrlHash, kanon_join_candidate.ad_render_url_hash(),
+      error_handler, **serialized_kanon_join_candidates));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kReportingIdHash, kanon_join_candidate.reporting_id_hash(), error_handler,
+      **serialized_kanon_join_candidates));
+  const auto& input_ad_component_render_urls_hash =
+      kanon_join_candidate.ad_component_render_urls_hash();
+  ScopedCbor ad_component_render_urls_hash(
+      cbor_new_definite_array(input_ad_component_render_urls_hash.size()));
+  for (const auto& ad_component_render_url_hash :
+       input_ad_component_render_urls_hash) {
+    if (!cbor_array_push(*ad_component_render_urls_hash,
+                         cbor_move(cbor_build_stringn(
+                             ad_component_render_url_hash.data(),
+                             ad_component_render_url_hash.size())))) {
+      error_handler(grpc::Status(
+          grpc::INTERNAL,
+          "Failed to serialize ad component render URL hash to CBOR"));
+      return absl::InternalError("");
+    }
+  }
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(
+          kAdComponentRenderUrlsHash, sizeof(kAdComponentRenderUrlsHash) - 1)),
+      .value = *ad_component_render_urls_hash};
+  if (!cbor_map_add(*serialized_kanon_join_candidates, kv)) {
+    error_handler(
+        grpc::Status(grpc::INTERNAL,
+                     "Failed to serialize kAdComponentRenderUrlsHash to CBOR"));
+    return absl::InternalError("");
+  }
+  struct cbor_pair outer_kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = *serialized_kanon_join_candidates};
+  if (!cbor_map_add(&root, outer_kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, "Failed to serialize kAnonJoinCandidate to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborSerializekAnonGhostWinnerForTopLevelAuction(
+    absl::string_view key,
+    const GhostWinnerForTopLevelAuction& ghost_winner_for_top_level_auction,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_ghost_winner(
+      cbor_new_definite_map(kNumGhostWinnerForTopLevelAuctionKeys));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kAdMetadata, ghost_winner_for_top_level_auction.ad_metadata(),
+      error_handler, **serialized_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kAdRenderUrl, ghost_winner_for_top_level_auction.ad_render_url(),
+      error_handler, **serialized_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kBidCurrency, ghost_winner_for_top_level_auction.bid_currency(),
+      error_handler, **serialized_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializeFloat(
+      kModifiedBid, ghost_winner_for_top_level_auction.modified_bid(),
+      error_handler, **serialized_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kBuyerReportingId,
+      ghost_winner_for_top_level_auction.buyer_reporting_id(), error_handler,
+      **serialized_ghost_winner));
+
+  ScopedCbor serialized_ad_component_render_urls(cbor_new_definite_array(
+      ghost_winner_for_top_level_auction.ad_component_render_urls_size()));
+  for (const auto& ad_component_render_url :
+       ghost_winner_for_top_level_auction.ad_component_render_urls()) {
+    if (!cbor_array_push(
+            *serialized_ad_component_render_urls,
+            cbor_move(cbor_build_stringn(ad_component_render_url.data(),
+                                         ad_component_render_url.size())))) {
+      error_handler(grpc::Status(grpc::INTERNAL,
+                                 "Failed to serialize a ad component render "
+                                 "url for ghost winner to CBOR"));
+      return absl::InternalError("");
+    }
+  }
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(kAdComponentRenderUrls,
+                                          sizeof(kAdComponentRenderUrls) - 1)),
+      .value = *serialized_ad_component_render_urls};
+  if (!cbor_map_add(*serialized_ghost_winner, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, "Failed to serialize adComponentRenderUrls to CBOR"));
+    return absl::InternalError("");
+  }
+  struct cbor_pair outer_kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = *serialized_ghost_winner};
+  if (!cbor_map_add(&root, outer_kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, "Failed to serialize kAnonJoinCandidate to CBOR"));
+    return absl::InternalError("");
+  }
+  PS_RETURN_IF_ERROR(CborSerializeString(
+      kBuyerAndSellerReportingId,
+      ghost_winner_for_top_level_auction.buyer_and_seller_reporting_id(),
+      error_handler, **serialized_ghost_winner));
+  PS_RETURN_IF_ERROR(
+      CborSerializeString(kSelectableBuyerAndSellerReportingId,
+                          ghost_winner_for_top_level_auction
+                              .selectable_buyer_and_seller_reporting_id(),
+                          error_handler, **serialized_ghost_winner));
+  return absl::OkStatus();
+}
+
+absl::Status CborSerializekAnonGhostWinnerPrivateAggSignals(
+    absl::string_view key,
+    const GhostWinnerPrivateAggregationSignals& private_agg_signals,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_private_agg_signals(
+      cbor_new_definite_map(kNumGhostWinnerPrivateAggregationSignalsKeys));
+  PS_RETURN_IF_ERROR(CborSerializeInt(kValue, private_agg_signals.value(),
+                                      error_handler,
+                                      **serialized_private_agg_signals));
+  PS_RETURN_IF_ERROR(CborSerializeString(kBucket, private_agg_signals.bucket(),
+                                         error_handler,
+                                         **serialized_private_agg_signals));
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = *serialized_private_agg_signals};
+  if (!cbor_map_add(&root, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, "Failed to serialize kAnonJoinCandidate to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborSerializeKAnonGhostWinner(
+    const AuctionResult::KAnonGhostWinner& kanon_ghost_winner,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_kanon_ghost_winner(
+      cbor_new_definite_map(kNumKAnonGhostWinnerKeys));
+  PS_RETURN_IF_ERROR(CborSerializeString(kOwner, kanon_ghost_winner.owner(),
+                                         error_handler,
+                                         **serialized_kanon_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializeInt(
+      kInterestGroupIndex, kanon_ghost_winner.interest_group_index(),
+      error_handler, **serialized_kanon_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializekAnonJoinCandidates(
+      kKAnonJoinCandidates, kanon_ghost_winner.k_anon_join_candidates(),
+      error_handler, **serialized_kanon_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializekAnonGhostWinnerForTopLevelAuction(
+      kGhostWinnerForTopLevelAuction,
+      kanon_ghost_winner.ghost_winner_for_top_level_auction(), error_handler,
+      **serialized_kanon_ghost_winner));
+  PS_RETURN_IF_ERROR(CborSerializekAnonGhostWinnerPrivateAggSignals(
+      kGhostWinnerPrivateAggregationSignals,
+      kanon_ghost_winner.ghost_winner_private_aggregation_signals(),
+      error_handler, **serialized_kanon_ghost_winner));
+  if (!cbor_array_push(&root, *serialized_kanon_ghost_winner)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL,
+        "Failed to serialize ad component render URL hash to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborSerializeKAnonGhostWinners(
+    absl::string_view key,
+    const std::vector<AuctionResult::KAnonGhostWinner>& kanon_ghost_winners,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_kanon_ghost_winners(
+      cbor_new_definite_array(kanon_ghost_winners.size()));
+  for (const auto& kanon_ghost_winner : kanon_ghost_winners) {
+    if (auto status =
+            CborSerializeKAnonGhostWinner(kanon_ghost_winner, error_handler,
+                                          **serialized_kanon_ghost_winners);
+        !status.ok()) {
+      error_handler(grpc::Status(
+          grpc::INTERNAL, "Failed to serialize a kAnonGhostWinner to CBOR"));
+      return absl::InternalError("");
+    }
+  }
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(kKAnonGhostWinners,
+                                          sizeof(kKAnonGhostWinners) - 1)),
+      .value = *serialized_kanon_ghost_winners};
+  if (!cbor_map_add(&root, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, "Failed to serialize kAnonGhostWinners to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
 absl::Status CborSerializeScoreAdResponse(
     const ScoreAdsResponse::AdScore& ad_score,
-    const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
-    cbor_item_t& root) {
+    const BiddingGroupMap& bidding_group_map,
+    const UpdateGroupMap& update_group_map,
+    const KAnonAuctionResultData* kanon_auction_result_data,
+    ErrorHandler error_handler, cbor_item_t& root) {
   PS_RETURN_IF_ERROR(
       CborSerializeFloat(kBid, ad_score.buyer_bid(), error_handler, root));
   PS_RETURN_IF_ERROR(
@@ -330,6 +547,8 @@ absl::Status CborSerializeScoreAdResponse(
   PS_RETURN_IF_ERROR(CborSerializeString(kAdRenderUrl, ad_score.render(),
                                          error_handler, root));
   PS_RETURN_IF_ERROR(
+      CborSerializeUpdateGroups(update_group_map, error_handler, root));
+  PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
   if (!ad_score.buyer_reporting_id().empty()) {
     PS_RETURN_IF_ERROR(CborSerializeString(
@@ -339,16 +558,32 @@ absl::Status CborSerializeScoreAdResponse(
       ad_score.win_reporting_urls(), error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(
       kInterestGroupName, ad_score.interest_group_name(), error_handler, root));
+  if (kanon_auction_result_data != nullptr) {
+    PS_RETURN_IF_ERROR(CborSerializeKAnonGhostWinners(
+        kKAnonGhostWinners, kanon_auction_result_data->kanon_ghost_winners,
+        error_handler, root));
+  }
   PS_RETURN_IF_ERROR(CborSerializeString(kInterestGroupOwner,
                                          ad_score.interest_group_owner(),
                                          error_handler, root));
+  if (kanon_auction_result_data != nullptr) {
+    PS_RETURN_IF_ERROR(CborSerializekAnonJoinCandidates(
+        kKAnonWinnerJoinCandidates,
+        kanon_auction_result_data->kanon_winner_join_candidates, error_handler,
+        root));
+    PS_RETURN_IF_ERROR(CborSerializeInt(
+        kKAnonWinnerPositionalIndex,
+        kanon_auction_result_data->kanon_winner_positional_index, error_handler,
+        root));
+  }
   return absl::OkStatus();
 }
 
 absl::Status CborSerializeComponentScoreAdResponse(
     absl::string_view top_level_seller,
     const ScoreAdsResponse::AdScore& ad_score,
-    const BiddingGroupMap& bidding_group_map, ErrorHandler error_handler,
+    const BiddingGroupMap& bidding_group_map,
+    const UpdateGroupMap& update_group_map, ErrorHandler error_handler,
     cbor_item_t& root) {
   // Logic in the rest of the system guarantees that:
   // - buyer_bid must be > 0 for the AdWithBid to be scored
@@ -376,6 +611,8 @@ absl::Status CborSerializeComponentScoreAdResponse(
     PS_RETURN_IF_ERROR(CborSerializeString(
         kBidCurrency, ad_score.bid_currency(), error_handler, root));
   }
+  PS_RETURN_IF_ERROR(
+      CborSerializeUpdateGroups(update_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeBiddingGroups(bidding_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(CborSerializeString(kTopLevelSeller, top_level_seller,
@@ -451,6 +688,53 @@ absl::Status CborSerializeError(const AuctionResult::Error& error,
   return absl::OkStatus();
 }
 
+absl::StatusOr<UpdateGroupMap> CborDecodeUpdateGroupMapToProto(
+    cbor_item_t* serialized_groups) {
+  UpdateGroupMap update_group_map;
+  absl::Span<struct cbor_pair> owner_entries(cbor_map_handle(serialized_groups),
+                                             cbor_map_size(serialized_groups));
+  for (const auto& owner_entry : owner_entries) {
+    if (!cbor_isa_string(owner_entry.key) ||
+        !cbor_isa_array(owner_entry.value)) {
+      return absl::InvalidArgumentError(
+          "Malformed interest group update list, either key is not string or "
+          "value is not an array");
+    }
+    absl::Span<cbor_item_t*> update_list_entries(
+        cbor_array_handle(owner_entry.value),
+        cbor_array_size(owner_entry.value));
+    UpdateInterestGroupList update_list;
+
+    for (const auto& update_entry : update_list_entries) {
+      if (!cbor_isa_map(update_entry)) {
+        return absl::InvalidArgumentError("Update interest group is not a map");
+      }
+      UpdateInterestGroup update;
+      absl::Span<struct cbor_pair> interest_group(cbor_map_handle(update_entry),
+                                                  cbor_map_size(update_entry));
+      for (const auto& kv : interest_group) {
+        std::string field = CborDecodeString(kv.key);
+        if (!cbor_isa_string(kv.key)) {
+          return absl::InvalidArgumentError(
+              "Interest group update keys must be strings.");
+        } else if (field == kIndex) {
+          update.set_index(cbor_get_int(kv.value));
+        } else if (field == kUpdateIfOlderThanMs) {
+          update.set_update_if_older_than_ms(cbor_get_int(kv.value));
+        } else {
+          return absl::InvalidArgumentError(
+              "Interest group update key invalid.");
+        }
+      }
+      *update_list.mutable_interest_groups()->Add() = std::move(update);
+    }
+
+    update_group_map.emplace(CborDecodeString(owner_entry.key),
+                             std::move(update_list));
+  }
+  return update_group_map;
+}
+
 absl::StatusOr<BiddingGroupMap> CborDecodeInterestGroupToProto(
     cbor_item_t* serialized_groups) {
   BiddingGroupMap bidding_group_map;
@@ -478,15 +762,15 @@ absl::StatusOr<BiddingGroupMap> CborDecodeInterestGroupToProto(
   return bidding_group_map;
 }
 
-google::protobuf::RepeatedPtrField<std::string> CborDecodeComponentAdUrls(
+google::protobuf::RepeatedPtrField<std::string> CborDecodeStringsArrToProto(
     cbor_item_t* input) {
-  google::protobuf::RepeatedPtrField<std::string> component_ad_urls;
-  absl::Span<cbor_item_t*> component_ad_url_entries(cbor_array_handle(input),
-                                                    cbor_array_size(input));
-  for (cbor_item_t* entry : component_ad_url_entries) {
-    *component_ad_urls.Add() = CborDecodeString(entry);
+  google::protobuf::RepeatedPtrField<std::string> string_arr;
+  absl::Span<cbor_item_t*> string_arr_entries(cbor_array_handle(input),
+                                              cbor_array_size(input));
+  for (cbor_item_t* entry : string_arr_entries) {
+    *string_arr.Add() = CborDecodeString(entry);
   }
-  return component_ad_urls;
+  return string_arr;
 }
 
 absl::StatusOr<AuctionResult::Error> CborDecodeErrorToProto(
@@ -635,6 +919,198 @@ absl::Status CborDecodeReportingUrlsToProto(
   return absl::OkStatus();
 }
 
+absl::Status CborDecodeKAnonJoinCandidatesToProto(
+    cbor_item_t* serialized_candidates_map,
+    AuctionResult::KAnonJoinCandidate& kanon_join_candidate) {
+  absl::Span<struct cbor_pair> winner_join_candidates(
+      cbor_map_handle(serialized_candidates_map),
+      cbor_map_size(serialized_candidates_map));
+  bool any_key_found = false;
+  for (const auto& kv : winner_join_candidates) {
+    if (!cbor_isa_string(kv.key)) {
+      return absl::InvalidArgumentError(
+          "Malformed key type in kAnonWinnerJoinCandidates");
+    }
+    std::string key = CborDecodeString(kv.key);
+    switch (FindKeyIndex<kNumKAnonJoinCandidateKeys>(kKAnonJoinCandidateKeys,
+                                                     key)) {
+      case 0:  // kAdRenderUrlHash
+        kanon_join_candidate.set_ad_render_url_hash(CborDecodeString(kv.value));
+        any_key_found = true;
+        break;
+      case 1:  // kAdComponentRenderUrlsHash
+        if (!cbor_isa_array(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected component ad URLs hash to be an array");
+        }
+        *kanon_join_candidate.mutable_ad_component_render_urls_hash() =
+            CborDecodeStringsArrToProto(kv.value);
+        any_key_found = true;
+        break;
+      case 2:  // kReportingIdHash
+        kanon_join_candidate.set_reporting_id_hash(CborDecodeString(kv.value));
+        any_key_found = true;
+        break;
+      default:
+        PS_VLOG(5)
+            << "Following Key in KAnonWinnerJoinCandidates is unhandled: "
+            << key;
+    }
+  }
+  if (!any_key_found) {
+    return absl::InvalidArgumentError(
+        "No keys matching KAnonWinnerJoinCandidates found in passed in "
+        "serialized CBOR input map");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborDecodeGhostWinnerForTopLevelAuctionToProto(
+    cbor_item_t* serialized_ghost,
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction&
+        ghost_winner) {
+  if (!cbor_isa_map(serialized_ghost)) {
+    return absl::InvalidArgumentError(
+        "Expected ghost winner for top level auction to be a map");
+  }
+  absl::Span<struct cbor_pair> entries(cbor_map_handle(serialized_ghost),
+                                       cbor_map_size(serialized_ghost));
+  for (const auto& kv : entries) {
+    if (!cbor_isa_string(kv.key)) {
+      return absl::InvalidArgumentError(
+          "Malformed key type in ghost winner for top level auction");
+    }
+    std::string key = CborDecodeString(kv.key);
+    switch (FindKeyIndex<kNumGhostWinnerForTopLevelAuctionKeys>(
+        kGhostWinnerForTopLevelAuctionKeys, key)) {
+      case 0:  // kAdRenderUrlSmall
+        ghost_winner.set_ad_render_url(CborDecodeString(kv.value));
+        break;
+      case 1:  // kAdComponentRenderUrls
+        *ghost_winner.mutable_ad_component_render_urls() =
+            CborDecodeStringsArrToProto(kv.value);
+        break;
+      case 2:  // kModifiedBid
+        ghost_winner.set_modified_bid(cbor_float_get_float(kv.value));
+        break;
+      case 3:  // kBidCurrency
+        ghost_winner.set_bid_currency(CborDecodeString(kv.value));
+        break;
+      case 4:  // kAdMetadata
+        ghost_winner.set_ad_metadata(CborDecodeString(kv.value));
+        break;
+      case 5:  // kBuyerAndSellerReportingId
+        ghost_winner.set_buyer_and_seller_reporting_id(
+            CborDecodeString(kv.value));
+        break;
+      case 6:  // kBuyerReportingId
+        ghost_winner.set_buyer_reporting_id(CborDecodeString(kv.value));
+        break;
+      case 7:  // kSelectableBuyerAndSellerReportingId
+        ghost_winner.set_selectable_buyer_and_seller_reporting_id(
+            CborDecodeString(kv.value));
+        break;
+      default:
+        PS_VLOG(5)
+            << "Unhandled key in ghost winner private aggregation signals: "
+            << key;
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CborDecodePrivateAggregateSignalsToProto(
+    cbor_item_t* serialized_signals,
+    AuctionResult::KAnonGhostWinner::GhostWinnerPrivateAggregationSignals&
+        signals) {
+  if (!cbor_isa_map(serialized_signals)) {
+    return absl::InvalidArgumentError(
+        "Expected private aggregate signals to be a map");
+  }
+  absl::Span<struct cbor_pair> entries(cbor_map_handle(serialized_signals),
+                                       cbor_map_size(serialized_signals));
+  for (const auto& kv : entries) {
+    if (!cbor_isa_string(kv.key)) {
+      return absl::InvalidArgumentError(
+          "Malformed key type in ghost winner private aggregation signals");
+    }
+    std::string key = CborDecodeString(kv.key);
+    switch (FindKeyIndex<kNumGhostWinnerPrivateAggregationSignalsKeys>(
+        kGhostWinnerPrivateAggregationSignalsKeys, key)) {
+      case 0:  // kBucket
+        signals.set_bucket(CborDecodeString(kv.value));
+        break;
+      case 1:  // kValue
+        signals.set_value(cbor_get_int(kv.value));
+        break;
+      default:
+        PS_VLOG(5)
+            << "Unhandled key in ghost winner private aggregation signals: "
+            << key;
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<AuctionResult::KAnonGhostWinner>
+CborDecodeKAnonGhostWinnerToProto(cbor_item_t* serialized_ghost) {
+  if (!cbor_isa_map(serialized_ghost)) {
+    return absl::InvalidArgumentError(
+        "Expected each ghost winner candidate entry to be a map");
+  }
+  AuctionResult::KAnonGhostWinner kanon_ghost_winner;
+  absl::Span<struct cbor_pair> entries(cbor_map_handle(serialized_ghost),
+                                       cbor_map_size(serialized_ghost));
+  for (const auto& kv : entries) {
+    if (!cbor_isa_string(kv.key)) {
+      return absl::InvalidArgumentError(
+          "Malformed key type in kAnonGhostWinner");
+    }
+    std::string key = CborDecodeString(kv.key);
+    switch (
+        FindKeyIndex<kNumKAnonGhostWinnerKeys>(kKAnonGhostWinnerKeys, key)) {
+      case 0:  // kKAnonJoinCandidates
+        PS_RETURN_IF_ERROR(CborDecodeKAnonJoinCandidatesToProto(
+            kv.value, *kanon_ghost_winner.mutable_k_anon_join_candidates()));
+        break;
+      case 1:  // kInterestGroupIndex
+        kanon_ghost_winner.set_interest_group_index(cbor_get_int(kv.value));
+        break;
+      case 2:  // kOwner
+        kanon_ghost_winner.set_owner(CborDecodeString(kv.value));
+        break;
+      case 3:  // kGhostWinnerPrivateAggregationSignals
+        PS_RETURN_IF_ERROR(CborDecodePrivateAggregateSignalsToProto(
+            kv.value,
+            *kanon_ghost_winner
+                 .mutable_ghost_winner_private_aggregation_signals()));
+        break;
+      case 4:  // kGhostWinnerForTopLevelAuction
+        PS_RETURN_IF_ERROR(CborDecodeGhostWinnerForTopLevelAuctionToProto(
+            kv.value,
+            *kanon_ghost_winner.mutable_ghost_winner_for_top_level_auction()));
+
+        break;
+      default:
+        PS_VLOG(5) << "Following Key in kAnonGhostWinner is unhandled: " << key;
+    }
+  }
+  return kanon_ghost_winner;
+}
+
+absl::Status CborDecodeKAnonGhostWinnersToProto(
+    cbor_item_t* serialized_candidates_arr, AuctionResult& auction_result) {
+  absl::Span<cbor_item_t*> entries(cbor_array_handle(serialized_candidates_arr),
+                                   cbor_array_size(serialized_candidates_arr));
+  for (cbor_item_t* entry : entries) {
+    PS_ASSIGN_OR_RETURN(auto decoded_kanon_ghost_winner,
+                        CborDecodeKAnonGhostWinnerToProto(entry));
+    *auction_result.mutable_k_anon_ghost_winners()->Add() =
+        std::move(decoded_kanon_ghost_winner);
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 server_common::ConsentedDebugConfiguration DecodeConsentedDebugConfig(
@@ -766,13 +1242,33 @@ std::string DecodeCborString(const cbor_item_t* item) {
                      cbor_string_length(item));
 }
 
-cbor_item_t* cbor_build_uint(uint32_t input) {
-  if (input <= 255) {
+cbor_item_t* cbor_build_uint(uint input) {
+  if (input <= std::numeric_limits<uint8_t>::max()) {
     return cbor_build_uint8(input);
-  } else if (input <= 65535) {
+  } else if (input <= std::numeric_limits<uint16_t>::max()) {
     return cbor_build_uint16(input);
+  } else if (input <= std::numeric_limits<uint32_t>::max()) {
+    return cbor_build_uint32(input);
   }
-  return cbor_build_uint32(input);
+  return cbor_build_uint64(input);
+}
+
+cbor_item_t* cbor_build_negint(uint input) {
+  if (input <= std::numeric_limits<uint8_t>::max()) {
+    return cbor_build_negint8(input);
+  } else if (input <= std::numeric_limits<uint16_t>::max()) {
+    return cbor_build_negint16(input);
+  } else if (input <= std::numeric_limits<uint32_t>::max()) {
+    return cbor_build_negint32(input);
+  }
+  return cbor_build_negint64(input);
+}
+
+cbor_item_t* cbor_build_int(int input) {
+  if (input < 0) {
+    return cbor_build_negint(static_cast<uint>(-input - 1));
+  }
+  return cbor_build_uint(input);
 }
 
 absl::StatusOr<std::string> SerializeToCbor(cbor_item_t& cbor_data_root) {
@@ -844,6 +1340,61 @@ absl::StatusOr<cbor_item_t*> cbor_build_float(double input) {
   return cbor_build_float8(input);
 }
 
+absl::Status CborSerializeUpdateGroups(const UpdateGroupMap& update_groups,
+                                       ErrorHandler error_handler,
+                                       cbor_item_t& root) {
+  ScopedCbor serialized_group_map(cbor_new_definite_map(update_groups.size()));
+  std::set<absl::string_view, decltype(kComparator)> ordered_origins(
+      kComparator);
+  // NOLINTNEXTLINE
+  for (const auto& [origin, unused] : update_groups) {
+    ordered_origins.insert(origin);
+  }
+  for (absl::string_view origin : ordered_origins) {
+    const UpdateInterestGroupList& updates = update_groups.at(origin);
+
+    ScopedCbor update_group_array(
+        cbor_new_definite_array(updates.interest_groups().size()));
+    for (const UpdateInterestGroup& update : updates.interest_groups()) {
+      ScopedCbor serialized_update_map(cbor_new_definite_map(2));
+      PS_RETURN_IF_ERROR(CborSerializeInt(kIndex, update.index(), error_handler,
+                                          **serialized_update_map));
+      PS_RETURN_IF_ERROR(CborSerializeInt(
+          kUpdateIfOlderThanMs, update.update_if_older_than_ms(), error_handler,
+          **serialized_update_map));
+      if (!cbor_array_push(*update_group_array, *serialized_update_map)) {
+        error_handler(grpc::Status(
+            grpc::INTERNAL, absl::StrCat("Failed to add interest group update "
+                                         "entry to array for owner: ",
+                                         origin)));
+        return absl::InternalError("");
+      }
+    }
+
+    struct cbor_pair owner_update_groups_entry = {
+        .key = cbor_move(cbor_build_stringn(origin.data(), origin.size())),
+        .value = *update_group_array};
+
+    if (!cbor_map_add(*serialized_group_map, owner_update_groups_entry)) {
+      error_handler(grpc::Status(
+          grpc::INTERNAL,
+          "Failed to serialize an <origin, update group array> pair to CBOR"));
+      return absl::InternalError("");
+    }
+  }
+
+  struct cbor_pair kv = {.key = cbor_move(cbor_build_stringn(
+                             kUpdateGroups, sizeof(kUpdateGroups) - 1)),
+                         .value = *serialized_group_map};
+  if (!cbor_map_add(&root, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL,
+        absl::StrCat("Failed to serialize ", kUpdateGroups, " to CBOR")));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
 absl::Status CborSerializeBiddingGroups(const BiddingGroupMap& bidding_groups,
                                         ErrorHandler error_handler,
                                         cbor_item_t& root) {
@@ -851,6 +1402,7 @@ absl::Status CborSerializeBiddingGroups(const BiddingGroupMap& bidding_groups,
   // Order keys by length first and then lexicographically.
   std::set<absl::string_view, decltype(kComparator)> ordered_origins(
       kComparator);
+  // NOLINTNEXTLINE
   for (const auto& [origin, unused] : bidding_groups) {
     ordered_origins.insert(origin);
   }
@@ -920,8 +1472,10 @@ absl::Status CborSerializeInteractionReportingUrls(
 absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupMap& bidding_group_map,
+    const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
-    ErrorHandler error_handler) {
+    ErrorHandler error_handler,
+    const KAnonAuctionResultData* kanon_auction_result_data) {
   // CBOR data's root handle. When serializing the auction result to CBOR, we
   // use this handle to keep the temporary data.
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
@@ -932,10 +1486,16 @@ absl::StatusOr<std::string> Encode(
         CborSerializeError(*error, error_handler, *cbor_internal));
   } else if (high_score.has_value()) {
     PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
-        *high_score, bidding_group_map, error_handler, *cbor_internal));
+        *high_score, bidding_group_map, update_group_map,
+        kanon_auction_result_data, error_handler, *cbor_internal));
   } else {
     PS_RETURN_IF_ERROR(
         CborSerializeBool(kChaff, true, error_handler, *cbor_internal));
+    if (kanon_auction_result_data != nullptr) {
+      PS_RETURN_IF_ERROR(CborSerializeKAnonGhostWinners(
+          kKAnonGhostWinners, kanon_auction_result_data->kanon_ghost_winners,
+          error_handler, *cbor_internal));
+    }
   }
 
   return GetCborSerializedAuctionResult(error_handler, *cbor_internal);
@@ -945,6 +1505,7 @@ absl::StatusOr<std::string> EncodeComponent(
     absl::string_view top_level_seller,
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupMap& bidding_group_map,
+    const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     ErrorHandler error_handler) {
   // CBOR data's root handle. When serializing the auction result to CBOR, we
@@ -957,8 +1518,8 @@ absl::StatusOr<std::string> EncodeComponent(
         CborSerializeError(*error, error_handler, *cbor_internal));
   } else if (high_score.has_value()) {
     PS_RETURN_IF_ERROR(CborSerializeComponentScoreAdResponse(
-        top_level_seller, *high_score, bidding_group_map, error_handler,
-        *cbor_internal));
+        top_level_seller, *high_score, bidding_group_map, update_group_map,
+        error_handler, *cbor_internal));
   } else {
     PS_RETURN_IF_ERROR(
         CborSerializeBool(kChaff, true, error_handler, *cbor_internal));
@@ -1292,7 +1853,7 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
               "Expected component ad URLs to be an array");
         }
         *auction_result.mutable_ad_component_render_urls() =
-            CborDecodeComponentAdUrls(kv.value);
+            CborDecodeStringsArrToProto(kv.value);
         break;
       case 8: {  // kError
         if (!cbor_isa_map(kv.value)) {
@@ -1339,13 +1900,46 @@ absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
         }
         auction_result.set_buyer_reporting_id(CborDecodeString(kv.value));
       } break;
+      case 14: {  // kKAnonGhostWinners
+        if (!cbor_isa_array(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected kAnonGhostWinners value to be an array");
+        }
+        PS_RETURN_IF_ERROR(
+            CborDecodeKAnonGhostWinnersToProto(kv.value, auction_result))
+            << "Error decoding kAnonGhostWinners";
+      } break;
+      case 15: {  // kKAnonWinnerJoinCandidates
+        if (!cbor_isa_map(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected kAnonWinnerJoinCandidates value to be a map");
+        }
+        PS_RETURN_IF_ERROR(CborDecodeKAnonJoinCandidatesToProto(
+            kv.value, *auction_result.mutable_k_anon_winner_join_candidates()))
+            << "Error decoding kAnonWinnerJoinCandidates";
+      } break;
+      case 16: {  // kKAnonWinnerPositionalIndex
+        if (!cbor_is_int(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected KAnonWinnerPositionalIndex value to be an int");
+        }
+        auction_result.set_k_anon_winner_positional_index(
+            cbor_get_int(kv.value));
+      } break;
+      case 17: {  // kUpdateGroups
+        if (!cbor_isa_map(kv.value)) {
+          return absl::InvalidArgumentError(
+              "Expected updateGroups value to be a map ");
+        }
+        absl::StatusOr<UpdateGroupMap> update_groups;
+        PS_ASSIGN_OR_RETURN(update_groups,
+                            CborDecodeUpdateGroupMapToProto(kv.value));
+        *auction_result.mutable_update_groups() = std::move(*update_groups);
+      } break;
       default:
         // Unexpected key in the auction result CBOR
-        return absl::Status(
-            absl::StatusCode::kInvalidArgument,
-            absl::StrCat(
-                "Serialized CBOR auction result has an unknown root key: ",
-                key));
+        PS_VLOG(5) << "Serialized CBOR auction result has an unknown root key: "
+                   << key;
     }
   }
 

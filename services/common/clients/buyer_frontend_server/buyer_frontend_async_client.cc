@@ -17,6 +17,8 @@
 #include <algorithm>
 
 #include "services/common/chaffing/transcoding_utils.h"
+#include "services/common/compression/compression_utils.h"
+#include "services/common/util/request_response_constants.h"
 #include "src/public/cpio/interface/crypto_client/crypto_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -47,28 +49,67 @@ absl::Status BuyerFrontEndAsyncGrpcClient::ExecuteInternal(
                             ResponseMetadata) &&>
         on_done,
     absl::Duration timeout, RequestConfig request_config) {
+  PS_VLOG(kOriginated) << "Raw request:\n" << raw_request->DebugString();
+  PS_VLOG(kStats) << "Request size before compression: "
+                  << raw_request->SerializeAsString().length();
   if (!chaffing_enabled_) {
-    return DefaultAsyncGrpcClient::ExecuteInternal(std::move(raw_request),
-                                                   context, std::move(on_done),
-                                                   timeout, request_config);
+    PS_VLOG(kNoisyInfo) << "Encrypting request ...";
+
+    // Chaffing, and therefore the new request/response format, is disabled.
+    CompressionType compression_type = request_config.compression_type;
+    PS_ASSIGN_OR_RETURN(
+        std::string encoded_req_payload,
+        Compress(raw_request->SerializeAsString(), compression_type));
+
+    PS_VLOG(kStats) << "Request size after compression: "
+                    << encoded_req_payload.length();
+    PS_VLOG(kStats) << "Compression type: "
+                    << static_cast<int>(compression_type);
+
+    return EncryptPayloadAndSendRpc(encoded_req_payload, context,
+                                    std::move(on_done), timeout,
+                                    request_config);
   }
 
   // If chaffing is enabled, we encode requests according to the new request
   // format.
-  PS_VLOG(6) << "Raw request:\n" << raw_request->DebugString();
-  std::string encoded_req_payload =
-      EncodeGetBidsPayload(*raw_request, request_config.chaff_request_size);
+  PS_ASSIGN_OR_RETURN(std::string encoded_req_payload,
+                      EncodeAndCompressGetBidsPayload(
+                          *raw_request, request_config.compression_type,
+                          request_config.chaff_request_size));
+  PS_VLOG(kStats) << "Request size after compression: "
+                  << encoded_req_payload.length();
+  PS_VLOG(kStats) << "compression_type: "
+                  << static_cast<int>(request_config.compression_type);
 
   return EncryptPayloadAndSendRpc(encoded_req_payload, context,
                                   std::move(on_done), timeout, request_config);
 }
 
 void BuyerFrontEndAsyncGrpcClient::OnGetBidsDoneChaffingDisabled(
-    absl::string_view decrypted_payload, const grpc::Status& status,
+    std::string decrypted_payload, const grpc::Status& status,
     BuyerFrontendRawClientParams* params) const {
+  PS_VLOG(8) << "In OnGetBidsDoneChaffingDisabled()";
   std::unique_ptr<GetBidsResponse::GetBidsRawResponse> raw_response =
       std::make_unique<GetBidsResponse::GetBidsRawResponse>();
-  if (!raw_response->ParseFromString(decrypted_payload)) {
+
+  CompressionType compression_type = params->RequestConfig().compression_type;
+  PS_VLOG(kStats) << "compression_type: " << static_cast<int>(compression_type);
+  PS_VLOG(kStats) << "Decrypted response size (before decompression): "
+                  << decrypted_payload.length();
+
+  absl::StatusOr<std::string> decompressed =
+      Decompress(std::move(decrypted_payload), compression_type);
+  if (!decompressed.ok()) {
+    PS_LOG(ERROR) << "Failed to decompress GetBids response: "
+                  << decompressed.status();
+    params->OnDone(grpc::Status(grpc::StatusCode::INTERNAL,
+                                "Failed to decompress GetBids response"));
+    return;
+  }
+
+  PS_VLOG(kStats) << "Decompressed response size: " << decompressed->length();
+  if (!raw_response->ParseFromString(*decompressed)) {
     PS_LOG(ERROR) << "Failed to parse proto from decrypted response";
     params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                 raw_response->DebugString()));
@@ -84,9 +125,11 @@ void BuyerFrontEndAsyncGrpcClient::OnGetBidsDoneChaffingDisabled(
 }
 
 void BuyerFrontEndAsyncGrpcClient::OnGetBidsDoneChaffingEnabled(
-    absl::string_view decrypted_payload, const grpc::Status& status,
+    std::string decrypted_payload, const grpc::Status& status,
     BuyerFrontendRawClientParams* params) const {
+  PS_VLOG(9) << "In OnGetBidsDoneChaffingEnabled()";
   if (params->RequestConfig().chaff_request_size > 0) {
+    PS_VLOG(9) << "Request was chaff, ignoring response";
     // If the request was chaff, return an empty response up to
     // select_ad_reactor regardless of the actual response from the BFE.
     params->SetRawResponse(
@@ -102,11 +145,25 @@ void BuyerFrontEndAsyncGrpcClient::OnGetBidsDoneChaffingEnabled(
   absl::string_view payload(
       &decrypted_payload[kTotalMetadataSizeBytes],
       decrypted_payload.length() - kTotalMetadataSizeBytes);
-  if (!raw_response->ParseFromString(payload)) {
+  PS_VLOG(kStats) << "Decrypted payload length: " << payload.length();
+
+  absl::StatusOr<std::string> decompressed =
+      Decompress(params->RequestConfig().compression_type, payload);
+
+  if (!decompressed.ok()) {
+    PS_LOG(ERROR) << "Failed to decompress GetBids response: "
+                  << decompressed.status();
+    params->OnDone(grpc::Status(grpc::StatusCode::INTERNAL,
+                                "Failed to decompress GetBids response"));
+    return;
+  }
+
+  PS_VLOG(kStats) << "Decompressed payload length: " << decompressed->length();
+  if (!raw_response->ParseFromString(*decompressed)) {
     PS_LOG(ERROR) << "Failed to parse proto from decrypted response: "
                   << decrypted_payload;
     params->OnDone(
-        grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+        grpc::Status(grpc::StatusCode::INTERNAL,
                      "Failed to parse proto from decrypted response"));
     return;
   }
@@ -131,9 +188,11 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
           return;
         }
 
-        // For metric purposes in the reactor, note the response size.
+        // For metric purposes in the reactor, note the request and response
+        // size.
         params->SetResponseMetadata(
-            {.response_size = params->ResponseRef()->ByteSizeLong()});
+            {.request_size = params->RequestRef()->ByteSizeLong(),
+             .response_size = params->ResponseRef()->ByteSizeLong()});
 
         PS_VLOG(6) << "Decrypting the response ...";
         absl::StatusOr<
@@ -143,25 +202,20 @@ void BuyerFrontEndAsyncGrpcClient::SendRpc(
         if (!decrypt_response.ok()) {
           PS_LOG(ERROR, SystemLogContext())
               << "BuyerFrontEndAsyncGrpcClient Failed to decrypt response";
-          params->OnDone(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+          params->OnDone(grpc::Status(grpc::StatusCode::INTERNAL,
                                       decrypt_response.status().ToString()));
         }
 
-        absl::string_view decrypted_payload = decrypt_response->payload();
-        // Look at the first byte of the decrypted payload to determine whether
-        // the BFE responded in the new or old request format. In the old
-        // format, the decrypted payload is just a serialized proto message,
-        // which will never have the null terminator as the first character. In
-        // the new format, the decrypted payload's first byte is guaranteed to
-        // be zero for now (it will be non-zero when we change the version
-        // number or enable compression).
-        bool is_new_format_bfe_response =
-            !decrypted_payload.empty() && decrypted_payload.front() == '\0';
-
-        if (is_new_format_bfe_response && chaffing_enabled_) {
-          OnGetBidsDoneChaffingEnabled(decrypted_payload, status, params);
+        std::string decrypted_payload =
+            std::move(*decrypt_response->mutable_payload());
+        if (chaffing_enabled_) {
+          OnGetBidsDoneChaffingEnabled(std::move(decrypted_payload), status,
+                                       params);
         } else {
-          OnGetBidsDoneChaffingDisabled(decrypted_payload, status, params);
+          // If chaffing is disabled, thtis is a old format + compressed
+          // response.
+          OnGetBidsDoneChaffingDisabled(std::move(decrypted_payload), status,
+                                        params);
         }
       });
 }

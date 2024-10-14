@@ -36,9 +36,9 @@ class PeriodicCodeFetcherTest : public ::testing::Test {
   void SetUp() override { CommonTestInit(); }
 };
 
-TEST_F(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
+TEST_F(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoCodeLoader) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   absl::string_view js_url = "js.com";
   absl::string_view wasm_helper_url = "wasm.com";
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
@@ -85,7 +85,7 @@ TEST_F(PeriodicCodeFetcherTest, LoadsHttpFetcherResultIntoV8Dispatcher) {
 
 TEST_F(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
 
   const std::vector<std::string>& endpoints = {"test.com"};
@@ -128,7 +128,7 @@ TEST_F(PeriodicCodeFetcherTest, PeriodicallyFetchesCode) {
 
 TEST_F(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   std::vector<absl::StatusOr<std::string>> url_response = {"function test(){}"};
 
   const std::vector<std::string>& endpoints = {"test.com"};
@@ -184,7 +184,7 @@ TEST_F(PeriodicCodeFetcherTest, LoadsOnlyDifferentHttpFetcherResult) {
 
 TEST_F(PeriodicCodeFetcherTest, LoadsCodeWithTheCorrectVersion) {
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   auto executor = std::make_unique<MockExecutor>();
   auto wrap_code = [](const std::vector<std::string>& adtech_code_blobs) {
     return "test";
@@ -223,7 +223,7 @@ TEST_F(PeriodicCodeFetcherTest, LoadFetchFrequencyMustBeGreaterThan1Min) {
   auto executor = std::make_unique<MockExecutor>();
   EXPECT_CALL(*executor, Run).Times(0);
 
-  MockV8Dispatcher dispatcher;
+  MockUdfCodeLoaderInterface dispatcher;
   EXPECT_CALL(dispatcher, LoadSync).Times(0);
 
   PeriodicCodeFetcher code_fetcher(

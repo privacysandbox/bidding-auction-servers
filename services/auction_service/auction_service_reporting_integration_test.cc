@@ -24,7 +24,7 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
@@ -70,7 +70,8 @@ class AuctionServiceReportingIntegrationTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::OFF);
     metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
   }
 };
 

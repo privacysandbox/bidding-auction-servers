@@ -33,6 +33,7 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/buyer_frontend_service/data/get_bids_config.h"
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
+#include "services/buyer_frontend_service/util/bidding_signals.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/feature_flags.h"
@@ -55,6 +56,9 @@ inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
     kBiddingMetadata = {{{"x-accept-language", "x-accept-language"},
                          {"x-user-agent", "x-user-agent"},
                          {"x-bna-client-ip", "x-bna-client-ip"}}};
+
+inline constexpr absl::string_view kInvalidCompressionHeaderValue =
+    "Invalid value provided for B&A compression type header";
 
 inline constexpr int kMinChaffRequestDurationMs = 25;
 inline constexpr int kMaxChaffRequestDurationMs = 380;
@@ -112,11 +116,19 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   CLASS_CANCELLATION_WRAPPER(ExecuteChaffRequest, enable_cancellation_,
                              context_, FinishWithStatus)
 
+  // Examines gRPC request headers for custom B&A compression type header.
+  // Defaults to CompressionType::kUncompressed if no header is provided.
+  absl::StatusOr<CompressionType> GetCompressionType();
+
  private:
   // Process Outputs from Actions to prepare bidding request.
   // All Preload actions must have completed before this is invoked.
   void PrepareAndGenerateProtectedAudienceBid(
       std::unique_ptr<BiddingSignals> bidding_signals);
+
+  grpc::Status ParseRawRequestBytestring(
+      google::cmrt::sdk::crypto_service::v1::HpkeDecryptResponse&
+          decrypt_response);
 
   // Decrypts the request ciphertext in and returns whether decryption was
   // successful. If successful, the result is written into 'raw_request_'.
@@ -192,6 +204,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   ClientContexts client_contexts_;
 
   const bool enable_cancellation_;
+  const bool enable_enforce_kanon_;
 
   // Gets Protected Audience Bids.
   void MayGetProtectedAudienceBids();
@@ -209,6 +222,15 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;
+
+  // Compression used in the request object; the response will use the same.
+  CompressionType compression_type_;
+
+  // Set after parsing KV trusted bidding signals.
+  // While this field will be available throughout the lifetime of the reactor
+  // after it is intially set, its fields may be moved; see the struct
+  // definition for more specifics on its usage and fields.
+  BiddingSignalJsonComponents bidding_signal_json_components_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

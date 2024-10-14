@@ -579,18 +579,20 @@ class ScoreAdsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override { CommonTestInit(); }
   ScoreAdsResponse ExecuteScoreAds(
-      const RawRequest& raw_request, MockCodeDispatchClient& dispatcher,
+      const RawRequest& raw_request, MockV8DispatchClient& dispatcher,
       const AuctionServiceRuntimeConfig& runtime_config,
       bool enable_report_result_url_generation = false) {
     ScoreAdsReactorTestHelper test_helper;
     return test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
   }
+
+  AuctionServiceRuntimeConfig runtime_config_;
 };
 
 TEST_F(
     ScoreAdsReactorTest,
     CreatesScoreAdInputsWithParsedScoringSignalsForTwoAdsWithSameComponents) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   auto expected_foo_ad = JsonStringToValue(
       R"JSON(
       {
@@ -644,7 +646,7 @@ TEST_F(
 // See b/258697130.
 TEST_F(ScoreAdsReactorTest,
        CreatesScoreAdInputsInCorrectOrderWithParsedScoringSignalsForTwoAds) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
 
   auto expected_foo_ad_1 = JsonStringToValue(
       R"JSON(
@@ -708,7 +710,7 @@ TEST_F(ScoreAdsReactorTest,
 // See b/258697130.
 TEST_F(ScoreAdsReactorTest,
        CreatesScoreAdInputsInCorrectOrderWithParsedScoringSignals) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   auto expected_foo_ad_1 = JsonStringToValue(
       R"JSON(
       {
@@ -751,7 +753,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        CreatesScoreAdInputsInCorrectOrderWithParsedScoringSignalsForBar) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   auto expected_bar_ad_1 = JsonStringToValue(
       R"JSON(
     {
@@ -791,7 +793,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        CreatesCorrectScoreAdInputsWithParsedScoringSignalsForNoComponentAds) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   auto expected_ad = JsonStringToValue(
       R"JSON(
       {
@@ -837,7 +839,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        CreatesScoreAdInputsWellWithParsedScoringSignalsButNotForComponentAds) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
 
   auto expected_ad = JsonStringToValue(
       R"JSON(
@@ -883,7 +885,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, CreatesScoringSignalInputPerAdWithSignal) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   std::vector<AdWithBidMetadata> ads;
   AdWithBidMetadata no_signal_ad = MakeARandomAdWithBidMetadata(2, 2);
@@ -927,7 +929,7 @@ TEST_F(ScoreAdsReactorTest, CreatesScoringSignalInputPerAdWithSignal) {
 }
 
 TEST_F(ScoreAdsReactorTest, EmptySignalsResultsInNoResponse) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
@@ -941,7 +943,7 @@ TEST_F(ScoreAdsReactorTest, EmptySignalsResultsInNoResponse) {
 
 TEST_F(ScoreAdsReactorTest,
        CreatesScoresForAllAdsRequestedWithoutComponentAuction) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 1;
   bool allowComponentAuction = false;
   RawRequest raw_request;
@@ -1039,7 +1041,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        RejectsBidsForFailureToMatchIncomingBidInSellerCurrency) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   bool allowComponentAuction = false;
   RawRequest raw_request;
   // foo_two and bar are already in USD.
@@ -1179,7 +1181,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        CreatesScoresForAllAdsRequestedWithHighestOtherBids) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 1;
   bool allowComponentAuction = false;
   RawRequest raw_request;
@@ -1258,7 +1260,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        IncomingBidInSellerCurrencyUsedAsHighestScoringOtherBid) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 1;
   const float kDefaultIncomingBidInSellerCurrency = 0.92f;
   bool allowComponentAuction = false;
@@ -1352,7 +1354,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, PassesTopLevelSellerToComponentAuction) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
@@ -1375,7 +1377,7 @@ TEST_F(ScoreAdsReactorTest, PassesTopLevelSellerToComponentAuction) {
 
 TEST_F(ScoreAdsReactorTest,
        CreatesScoresForAllAdsRequestedWithComponentAuction) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = true;
   RawRequest raw_request;
@@ -1442,7 +1444,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        SetsCurrencyOnAdScorefromAdWithBidForComponentAuctionAndNoModifiedBid) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
   int current_score = 1;
@@ -1530,7 +1532,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, BidRejectedForModifiedIncomingBidInSellerCurrency) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
   int current_score = 1;
@@ -1596,7 +1598,7 @@ TEST_F(ScoreAdsReactorTest, BidRejectedForModifiedIncomingBidInSellerCurrency) {
 
 TEST_F(ScoreAdsReactorTest,
        BidWithMismatchedModifiedCurrencyAcceptedSinceModifiedBidNotSet) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
   int current_score = 1;
@@ -1685,7 +1687,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, BidCurrencyCanBeModifiedWhenNoSellerCurrencySet) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
   int current_score = 1;
@@ -1784,7 +1786,7 @@ TEST_F(ScoreAdsReactorTest, BidCurrencyCanBeModifiedWhenNoSellerCurrencySet) {
  */
 TEST_F(ScoreAdsReactorTest,
        AdScoreRejectedForMismatchedCurrencyWhenBuyerBidCurrencyUsed) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
   int current_score = 1;
@@ -1848,7 +1850,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, ModifiedBidOnScoreRejectedForCurrencyMismatch) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = true;
   RawRequest raw_request;
@@ -1896,7 +1898,7 @@ TEST_F(ScoreAdsReactorTest, ModifiedBidOnScoreRejectedForCurrencyMismatch) {
 }
 
 TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);
@@ -1929,7 +1931,7 @@ TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
 }
 
 TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   bool allowComponentAuction = false;
   RawRequest raw_request;
   AdWithBidMetadata foo, bar;
@@ -1988,7 +1990,7 @@ TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
 }
 
 TEST_F(ScoreAdsReactorTest, SuccessExecutesInRomaWithLogsEnabled) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   RawRequest raw_request;
@@ -2048,8 +2050,9 @@ TEST_F(ScoreAdsReactorTest, SuccessExecutesInRomaWithLogsEnabled) {
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
 }
 
+// [[deprecated]]
 TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   bool enable_adtech_code_logging = false;
@@ -2136,7 +2139,7 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResult) {
 
 TEST_F(ScoreAdsReactorTest,
        SellerReportingUrlsEmptyWhenParsingUdfResponseFails) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   bool enable_adtech_code_logging = false;
@@ -2219,7 +2222,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        SuccessfullyExecutesReportResultAndReportWinForComponentAuctions) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = true;
   bool enable_adtech_code_logging = true;
@@ -2326,9 +2329,10 @@ TEST_F(ScoreAdsReactorTest,
             kTestInteractionUrl);
 }
 
+// [[deprecated]]
 TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
   absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   bool enable_adtech_code_logging = true;
@@ -2433,9 +2437,10 @@ TEST_F(ScoreAdsReactorTest, SuccessfullyExecutesReportResultAndReportWin) {
             kTestInteractionUrl);
 }
 
+// [[deprecated]]
 TEST_F(ScoreAdsReactorTest, ReportingUrlsAndBuyerReportingIdSetInAdScore) {
   absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   bool enable_adtech_code_logging = true;
@@ -2541,8 +2546,9 @@ TEST_F(ScoreAdsReactorTest, ReportingUrlsAndBuyerReportingIdSetInAdScore) {
             kTestInteractionUrl);
 }
 
+// [[deprecated]]
 TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = false;
   bool enable_adtech_code_logging = false;
@@ -2625,7 +2631,7 @@ TEST_F(ScoreAdsReactorTest, ReportResultFailsReturnsOkayResponse) {
 }
 
 TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
@@ -2663,7 +2669,7 @@ TEST_F(ScoreAdsReactorTest, IgnoresUnknownFieldsFromScoreAdResponse) {
 }
 
 TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
                    BatchDispatchDoneCallback done_callback) {
@@ -2729,7 +2735,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   ScoreAdsReactor reactor(&context, dispatcher, &request, &response,
                           std::move(benchmarkingLogger), &key_fetcher_manager,
                           &crypto_client, async_reporter.get(),
-                          AuctionServiceRuntimeConfig());
+                          runtime_config_);
   reactor.Execute();
 
   EXPECT_FALSE(response.response_ciphertext().empty());
@@ -2738,7 +2744,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
 // This test case validates that reject reason is returned in response of
 // ScoreAds for ads where it was of any valid value other than 'not-available'.
 TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   bool allowComponentAuction = true;
   RawRequest raw_request;
   // Each ad must have its own unique render url, lest the IDs clash during roma
@@ -2856,7 +2862,7 @@ TEST_F(ScoreAdsReactorTest, CaptureRejectionReasonsForRejectedAds) {
 
 TEST_F(ScoreAdsReactorTest,
        ScoredAdRemovedFromConsiderationWhenRejectReasonAvailable) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata ad;
   GetTestAdWithBidFoo(ad);
@@ -2895,7 +2901,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, ZeroDesirabilityAdsConsideredAsRejected) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata ad;
   GetTestAdWithBidFoo(ad);
@@ -2928,7 +2934,7 @@ TEST_F(ScoreAdsReactorTest, ZeroDesirabilityAdsConsideredAsRejected) {
 }
 
 TEST_F(ScoreAdsReactorTest, SingleNumberResponseFromScoreAdIsValid) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata foo;
   GetTestAdWithBidFoo(foo);
@@ -3000,7 +3006,7 @@ class ScoreAdsReactorProtectedAppSignalsTest : public ScoreAdsReactorTest {
   }
 
   ScoreAdsResponse ExecuteScoreAds(const RawRequest& raw_request,
-                                   MockCodeDispatchClient& dispatcher) {
+                                   MockV8DispatchClient& dispatcher) {
     return ScoreAdsReactorTest::ExecuteScoreAds(raw_request, dispatcher,
                                                 runtime_config_);
   }
@@ -3010,7 +3016,7 @@ class ScoreAdsReactorProtectedAppSignalsTest : public ScoreAdsReactorTest {
 
 TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
        AdDispatchedForScoringWhenSignalsPresent) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   auto expected_ad = JsonStringToValue(
       R"JSON(
       {
@@ -3066,7 +3072,7 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
 TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
        NoDispatchWhenThereAreBidsButFeatureDisabled) {
   runtime_config_.enable_protected_app_signals = false;
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   EXPECT_CALL(dispatcher, BatchExecute).Times(0);
   RawRequest raw_request;
   ProtectedAppSignalsAdWithBidMetadata ad =
@@ -3080,7 +3086,7 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
 
 TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
        AdNotDispatchedForScoringWhenSignalsAbsent) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
 
   EXPECT_CALL(dispatcher, BatchExecute).Times(0);
   RawRequest raw_request;
@@ -3094,9 +3100,10 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
   ExecuteScoreAds(raw_request, dispatcher);
 }
 
+// [[deprecated]]
 TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
        SuccessfullyExecutesReportResultAndReportWin) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_result_win_generation = true;
@@ -3330,7 +3337,7 @@ void VerifyOnlyReportResultUrlInScoreAdsResponse(
 
 TEST_F(ScoreAdsReactorTest,
        ReportingSuccessfulWithSellerAndBuyerCodeIsolationWithBuyerReportingId) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
@@ -3419,7 +3426,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest,
        ReportingSuccessForComponentAuctionsWithSellerAndBuyerCodeIsolation) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
@@ -3516,7 +3523,7 @@ TEST_F(ScoreAdsReactorTest,
 }
 
 TEST_F(ScoreAdsReactorTest, NoBuyerReportingUrlReturnedWhenReportWinFails) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
@@ -3603,7 +3610,7 @@ TEST_F(ScoreAdsReactorTest, NoBuyerReportingUrlReturnedWhenReportWinFails) {
 
 TEST_F(ScoreAdsReactorTest,
        ReportingSuccessfulWithSellerAndBuyerCodeIsolationWithIgName) {
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
@@ -3693,7 +3700,7 @@ TEST_F(ScoreAdsReactorTest,
 
 TEST_F(ScoreAdsReactorTest, RespectConfiguredDebugUrlLimits) {
   server_common::log::SetGlobalPSVLogLevel(10);
-  MockCodeDispatchClient dispatcher;
+  MockV8DispatchClient dispatcher;
   RawRequest raw_request;
   AdWithBidMetadata foo, bar;
   GetTestAdWithBidFoo(foo);

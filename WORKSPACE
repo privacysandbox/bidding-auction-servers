@@ -25,11 +25,11 @@ http_archive(
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2024-08-26
-    sha256 = "dcd09e9241b9e2e85dfa9bd6b12768391f20e4587cba20589c781e4be1ba64a2",
-    strip_prefix = "data-plane-shared-libraries-da1550404faa919ccbbdaf9e91e6225934ad1620",
+    # 2024-10-09
+    sha256 = "7a0337420161304c7429c727b1f82394bc27e1e2586d2da30e6d6100ba92b437",
+    strip_prefix = "data-plane-shared-libraries-158593616a63df924af1cb689f3915b8d32e9db1",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/da1550404faa919ccbbdaf9e91e6225934ad1620.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/158593616a63df924af1cb689f3915b8d32e9db1.zip",
     ],
 )
 

@@ -108,5 +108,19 @@ TEST(ModelFetcherMetricTest, GetModelRegistrationFailedCountByErroCode) {
       UnorderedElementsAre(Pair("UNAVAILABLE", 2), Pair("INTERNAL", 1)));
 }
 
+TEST(ModelFetcherMetricTest, GetAvailableModels) {
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(), UnorderedElementsAre());
+
+  ModelFetcherMetric::UpdateAvailableModels({"model1", "model2"});
+
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
+              UnorderedElementsAre(Pair("model1", 1), Pair("model2", 1)));
+
+  ModelFetcherMetric::UpdateAvailableModels({"model1"});
+
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
+              UnorderedElementsAre(Pair("model1", 1)));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

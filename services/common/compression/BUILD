@@ -19,6 +19,20 @@ package(default_visibility = [
 ])
 
 cc_library(
+    name = "compression_utils",
+    srcs = ["compression_utils.cc"],
+    hdrs = [
+        "compression_utils.h",
+    ],
+    deps = [
+        ":gzip",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@zlib",
+    ],
+)
+
+cc_library(
     name = "gzip",
     srcs = ["gzip.cc"],
     hdrs = [

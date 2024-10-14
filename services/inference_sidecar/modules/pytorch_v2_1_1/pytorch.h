@@ -40,15 +40,16 @@ class PyTorchModule final : public ModuleInterface {
       const RegisterModelRequest& request) override;
 
  private:
-  const InferenceSidecarRuntimeConfig runtime_config_;
-
-  // Stores a set of models. It's thread safe.
-  std::unique_ptr<ModelStore<torch::jit::script::Module>> store_;
   friend class PyTorchModuleResetModelTest;
   void SetModelStoreForTestOnly(
       std::unique_ptr<ModelStore<torch::jit::script::Module>> store) {
     store_ = std::move(store);
   }
+
+  const InferenceSidecarRuntimeConfig runtime_config_;
+
+  // Stores a set of models. It's thread safe.
+  std::unique_ptr<ModelStore<torch::jit::script::Module>> store_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

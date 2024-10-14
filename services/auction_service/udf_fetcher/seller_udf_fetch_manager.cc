@@ -35,8 +35,6 @@
 #include "src/core/interface/errors.h"
 #include "src/util/status_macro/status_macros.h"
 
-using ::google::scp::core::errors::GetErrorMessage;
-
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
@@ -134,7 +132,7 @@ absl::Status SellerUdfFetchManager::InitializeLocalCodeFetch() {
       adtech_code_blob, udf_config_.enable_report_result_url_generation(),
       false, {});
 
-  return dispatcher_.LoadSync(kScoreAdBlobVersion, adtech_code_blob);
+  return dispatcher_.LoadSync(kScoreAdBlobVersion, std::move(adtech_code_blob));
 }
 
 absl::StatusOr<std::unique_ptr<PeriodicBucketCodeFetcher>>

@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
+#include "tensorflow.h"
+
 #include <future>
+#include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/log/absl_log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -32,8 +38,11 @@
 #include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/cc/saved_model/tag_constants.h"
+#include "tensorflow/cc/tools/freeze_saved_model.h"
+#include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/protobuf/meta_graph.pb.h"
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/tsl/platform/env.h"
 #include "tensorflow/tsl/platform/file_system.h"
@@ -44,6 +53,10 @@
 #include "utils/request_parser.h"
 
 #include "tensorflow_parser.h"
+#include "validator.h"
+
+ABSL_FLAG(bool, testonly_disable_model_freezing, false,
+          "Disable model freezing for testing purposes.");
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -118,6 +131,30 @@ absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
   return zipped_vector;
 }
 
+absl::Status FreezeSavedModel(tensorflow::SessionOptions& session_options,
+                              tensorflow::SavedModelBundle& model_bundle) {
+  // TODO(b/368374975): Deprecate the absl flag at least for the prod build.
+  if (absl::GetFlag(FLAGS_testonly_disable_model_freezing)) {
+    return absl::OkStatus();
+  }
+
+  tensorflow::GraphDef frozen_graph_def;
+  std::unordered_set<std::string> dummy_inputs, dummy_outputs;
+  PS_RETURN_IF_ERROR(tensorflow::FreezeSavedModel(
+      model_bundle, &frozen_graph_def, &dummy_inputs, &dummy_outputs));
+
+  std::unique_ptr<tensorflow::Session> frozen_session(
+      tensorflow::NewSession(session_options));
+  PS_RETURN_IF_ERROR(frozen_session->Create(frozen_graph_def));
+
+  // Updates the model in place.
+  model_bundle.session = std::move(frozen_session);
+  *model_bundle.meta_graph_def.mutable_graph_def() =
+      std::move(frozen_graph_def);
+
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>>
 TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
                            const RegisterModelRequest& request) {
@@ -141,6 +178,14 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
     return absl::InternalError(
         absl::StrCat("Error loading model: ", model_path));
   }
+
+  // TODO(b/361373900): Freeze a model only once at RegisterModel().
+  if (auto status = FreezeSavedModel(session_options, *model_bundle);
+      !status.ok()) {
+    return absl::InternalError(absl::StrCat(
+        "Error freezing model: ", model_path, ": ", status.ToString()));
+  }
+
   // perform warm up if metadata been provided.
   // TODO(b/362338463): Add optional execute mode choice.
   if (!request.warm_up_batch_request_json().empty()) {
@@ -167,26 +212,12 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
   return model_bundle;
 }
 
-class TensorflowModule final : public ModuleInterface {
- public:
-  explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config)
-      : runtime_config_(config),
-        store_(std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
-            config, TensorFlowModelConstructor)) {}
+}  // namespace
 
-  absl::StatusOr<PredictResponse> Predict(
-      const PredictRequest& request,
-      const RequestContext& request_context) override;
-  absl::StatusOr<RegisterModelResponse> RegisterModel(
-      const RegisterModelRequest& request) override;
-
- private:
-  const InferenceSidecarRuntimeConfig runtime_config_;
-
-  // Stores a set of models. It's thread safe.
-  // TODO(b/327907675) : Add a test for concurrency
-  std::unique_ptr<ModelStore<tensorflow::SavedModelBundle>> store_;
-};
+TensorflowModule::TensorflowModule(const InferenceSidecarRuntimeConfig& config)
+    : runtime_config_(config),
+      store_(std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
+          config, TensorFlowModelConstructor)) {}
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     const PredictRequest& request, const RequestContext& request_context) {
@@ -214,7 +245,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
     const InferenceRequest& inference_request = (*parsed_requests)[task_id];
     const std::string& model_path = inference_request.model_path;
-    AddMetric(predict_response, "kInferenceRequestCountByModel", 1, model_path);
     INFERENCE_LOG(INFO, request_context)
         << "Received inference request to model: " << model_path;
     absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>> model =
@@ -222,8 +252,6 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     if (!model.ok()) {
       AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
                 std::string(kInferenceModelNotFoundError));
-      AddMetric(predict_response, "kInferenceRequestFailedCountByModel", 1,
-                model_path);
       INFERENCE_LOG(ERROR, request_context)
           << "Fails to get model: " << model_path
           << " Reason: " << model.status();
@@ -232,6 +260,13 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
           .error = Error{.error_type = Error::MODEL_NOT_FOUND,
                          .description = std::string(model.status().message())}};
     } else {
+      // Only log count by model for available models since there is no metric
+      // partition for unregistered models.
+      AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
+                model_path);
+      int batch_count = inference_request.inputs[0].tensor_shape[0];
+      AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
+                batch_count, model_path);
       tasks[task_id] = std::async(std::launch::async, &PredictPerModel, *model,
                                   inference_request);
     }
@@ -299,6 +334,32 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   return predict_response;
 }
 
+// TODO(b/346418962): Move the function into TensorFlowGraphValidator.
+absl::Status IsModelAllowed(const RegisterModelRequest& request) {
+  tensorflow::SessionOptions session_options;
+  const std::unordered_set<std::string> tags = {"serve"};
+  const auto& model_path = request.model_spec().model_path();
+  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
+  if (auto status = tensorflow::LoadSavedModel(
+          session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
+          tags, model_bundle.get());
+      !status.ok()) {
+    return absl::InternalError(
+        absl::StrCat("Error loading model: ", model_path));
+  }
+
+  const tensorflow::GraphDef& graph_def =
+      model_bundle->meta_graph_def.graph_def();
+  if (!TensorFlowGraphValidator(graph_def).IsGraphAllowed()) {
+    // TODO(b/368395202): Improve error messages by including the specific
+    // operation that is disallowed.
+    return absl::InternalError(
+        absl::StrCat("Error: model ", model_path,
+                     " is not allowed due to using a disallowed operator"));
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     const RegisterModelRequest& request) {
   const auto& model_path = request.model_spec().model_path();
@@ -311,6 +372,7 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
         absl::StrCat("Model ", model_path, " has already been registered"));
   }
   PS_RETURN_IF_ERROR(SaveToRamFileSystem(request));
+  PS_RETURN_IF_ERROR(IsModelAllowed(request));
 
   RegisterModelRequest model_request;
   *model_request.mutable_model_spec() = request.model_spec();
@@ -321,8 +383,6 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
   PS_RETURN_IF_ERROR(store_->PutModel(model_path, model_request));
   return RegisterModelResponse();
 }
-
-}  // namespace
 
 std::unique_ptr<ModuleInterface> ModuleInterface::Create(
     const InferenceSidecarRuntimeConfig& config) {

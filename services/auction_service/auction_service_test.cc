@@ -72,7 +72,8 @@ class AuctionServiceTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<ScoreAdsRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     SetupMockCryptoClientWrapper();
     server_common::log::SetGlobalPSVLogLevel(10);
 
@@ -108,7 +109,7 @@ class AuctionServiceTest : public ::testing::Test {
         });
   }
 
-  MockCodeDispatchClient dispatcher_;
+  MockV8DispatchClient dispatcher_;
   ScoreAdsRequest request_;
   ScoreAdsResponse response_;
   std::unique_ptr<MockCryptoClientWrapper> crypto_client_ =

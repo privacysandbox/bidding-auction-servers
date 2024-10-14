@@ -23,13 +23,19 @@ locals {
 
   # If you are using a TEE Ad Retrieval KV server, set this to true:
   tee_ad_retrieval_kv_server_exists = false
-  # Then change these values to the actual addresses of the relevant services; these templates are merely guesses at/suggestions for what these should look like:
-  tee_ad_retrieval_kv_server_domain  = "adretrieval-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}"
-  tee_ad_retrieval_kv_server_address = "dns:///${local.tee_ad_retrieval_kv_server_domain}:50051"
+  ## Then change these values if necessary:
+  # Template is a suggestion for likely name if running with mesh.
+  # Replace with actual domain, regardless of using mesh or not.
+  tee_ad_retrieval_kv_server_domain = "adretrieval-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}"
+  # NOTE THAT THE ONLY PORT ALLOWED HERE WHEN RUNNING WITH MESH IS 50051!
+  tee_kv_servers_port                = 50051
+  tee_ad_retrieval_kv_server_address = "dns:///${local.tee_ad_retrieval_kv_server_domain}:${local.tee_kv_servers_port}"
   # Ditto for these:
-  tee_kv_server_exists  = false
+  tee_kv_server_exists = false
+  # Template is a suggestion for likely name if running with mesh.
+  # Replace with actual domain, regardless of using mesh or not.
   tee_kv_server_domain  = "kv-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}"
-  tee_kv_server_address = "dns:///${local.tee_kv_server_domain}:50051"
+  tee_kv_server_address = "dns:///${local.tee_kv_server_domain}:${local.tee_kv_servers_port}"
 
   # Set to true for service mesh, false for Load balancers. MUST be true if using TEE KV or AdRetrieval servers.
   use_service_mesh = true
@@ -73,6 +79,7 @@ module "buyer" {
   ad_retrieval_kv_server_virtual_service_name = local.tee_ad_retrieval_kv_server_exists ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
   use_service_mesh                            = local.use_service_mesh
   use_tls_with_mesh                           = local.use_tls_with_mesh
+  tee_kv_servers_port                         = local.tee_kv_servers_port
 
   runtime_flags = {
     BIDDING_PORT                      = "50051" # Do not change unless you are modifying the default AWS architecture.
@@ -83,14 +90,15 @@ module "buyer" {
     KV_SERVER_EGRESS_TLS              = local.use_service_mesh ? "false" : "true"
     COLLECTOR_ENDPOINT                = "127.0.0.1:4317" # Do not change unless you are modifying the default AWS architecture.
 
-    ENABLE_BIDDING_SERVICE_BENCHMARK                      = "" # Example: "false"
-    BIDDING_SERVER_ADDR                                   = local.use_service_mesh ? "dns:///bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}:50051" : "dns:///bidding-${local.environment}.${local.buyer_root_domain}:443"
-    GRPC_ARG_DEFAULT_AUTHORITY                            = local.use_service_mesh ? "bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
-    BUYER_KV_SERVER_ADDR                                  = ""                                                                                                                                                 # Example: "https://kvserver.com/trusted-signals"
+    ENABLE_BIDDING_SERVICE_BENCHMARK = "" # Example: "false"
+    BIDDING_SERVER_ADDR              = local.use_service_mesh ? "dns:///bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}:50051" : "dns:///bidding-${local.environment}.${local.buyer_root_domain}:443"
+    GRPC_ARG_DEFAULT_AUTHORITY       = local.use_service_mesh ? "bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
+    # Refers to BYOS Buyer Key-Value Server only.
+    BUYER_KV_SERVER_ADDR                                  = "" # Example: "https://kvserver.com/trusted-signals"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR                       = "${local.tee_ad_retrieval_kv_server_address}"
-    TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY = "${local.tee_ad_retrieval_kv_server_domain}"
+    TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY = local.use_service_mesh ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
     TEE_KV_SERVER_ADDR                                    = "${local.tee_kv_server_address}"
-    TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY              = "${local.tee_kv_server_domain}"
+    TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY              = local.use_service_mesh ? "${local.tee_kv_server_domain}" : "PLACEHOLDER"
     AD_RETRIEVAL_TIMEOUT_MS                               = "60000"
     GENERATE_BID_TIMEOUT_MS                               = "" # Example: "60000"
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS                       = "" # Example: "60000"
@@ -132,7 +140,7 @@ module "buyer" {
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #    "enablePrivateAggregateReporting": false,
     #  }"
-    JS_NUM_WORKERS      = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count, and should be equal for best performance.
+    UDF_NUM_WORKERS     = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count, and should be equal for best performance.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
     ROMA_TIMEOUT_MS     = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.

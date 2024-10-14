@@ -48,7 +48,7 @@ cc_binary(
     deps = [
         "//services/auction_service:score_ads_reactor",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",

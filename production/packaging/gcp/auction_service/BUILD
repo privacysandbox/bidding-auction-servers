@@ -29,6 +29,7 @@ load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 pkg_files(
     name = "server_executables",
     srcs = [
+        "bin/init_server_basic",
         "//services/auction_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
@@ -69,11 +70,9 @@ container_image(
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
     cmd = [
-        "--init_config_client=true",
+        "/server/bin/init_server_basic",
     ],
-    entrypoint = [
-        "/server/bin/server",
-    ],
+    entrypoint = ["sh"],
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",

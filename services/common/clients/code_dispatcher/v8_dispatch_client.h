@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_CODE_DISPATCH_CLIENT_H_
-#define SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_CODE_DISPATCH_CLIENT_H_
+#ifndef SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_V8_DISPATCH_CLIENT_H_
+#define SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_V8_DISPATCH_CLIENT_H_
 
 #include <vector>
 
@@ -27,10 +27,13 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // This class acts as a client for dispatching javascript + wasm to be
 // executed in a different process sandbox.
-class CodeDispatchClient {
+class V8DispatchClient {
  public:
-  explicit CodeDispatchClient(V8Dispatcher& dispatcher)
+  explicit V8DispatchClient(V8Dispatcher& dispatcher)
       : dispatcher_(dispatcher) {}
+
+  // Required to create this on the heap.
+  virtual ~V8DispatchClient() = default;
 
   // Execute a batch of requests asynchronously via the code dispatcher library.
   // There are no guarantees on request order processing.
@@ -48,4 +51,4 @@ class CodeDispatchClient {
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_CODE_DISPATCH_CLIENT_H_
+#endif  // SERVICES_COMMON_CLIENTS_CODE_DISPATCHER_V8_DISPATCH_CLIENT_H_

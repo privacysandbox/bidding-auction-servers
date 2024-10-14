@@ -55,15 +55,11 @@ std::unique_ptr<GetBidsRawResponse> CreateGetBidsRawResponse(
 absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
     const ::google::protobuf::RepeatedPtrField<std::string>&
         bidding_signals_keys,
-    rapidjson::Value* bidding_signals_obj, long avg_signal_str_size) {
+    rapidjson::Value& bidding_signals_obj, long avg_signal_str_size) {
   // Insert bidding signal values for this IG.
   ParsedTrustedBiddingSignals parsed_signals;
   rapidjson::Document ig_signals;
   ig_signals.SetObject();
-  // If no bidding signals passed, return empty document.
-  if (bidding_signals_obj == nullptr) {
-    return parsed_signals;
-  }
 
   // Copy bidding signals with key name in bidding signal keys.
   for (const auto& key : bidding_signals_keys) {
@@ -72,8 +68,8 @@ absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
       continue;
     }
     rapidjson::Value::ConstMemberIterator bidding_signals_key_itr =
-        bidding_signals_obj->FindMember(key.c_str());
-    if (bidding_signals_key_itr != bidding_signals_obj->MemberEnd()) {
+        bidding_signals_obj.FindMember(key.c_str());
+    if (bidding_signals_key_itr != bidding_signals_obj.MemberEnd()) {
       rapidjson::Value json_key;
       // Keep string reference. Assumes safe lifecycle.
       json_key.SetString(rapidjson::StringRef(key.c_str()));
@@ -129,47 +125,16 @@ void CopyIGFromDeviceToIGForBidding(
 }
 
 std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
-    const GetBidsRawRequest& get_bids_raw_request,
-    const BuyerInput& buyer_input,
-    std::unique_ptr<BiddingSignals> bidding_signals,
-    RequestLogContext& log_context) {
+    const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
+    std::unique_ptr<rapidjson::Value> bidding_signals_obj,
+    const size_t signal_size, const bool enable_kanon) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
-
-  // Deserialize trusted bidding signals.
-  // Note: Null checks for bidding_signals and bidding_signals->trusted signals
-  // expected to be already performed elsewhere.
-  auto start_deserialize_time = absl::Now();
-  absl::StatusOr<rapidjson::Document> trusted_signals_status =
-      ParseJsonString(*bidding_signals->trusted_signals);
-  rapidjson::Document trusted_signals;
-  if (trusted_signals_status.ok()) {
-    trusted_signals = *std::move(trusted_signals_status);
-    PS_VLOG(kStats, log_context)
-        << "\nTrusted Bidding Signals Deserialize Time: "
-        << ToInt64Microseconds((absl::Now() - start_deserialize_time))
-        << " microseconds for " << trusted_signals.Size() << " bytes.";
-  } else {
-    // TODO(b/308793587): Publish a metric for this error.
-    PS_VLOG(kNoisyWarn, log_context)
-        << "Trusted bidding signals JSON deserialize error: "
-        << trusted_signals_status.status();
-    return generate_bids_raw_request;
-  }
-  rapidjson::Value bidding_signals_obj;
-  if (trusted_signals.HasMember("keys")) {
-    bidding_signals_obj = std::move(trusted_signals["keys"]);
-  } else {
-    // TODO(b/308793587): Publish a metric for this error.
-    PS_VLOG(kNoisyWarn, log_context)
-        << "Trusted bidding signals JSON validate error (Missing property "
-           "\"keys\")";
-    return generate_bids_raw_request;
-  }
+  const BuyerInput& buyer_input = get_bids_raw_request.buyer_input();
 
   // 1. Set interest groups (IGs) for bidding.
   if (buyer_input.interest_groups_size() > 0) {
-    long avg_signal_size_per_ig = bidding_signals->trusted_signals->size() /
-                                  buyer_input.interest_groups_size();
+    long avg_signal_size_per_ig =
+        signal_size / buyer_input.interest_groups_size();
     // Iterate through each IG from device.
     for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
       // Skip IG if it has no name or bidding signals keys.
@@ -181,7 +146,7 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
       // Get parsed trusted bidding signals for this IG.
       absl::StatusOr<ParsedTrustedBiddingSignals> parsed_signals =
           GetSignalsForIG(ig_from_device.bidding_signals_keys(),
-                          &bidding_signals_obj, avg_signal_size_per_ig);
+                          *bidding_signals_obj, avg_signal_size_per_ig);
       // Skip IG if it has no parsed trusted bidding signals.
       if (!parsed_signals.ok() || parsed_signals->json.empty()) {
         continue;
@@ -247,12 +212,22 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
   generate_bids_raw_request->set_top_level_seller(
       get_bids_raw_request.top_level_seller());
 
+  // 11. Set multi bid limit.
+  generate_bids_raw_request->set_multi_bid_limit(kDefaultMultiBidLimit);
+  if (enable_kanon) {
+    generate_bids_raw_request->set_enforce_kanon(
+        get_bids_raw_request.enforce_kanon());
+    int bid_limit = get_bids_raw_request.multi_bid_limit();
+    if (bid_limit > 0) {
+      generate_bids_raw_request->set_multi_bid_limit(bid_limit);
+    }
+  }
   return generate_bids_raw_request;
 }
 
 std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>
 CreateGenerateProtectedAppSignalsBidsRawRequest(
-    const GetBidsRawRequest& raw_request) {
+    const GetBidsRawRequest& raw_request, const bool enable_kanon) {
   auto generate_bids_raw_request =
       std::make_unique<GenerateProtectedAppSignalsBidsRawRequest>();
   generate_bids_raw_request->set_auction_signals(raw_request.auction_signals());
@@ -296,6 +271,15 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   generate_bids_raw_request->set_enable_unlimited_egress(
       raw_request.enable_unlimited_egress());
+
+  generate_bids_raw_request->set_multi_bid_limit(kDefaultMultiBidLimit);
+  if (enable_kanon) {
+    generate_bids_raw_request->set_enforce_kanon(raw_request.enforce_kanon());
+    int bid_limit = raw_request.multi_bid_limit();
+    if (bid_limit > 0) {
+      generate_bids_raw_request->set_multi_bid_limit(bid_limit);
+    }
+  }
 
   return generate_bids_raw_request;
 }

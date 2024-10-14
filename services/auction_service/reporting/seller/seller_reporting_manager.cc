@@ -152,7 +152,7 @@ absl::Status PerformReportResult(
     absl::AnyInvocable<
         void(const std::vector<absl::StatusOr<DispatchResponse>>&)>
         report_result_callback,
-    CodeDispatchClient& dispatcher) {
+    V8DispatchClient& dispatcher) {
   std::string seller_device_signals_json;
   PS_ASSIGN_OR_RETURN(seller_device_signals_json,
                       SerializeJsonDoc(seller_device_signals));

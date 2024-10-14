@@ -25,6 +25,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "api/udf/generate_bid_udf_interface.pb.h"
 #include "gmock/gmock.h"
 #include "include/grpc/event_engine/event_engine.h"
 #include "public/query/v2/get_values_v2.grpc.pb.h"
@@ -40,7 +41,9 @@
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
 #include "services/common/clients/client_factory.h"
-#include "services/common/clients/code_dispatcher/code_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/byob/byob_dispatch_client.h"
+#include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
+#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/concurrent/local_cache.h"
@@ -176,6 +179,21 @@ using ProtectedAppSignalsBiddingAsyncClientMock =
 using KVAsyncClientMock =
     AsyncClientMock<ObliviousGetValuesRequest, google::api::HttpBody,
                     GetValuesRequest, GetValuesResponse>;
+
+template <typename ServiceRequest, typename ServiceResponse>
+class ByobDispatchClientMock
+    : public ByobDispatchClient<ServiceRequest, ServiceResponse> {
+ public:
+  MOCK_METHOD(absl::Status, LoadSync, (std::string version, std::string code),
+              (override));
+  MOCK_METHOD(absl::StatusOr<std::unique_ptr<ServiceResponse>>, Execute,
+              (const ServiceRequest& request, absl::Duration timeout),
+              (override));
+};
+
+using GenerateBidByobDispatchClientMock =
+    ByobDispatchClientMock<roma_service::GenerateProtectedAudienceBidRequest,
+                           roma_service::GenerateProtectedAudienceBidResponse>;
 
 // Utility class to be used by anything that relies on an HttpFetcherAsync.
 class MockHttpFetcherAsync : public HttpFetcherAsync {
@@ -356,13 +374,18 @@ class KVServiceMock : public kv_server::v2::KeyValueService::CallbackService {
       server_rpc_;
 };
 
+class MockUdfCodeLoaderInterface : public UdfCodeLoaderInterface {
+ public:
+  ~MockUdfCodeLoaderInterface() override = default;
+  MOCK_METHOD(absl::Status, LoadSync, (std::string version, std::string code));
+};
+
 class MockV8Dispatcher : public V8Dispatcher {
  public:
   ~MockV8Dispatcher() override = default;
   MOCK_METHOD(absl::Status, Init, ());
   MOCK_METHOD(absl::Status, Stop, ());
-  MOCK_METHOD(absl::Status, LoadSync,
-              (absl::string_view version, absl::string_view js));
+  MOCK_METHOD(absl::Status, LoadSync, (std::string version, std::string code));
   MOCK_METHOD(absl::Status, BatchExecute,
               (std::vector<DispatchRequest> & batch,
                BatchDispatchDoneCallback batch_callback));
@@ -371,9 +394,9 @@ class MockV8Dispatcher : public V8Dispatcher {
                DispatchDoneCallback done_callback));
 };
 
-class MockCodeDispatchClient : public CodeDispatchClient {
+class MockV8DispatchClient : public V8DispatchClient {
  public:
-  MockCodeDispatchClient() : CodeDispatchClient(dispatcher_) {}
+  MockV8DispatchClient() : V8DispatchClient(dispatcher_) {}
   MOCK_METHOD(absl::Status, BatchExecute,
               (std::vector<DispatchRequest> & batch,
                BatchDispatchDoneCallback batch_callback));
@@ -391,7 +414,7 @@ class LocalCacheMock : public LocalCache<Key, Value> {
 class MockScoreAdsReactor : public ScoreAdsReactor {
  public:
   MockScoreAdsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const ScoreAdsRequest* request, ScoreAdsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
@@ -407,7 +430,7 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
 class MockGenerateBidsReactor : public GenerateBidsReactor {
  public:
   MockGenerateBidsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const GenerateBidsRequest* request, GenerateBidsResponse* response,
       absl::string_view js,
       std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger,
@@ -424,7 +447,7 @@ class GenerateProtectedAppSignalsMockBidsReactor
     : public ProtectedAppSignalsGenerateBidsReactor {
  public:
   GenerateProtectedAppSignalsMockBidsReactor(
-      grpc::CallbackServerContext* context, CodeDispatchClient& dispatcher,
+      grpc::CallbackServerContext* context, V8DispatchClient& dispatcher,
       const BiddingServiceRuntimeConfig& runtime_config,
       const GenerateProtectedAppSignalsBidsRequest* request,
       GenerateProtectedAppSignalsBidsResponse* response,

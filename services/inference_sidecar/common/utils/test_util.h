@@ -37,6 +37,22 @@ inline void CheckMetric(
   }
 }
 
+inline void CheckMetricList(
+    const google::protobuf::Map<std::string, MetricValueList>& metrics_list,
+    const std::string& key, int index, int expected_value,
+    const std::string& expected_partition = "") {
+  auto it = metrics_list.find(key);
+  ASSERT_NE(it, metrics_list.end()) << "Metric list" << key << " is missing.";
+  MetricValueList metric_list = it->second;
+  MetricValue metric = metric_list.metrics().at(index);
+  EXPECT_EQ(metric.value(), expected_value)
+      << "Unexpected value for metric " << key;
+  if (!expected_partition.empty()) {
+    EXPECT_EQ(metric.partition(), expected_partition)
+        << "Unexpected partition for metric " << key;
+  }
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 
 #endif  // PRIVACY_SANDBOX_BIDDING_AUCTION_SERVERS_TEST_UTIL_H_

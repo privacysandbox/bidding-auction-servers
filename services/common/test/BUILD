@@ -25,6 +25,7 @@ cc_library(
     ],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api/udf:generate_bid_sdk_cc_proto",
         "//services/auction_service:score_ads_reactor",
         "//services/bidding_service:cddl_spec_cache",
         "//services/bidding_service:egress_schema_cache",
@@ -34,7 +35,9 @@ cc_library(
         "//services/common/clients/bidding_server:async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client_factory",
-        "//services/common/clients/code_dispatcher:code_dispatch_client",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
+        "//services/common/clients/code_dispatcher:v8_dispatch_client",
+        "//services/common/clients/code_dispatcher/byob:byob_dispatch_client",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/concurrent:local_cache",
         "//services/common/providers:async_provider",
@@ -54,7 +57,9 @@ cc_library(
     hdrs = ["random.h"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api/udf:generate_bid_sdk_cc_proto",
         "//services/common/test/utils:cbor_test_utils",
+        "//services/common/util:request_response_constants",
         "//services/seller_frontend_service/test:app_test_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",

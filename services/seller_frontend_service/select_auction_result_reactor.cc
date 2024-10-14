@@ -83,6 +83,7 @@ void SelectAuctionResultReactor::ScoreAds(
       component_auction_results);
   PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
                                      << raw_request->DebugString();
+  std::string x = raw_request->DebugString();
   auto auction_request_metric =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get())
           .release();
@@ -164,7 +165,8 @@ void SelectAuctionResultReactor::OnScoreAdsDone(
       FinishWithResponse(CreateWinningAuctionResultCiphertext(
           score_ad_response->ad_score(),
           GetBuyerIgsWithBidsMap(component_auction_bidding_groups_),
-          request_->client_type(), *decrypted_request_, log_context_));
+          component_auction_update_groups_, request_->client_type(),
+          *decrypted_request_, log_context_));
       return;
     }
   }
@@ -310,6 +312,11 @@ void SelectAuctionResultReactor::Execute() {
   for (auto& car : component_auction_results) {
     component_auction_bidding_groups_.push_back(
         std::move(*car.mutable_bidding_groups()));
+
+    UpdateGroupMap update_group_map = std::move(*car.mutable_update_groups());
+    for (auto& [ig_owner, updates] : update_group_map) {
+      component_auction_update_groups_.emplace(ig_owner, std::move(updates));
+    }
   }
 
   // Map and Call Auction Service.

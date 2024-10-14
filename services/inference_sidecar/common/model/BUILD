@@ -45,3 +45,21 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "validator",
+    srcs = ["validator.h"],
+    hdrs = ["validator.h"],
+    deps = [
+    ],
+)
+
+cc_test(
+    name = "validator_test",
+    srcs = ["validator_test.cc"],
+    deps = [
+        ":validator",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

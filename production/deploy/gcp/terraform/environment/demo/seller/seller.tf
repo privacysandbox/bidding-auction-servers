@@ -88,7 +88,7 @@ module "seller" {
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
-    JS_NUM_WORKERS                  = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    UDF_NUM_WORKERS                 = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
     JS_WORKER_QUEUE_LEN             = "" # Example: "200".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
     TELEMETRY_CONFIG                = "" # Example: "mode: EXPERIMENT"
@@ -134,10 +134,14 @@ module "seller" {
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 
-  # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.
-  frontend_domain_name               = ""    # Example: sfe-gcp.com
-  frontend_dns_zone                  = ""    # Example: "sfe-gcp-com"
-  frontend_domain_ssl_certificate_id = ""    # Example: "projects/${local.gcp_project_id}/global/sslCertificates/sfe-${local.environment}"
+  # Please create a Google Cloud domain name, dns zone, and SSL certificate.
+  # See demo/project_setup_utils/domain_setup/README.md for more details.
+  # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
+  frontend_domain_name               = "" # Example: sfe-gcp.com
+  frontend_dns_zone                  = "" # Example: "sfe-gcp-com"
+  frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/sfe-${local.environment}"
+  frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
+
   operator                           = ""    # Example: "seller-1"
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
   vm_startup_delay_seconds           = 200   # Example: 200

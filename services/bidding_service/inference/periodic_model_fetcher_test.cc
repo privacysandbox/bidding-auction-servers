@@ -51,7 +51,18 @@ using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::ReturnRef;
 
-TEST(PeriodicModelFetcherTest, FetchesAndRegistersAllModels) {
+class PeriodicModelFetcherTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    server_common::telemetry::TelemetryConfig config_proto;
+    config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
+    metric::MetricContextMap<google::protobuf::Message>(
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
+  }
+};
+
+TEST_F(PeriodicModelFetcherTest, FetchesAndRegistersAllModels) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1"},
@@ -129,7 +140,7 @@ TEST(PeriodicModelFetcherTest, FetchesAndRegistersAllModels) {
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest, ShouldNotRegisterSameModelTwice) {
+TEST_F(PeriodicModelFetcherTest, ShouldNotRegisterSameModelTwice) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1"},
@@ -203,8 +214,8 @@ TEST(PeriodicModelFetcherTest, ShouldNotRegisterSameModelTwice) {
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest,
-     GetModelMetadataConfigFailureShouldNotRegisterModel) {
+TEST_F(PeriodicModelFetcherTest,
+       GetModelMetadataConfigFailureShouldNotRegisterModel) {
   auto blob_fetcher = std::make_unique<BlobFetcherMock>();
   auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
   auto executor = std::make_unique<MockExecutor>();
@@ -236,7 +247,7 @@ TEST(PeriodicModelFetcherTest,
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest, CloudFetchFailureShouldNotRegisterModel) {
+TEST_F(PeriodicModelFetcherTest, CloudFetchFailureShouldNotRegisterModel) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1"}
@@ -290,7 +301,7 @@ TEST(PeriodicModelFetcherTest, CloudFetchFailureShouldNotRegisterModel) {
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest, IncorrectChecksumShouldNotRegisterModel) {
+TEST_F(PeriodicModelFetcherTest, IncorrectChecksumShouldNotRegisterModel) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1",
@@ -350,7 +361,7 @@ TEST(PeriodicModelFetcherTest, IncorrectChecksumShouldNotRegisterModel) {
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest, CorrectChecksumShouldRegisterModel) {
+TEST_F(PeriodicModelFetcherTest, CorrectChecksumShouldRegisterModel) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1",
@@ -416,7 +427,7 @@ TEST(PeriodicModelFetcherTest, CorrectChecksumShouldRegisterModel) {
   model_fetcher.End();
 }
 
-TEST(PeriodicModelFetcherTest, RegisterModelWithWarmUpRequestIfProvided) {
+TEST_F(PeriodicModelFetcherTest, RegisterModelWithWarmUpRequestIfProvided) {
   const std::string model_metadata_config = R"({
         "model_metadata": [
             {"model_path": "model1"},

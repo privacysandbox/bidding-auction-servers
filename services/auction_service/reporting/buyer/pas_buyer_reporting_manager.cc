@@ -111,7 +111,7 @@ absl::Status PerformPASReportWin(
     absl::AnyInvocable<
         void(const std::vector<absl::StatusOr<DispatchResponse>>&)>
         report_win_callback,
-    CodeDispatchClient& dispatcher) {
+    V8DispatchClient& dispatcher) {
   std::shared_ptr<std::string> buyer_device_signals;
   PS_ASSIGN_OR_RETURN(
       buyer_device_signals,

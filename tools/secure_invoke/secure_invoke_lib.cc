@@ -122,7 +122,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
     const HpkeKeyset& keyset, bool enable_debug_reporting,
-    std::optional<bool> enable_debug_info, bool enable_unlimited_egress,
+    std::optional<bool> enable_debug_info,
+    std::optional<bool> enable_unlimited_egress,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -232,9 +233,8 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               raw_response,
           ResponseMetadata response_metadata) mutable {
-        ABSL_VLOG(0) << "Received bid response from BFE in "
-                     << ((absl::Now() - start) / absl::Milliseconds(1))
-                     << " ms.";
+        PS_VLOG(1) << "Received bid response from BFE in "
+                   << ((absl::Now() - start) / absl::Milliseconds(1)) << " ms.";
         if (!raw_response.ok()) {
           std::move(onDone)(raw_response.status());
         } else {
@@ -265,7 +265,7 @@ std::string LoadFile(absl::string_view file_path) {
 absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               bool enable_debug_reporting,
                               std::optional<bool> enable_debug_info,
-                              bool enable_unlimited_egress) {
+                              std::optional<bool> enable_unlimited_egress) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -297,13 +297,15 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
 }
 
 GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
-    bool enable_debug_reporting, bool enable_unlimited_egress) {
+    bool enable_debug_reporting, std::optional<bool> enable_unlimited_egress) {
   std::string raw_get_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
   const bool is_json = (!raw_get_bids_request_str.empty() ||
                         absl::GetFlag(FLAGS_input_format) == kJsonFormat);
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request;
   get_bids_raw_request.set_enable_debug_reporting(enable_debug_reporting);
-  get_bids_raw_request.set_enable_unlimited_egress(enable_unlimited_egress);
+  if (enable_unlimited_egress) {
+    get_bids_raw_request.set_enable_unlimited_egress(*enable_unlimited_egress);
+  }
   if (is_json) {
     if (raw_get_bids_request_str.empty()) {
       raw_get_bids_request_str = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -324,9 +326,9 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
   return get_bids_raw_request;
 }
 
-std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
-                                                 bool enable_debug_reporting,
-                                                 bool enable_unlimited_egress) {
+std::string PackagePlainTextGetBidsRequestToJson(
+    const HpkeKeyset& keyset, bool enable_debug_reporting,
+    std::optional<bool> enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting,
                                  enable_unlimited_egress);
@@ -349,7 +351,7 @@ std::string PackagePlainTextGetBidsRequestToJson(const HpkeKeyset& keyset,
 absl::Status SendRequestToBfe(
     const HpkeKeyset& keyset, bool enable_debug_reporting,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub,
-    bool enable_unlimited_egress) {
+    std::optional<bool> enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting,
                                  enable_unlimited_egress);

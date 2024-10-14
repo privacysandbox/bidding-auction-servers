@@ -49,3 +49,29 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "validation",
+    srcs = ["validation.cc"],
+    hdrs = ["validation.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/loggers:request_log_context",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "validation_test",
+    size = "small",
+    srcs = ["validation_test.cc"],
+    deps = [
+        ":validation",
+        "//services/common/test:random",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

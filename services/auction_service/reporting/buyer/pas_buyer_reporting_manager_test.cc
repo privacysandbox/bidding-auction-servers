@@ -144,7 +144,7 @@ TEST_F(PerformReportWin, DispatchesRequestToReportWin) {
   };
 
   absl::Notification notification;
-  MockCodeDispatchClient mock_dispatch_client;
+  MockV8DispatchClient mock_dispatch_client;
   EXPECT_CALL(mock_dispatch_client, BatchExecute)
       .WillOnce([&notification, &test_data, &dispatch_request_data,
                  &seller_dispatch_request_data](
@@ -190,7 +190,7 @@ TEST_F(PerformReportWin, DispatchRequestFailsAndStatusNotOkReturned) {
   };
 
   absl::Notification notification;
-  MockCodeDispatchClient mock_dispatch_client;
+  MockV8DispatchClient mock_dispatch_client;
   EXPECT_CALL(mock_dispatch_client, BatchExecute)
       .WillOnce([&notification, &test_data, &dispatch_request_data,
                  &seller_dispatch_request_data](
@@ -228,7 +228,7 @@ TEST_F(PerformReportWin, ReportWinNotExecutedWhenVersionLookupFails) {
 
   ReportingDispatchRequestConfig config;
   dispatch_request_data.buyer_origin = kInvalidUrl;
-  MockCodeDispatchClient mock_dispatch_client;
+  MockV8DispatchClient mock_dispatch_client;
   EXPECT_CALL(mock_dispatch_client, BatchExecute).Times(0);
   absl::Status status =
       PerformPASReportWin(config, dispatch_request_data, document,

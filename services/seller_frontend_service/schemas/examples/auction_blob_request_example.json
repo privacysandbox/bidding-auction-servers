@@ -7,5 +7,6 @@
   },
   "generationId": "a8098c1a-f86e-11da-bd1a-00112444be1e",
   "enableDebugReporting": false,
-  "requestTimestampMs": 1723102593791
+  "requestTimestampMs": 1723102593791,
+  "enforceKAnon": true
 }

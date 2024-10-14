@@ -165,7 +165,7 @@ variable "healthcheck_timeout_sec" {
 variable "healthcheck_grace_period_sec" {
   description = "Amount of time to wait for service inside enclave to start up before starting health checks, in seconds."
   type        = number
-  default     = 60
+  default     = 180
 }
 
 variable "healthcheck_healthy_threshold" {
@@ -241,4 +241,9 @@ variable "ad_retrieval_kv_server_virtual_service_name" {
 variable "consented_request_s3_bucket" {
   description = "s3 bucket to export event message for consented request"
   type        = string
+}
+
+variable "tee_kv_servers_port" {
+  description = "Port on which the TEE KV server accepts connections."
+  type        = number
 }

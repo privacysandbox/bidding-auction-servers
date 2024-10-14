@@ -132,3 +132,11 @@ load("@com_google_sandboxed_api//sandboxed_api/bazel:sapi_deps.bzl", "sapi_deps"
 llvm_disable_optional_support_deps()
 
 sapi_deps()
+
+load("@rules_fuzzing//fuzzing:repositories.bzl", "rules_fuzzing_dependencies")
+
+rules_fuzzing_dependencies()
+
+load("@rules_fuzzing//fuzzing:init.bzl", "rules_fuzzing_init")
+
+rules_fuzzing_init()

@@ -28,3 +28,6 @@ ABSL_FLAG(bool, enable_temporary_unlimited_egress, true,
 ABSL_FLAG(bool, enable_cancellation, false,
           "If true, request cancellations are allowed. This will try to cancel "
           "downstream requests and RPC and then finish the reactor.");
+
+ABSL_FLAG(bool, enable_kanon, false,
+          "If true, k-anonymity checks on ads will be enabled.");

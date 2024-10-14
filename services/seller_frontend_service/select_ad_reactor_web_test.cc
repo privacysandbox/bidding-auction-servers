@@ -67,7 +67,8 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
-        server_common::telemetry::BuildDependentConfig(config_proto));
+        std::make_unique<server_common::telemetry::BuildDependentConfig>(
+            config_proto));
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
@@ -323,10 +324,23 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
       expected_score_ads_request.mutable_log_context();
   score_ads_log_context->set_generation_id(kSampleGenerationId);
   score_ads_log_context->set_adtech_debug_id(kSampleSellerDebugId);
+  auto mock_scoring_client_exec =
+      [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+         grpc::ClientContext* context,
+         absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                     ScoreAdsResponse::ScoreAdsRawResponse>>,
+                                 ResponseMetadata)&&>
+             on_done,
+         absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
+        return absl::OkStatus();
+      };
   EXPECT_CALL(scoring_client,
               ExecuteInternal(Pointee(EqScoreAdsRawRequestWithLogContext(
                                   expected_score_ads_request)),
-                              _, _, _, _));
+                              _, _, _, _))
+      .WillRepeatedly(mock_scoring_client_exec);
 
   // Set log context that should be propagated to the downstream services.
   auto [protected_auction_input, request, context] =
@@ -670,12 +684,24 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
       kIsConsentedDebug);
   expected_consented_debug_config_for_score_ads->set_token(
       kConsentedDebugToken);
-
+  auto mock_scoring_client_exec =
+      [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+         grpc::ClientContext* context,
+         absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                     ScoreAdsResponse::ScoreAdsRawResponse>>,
+                                 ResponseMetadata)&&>
+             on_done,
+         absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
+        return absl::OkStatus();
+      };
   EXPECT_CALL(
       scoring_client,
       ExecuteInternal(Pointee(EqScoreAdsRawRequestWithConsentedDebugConfig(
                           expected_score_ads_request)),
-                      _, _, _, _));
+                      _, _, _, _))
+      .WillRepeatedly(mock_scoring_client_exec);
 
   // Set consented debug config that should be propagated to the downstream
   // services.
@@ -828,7 +854,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
       .WillOnce(Return(google::cmrt::sdk::public_key_service::v1::PublicKey()));
   MockCryptoClientWrapper crypto_client;
-  SetupMockCrytoClient(crypto_client);
+  SetupMockCryptoClient(crypto_client);
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,

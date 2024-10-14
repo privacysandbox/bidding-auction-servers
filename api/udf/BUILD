@@ -15,7 +15,7 @@
 load(
     "@google_privacysandbox_servers_common//src/roma/tools/api_plugin:roma_api.bzl",
     "declare_roma_api",
-    "roma_byob_app_api_cc_library",
+    "roma_byob_sdk",
 )
 load("@rules_cc//cc:defs.bzl", "cc_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
@@ -31,6 +31,7 @@ proto_library(
 
 cc_proto_library(
     name = "generate_bid_cc_proto",
+    visibility = ["//visibility:public"],
     deps = [
         ":generate_bid_proto",
     ],
@@ -42,12 +43,9 @@ generate_bid_api = declare_roma_api(
     protos = [":generate_bid_proto"],
 )
 
-roma_byob_app_api_cc_library(
-    name = "generate_bid_roma_api",
+roma_byob_sdk(
+    name = "generate_bid_sdk",
+    srcs = [],
     roma_app_api = generate_bid_api,
-    tags = [
-        "noasan",
-        "notsan",
-    ],
     visibility = ["//visibility:public"],
 )

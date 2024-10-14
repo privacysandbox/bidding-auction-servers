@@ -23,15 +23,13 @@
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
-#include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/file_util.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/util/status_macro/status_macros.h"
-
-#include "buyer_code_fetch_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -40,9 +38,6 @@ constexpr int kJsBlobIndex = 0;
 constexpr int kWasmBlobIndex = 1;
 constexpr int kMinNumCodeBlobs = 1;
 constexpr int kMaxNumCodeBlobs = 2;
-constexpr char kUnusedWasmBlob[] = "";
-
-using ::google::scp::core::errors::GetErrorMessage;
 
 }  // namespace
 
@@ -92,13 +87,21 @@ absl::Status BuyerCodeFetchManager::InitializeLocalCodeFetch() {
                       GetFileContent(udf_config_.bidding_js_path(),
                                      /*log_on_error=*/true));
   adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, {});
-  return dispatcher_.LoadSync(kProtectedAudienceGenerateBidBlobVersion,
-                              adtech_code_blob);
+  return loader_.LoadSync(kProtectedAudienceGenerateBidBlobVersion,
+                          std::move(adtech_code_blob));
+}
+
+absl::Status BuyerCodeFetchManager::InitializeBucketClient() {
+  PS_RETURN_IF_ERROR(blob_storage_client_->Init()).SetPrepend()
+      << kBlobStorageClientInitFailed;
+  PS_RETURN_IF_ERROR(blob_storage_client_->Run()).SetPrepend()
+      << kBlobStorageClientRunFailed;
+  return absl::OkStatus();
 }
 
 absl::Status BuyerCodeFetchManager::InitializeBucketCodeFetch() {
   if (enable_protected_audience_ || enable_protected_app_signals_) {
-    PS_RETURN_IF_ERROR(InitBucketClient()) << kBlobStorageClientInitFailed;
+    PS_RETURN_IF_ERROR(InitializeBucketClient());
   }
   if (enable_protected_audience_) {
     PS_RETURN_IF_ERROR(InitializeBucketCodeFetchForPA());
@@ -194,12 +197,13 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPA() {
 
   PS_ASSIGN_OR_RETURN(
       pa_udf_fetcher_,
-      StartUrlFetch(udf_config_.bidding_js_url(),
-                    udf_config_.bidding_wasm_helper_url(),
-                    kProtectedAudienceGenerateBidBlobVersion, "bidding_js_url",
-                    absl::Milliseconds(udf_config_.url_fetch_period_ms()),
-                    absl::Milliseconds(udf_config_.url_fetch_timeout_ms()),
-                    std::move(wrap_code)));
+      StartUrlFetch(
+          udf_config_.bidding_js_url(),
+          kProtectedAudienceGenerateBidBlobVersion, kProtectedAuctionJsUrlId,
+          absl::Milliseconds(udf_config_.url_fetch_period_ms()),
+          absl::Milliseconds(udf_config_.url_fetch_timeout_ms()),
+          std::move(wrap_code), udf_config_.bidding_wasm_helper_url()));
+
   return absl::OkStatus();
 }
 
@@ -240,52 +244,28 @@ absl::Status BuyerCodeFetchManager::InitializeUrlCodeFetchForPAS() {
 
   PS_ASSIGN_OR_RETURN(
       pas_bidding_udf_fetcher_,
-      StartUrlFetch(udf_config_.protected_app_signals_bidding_js_url(),
-                    udf_config_.protected_app_signals_bidding_wasm_helper_url(),
-                    kProtectedAppSignalsGenerateBidBlobVersion,
-                    "protected_app_signals_bidding_js_url", url_fetch_period_ms,
-                    url_fetch_timeout_ms, std::move(wrap_bidding_code)));
+      StartUrlFetch(
+          udf_config_.protected_app_signals_bidding_js_url(),
+          kProtectedAppSignalsGenerateBidBlobVersion,
+          kProtectedAppSignalsJsUrlId, url_fetch_period_ms,
+          url_fetch_timeout_ms, std::move(wrap_bidding_code),
+          udf_config_.protected_app_signals_bidding_wasm_helper_url()));
 
   PS_ASSIGN_OR_RETURN(
       pas_ads_retrieval_udf_fetcher_,
       StartUrlFetch(
           udf_config_.prepare_data_for_ads_retrieval_js_url(),
-          udf_config_.prepare_data_for_ads_retrieval_wasm_helper_url(),
-          kPrepareDataForAdRetrievalBlobVersion,
-          "prepare_data_for_ads_retrieval_js_url", url_fetch_period_ms,
-          url_fetch_timeout_ms, std::move(wrap_ads_retrieval_code)));
+          kPrepareDataForAdRetrievalBlobVersion, kAdsRetrievalJsUrlId,
+          url_fetch_period_ms, url_fetch_timeout_ms,
+          std::move(wrap_ads_retrieval_code),
+          udf_config_.prepare_data_for_ads_retrieval_wasm_helper_url()));
 
   return absl::OkStatus();
 }
 
 absl::StatusOr<std::unique_ptr<FetcherInterface>>
-BuyerCodeFetchManager::StartUrlFetch(
-    const std::string& js_url, const std::string& wasm_helper_url,
-    const std::string& roma_version, absl::string_view script_logging_name,
-    absl::Duration url_fetch_period_ms, absl::Duration url_fetch_timeout_ms,
-    absl::AnyInvocable<std::string(const std::vector<std::string>&)>
-        wrap_code) {
-  if (js_url.empty()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("JS URL for ", script_logging_name, " is missing"));
-  }
-
-  std::vector<std::string> endpoints = {js_url};
-  if (!wasm_helper_url.empty()) {
-    endpoints.emplace_back(wasm_helper_url);
-  }
-  auto code_fetcher = std::make_unique<PeriodicCodeFetcher>(
-      std::move(endpoints), url_fetch_period_ms, &http_fetcher_, &dispatcher_,
-      &executor_, url_fetch_timeout_ms, std::move(wrap_code), roma_version);
-
-  PS_RETURN_IF_ERROR(code_fetcher->Start())
-      << absl::StrCat("Failed url fetcher startup for  ", script_logging_name);
-  return code_fetcher;
-}
-
-absl::StatusOr<std::unique_ptr<FetcherInterface>>
 BuyerCodeFetchManager::StartBucketFetch(
-    const std::string& bucket_name, const std::string& default_version,
+    absl::string_view bucket_name, absl::string_view default_version,
     absl::string_view script_logging_name, absl::Duration url_fetch_period_ms,
     absl::AnyInvocable<std::string(const std::vector<std::string>&)>
         wrap_code) {
@@ -298,20 +278,36 @@ BuyerCodeFetchManager::StartBucketFetch(
   }
 
   auto bucket_fetcher = std::make_unique<PeriodicBucketCodeFetcher>(
-      bucket_name, url_fetch_period_ms, &dispatcher_, &executor_,
+      bucket_name, url_fetch_period_ms, &loader_, &executor_,
       std::move(wrap_code), blob_storage_client_.get());
-  PS_RETURN_IF_ERROR(bucket_fetcher->Start())
-      << absl::StrCat("Failed bucket fetch startup for ", script_logging_name,
-                      " ", bucket_name);
+  PS_RETURN_IF_ERROR(bucket_fetcher->Start()) << absl::StrCat(
+      kFailedBucketFetchStartup, script_logging_name, " for ", bucket_name);
   return bucket_fetcher;
 }
 
-absl::Status BuyerCodeFetchManager::InitBucketClient() {
-  PS_RETURN_IF_ERROR(blob_storage_client_->Init()).SetPrepend()
-      << "Failed to init BlobStorageClient: ";
-  PS_RETURN_IF_ERROR(blob_storage_client_->Run()).SetPrepend()
-      << "Failed to run BlobStorageClient: ";
-  return absl::OkStatus();
+absl::StatusOr<std::unique_ptr<FetcherInterface>>
+BuyerCodeFetchManager::StartUrlFetch(
+    const std::string& script_url, const std::string& roma_version,
+    absl::string_view script_logging_name, absl::Duration url_fetch_period_ms,
+    absl::Duration url_fetch_timeout_ms,
+    absl::AnyInvocable<std::string(const std::vector<std::string>&)> wrap_code,
+    const std::string& wasm_helper_url) {
+  if (script_url.empty()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(kEmptyUrl, script_logging_name));
+  }
+
+  std::vector<std::string> endpoints = {script_url};
+  if (!wasm_helper_url.empty()) {
+    endpoints.emplace_back(wasm_helper_url);
+  }
+  auto code_fetcher = std::make_unique<PeriodicCodeFetcher>(
+      std::move(endpoints), url_fetch_period_ms, &http_fetcher_, &loader_,
+      &executor_, url_fetch_timeout_ms, std::move(wrap_code), roma_version);
+
+  PS_RETURN_IF_ERROR(code_fetcher->Start())
+      << absl::StrCat(kFailedUrlFetchStartup, script_logging_name);
+  return code_fetcher;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

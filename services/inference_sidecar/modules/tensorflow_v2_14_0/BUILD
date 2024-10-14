@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "@rules_pkg//pkg:mappings.bzl",
@@ -26,6 +27,10 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "inference_sidecar_bin",
     srcs = ["@inference_common//:inference_sidecar_main.cc"],
+    malloc = select({
+        ":use_tcmalloc": "@com_google_tcmalloc//tcmalloc",
+        "//conditions:default": "@bazel_tools//tools/cpp:malloc",
+    }),
     deps = [
         ":tensorflow",
         "@inference_common//:grpc_sidecar",
@@ -133,9 +138,12 @@ cc_test(
 cc_library(
     name = "tensorflow",
     srcs = ["tensorflow.cc"],
+    hdrs = ["tensorflow.h"],
     deps = [
         ":tensorflow_parser",
+        ":validator",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -155,6 +163,7 @@ cc_library(
         "@org_tensorflow//tensorflow/cc/saved_model:loader",
         "@org_tensorflow//tensorflow/cc/saved_model:signature_constants",
         "@org_tensorflow//tensorflow/cc/saved_model:tag_constants",
+        "@org_tensorflow//tensorflow/cc/tools:freeze_saved_model",
         "@org_tensorflow//tensorflow/core:core_cpu",
         "@org_tensorflow//tensorflow/core:example_parser_configuration",
         "@org_tensorflow//tensorflow/core:framework",
@@ -171,6 +180,9 @@ cc_test(
     srcs = ["tensorflow_test.cc"],
     data = [
         "//benchmark_models/embedding:embedding_model",
+        "//benchmark_models/frozen_embedding:frozen_embedding_model",
+        "//benchmark_models/frozen_pctr:frozen_pctr_model",
+        "//benchmark_models/frozen_pcvr:frozen_pcvr_model",
         "//benchmark_models/pctr:pctr_model",
         "//benchmark_models/pcvr:pcvr_model",
         "//benchmark_models/stateful:stateful_model",
@@ -214,6 +226,37 @@ cc_test(
     ],
 )
 
+cc_library(
+    name = "validator",
+    srcs = ["validator.cc"],
+    hdrs = [
+        "validator.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:absl_log",
+        "@inference_common//model:validator",
+        "@org_tensorflow//tensorflow/cc:client_session",
+        "@org_tensorflow//tensorflow/core:framework",
+    ],
+)
+
+cc_test(
+    name = "validator_test",
+    srcs = ["validator_test.cc"],
+    data = [
+        "//benchmark_models/stateful:stateful_model",
+    ],
+    deps = [
+        ":validator",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@org_tensorflow//tensorflow/cc:client_session",
+        "@org_tensorflow//tensorflow/cc/saved_model:loader",
+    ],
+)
+
 cc_test(
     name = "module_concurrency_test",
     size = "small",
@@ -221,6 +264,10 @@ cc_test(
     data = [
         ":test_model_target",
     ],
+    malloc = select({
+        ":use_tcmalloc": "@com_google_tcmalloc//tcmalloc",
+        "//conditions:default": "@bazel_tools//tools/cpp:malloc",
+    }),
     deps = [
         ":tensorflow",
         "@com_google_absl//absl/status",
@@ -232,6 +279,23 @@ cc_test(
         "@inference_common//proto:inference_sidecar_cc_proto",
         "@inference_common//utils:file_util",
     ],
+)
+
+string_flag(
+    name = "tcmalloc_build",
+    build_setting_default = "no",
+    values = [
+        "yes",
+        "no",
+    ],
+)
+
+config_setting(
+    name = "use_tcmalloc",
+    flag_values = {
+        ":tcmalloc_build": "yes",
+    },
+    visibility = ["//visibility:public"],
 )
 
 genrule(

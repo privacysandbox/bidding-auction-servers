@@ -61,6 +61,8 @@ module "seller" {
   locality_for_cert_auth               = ""    # Example: "Mountain View"
   use_service_mesh                     = local.use_service_mesh
   use_tls_with_mesh                    = local.use_tls_with_mesh
+  # NOTE THAT THE ONLY PORT ALLOWED HERE WHEN RUNNING WITH MESH IS 50051!
+  tee_kv_servers_port = 50051 # Example: 50051
 
   runtime_flags = {
     AUCTION_PORT         = "50051"                                   # Do not change unless you are modifying the default AWS architecture.
@@ -77,21 +79,22 @@ module "seller" {
     SELLER_ORIGIN_DOMAIN                   = "" # Example: "https://sellerorigin.com"
     AUCTION_SERVER_HOST                    = local.use_service_mesh ? "dns:///auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}:50051" : "dns:///auction-${local.environment}.${local.seller_root_domain}:443"
     GRPC_ARG_DEFAULT_AUTHORITY             = local.use_service_mesh ? "auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
-    KEY_VALUE_SIGNALS_HOST                 = ""                                                                                                                                                   # Example: "https://keyvaluesignals.com/trusted-signals"
-    BUYER_SERVER_HOSTS                     = ""                                                                                                                                                   # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
-    SELLER_CLOUD_PLATFORMS_MAP             = ""                                                                                                                                                   # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
-    ENABLE_SELLER_FRONTEND_BENCHMARKING    = ""                                                                                                                                                   # Example: "false"
-    ENABLE_AUCTION_COMPRESSION             = ""                                                                                                                                                   # Example: "false"
-    ENABLE_BUYER_COMPRESSION               = ""                                                                                                                                                   # Example: "false"
-    ENABLE_PROTECTED_APP_SIGNALS           = ""                                                                                                                                                   # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE              = ""                                                                                                                                                   # Example: "true"
-    PS_VERBOSITY                           = ""                                                                                                                                                   # Example: "10"
-    CREATE_NEW_EVENT_ENGINE                = ""                                                                                                                                                   # Example: "false"
-    TELEMETRY_CONFIG                       = ""                                                                                                                                                   # Example: "mode: EXPERIMENT"
-    ENABLE_OTEL_BASED_LOGGING              = ""                                                                                                                                                   # Example: "true"
-    CONSENTED_DEBUG_TOKEN                  = ""                                                                                                                                                   # Example: "123456"
-    TEST_MODE                              = ""                                                                                                                                                   # Example: "false"
-    SELLER_CODE_FETCH_CONFIG               = ""                                                                                                                                                   # Example:
+    # Refers to BYOS Seller Key-Value Server only.
+    KEY_VALUE_SIGNALS_HOST              = "" # Example: "https://keyvaluesignals.com/trusted-signals"
+    BUYER_SERVER_HOSTS                  = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
+    SELLER_CLOUD_PLATFORMS_MAP          = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
+    ENABLE_SELLER_FRONTEND_BENCHMARKING = "" # Example: "false"
+    ENABLE_AUCTION_COMPRESSION          = "" # Example: "false"
+    ENABLE_BUYER_COMPRESSION            = "" # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS        = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE           = "" # Example: "true"
+    PS_VERBOSITY                        = "" # Example: "10"
+    CREATE_NEW_EVENT_ENGINE             = "" # Example: "false"
+    TELEMETRY_CONFIG                    = "" # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING           = "" # Example: "true"
+    CONSENTED_DEBUG_TOKEN               = "" # Example: "123456"
+    TEST_MODE                           = "" # Example: "false"
+    SELLER_CODE_FETCH_CONFIG            = "" # Example:
     # "{
     #     "fetchMode": 0,
     #     "auctionJsPath": "",
@@ -112,7 +115,7 @@ module "seller" {
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
 
     #  }"
-    JS_NUM_WORKERS                  = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count, and should be equal for best performance.
+    UDF_NUM_WORKERS                 = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count, and should be equal for best performance.
     JS_WORKER_QUEUE_LEN             = "" # Example: "100".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
     ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"

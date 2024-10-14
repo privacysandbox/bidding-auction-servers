@@ -83,6 +83,6 @@ ABSL_FLAG(std::optional<bool>, enable_debug_info, std::nullopt,
 ABSL_FLAG(std::string, pas_buyer_input_json, "",
           "PAS specific buyer input for each buyer app signal proto.");
 
-ABSL_FLAG(bool, enable_unlimited_egress, false,
+ABSL_FLAG(std::optional<bool>, enable_unlimited_egress, std::nullopt,
           "Set to true to indicate to server that temporary unlimited egress "
           "should be enabled");

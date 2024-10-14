@@ -96,6 +96,11 @@ module "buyer_dashboard" {
   environment = var.environment
 }
 
+module "inference_dashboard" {
+  source      = "../../services/dashboards/inference_dashboard"
+  environment = var.environment
+}
+
 resource "google_secret_manager_secret" "runtime_flag_secrets" {
   for_each = var.runtime_flags
 

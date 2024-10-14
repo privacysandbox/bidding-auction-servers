@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.1.0 (2024-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* All sellers and buyers must update the js_num_workers parameter to udf_num_workers in terraform
+* Sellers must wait for all the integrated buyers to update to 4.1.0 before updating to accomodate serialization changes in the GetBidsRequest.
+
+### Features
+
+* [BYOB] Add buyer code fetcher for executables
+* [BYOB] Add dispatch client for generateBid
+* [BYOB] Add GCP build setup for Bidding service
+* [BYOB] Add gRPC reactor for generateBid binary
+* [BYOB] Add info about runtime flags to demo/README.md
+* [BYOB] Add interface for clients that load code
+* [BYOB] Add to Bidding service critical path
+* Add a generic model validator interface for Tensorflow and PyTorch
+* Add PrivateAggregation protos to generateBid spec
+* add project setup scripts
+* add proto support for updateIfOlderThanMs
+* BFE parses perInterestGroupData, returns updateIfOlderThanMs data to SFE
+* Compress SFE <> BFE comms
+* Create new inference dashboard for GCP
+* Enable chaffing on SFE prod mode builds
+* Enable connecting to TKV via an External LB
+* Enable dynamic partition for inference metrics
+* Enable model validation for PyTorch
+* Enable TCMalloc for B&A inference
+* Export all available models as metric
+* Freeze a TensorFlow model ([bcc798c]( )), closes [#7]( )
+* Implement a PyTorch model validator
+* Implement a TensorFlow model validator
+* Rename JS_NUM_WORKERS to UDF_NUM_WORKERS
+* SFE sends updateIfOlderThanMs data to client
+* update start_bidding with minimal defaults and local file flag
+
+### Bug Fixes
+
+* BYOB generateBid should only parse first bid from binary response
+* Ensure gRPC calls don't hang on error
+* Fix js_execution.error.count metric
+* Fix memory leak in BFE client
+* Fix readonly declarations in shell script
+* Fix version bump in release script
+* Load request files in the init function
+* Reduce absl::GetFlag() call in GetBidsReactor
+* Renames prev_wins_ms to prev_wins
+* Set inference sidecar GRPC keepalive timeout
+* update tls cert commands for GCP setup
+* Use std::hash instead of absl::hash
+
 ## 4.0.0 (2024-09-09)
 
 

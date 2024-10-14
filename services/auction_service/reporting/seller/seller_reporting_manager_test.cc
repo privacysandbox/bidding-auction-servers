@@ -154,7 +154,7 @@ TEST_F(SellerReportingManagerTest,
        PerformReportResult_DispatchesRequestToReportResult) {
   auto report_result_callback =
       [](const std::vector<absl::StatusOr<DispatchResponse>>& result) {};
-  MockCodeDispatchClient mock_dispatch_client;
+  MockV8DispatchClient mock_dispatch_client;
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
@@ -186,7 +186,7 @@ TEST_F(SellerReportingManagerTest,
       [](const std::vector<absl::StatusOr<DispatchResponse>>& result) {};
   absl::StatusOr<rapidjson::Document> document =
       ParseJsonString(kExpectedSellerDeviceSignals);
-  MockCodeDispatchClient mock_dispatch_client;
+  MockV8DispatchClient mock_dispatch_client;
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
   PostAuctionSignals post_auction_signals =
       GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);

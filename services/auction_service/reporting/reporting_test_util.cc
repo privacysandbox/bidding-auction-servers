@@ -30,6 +30,7 @@
 #include "services/auction_service/reporting/seller/seller_reporting_manager.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
+#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

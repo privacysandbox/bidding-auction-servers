@@ -26,6 +26,6 @@ enum FetchMode {
    // Fetch all blobs from a specified bucket
    // and rely on a default blob specification.
    FETCH_MODE_BUCKET = 1;
-   // Fetch a blob from a local path. Dev-only.
+   // Fetch a blob from a local path. Test-only.
    FETCH_MODE_LOCAL = 2;
 }

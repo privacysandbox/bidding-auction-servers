@@ -79,7 +79,7 @@ module "buyer" {
     #   "urlFetchTimeoutMs": 30000
     # }"
     # [END] PAS related params
-    BUYER_CODE_FETCH_CONFIG = "" # Example:
+    BUYER_CODE_FETCH_CONFIG = "" # Example for V8:
     # "{
     #    "fetchMode": 0,
     #    "biddingJsPath": "",
@@ -94,7 +94,17 @@ module "buyer" {
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #    "enablePrivateAggregateReporting": false,
     #  }"
-    JS_NUM_WORKERS            = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
+    # Example for BYOB:
+    # "{
+    #    "fetchMode": 0,
+    #    "biddingExecutablePath": "",
+    #    "biddingExecutableUrl": "https://example.com/generateBid",
+    #    "urlFetchPeriodMs": 13000000,
+    #    "urlFetchTimeoutMs": 30000,
+    #    "enableBuyerDebugUrlGeneration": true,
+    #    "enablePrivateAggregateReporting": false,
+    #  }"
+    UDF_NUM_WORKERS           = "" # Example: "64" Must be <=vCPUs in bidding_machine_type.
     JS_WORKER_QUEUE_LEN       = "" # Example: "200".
     ROMA_TIMEOUT_MS           = "" # Example: "10000"
     TELEMETRY_CONFIG          = "" # Example: "mode: EXPERIMENT"
@@ -143,10 +153,13 @@ module "buyer" {
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
   }
 
-  # Please manually create a Google Cloud domain name, dns zone, and SSL certificate.
+  # Please create a Google Cloud domain name, dns zone, and SSL certificate.
+  # See demo/project_setup_utils/domain_setup/README.md for more details.
+  # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
   frontend_domain_name               = "" # Example: bfe-gcp.com
   frontend_dns_zone                  = "" # Example: "bfe-gcp-com"
   frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/bfe-${local.environment}"
+  frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
 
   operator                           = ""    # Example: "buyer-1"
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"

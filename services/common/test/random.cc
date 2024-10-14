@@ -14,6 +14,7 @@
 
 #include "services/common/test/random.h"
 
+#include <set>
 #include <string>
 
 #include "absl/strings/str_format.h"
@@ -25,6 +26,18 @@ constexpr char kTestIgWithTwoAds[] =
 
 std::string MakeARandomString() {
   return std::to_string(ToUnixNanos(absl::Now()));
+}
+
+std::string MakeARandomStringOfLength(size_t length) {
+  static const std::string alphanumeric =
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  std::default_random_engine curr_time_generator(ToUnixMillis(absl::Now()));
+  std::uniform_int_distribution<int> distribution(0, alphanumeric.size() - 1);
+  std::string output(length, ' ');
+  std::generate_n(output.begin(), length, [&] {
+    return alphanumeric[distribution(curr_time_generator)];
+  });
+  return output;
 }
 
 std::string MakeARandomUrl() {
@@ -367,6 +380,11 @@ InterestGroupForBidding MakeARandomInterestGroupForBidding(
     *ig_for_bidding.mutable_ad_render_ids()->Add() =
         absl::StrCat("ad_render_id_random_", MakeARandomString());
   }
+  int ad_component_render_ids_to_generate = MakeARandomInt(1, 10);
+  for (int i = 0; i < ad_component_render_ids_to_generate; i++) {
+    *ig_for_bidding.mutable_ad_component_render_ids()->Add() =
+        absl::StrCat("ad_component_render_id_random_", MakeARandomString());
+  }
   if (build_android_signals) {
     // Empty message for now.
     ig_for_bidding.mutable_android_signals();
@@ -421,7 +439,8 @@ InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser() {
 }
 
 GenerateBidsRequest::GenerateBidsRawRequest
-MakeARandomGenerateBidsRawRequestForAndroid() {
+MakeARandomGenerateBidsRawRequestForAndroid(bool enforce_kanon,
+                                            int multi_bid_limit) {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
@@ -434,11 +453,15 @@ MakeARandomGenerateBidsRawRequestForAndroid() {
   raw_request.set_allocated_buyer_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
 
+  raw_request.set_enforce_kanon(enforce_kanon);
+  raw_request.set_multi_bid_limit(multi_bid_limit);
+
   return raw_request;
 }
 
 GenerateBidsRequest::GenerateBidsRawRequest
-MakeARandomGenerateBidsRequestForBrowser() {
+MakeARandomGenerateBidsRequestForBrowser(bool enforce_kanon,
+                                         int multi_bid_limit) {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
@@ -452,6 +475,9 @@ MakeARandomGenerateBidsRequestForBrowser() {
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 10))).release());
   raw_request.set_seller(MakeARandomString());
   raw_request.set_publisher_name(MakeARandomString());
+
+  raw_request.set_enforce_kanon(enforce_kanon);
+  raw_request.set_multi_bid_limit(multi_bid_limit);
 
   return raw_request;
 }
@@ -563,6 +589,71 @@ AdWithBid MakeARandomAdWithBid(float min_bid, float max_bid,
   return ad_with_bid;
 }
 
+AdWithBid MakeARandomAdWithBid(int64_t seed, bool debug_reporting_enabled,
+                               bool allow_component_auction) {
+  std::string random_string = std::to_string(seed);
+  std::string random_url = absl::StrCat("https://", random_string, ".com");
+
+  AdWithBid bid;
+  bid.mutable_ad()->set_string_value(random_string);
+  bid.set_bid(1.1f + seed);
+  bid.set_render(random_url);
+  bid.add_ad_components(absl::StrFormat("%s/%d", random_url, seed));
+  bid.add_ad_components(absl::StrFormat("%s/%d", random_url, seed + 1));
+  bid.set_allow_component_auction(allow_component_auction);
+  bid.set_interest_group_name(random_string);
+  bid.set_ad_cost(0.5f + seed);
+  bid.set_modeling_signals(seed);
+  bid.set_bid_currency("USD");
+  bid.set_buyer_reporting_id(absl::StrFormat("id_%s", random_string));
+  if (debug_reporting_enabled) {
+    bid.mutable_debug_report_urls()->set_auction_debug_win_url(
+        absl::StrFormat("%s/win", random_url));
+    bid.mutable_debug_report_urls()->set_auction_debug_loss_url(
+        absl::StrFormat("%s/loss", random_url));
+  }
+  *bid.add_private_aggregation_contributions() =
+      MakeARandomPrivateAggregationContribution(seed);
+  return bid;
+}
+
+roma_service::ProtectedAudienceBid MakeARandomRomaProtectedAudienceBid(
+    int64_t seed, bool debug_reporting_enabled, bool allow_component_auction) {
+  std::string random_string = std::to_string(seed);
+  std::string random_url = absl::StrCat("https://", random_string, ".com");
+
+  roma_service::ProtectedAudienceBid bid;
+  bid.set_ad(random_string);
+  bid.set_bid(1.1f + seed);
+  bid.set_render(random_url);
+  bid.add_ad_components(absl::StrFormat("%s/%d", random_url, seed));
+  bid.add_ad_components(absl::StrFormat("%s/%d", random_url, seed + 1));
+  bid.set_allow_component_auction(allow_component_auction);
+  bid.set_ad_cost(0.5f + seed);
+  bid.set_modeling_signals(seed);
+  bid.set_bid_currency("USD");
+  bid.set_buyer_reporting_id(absl::StrFormat("id_%s", random_string));
+  if (debug_reporting_enabled) {
+    bid.mutable_debug_report_urls()->set_auction_debug_win_url(
+        absl::StrFormat("%s/win", random_url));
+    bid.mutable_debug_report_urls()->set_auction_debug_loss_url(
+        absl::StrFormat("%s/loss", random_url));
+  }
+  return bid;
+}
+
+PrivateAggregateContribution MakeARandomPrivateAggregationContribution(
+    int64_t seed) {
+  PrivateAggregateContribution contribution;
+  contribution.mutable_bucket()->mutable_bucket_128_bit()->add_bucket_128_bits(
+      seed);
+  contribution.mutable_value()->mutable_extended_value()->set_base_value(
+      BaseValue::BASE_VALUE_WINNING_BID);
+  contribution.mutable_value()->mutable_extended_value()->set_scale(2.0);
+  contribution.mutable_value()->mutable_extended_value()->set_offset(-seed);
+  return contribution;
+}
+
 GenerateBidsResponse::GenerateBidsRawResponse
 MakeARandomGenerateBidsRawResponse() {
   // request object will take ownership
@@ -570,6 +661,17 @@ MakeARandomGenerateBidsRawResponse() {
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.mutable_bids()->Add(MakeARandomAdWithBid(0, 10));
   return raw_response;
+}
+
+UpdateInterestGroupList MakeAnUpdateInterestGroupList() {
+  UpdateInterestGroupList list;
+  for (int i = 0; i < 5; i++) {
+    UpdateInterestGroup update;
+    update.set_update_if_older_than_ms(i + 1000);
+    update.set_index(i);
+    *list.mutable_interest_groups()->Add() = std::move(update);
+  }
+  return list;
 }
 
 ScoreAdsResponse::AdScore MakeARandomAdScore(
@@ -740,10 +842,13 @@ AuctionResult MakeARandomSingleSellerAuctionResult(
   if (buyer_list.empty()) {
     buyer_list.push_back(MakeARandomString());
   }
-  for (const auto& buyer : buyer_list) {
+  for (const auto& buyer :
+       std::set<std::string>(buyer_list.begin(), buyer_list.end())) {
     AuctionResult::InterestGroupIndex ig_indices;
     ig_indices.add_index(MakeARandomInt(1, 5));
     result.mutable_bidding_groups()->try_emplace(buyer, std::move(ig_indices));
+    result.mutable_update_groups()->try_emplace(
+        buyer, MakeAnUpdateInterestGroupList());
   }
 
   // TODO(b/287074572): Add reporting URLs and other reporting fields here

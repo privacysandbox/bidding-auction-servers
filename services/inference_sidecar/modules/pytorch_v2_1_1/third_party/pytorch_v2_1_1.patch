@@ -263,3 +263,18 @@ index 3e4e4b04142..bbe19ce284c 100644
              shape_infr_decls = f.read()
              shape_infr_decl_lines = set(shape_infr_decls.split("\n"))
      except OSError as e:
+diff --git a/torch/csrc/jit/ir/ir.h b/torch/csrc/jit/ir/ir.h
+index ad8f081c23..3f8976c273 100644
+--- a/torch/csrc/jit/ir/ir.h
++++ b/torch/csrc/jit/ir/ir.h
+@@ -1217,6 +1217,10 @@ struct Graph : std::enable_shared_from_this<Graph> {
+         block_(new Block(this, nullptr)),
+         insert_before_(return_node()) {}
+
++  std::unordered_set<const Node*>& get_all_nodes() {
++    return all_nodes;
++  }
++
+   at::ArrayRef<Value*> inputs() {
+     return block_->inputs();
+   }
