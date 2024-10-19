@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.71.0 (2024-10-18)
+
+
+### Dependencies
+
+* **deps:** Pin AmazonLinux2023 Nitro CLI versions
+* **deps:** Update AmazonLinux base images to 2024-10-01
+* **deps:** Upgrade pre-commit and pylint
+
+## 0.70.0 (2024-10-10)
+
+
+### Features
+
+* add awk, crane and jq to build-* images for the oci_pull credential helper
+
+## 0.69.1 (2024-09-19)
+
+### Bug Fixes
+
+* Use digest to ensure deterministic environment for build system
+
+
+## 0.69.0 (2024-09-15)
+
+
+### Features
+
+* Pin build-debian ubuntu base image from 20.04 to focal-20240530
+
 ## 0.68.1 (2024-08-21)
 
 ### Bug Fixes

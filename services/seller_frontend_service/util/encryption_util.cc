@@ -58,7 +58,7 @@ DecryptOHTTPEncapsulatedHpkeCiphertext(
   std::optional<server_common::PrivateKey> private_key =
       key_fetcher_manager.GetPrivateKey(str_key_id);
 
-  if (!private_key.has_value()) {
+  if (!private_key) {
     PS_VLOG(kNoisyWarn, SystemLogContext())
         << "Unable to retrieve private key for key ID: " << str_key_id;
     return absl::Status(absl::StatusCode::kNotFound,

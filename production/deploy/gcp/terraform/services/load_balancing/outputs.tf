@@ -13,3 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+output "google_compute_backend_service_id" {
+  value = google_compute_backend_service.default.id
+}

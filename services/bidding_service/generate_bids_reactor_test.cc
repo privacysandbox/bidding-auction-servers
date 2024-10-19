@@ -86,10 +86,10 @@ std::string GetTestResponse(absl::string_view render, float bid,
                             bool enable_adtech_code_logging = false) {
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
-      "response": {
+      "response": [{
         "render": "$0",
         "bid": $1
-      },
+      }],
       "logs": ["test log"],
       "errors": ["test.error"],
       "warnings":["test.warn"]
@@ -97,10 +97,10 @@ std::string GetTestResponse(absl::string_view render, float bid,
                             render, bid);
   }
 
-  return absl::Substitute(R"JSON({
+  return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1
-  })JSON",
+  }])JSON",
                           render, bid);
 }
 
@@ -116,22 +116,22 @@ std::string GetTestResponseWithPAgg(
 
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
-      "response": {
+      "response": [{
         "render": "$0",
         "bid": $1,
-        "private_aggregation_contributions": [$2],
-      },
+        "private_aggregation_contributions": [$2]
+      }],
       "logs": ["test log"],
       "errors": ["test.error"],
       "warnings":["test.warn"]
     })JSON",
                             render, bid, json_contribution);
   }
-  return absl::Substitute(R"JSON({
+  return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1,
     "private_aggregation_contributions": [$2],
-  })JSON",
+  }])JSON",
                           render, bid, json_contribution);
 }
 
@@ -140,11 +140,11 @@ std::string GetTestResponseWithBuyerReportingId(
     bool enable_adtech_code_logging = false) {
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
-      "response": {
+      "response": [{
         "render": "$0",
         "bid": $1,
         "buyerReportingId": "$2"
-      },
+      }],
       "logs": [],
       "errors": [],
       "warnings":[]
@@ -152,11 +152,11 @@ std::string GetTestResponseWithBuyerReportingId(
                             render, bid, buyer_reporting_id);
   }
 
-  return absl::Substitute(R"JSON({
+  return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1,
     "buyerReportingId": "$2"
-  })JSON",
+  }])JSON",
                           render, bid, buyer_reporting_id);
 }
 
@@ -165,11 +165,11 @@ std::string GetTestResponseWithUnknownField(
     bool enable_adtech_code_logging = false) {
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
-      "response": {
+      "response": [{
         "render": "$0",
         "bid": $1,
         "buyer_reporting_ids": "abcdef"
-      },
+      }],
       "logs": [],
       "errors": [],
       "warnings":[]
@@ -177,11 +177,11 @@ std::string GetTestResponseWithUnknownField(
                             render, bid);
   }
 
-  return absl::Substitute(R"JSON({
+  return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1,
     "buyer_reporting_ids": "abcdef"
-  })JSON",
+  }])JSON",
                           render, bid);
 }
 
@@ -190,11 +190,11 @@ std::string GetComponentAuctionResponse(
     bool enable_adtech_code_logging = false) {
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
-      "response": {
+      "response": [{
         "render": "$0",
         "bid": $1,
         "allowComponentAuction": $2
-      },
+      }],
       "logs": ["test log"],
       "errors": ["test.error"],
       "warnings":["test.warn"]
@@ -202,11 +202,11 @@ std::string GetComponentAuctionResponse(
                             render, bid, allow_component_auction);
   }
 
-  return absl::Substitute(R"JSON({
+  return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1,
     "allowComponentAuction": $2
-  })JSON",
+  }])JSON",
                           render, bid, allow_component_auction);
 }
 
@@ -359,7 +359,8 @@ void BuildRawRequest(const std::vector<IGForBidding>& interest_groups_to_add,
                      absl::string_view auction_signals,
                      absl::string_view buyer_signals, RawRequest& raw_request,
                      bool enable_debug_reporting = false,
-                     bool enable_adtech_code_logging = false) {
+                     bool enable_adtech_code_logging = false,
+                     int multi_bid_limit = kDefaultMultiBidLimit) {
   for (int i = 0; i < interest_groups_to_add.size(); i++) {
     *raw_request.mutable_interest_group_for_bidding()->Add() =
         interest_groups_to_add[i];
@@ -373,6 +374,7 @@ void BuildRawRequest(const std::vector<IGForBidding>& interest_groups_to_add,
     raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
     raw_request.mutable_consented_debug_config()->set_is_consented(true);
   }
+  raw_request.set_multi_bid_limit(multi_bid_limit);
 }
 
 void BuildRawRequestForComponentAuction(
@@ -415,7 +417,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
 TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
   bool enable_debug_reporting = false;
   bool enable_buyer_debug_url_generation = false;
-  bool enable_adtech_code_logging = false;
+  bool enable_adtech_code_logging = true;
   PrivateAggregateContribution pAggContribution =
       CreateTestPAggContribution(EVENT_TYPE_WIN,
                                  /* event_name = */ "");
@@ -668,7 +670,7 @@ TEST_F(GenerateBidsReactorTest, CreatesGenerateBidInputsInCorrectOrder) {
       .WillOnce([response_json](std::vector<DispatchRequest>& batch,
                                 BatchDispatchDoneCallback batch_callback) {
         auto input = batch.at(0).input;
-        EXPECT_EQ(input.size(), 6);
+        EXPECT_EQ(input.size(), 7);
         if (input.size() == 6) {
           CheckCorrectnessOfIg(*input[0], GetIGForBiddingBar());
           EXPECT_EQ(*input[1], R"JSON({"auction_signal": "test 1"})JSON");
@@ -704,7 +706,7 @@ TEST_F(GenerateBidsReactorTest,
       .WillOnce([response_json](std::vector<DispatchRequest>& batch,
                                 BatchDispatchDoneCallback batch_callback) {
         auto input = batch.at(0).input;
-        EXPECT_EQ(input.size(), 6);
+        EXPECT_EQ(input.size(), 7);
         if (input.size() == 6) {
           CheckCorrectnessOfIg(*input[0], GetIGForBiddingBar());
           EXPECT_EQ(*input[1], R"JSON({"auction_signal": "test 1"})JSON");
@@ -886,14 +888,14 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;
   const std::string response_json = R"JSON(
-    {
+    [{
       "render": "https://adTech.com/ad?id=123",
       "bid": 1,
       "debug_report_urls": {
         "auction_debug_loss_url": "test.com/debugLoss",
         "auction_debug_win_url": "test.com/debugWin"
       }
-    }
+    }]
   )JSON";
 
   AdWithBid bid;

@@ -98,7 +98,7 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
   *raw_request.mutable_protected_app_signals() = protected_app_signals;
   raw_request.set_seller(seller);
   raw_request.set_publisher_name(publisher_name);
-  if (contextual_pas_data.has_value()) {
+  if (contextual_pas_data) {
     *raw_request.mutable_contextual_protected_app_signals_data() =
         *std::move(contextual_pas_data);
   }
@@ -162,13 +162,13 @@ std::string CreateGenerateBidsUdfResponse(
     absl::string_view temporary_egress_payload_string) {
   std::string base64_encoded_features_bytes;
   return absl::Substitute(R"JSON(
-    {
+    [{
       "render": "$0",
       "bid": $1,
       "egressPayload": "$2",
       "debugReportUrls": $3,
       "temporaryUnlimitedEgressPayload": "$4"
-    }
+    }]
   )JSON",
                           render, bid, egress_payload_string,
                           debug_reporting_urls,

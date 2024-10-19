@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <rapidjson/document.h>
 
@@ -136,6 +137,13 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 // Parses the JSON string, conditionally prints the logs from the response and
 // returns a serialized response string retrieved from the underlying UDF.
 absl::StatusOr<std::string> ParseAndGetResponseJson(
+    bool enable_ad_tech_code_logging, const std::string& response,
+    RequestLogContext& log_context);
+
+// Parses the JSON array of string, conditionally prints the logs from the
+// response and returns a serialized response vector retrieved from the
+// underlying UDF.
+absl::StatusOr<std::vector<std::string>> ParseAndGetResponseJsonArray(
     bool enable_ad_tech_code_logging, const std::string& response,
     RequestLogContext& log_context);
 

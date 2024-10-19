@@ -47,6 +47,7 @@
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/feature_flags.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
@@ -320,7 +321,9 @@ absl::Status RunServer() {
       .default_code_version = default_code_version,
       .enable_seller_and_buyer_udf_isolation =
           enable_seller_and_buyer_udf_isolation,
-      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
+      .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
+      .enable_kanon = absl::GetFlag(FLAGS_enable_kanon)};
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),

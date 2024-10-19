@@ -72,13 +72,18 @@ absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
     RequestLogContext& log_context);
 
+ScoreAdsResponse::AdScore::AdRejectionReason BuildAdRejectionReason(
+    absl::string_view interest_group_owner,
+    absl::string_view interest_group_name,
+    SellerRejectionReason seller_rejection_reason);
+
 std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
 ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
                        absl::string_view interest_group_owner,
                        absl::string_view interest_group_name,
                        RequestLogContext& log_context);
 
-absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
+absl::StatusOr<ScoreAdsResponse::AdScore> ScoreAdResponseJsonToProto(
     const rapidjson::Document& score_ad_resp,
     int max_allowed_size_debug_url_chars,
     int64_t max_allowed_size_all_debug_urls_chars,

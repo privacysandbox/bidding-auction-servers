@@ -16,6 +16,8 @@
 source $(dirname "$0")/common
 export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
+export BUYER_KV_SERVER_ADDR=""
+
 export SERVER_START_CMD=$(cat << END
 /server/bin/server \
 --init_config_client="false" --port=50051 \

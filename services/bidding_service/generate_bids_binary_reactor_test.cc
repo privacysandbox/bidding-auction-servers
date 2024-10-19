@@ -514,6 +514,40 @@ TEST_F(GenerateBidsBinaryReactorTest,
   CheckGenerateBids(raw_request, expected_raw_response);
 }
 
+TEST_F(GenerateBidsBinaryReactorTest, CreatesPABidRequestsForMultipleIGs) {
+  GenerateBidsRawRequest raw_request;
+  IGForBidding ig_for_bidding_1 =
+      MakeARandomInterestGroupForBiddingFromAndroid();
+  IGForBidding ig_for_bidding_2 =
+      MakeARandomInterestGroupForBiddingFromAndroid();
+  BuildGenerateBidsRawRequest({ig_for_bidding_1, ig_for_bidding_2},
+                              kTestAuctionSignals, kTestBuyerSignals,
+                              raw_request, false, true);
+  ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 2);
+
+  GenerateBidsRawResponse expected_raw_response;
+
+  EXPECT_CALL(byob_client_, Execute)
+      .WillOnce(
+          [&ig_for_bidding_1, &raw_request](
+              const roma_service::GenerateProtectedAudienceBidRequest& request,
+              absl::Duration timeout) {
+            CheckBasicFieldsEqual(request, raw_request, ig_for_bidding_1);
+            return std::make_unique<
+                roma_service::GenerateProtectedAudienceBidResponse>();
+          })
+      .WillOnce(
+          [&ig_for_bidding_2, &raw_request](
+              const roma_service::GenerateProtectedAudienceBidRequest& request,
+              absl::Duration timeout) {
+            CheckBasicFieldsEqual(request, raw_request, ig_for_bidding_2);
+            return std::make_unique<
+                roma_service::GenerateProtectedAudienceBidResponse>();
+          });
+  ExpectRun(raw_request.interest_group_for_bidding_size());
+  CheckGenerateBids(raw_request, expected_raw_response);
+}
+
 TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidForSingleIG) {
   std::unique_ptr<roma_service::GenerateProtectedAudienceBidResponse>
       bid_response = std::make_unique<

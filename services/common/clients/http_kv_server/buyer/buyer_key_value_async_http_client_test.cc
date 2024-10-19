@@ -25,6 +25,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr char kEgId[] = "1776";
+constexpr uint32_t kDataVersionHeaderValue = 1689;
+constexpr absl::string_view kIvalidDataVersionHeaderStringValue = "abcxyz";
+// Don't check these. They are not calculated from the request or response.
+constexpr size_t kRequestSizeDontCheck = 0;
+constexpr size_t kResponseSizeDontCheck = 0;
 
 class KeyValueAsyncHttpClientTest : public testing::Test {
  public:
@@ -75,17 +80,18 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
  * 1. Define inputs
  * 2. Create the actual client and actually call it
  * 3. Actual client makes a url
- * 4. Actual client calls FetchUrl with that url it made
- * 5. Since FetchUrl is a mock, we get to assert that it is called with the url
- * we expect (or in other words: assert that the actual URL the client created
- * matches the expected URL we wrote)
+ * 4. Actual client calls FetchUrlWithMetadata with that url it made
+ * 5. Since FetchUrlWithMetadata is a mock, we get to assert that it is called
+ * with the url we expect (or in other words: assert that the actual URL the
+ * client created matches the expected URL we wrote)
  * 6. If and when all of that goes well: Since the HttpAsyncFetcher is a mock,
  * we define its behavior
  * 7. We specify that it returns a string like a KV server would
- * 8. Then we pass that string into a callback exactly as the real FetchUrl
- * would have done
- * 9. THAT callback, into which the output of our mock FetchUrl is passed, is
- * the one actually defined to be the actual callback made in the actual client.
+ * 8. Then we pass that string into a callback exactly as the real
+ * FetchUrlWithMetadata would have done
+ * 9. THAT callback, into which the output of our mock FetchUrlWithMetadata is
+ * passed, is the one actually defined to be the actual callback made in the
+ * actual client.
  * 10. It is THAT callback that WE define HERE in this test.
  *      Specifically we define that it shall check that the actual output
  * matches an expected output And we define that expected output here.
@@ -116,7 +122,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       "interestGroupNames=ig_name_likes_boots"));
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
-  const std::string expected_result = R"json({
+  const std::string expected_response_body_json_string = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -136,8 +142,9 @@ TEST_F(KeyValueAsyncHttpClientTest,
           })json";
 
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
-      std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expected_result}));
+      std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+          {expected_response_body_json_string, kRequestSizeDontCheck,
+           kResponseSizeDontCheck, kDataVersionHeaderValue}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -152,30 +159,45 @@ TEST_F(KeyValueAsyncHttpClientTest,
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
-        ASSERT_TRUE(actualOutputStruct.ok());
-        ASSERT_EQ(actualOutputStruct.value()->result,
-                  expectedOutputStructUPtr->result);
+        // We can't make any assertions here because if we do and they fail the
+        // callback will never be notified.
+        EXPECT_TRUE(actualOutputStruct.ok());
+        if (actualOutputStruct.ok()) {
+          EXPECT_EQ(actualOutputStruct.value()->result,
+                    expectedOutputStructUPtr->result);
+          EXPECT_EQ(actualOutputStruct.value()->data_version,
+                    expectedOutputStructUPtr->data_version);
+        }
         callback_invoked.Notify();
       };
 
-  // Assert that the mocked fetcher will have the method FetchUrl called on it,
-  // with the URL being expectedUrl.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
-      // If and when that happens: DEFINE that the FetchUrl function SHALL do
-      // the following:
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the URL being expectedUrl.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      // If and when that happens: DEFINE that the FetchUrlWithMetadata function
+      // SHALL do the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actual_result = expected_result, &expected_urls](
+      .WillOnce([actual_response_body_json_string =
+                     expected_response_body_json_string,
+                 &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
-        // Pack said string into a statusOr
-        absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actual_result);
+        HTTPResponse actual_http_response;
+        actual_http_response.body = actual_response_body_json_string;
+        // Add a valid header.
+        absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+        headers[kDataVersionResponseHeaderName] = absl::StatusOr<std::string>(
+            absl::StrFormat("%d", kDataVersionHeaderValue));
+        actual_http_response.headers = headers;
+        // Pack said response into a statusOr
+        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
+            absl::StatusOr<HTTPResponse>(actual_http_response);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(resp);
+        std::move(done_callback)(actual_http_response_statusor);
       });
 
   // Finally, actually call the function to perform the test
@@ -225,7 +247,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
   // Note that this test is trivial; we use the same string
-  const std::string expectedResult = R"json({
+  const std::string expected_response_body_json_string = R"json({
             "keys": {
               "1j386134098": {
                 "constitution_author": "madison",
@@ -249,7 +271,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  const std::string actualResult = R"json({
+  const std::string actual_response_body_json_string = R"json({
             "keys": {
               "1j386134098": {
                 "constitution_author": "Edmund Burke",
@@ -274,7 +296,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
           })json";
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expectedResult}));
+          GetBuyerValuesOutput({expected_response_body_json_string}));
 
   absl::Notification callback_invoked;
   // Define the lambda function which is the callback.
@@ -289,30 +311,42 @@ TEST_F(KeyValueAsyncHttpClientTest,
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
-        ASSERT_TRUE(actualOutputStruct.ok());
-        ASSERT_FALSE(actualOutputStruct.value()->result ==
-                     expectedOutputStructUPtr->result);
+        EXPECT_TRUE(actualOutputStruct.ok());
+        if (actualOutputStruct.ok()) {
+          EXPECT_NE(actualOutputStruct.value()->result,
+                    expectedOutputStructUPtr->result);
+          EXPECT_EQ(actualOutputStruct.value()->data_version, 0);
+        }
         callback_invoked.Notify();
       };
 
-  // Assert that the mocked fetcher will have the method FetchUrl called on it,
-  // with the URL being expectedUrl.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
-      // If and when that happens: DEFINE that the FetchUrl function SHALL do
-      // the following:
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the URL being expectedUrl.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      // If and when that happens: DEFINE that the FetchUrlWithMetadata function
+      // SHALL do the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actualResult, &expected_urls](
+      .WillOnce([actual_response_body_json_string, &expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url)) << request.url;
+        HTTPResponse actual_http_response;
+        actual_http_response.body = actual_response_body_json_string;
+        // Add a header value that is INVALID.
+        // The idea is that it will NOT parse but will also NOT CRASH the
+        // client.
+        absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+        headers[kDataVersionResponseHeaderName] =
+            absl::StatusOr<std::string>(kIvalidDataVersionHeaderStringValue);
+        actual_http_response.headers = headers;
         // Pack said string into a statusOr
-        absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actualResult);
+        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
+            absl::StatusOr<HTTPResponse>(actual_http_response);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(resp);
+        std::move(done_callback)(actual_http_response_statusor);
       });
 
   // Finally, actually call the function to perform the test
@@ -328,13 +362,12 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   const std::string expected_url =
       absl::StrCat(hostname_, "?hostname=www.usatoday.com&keys=url1");
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce(
-          [expected_url](const HTTPRequest& request, int timeout_ms,
-                         absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
-                             done_callback) {
-            EXPECT_EQ(expected_url, request.url);
-          });
+          [expected_url](
+              const HTTPRequest& request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                  done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -344,13 +377,12 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
   const std::string expected_url =
       absl::StrCat(hostname_, "?hostname=www.usatoday.com");
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce(
-          [expected_url](const HTTPRequest& request, int timeout_ms,
-                         absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
-                             done_callback) {
-            EXPECT_EQ(expected_url, request.url);
-          });
+          [expected_url](
+              const HTTPRequest& request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                  done_callback) { EXPECT_EQ(expected_url, request.url); });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 
@@ -360,10 +392,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
       {"lloyd_george", "clementine", "birkenhead"}, {}, ""};
   std::unique_ptr<GetBuyerValuesInput> input =
       std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -382,10 +414,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
   // Note: if the client type is not CLIENT_TYPE_ANDROID, no client_type
   // param is attached to the url. This behavior will change after beta
   // testing to always include a client_type.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls_1->contains(request.url));
       });
@@ -413,10 +445,10 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithClientTypeAndroid) {
                    "?client_type=1&keys=lloyd_george,clementine,birkenhead"),
       absl::StrCat(hostname_,
                    "?client_type=1&keys=clementine,lloyd_george,birkenhead")};
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([&expected_urls](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
       });
@@ -440,12 +472,12 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
     expectedHeaders.emplace_back(
         absl::StrCat(expected_metadatum.first, ":", expected_metadatum.second));
   }
-  // Assert that the mocked fetcher will have the method FetchUrl called on it,
-  // with the metadata.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the metadata.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([&expectedHeaders](
                     HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         std::sort(expectedHeaders.begin(), expectedHeaders.end());
         std::sort(request.headers.begin(), request.headers.end());
@@ -471,12 +503,12 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
   for (const auto& mandatory_header : kMandatoryHeaders) {
     expected_headers.push_back(absl::StrCat(mandatory_header, ":"));
   }
-  // Assert that the mocked fetcher will have the method FetchUrl called on it,
-  // with the metadata.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the metadata.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([&expected_headers](
                     HTTPRequest request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         std::sort(expected_headers.begin(), expected_headers.end());
         std::sort(request.headers.begin(), request.headers.end());
@@ -493,7 +525,7 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
 
 TEST_F(KeyValueAsyncHttpClientTest, PrewarmsHTTPClient) {
   const std::string expectedUrl = absl::StrCat(hostname_, "?");
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl).Times(1);
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata).Times(1);
   // Create the client.
   BuyerKeyValueAsyncHttpClient kvHttpClient(
       hostname_, std::move(mock_http_fetcher_async_), true);
@@ -515,7 +547,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Now we define what we expect to get back out of the client, which is a
   // GetBuyerValuesOutput struct.
   // Note that this test is trivial; we use the same string
-  const std::string expected_result = R"json({
+  const std::string expected_response_body_json_string = R"json({
             "keys": {
               "1j1043317685": {
                 "constitution_author": "madison",
@@ -528,8 +560,9 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
           })json";
 
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
-      std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expected_result}));
+      std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+          {expected_response_body_json_string, kRequestSizeDontCheck,
+           kResponseSizeDontCheck, kDataVersionHeaderValue}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -544,30 +577,42 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
-        ASSERT_TRUE(actualOutputStruct.ok());
-        ASSERT_EQ(actualOutputStruct.value()->result,
-                  expectedOutputStructUPtr->result);
+        EXPECT_TRUE(actualOutputStruct.ok());
+        if (actualOutputStruct.ok()) {
+          EXPECT_EQ(actualOutputStruct.value()->result,
+                    expectedOutputStructUPtr->result);
+          EXPECT_EQ(actualOutputStruct.value()->data_version,
+                    expectedOutputStructUPtr->data_version);
+        }
         callback_invoked.Notify();
       };
 
-  // Assert that the mocked fetcher will have the method FetchUrl called on it,
-  // with the URL being expectedUrl.
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrl)
-      // If and when that happens: DEFINE that the FetchUrl function SHALL do
-      // the following:
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the URL being expectedUrl.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      // If and when that happens: DEFINE that the FetchUrlWithMetadata function
+      // SHALL do the following:
       //  (This part is NOT an assertion of expected behavior but rather a mock
       //  defining what it shall be)
-      .WillOnce([actual_result = expected_result, &expectedUrl](
+      .WillOnce([actual_response_body_json_string =
+                     expected_response_body_json_string,
+                 &expectedUrl](
                     const HTTPRequest& request, int timeout_ms,
-                    absl::AnyInvocable<void(absl::StatusOr<std::string>)&&>
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_EQ(request.url, expectedUrl);
+        HTTPResponse actual_http_response;
+        actual_http_response.body = actual_response_body_json_string;
+        absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+        headers[kDataVersionResponseHeaderName] = absl::StatusOr<std::string>(
+            absl::StrCat("", kDataVersionHeaderValue));
+        actual_http_response.headers = headers;
         // Pack said string into a statusOr
-        absl::StatusOr<std::string> resp =
-            absl::StatusOr<std::string>(actual_result);
+        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
+            absl::StatusOr<HTTPResponse>(actual_http_response);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(resp);
+        std::move(done_callback)(actual_http_response_statusor);
       });
 
   // Finally, actually call the function to perform the test

@@ -95,8 +95,8 @@ end
         services are deployed on to find the buyer and seller metrics.
     1.  Look at the round trip latency using the request.duration_ms metrics.
 
-Note: _Verify the request count and make sure request.failed_count is 0. _ IGNORE the latency
-metrics from the wrk2 tool.
+Note: _Verify the request count and make sure request.failed_count is 0._ IGNORE the latency metrics
+from the wrk2 tool.
 
 ## Recommended load testing tool
 

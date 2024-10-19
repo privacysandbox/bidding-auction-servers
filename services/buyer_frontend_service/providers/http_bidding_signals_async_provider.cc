@@ -58,9 +58,10 @@ void HttpBiddingSignalsAsyncProvider::Get(
         if (buyer_kv_output.ok()) {
           // TODO(b/258281777): Add ads and buyer signals from KV.
           res.value()->trusted_signals =
-              std::make_unique<std::string>(buyer_kv_output.value()->result);
-          get_byte_size.request = buyer_kv_output.value()->request_size;
-          get_byte_size.response = buyer_kv_output.value()->response_size;
+              std::make_unique<std::string>((*buyer_kv_output)->result);
+          res.value()->data_version = (*buyer_kv_output)->data_version;
+          get_byte_size.request = (*buyer_kv_output)->request_size;
+          get_byte_size.response = (*buyer_kv_output)->response_size;
         } else {
           res = buyer_kv_output.status();
         }

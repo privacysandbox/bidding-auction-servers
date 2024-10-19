@@ -14,12 +14,12 @@
 # limitations under the License.
 
 export BIDDING_EXECUTABLE_URL=""
-export BIDDING_EXECUTABLE_PATH="/sample_udf/bin/sample_generate_bid_udf"
+export BIDDING_EXECUTABLE_PATH=""
 
-if [[ -z "$BIDDING_EXECUTABLE_URL" ]]; then
-  export FETCH_MODE=2
-else
+if [[ -n "$BIDDING_EXECUTABLE_URL" ]]; then
   export FETCH_MODE=0
+else
+  export FETCH_MODE=2
 fi
 
 export SERVER_START_CMD=$(cat << END

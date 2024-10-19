@@ -34,7 +34,7 @@ absl::StatusOr<std::vector<bool>> BooleanFeature::Serialize() {
   }
   std::optional<bool> value;
   PS_ASSIGN_IF_PRESENT(value, value_, "value", Bool);
-  if (!value.has_value()) {
+  if (!value) {
     return absl::InvalidArgumentError(
         "Value in the egress payload didn't have a bool");
   }

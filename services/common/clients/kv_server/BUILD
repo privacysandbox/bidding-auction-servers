@@ -38,9 +38,9 @@ cc_library(
     deps = [
         "//services/common/clients:client_params_template",
         "//services/common/clients/async_grpc:default_async_grpc_client",
-        "//services/common/util:binary_http_utils",
         "//services/common/util:client_context_util",
         "//services/common/util:oblivious_http_utils",
+        "//services/seller_frontend_service/util:framing_utils",
         "@com_github_google_quiche//quiche:binary_http_unstable_api",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_github_grpc_grpc//:grpc++",

@@ -29,7 +29,6 @@
 #include "services/common/clients/async_client.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/feature_flags.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/client_contexts.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
@@ -47,13 +46,14 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
   explicit CodeDispatchReactor(
       const Request* request, Response* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-      CryptoClientWrapperInterface* crypto_client)
+      CryptoClientWrapperInterface* crypto_client,
+      bool enable_cancellation = false, bool enable_kanon = false)
       : request_(request),
         response_(response),
         key_fetcher_manager_(key_fetcher_manager),
         crypto_client_(crypto_client),
-        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
-        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)) {
+        enable_cancellation_(enable_cancellation),
+        enable_kanon_(enable_kanon) {
     PS_VLOG(5) << "Encryption is enabled, decrypting request now";
     if (DecryptRequest()) {
       PS_VLOG(5) << "Decrypted request: " << raw_request_.DebugString();
@@ -100,7 +100,7 @@ class CodeDispatchReactor : public grpc::ServerUnaryReactor {
 
     std::optional<server_common::PrivateKey> private_key =
         key_fetcher_manager_->GetPrivateKey(request_->key_id());
-    if (!private_key.has_value()) {
+    if (!private_key) {
       PS_LOG(ERROR, SystemLogContext())
           << "Unable to fetch private key from the key fetcher manager";
       Finish(

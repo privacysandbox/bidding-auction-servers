@@ -74,6 +74,11 @@ message ProtectedAudienceInput {
   // Clients can indicate whether K-Anonymity is enforced for the traffic.
   // By default, this would be false, i.e. K-Anonymity is not enforced.
   bool enforce_kanon = 9;
+
+  // Clients can indicate whether this request can be used for debug.
+  // By default, this would be false, i.e. cannot be used for debug.
+  // Currently Android request with ad-id is eligible.
+  bool prod_debug = 10;
 }
 
 // ProtectedAuctionInput is generated and encrypted by the client,
@@ -128,6 +133,11 @@ message ProtectedAuctionInput {
   // Clients can indicate whether K-Anonymity is enforced for the traffic.
   // By default, this would be false, i.e. K-Anonymity is not enforced.
   bool enforce_kanon = 9;
+
+  // Clients can indicate whether this request can be used for debug.
+  // By default, this would be false, i.e. cannot be used for debug.
+  // Currently Android request with ad-id is eligible.
+  bool prod_debug = 10;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -976,6 +986,10 @@ message GetBidsRequest {
     // Clients can indicate whether K-Anonymity is enforced for the traffic.
     // By default, this would be false, i.e. K-Anonymity is not enforced.
     bool enforce_kanon = 16;
+
+    // A boolean value which indicates whether this request can be used for debugging.
+    // current eligible request: Android request with ad-id
+    bool is_debug_eligible = 17;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -1226,6 +1240,13 @@ message GenerateBidsRequest {
     // Clients can indicate whether K-Anonymity is enforced for the traffic.
     // By default, this would be false, i.e. K-Anonymity is not enforced.
     bool enforce_kanon = 12;
+
+    // Optional. Value of the data version header from the buyer kv server.
+    // This is passed through to the buyer reporting function.
+    uint32 data_version = 13;
+
+    // If BFE is sampling this request for debug.
+    bool is_sampled_for_debug = 14;
   }
 
   // Encrypted GenerateBidsRawRequest.
@@ -1327,6 +1348,9 @@ message GenerateProtectedAppSignalsBidsRequest {
     // Clients can indicate whether K-Anonymity is enforced for the traffic.
     // By default, this would be false, i.e. K-Anonymity is not enforced.
     bool enforce_kanon = 12;
+
+    // If BFE is sampling this request for debug.
+    bool is_sampled_for_debug = 13;
   }
 
   // Encrypted GenerateProtectedAppSignalsBidsRawRequest.

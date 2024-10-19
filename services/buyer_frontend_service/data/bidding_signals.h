@@ -28,6 +28,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // sourced such as from a gRPC Key Value Service.
 struct BiddingSignals {
   std::unique_ptr<std::string> trusted_signals;
+  uint32_t data_version;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

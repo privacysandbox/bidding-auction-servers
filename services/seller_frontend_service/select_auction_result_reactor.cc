@@ -330,7 +330,7 @@ void SelectAuctionResultReactor::OnCancel() { client_contexts_.CancelAll(); }
 SelectAuctionResultReactor::SelectAuctionResultReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client)
+    const TrustedServersConfigClient& config_client, bool enable_cancellation)
     : request_context_(context),
       request_(request),
       response_(response),
@@ -341,7 +341,7 @@ SelectAuctionResultReactor::SelectAuctionResultReactor(
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
-      enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)) {
+      enable_cancellation_(enable_cancellation) {
   seller_domain_ = config_client_.GetStringParameter(SELLER_ORIGIN_DOMAIN);
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,

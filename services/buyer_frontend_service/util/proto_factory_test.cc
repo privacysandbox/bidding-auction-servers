@@ -29,6 +29,7 @@ constexpr char kSampleGenerationId[] = "sample-generation-id";
 constexpr char kSampleAdtechDebugId[] = "sample-adtech-debug-id";
 constexpr bool kIsConsentedDebug = true;
 constexpr absl::string_view kConsentedDebugToken = "test";
+constexpr uint32_t kTestDefaultDataVersion = 0;
 
 using ::google::protobuf::util::MessageDifferencer;
 using ::google::protobuf::util::MessageToJsonString;
@@ -72,8 +73,7 @@ TEST(CreateGetBidsRawResponseTest,
 TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRawRequestForAndroid();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -143,7 +143,8 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, /*enable_kanon=*/true);
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version(),
+      /*enable_kanon=*/true);
   std::string difference;
   MessageDifferencer differencer;
   differencer.ReportDifferencesToString(&difference);
@@ -154,8 +155,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
 TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -227,7 +227,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version());
   EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
 
   std::string difference;
@@ -310,7 +310,7 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version());
   ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
   ASSERT_GT(raw_output->interest_group_for_bidding().size(), 0);
 
@@ -351,7 +351,7 @@ TEST(CreateGenerateBidsRequestTest, SkipsIGWithEmptyBiddingSignalsKeys) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_EQ(raw_output->interest_group_for_bidding().size(), 0);
 }
 
@@ -381,7 +381,7 @@ TEST(CreateGenerateBidsRequestTest, HandlesIGWithDuplicateBiddingSignalsKeys) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_EQ(raw_output->interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
             1);
@@ -411,7 +411,7 @@ TEST(CreateGenerateBidsRequestTest,
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_EQ(raw_output->interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
             1);
@@ -422,8 +422,7 @@ TEST(CreateGenerateBidsRequestTest,
 TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -434,15 +433,14 @@ TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_TRUE(raw_output->enable_debug_reporting());
 }
 
 TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -454,7 +452,7 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
 
   EXPECT_EQ(raw_output->log_context().generation_id(),
             input.log_context().generation_id());
@@ -465,8 +463,7 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
 TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -479,7 +476,7 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
             kIsConsentedDebug);
   EXPECT_EQ(raw_output->consented_debug_config().token(), kConsentedDebugToken);
@@ -488,8 +485,7 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
 TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
   GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -500,15 +496,14 @@ TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
   EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
 }
 
 TEST(CreateGenerateBidsRequestTest, SetsMultiBidLimit) {
   GenBidsRawReq expected_raw_output = MakeARandomGenerateBidsRequestForBrowser(
       /*enforce_kanon=*/true, /*multi_bid_limit=*/5);
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -520,7 +515,8 @@ TEST(CreateGenerateBidsRequestTest, SetsMultiBidLimit) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      parsed_bidding_signals->raw_size, /*enable_kanon=*/true);
+      parsed_bidding_signals->raw_size, /*data_version=*/0,
+      /*enable_kanon=*/true);
   ASSERT_EQ(raw_output->enforce_kanon(), expected_raw_output.enforce_kanon());
   EXPECT_EQ(raw_output->multi_bid_limit(),
             expected_raw_output.multi_bid_limit());
@@ -529,8 +525,7 @@ TEST(CreateGenerateBidsRequestTest, SetsMultiBidLimit) {
 TEST(CreateGenerateBidsRequestTest, MultiBidLimitDefaultsWithFalseFlags) {
   GenBidsRawReq expected_raw_output =
       MakeARandomGenerateBidsRequestForBrowser();
-  auto bidding_signals = std::make_unique<BiddingSignals>();
-  bidding_signals->trusted_signals = std::make_unique<std::string>(
+  auto bidding_signals = std::make_unique<BiddingSignals>(
       GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
   auto parsed_bidding_signals = ParseTrustedBiddingSignals(
       std::move(bidding_signals), /*buyer_input*/ {});
@@ -541,7 +536,8 @@ TEST(CreateGenerateBidsRequestTest, MultiBidLimitDefaultsWithFalseFlags) {
 
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      parsed_bidding_signals->raw_size, /*enable_kanon=*/false);
+      parsed_bidding_signals->raw_size, /*data_version=*/0,
+      /*enable_kanon=*/false);
   ASSERT_FALSE(raw_output->enforce_kanon());
   EXPECT_EQ(raw_output->multi_bid_limit(), kDefaultMultiBidLimit);
 }

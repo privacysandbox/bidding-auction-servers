@@ -57,10 +57,8 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
       std::move(*ig_for_bidding.mutable_user_bidding_signals());
 
   // Populate auction, buyer, and bidding signals.
-  *bid_request.mutable_auction_signals() =
-      std::move(*raw_request.mutable_auction_signals());
-  *bid_request.mutable_per_buyer_signals() =
-      std::move(*raw_request.mutable_buyer_signals());
+  bid_request.set_auction_signals(raw_request.auction_signals());
+  bid_request.set_per_buyer_signals(raw_request.buyer_signals());
   *bid_request.mutable_trusted_bidding_signals() =
       std::move(*ig_for_bidding.mutable_trusted_bidding_signals());
 
@@ -69,18 +67,14 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
       ig_for_bidding.android_signals().IsInitialized()) {
     roma_service::ProtectedAudienceAndroidSignals* android_signals =
         bid_request.mutable_android_signals();
-    *android_signals->mutable_top_level_seller() =
-        std::move(*raw_request.mutable_top_level_seller());
+    android_signals->set_top_level_seller(raw_request.top_level_seller());
   } else if (ig_for_bidding.has_browser_signals() &&
              ig_for_bidding.browser_signals().IsInitialized()) {
     roma_service::ProtectedAudienceBrowserSignals* browser_signals =
         bid_request.mutable_browser_signals();
-    *browser_signals->mutable_top_window_hostname() =
-        std::move(*raw_request.mutable_publisher_name());
-    *browser_signals->mutable_seller() =
-        std::move(*raw_request.mutable_seller());
-    *browser_signals->mutable_top_level_seller() =
-        std::move(*raw_request.mutable_top_level_seller());
+    browser_signals->set_top_window_hostname(raw_request.publisher_name());
+    browser_signals->set_seller(raw_request.seller());
+    browser_signals->set_top_level_seller(raw_request.top_level_seller());
     browser_signals->set_join_count(
         ig_for_bidding.browser_signals().join_count());
     browser_signals->set_bid_count(
@@ -245,6 +239,7 @@ void GenerateBidsBinaryReactor::Execute() {
   ads_with_bids_by_ig_.resize(ig_count);
 
   // Send execution requests for each interest group in parallel.
+  start_binary_execution_time_ = absl::Now();
   for (int ig_index = 0; ig_index < ig_count; ++ig_index) {
     executor_->Run([this, ig_index]() { ExecuteForInterestGroup(ig_index); });
   }
@@ -273,6 +268,8 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(int ig_index) {
     LogIfError(metric_context_
                    ->AccumulateMetric<metric::kBiddingErrorCountByErrorCode>(
                        1, metric::kBiddingGenerateBidsDispatchResponseError));
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kUdfExecutionErrorCount>(1));
     async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
     return;
   }
@@ -313,6 +310,11 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
         grpc::INTERNAL, "No successful bids returned by the adtech UDF"));
     return;
   }
+
+  int binary_execution_time_ms =
+      (absl::Now() - start_binary_execution_time_) / absl::Milliseconds(1);
+  LogIfError(metric_context_->LogHistogram<metric::kUdfExecutionDuration>(
+      binary_execution_time_ms));
 
   // Handle cancellation.
   if (enable_cancellation_ && context_->IsCancelled()) {

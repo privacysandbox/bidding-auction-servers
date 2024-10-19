@@ -99,7 +99,7 @@ cc_library(
     ],
     deps = [
         "//services/buyer_frontend_service/data:buyer_frontend_data",
-        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/providers:http_bidding_signals_providers",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_utils",
         "@com_google_absl//absl/functional:any_invocable",

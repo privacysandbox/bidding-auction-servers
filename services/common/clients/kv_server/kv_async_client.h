@@ -39,7 +39,6 @@
 #include "services/common/clients/client_params.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
 #include "services/common/loggers/request_log_context.h"
-#include "services/common/util/binary_http_utils.h"
 #include "services/common/util/oblivious_http_utils.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/encryption/key_fetcher/key_fetcher_utils.h"

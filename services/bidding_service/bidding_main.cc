@@ -63,6 +63,7 @@
 #include "services/common/feature_flags.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
+#include "services/common/util/read_system.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
@@ -330,6 +331,8 @@ DispatchConfig GetV8DispatchConfig(
       inference::SandboxExecutor& inference_executor = inference::Executor();
       CHECK_EQ(inference_executor.StartSandboxee().code(),
                absl::StatusCode::kOk);
+      server_common::SystemMetrics::SetInferencePid(
+          inference_executor.GetPid());
     }
     return config;
   }();
@@ -528,6 +531,9 @@ absl::Status RunServer() {
         "specify at least one.");
   }
 
+  const bool enable_temporary_unlimited_egress =
+      absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
+
   BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
@@ -551,7 +557,10 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(AD_RETRIEVAL_KV_SERVER_EGRESS_TLS),
       .kv_server_egress_tls =
           config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS),
-      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
+      .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
+      .enable_kanon = absl::GetFlag(FLAGS_enable_kanon),
+      .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress};
 
   if (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     if (enable_protected_audience) {
@@ -575,8 +584,6 @@ absl::Status RunServer() {
          " (Invalid JSON provided?)";
   PS_VLOG(5) << "Fetched egress schema fetch config: "
              << egress_schema_fetch_config.DebugString();
-  const bool enable_temporary_unlimited_egress =
-      absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
   absl::StatusOr<EgressInfo> egress_info = absl::UnimplementedError("");
   if (enable_temporary_unlimited_egress && enable_protected_app_signals) {
     PS_LOG(INFO) << "Temporary egress feature is enabled in the binary";

@@ -144,10 +144,9 @@ TEST_F(ModelStoreTest, ResetModelFailureDoesNotOverwrite) {
   EXPECT_EQ((*result2)->GetCounter(), 1);
 }
 
-TEST_F(ModelStoreTest, ResetNonExistentModelReturnsNotFound) {
+TEST_F(ModelStoreTest, ResetNonExistentModelReturnsOkStatus) {
   absl::Status status = store_.ResetModel(kNonExistModelName);
-  EXPECT_FALSE(status.ok());
-  EXPECT_EQ(status.code(), absl::StatusCode::kNotFound);
+  EXPECT_TRUE(status.ok());
 }
 
 TEST_F(ModelStoreTest, ListModels) {
@@ -158,6 +157,24 @@ TEST_F(ModelStoreTest, ListModels) {
   std::vector<std::string> models = store_.ListModels();
   EXPECT_EQ(models.size(), 1);
   EXPECT_EQ(models.front(), kTestModelName);
+}
+
+TEST_F(ModelStoreTest, DeleteModelsSuccess) {
+  RegisterModelRequest request;
+  EXPECT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/false).ok());
+  EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/true).ok());
+
+  EXPECT_TRUE(store_.DeleteModel(kTestModelName).ok());
+
+  EXPECT_FALSE(store_.GetModel(kTestModelName, /*is_consented=*/false).ok());
+  EXPECT_FALSE(store_.GetModel(kTestModelName, /*is_consented=*/true).ok());
+}
+
+TEST_F(ModelStoreTest, DeleteNonExistentModelReturnsNotFound) {
+  absl::Status result = store_.DeleteModel(kTestModelName);
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.code(), absl::StatusCode::kNotFound);
 }
 
 absl::StatusOr<std::unique_ptr<MockModel>> MockModelConstructorWithInitCounter(
@@ -221,6 +238,57 @@ TEST_F(ModelStoreConcurrencyTest,
   int consented_model_counter = (*consented_model)->GetCounter();
 
   EXPECT_EQ(prod_model_counter, consented_model_counter);
+}
+
+TEST_F(ModelStoreConcurrencyTest, ConcurrentPutAndDeleteModelSuccess) {
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads * 2);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.push_back(std::thread([this]() {
+      EXPECT_TRUE(
+          this->store_
+              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
+              .ok());
+    }));
+    threads.push_back(
+        std::thread([this]() { this->store_.DeleteModel(kTestModelName); }));
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(ModelStoreConcurrencyTest, ConcurrentGetAndDeleteModelSuccess) {
+  for (int i = 0; i < kNumThreads; ++i) {
+    EXPECT_TRUE(this->store_
+                    .PutModel(absl::StrCat(kTestModelName, i),
+                              BuildMockModelRegisterModelRequest(1))
+                    .ok());
+  }
+
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads * 2);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.push_back(std::thread([this, i]() {
+      auto get_result = this->store_.GetModel(absl::StrCat(kTestModelName, i));
+      if (get_result.ok()) {
+        (*get_result)->Increment();
+        store_.IncrementModelInferenceCount(absl::StrCat(kTestModelName, i));
+      }
+    }));
+    threads.push_back(std::thread([this, i]() {
+      EXPECT_TRUE(
+          this->store_.DeleteModel(absl::StrCat(kTestModelName, i)).ok());
+    }));
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (int i = 0; i < kNumThreads; ++i) {
+    EXPECT_FALSE(this->store_.GetModel(absl::StrCat(kTestModelName, i)).ok());
+  }
 }
 
 TEST_F(ModelStoreConcurrencyTest, ConcurrentGetModelSuccess) {
@@ -454,6 +522,54 @@ TEST_F(ModelStoreBackgroundModelResetTest, ResetSuccessWithStatefulModels) {
     ASSERT_TRUE(prod_model.ok());
     EXPECT_EQ((*prod_model)->GetCounter(), 1);
   }
+}
+
+TEST_F(ModelStoreBackgroundModelResetTest, ResetSuccessWhileDeletingModels) {
+  for (int i = 0; i < kNumThreads; ++i) {
+    EXPECT_TRUE(store_
+                    .PutModel(absl::StrCat(kTestModelName, i),
+                              BuildMockModelRegisterModelRequest(1))
+                    .ok());
+  }
+
+  std::vector<std::thread> threads;
+  threads.reserve(2 * kNumThreads);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.push_back(std::thread([this, i]() {
+      absl::StatusOr<std::shared_ptr<MockModel>> prod_model = store_.GetModel(
+          absl::StrCat(kTestModelName, i), /*is_consented=*/false);
+      if (prod_model.ok()) {
+        EXPECT_EQ((*prod_model)->GetCounter(), 1);
+        (*prod_model)->Increment();
+        store_.IncrementModelInferenceCount(absl::StrCat(kTestModelName, i));
+      }
+    }));
+    // Delete all models except the (kNumThreads - 1)th model, which is reset.
+    if (i < kNumThreads - 1) {
+      threads.push_back(std::thread([this, i]() {
+        EXPECT_TRUE(store_.DeleteModel(absl::StrCat(kTestModelName, i)).ok());
+      }));
+    }
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  absl::SleepFor(absl::Seconds(1));
+  for (int i = 0; i < kNumThreads - 1; ++i) {
+    EXPECT_FALSE(
+        store_.GetModel(absl::StrCat(kTestModelName, 0), /*is_consented=*/false)
+            .ok());
+    EXPECT_FALSE(
+        store_.GetModel(absl::StrCat(kTestModelName, 0), /*is_consented=*/true)
+            .ok());
+  }
+
+  absl::StatusOr<std::shared_ptr<MockModel>> prod_model = store_.GetModel(
+      absl::StrCat(kTestModelName, kNumThreads - 1), /*is_consented=*/false);
+  ASSERT_TRUE(prod_model.ok());
+  EXPECT_EQ((*prod_model)->GetCounter(), 1);
 }
 
 }  // namespace

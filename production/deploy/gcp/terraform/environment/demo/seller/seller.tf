@@ -13,10 +13,67 @@
 # limitations under the License.
 
 locals {
-  gcp_project_id = "" # Example: "your-gcp-project-123"
-  environment    = "" # # Must be <= 3 characters. Example: "abc"
-  image_repo     = "" # Example: "us-docker.pkg.dev/your-gcp-project-123/services"
+  gcp_project_id  = "" # Example: "your-gcp-project-123"
+  environment     = "" # Must be <= 3 characters. Example: "abc"
+  image_repo      = "" # Example: "us-docker.pkg.dev/your-gcp-project-123/services"
+  seller_operator = "" # Example: "seller-1"
+  default_region_config = {
+    # Example config provided for us-central1 and you may add your own regions.
+    "us-central1" = {
+      collector = {
+        machine_type          = "e2-micro"
+        min_replicas          = 1
+        max_replicas          = 1
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+      backend = {
+        machine_type          = "n2d-standard-64"
+        min_replicas          = 1
+        max_replicas          = 5
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+      frontend = {
+        machine_type          = "n2d-standard-64"
+        min_replicas          = 1
+        max_replicas          = 2
+        zones                 = null # Null signifies no zone preference.
+        max_rate_per_instance = null # Null signifies no max.
+      }
+    }
+  }
 
+  # Please create a Google Cloud domain name, dns zone, and SSL certificate.
+  # See demo/project_setup_utils/domain_setup/README.md for more details.
+  # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
+  frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/sfe-${local.environment}"
+  frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
+  seller_domain_name                 = "" # Example: sfe-gcp.com
+  frontend_dns_zone                  = "" # Example: "sfe-gcp-com"
+
+  seller_traffic_splits = {
+    # default
+    "${local.environment}" = {
+      image_tag             = ""   # Image built and uploaded by production/packaging/build_and_test_all_in_docker
+      traffic_weight        = 1000 # traffic_weight for this arm, between 0~1000. default's weight must > 0.
+      region_config         = local.default_region_config
+      runtime_flag_override = {}
+    }
+
+    # optional: experiment arm 1
+    "${local.environment}-1" = {
+      image_tag      = ""                          # Image built and uploaded by production/packaging/build_and_test_all_in_docker
+      traffic_weight = 0                           # traffic_weight for this arm, between 0~1000. Arm with 0 weight will be skipped.
+      region_config  = local.default_region_config # region config can be different for each arm
+      runtime_flag_override = {
+        # Example: MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "12345"
+      }
+    }
+
+    # optional: more experiment arm
+    # "${local.environment}-2" = ...
+  }
 }
 
 provider "google" {
@@ -40,14 +97,15 @@ module "secrets" {
 }
 
 module "seller" {
+  for_each              = { for key, value in local.seller_traffic_splits : key => value if value.traffic_weight > 0 }
   source                = "../../../modules/seller"
-  environment           = local.environment
+  environment           = each.key
   gcp_project_id        = local.gcp_project_id
-  auction_image         = "${local.image_repo}/auction_service:${local.environment}"         # Image built and uploaded by production/packaging/build_and_test_all_in_docker
-  seller_frontend_image = "${local.image_repo}/seller_frontend_service:${local.environment}" # Image built and uploaded by production/packaging/build_and_test_all_in_docker
+  auction_image         = "${local.image_repo}/auction_service:${each.value.image_tag}"
+  seller_frontend_image = "${local.image_repo}/seller_frontend_service:${each.value.image_tag}"
 
   envoy_port = 51052 # Do not change. Must match production/packaging/gcp/seller_frontend_service/bin/envoy.yaml
-  runtime_flags = {
+  runtime_flags = merge({
     SELLER_FRONTEND_PORT             = "50051"          # Do not change unless you are modifying the default GCP architecture.
     SELLER_FRONTEND_HEALTHCHECK_PORT = "50050"          # Do not change unless you are modifying the default GCP architecture.
     AUCTION_PORT                     = "50051"          # Do not change unless you are modifying the default GCP architecture.
@@ -92,7 +150,7 @@ module "seller" {
     JS_WORKER_QUEUE_LEN             = "" # Example: "200".
     ROMA_TIMEOUT_MS                 = "" # Example: "10000"
     TELEMETRY_CONFIG                = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${local.environment}.sfe-gcp.com:4317"
+    COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${each.key}.sfe-gcp.com:4317"
     ENABLE_OTEL_BASED_LOGGING       = "" # Example: "false"
     CONSENTED_DEBUG_TOKEN           = "" # Example: "<unique_id>"
     ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
@@ -132,17 +190,11 @@ module "seller" {
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
-  }
+  }, each.value.runtime_flag_override)
 
-  # Please create a Google Cloud domain name, dns zone, and SSL certificate.
-  # See demo/project_setup_utils/domain_setup/README.md for more details.
-  # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
-  frontend_domain_name               = "" # Example: sfe-gcp.com
-  frontend_dns_zone                  = "" # Example: "sfe-gcp-com"
-  frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/sfe-${local.environment}"
-  frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
-
-  operator                           = ""    # Example: "seller-1"
+  frontend_domain_name               = local.seller_domain_name
+  frontend_dns_zone                  = local.frontend_dns_zone
+  operator                           = local.seller_operator
   service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
   vm_startup_delay_seconds           = 200   # Example: 200
   cpu_utilization_percent            = 0.6   # Example: 0.6
@@ -155,34 +207,32 @@ module "seller" {
     gcs_hmac_key             = module.secrets.gcs_hmac_key
     gcs_hmac_secret          = module.secrets.gcs_hmac_secret
     gcs_bucket               = "" # Example: ${name of a gcs bucket}
-    gcs_bucket_prefix        = "" # Example: "consented-eventmessage-${local.environment}"
-    file_prefix              = "" # Example: "operator-name"
+    gcs_bucket_prefix        = "" # Example: "consented-eventmessage-${each.key}"
+    file_prefix              = "" # Example: local.seller_operator
   })
-  region_config = {
-    # Example config provided for us-central1 and you may add your own regions.
-    "us-central1" = {
-      collector = {
-        machine_type          = "e2-micro"
-        min_replicas          = 1
-        max_replicas          = 1
-        zones                 = null # Null signifies no zone preference.
-        max_rate_per_instance = null # Null signifies no max.
-      }
-      backend = {
-        machine_type          = "n2d-standard-64"
-        min_replicas          = 1
-        max_replicas          = 5
-        zones                 = null # Null signifies no zone preference.
-        max_rate_per_instance = null # Null signifies no max.
-      }
-      frontend = {
-        machine_type          = "n2d-standard-64"
-        min_replicas          = 1
-        max_replicas          = 2
-        zones                 = null # Null signifies no zone preference.
-        max_rate_per_instance = null # Null signifies no max.
-      }
-    }
-  }
+  region_config                     = each.value.region_config
   enable_tee_container_log_redirect = false
+}
+
+module "seller_frontend_load_balancing" {
+  source               = "../../services/frontend_load_balancing"
+  environment          = local.environment
+  operator             = local.seller_operator
+  frontend_ip_address  = module.seller[local.environment].frontend_address
+  frontend_domain_name = local.seller_domain_name
+  frontend_dns_zone    = local.frontend_dns_zone
+
+  frontend_domain_ssl_certificate_id = local.frontend_domain_ssl_certificate_id
+  frontend_certificate_map_id        = local.frontend_certificate_map_id
+  frontend_service_name              = "sfe"
+  google_compute_backend_service_ids = {
+    for seller_key, seller in module.seller :
+    seller_key => seller.google_compute_backend_service_id
+  }
+  traffic_weights = { for key, value in local.seller_traffic_splits : key => value.traffic_weight }
+}
+
+module "seller_dashboard" {
+  source      = "../../services/dashboards/seller_dashboard"
+  environment = join("|", [for k, v in local.seller_traffic_splits : k if v.traffic_weight > 0])
 }

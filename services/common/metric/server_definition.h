@@ -77,32 +77,36 @@ inline constexpr server_common::metrics::Definition<
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kJSExecutionDuration("js_execution.duration_ms",
-                         "Time taken to execute the JS dispatcher",
-                         server_common::metrics::kTimeHistogram, 300, 10);
+    kUdfExecutionDuration("udf_execution.duration_ms",
+                          "End to end time taken from dispatching the UDF to "
+                          "the execution of the callback (includes queue time)",
+                          server_common::metrics::kTimeHistogram, 300, 10);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kPASGenerateBidJSExecutionDuration(
-        "pas_generate_bid_js_execution.duration_ms",
-        "Time taken to execute the PAS GenerateBid JS dispatcher",
+    kPASGenerateBidUdfExecutionDuration(
+        "pas_generate_bid_udf_execution.duration_ms",
+        "End to end time taken from dispatching the PAS GenerateBid UDF to the "
+        "execution of the callback (includes queue time)",
         server_common::metrics::kTimeHistogram, 300, 10);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kPASPrepareDataForRetrievalJSExecutionDuration(
-        "pas_prepare_data_for_retrieval_js_execution.duration_ms",
-        "Time taken to execute the PAS PrepareDataForAdRetrieval JS dispatcher",
+    kPASPrepareDataForRetrievalUdfExecutionDuration(
+        "pas_prepare_data_for_retrieval_udf_execution.duration_ms",
+        "End to end time taken from dispatching the PAS "
+        "PrepareDataForAdRetrieval UDF to the execution of the callback "
+        "(includes queue time)",
         server_common::metrics::kTimeHistogram, 300, 10);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kUpDownCounter>
-    kJSExecutionErrorCount("js_execution.errors_count",
-                           "No. of times js execution returned status != OK", 1,
-                           0);
+    kUdfExecutionErrorCount("udf_execution.errors_count",
+                            "No. of times UDF execution returned status != OK",
+                            1, 0);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
@@ -212,7 +216,7 @@ inline constexpr server_common::metrics::Definition<
     kBiddingInferenceRequestDuration(
         "bidding.inference.request.duration_ms",
         "Time taken by Roma callback to execute inference",
-        server_common::metrics::kTimeHistogram, 300, 0);
+        server_common::metrics::kTimeHistogram, 200, 0);
 
 inline constexpr server_common::metrics::Definition<
     double, server_common::metrics::Privacy::kNonImpacting,
@@ -589,7 +593,7 @@ inline constexpr server_common::metrics::Definition<
     kInferenceRequestDuration(
         "inference.request.duration_ms",
         "Time taken by inference sidecar to execute inference",
-        server_common::metrics::kTimeHistogram, 300, 0);
+        server_common::metrics::kTimeHistogram, 200, 0);
 
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
@@ -643,7 +647,7 @@ inline constexpr server_common::metrics::Definition<
         /*partition_type*/ "model",
         /*max_partitions_contributed*/ 1,
         /*public_partitions*/ kDefaultDynamicPartition,
-        /*upper_bound*/ 300,
+        /*upper_bound*/ 200,
         /*lower_bound*/ 0);
 
 inline constexpr server_common::metrics::Definition<
@@ -699,8 +703,8 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kBiddingTotalBidsCount,
         &kBiddingZeroBidCount,
         &kBiddingZeroBidPercent,
-        &kJSExecutionDuration,
-        &kJSExecutionErrorCount,
+        &kUdfExecutionDuration,
+        &kUdfExecutionErrorCount,
         &kBiddingErrorCountByErrorCode,
         &kBiddingInferenceRequestDuration,
         &kInferenceCloudFetchSuccessCount,
@@ -718,8 +722,8 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kInferenceRequestCountByModel,
         &kInferenceRequestDurationByModel,
         &kInferenceRequestFailedCountByModel,
-        &kPASGenerateBidJSExecutionDuration,
-        &kPASPrepareDataForRetrievalJSExecutionDuration,
+        &kPASGenerateBidUdfExecutionDuration,
+        &kPASPrepareDataForRetrievalUdfExecutionDuration,
         &kInferenceRequestBatchCountByModel,
 };
 
@@ -823,8 +827,8 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kAuctionTotalBidsCount,
         &kAuctionBidRejectedCount,
         &kAuctionBidRejectedPercent,
-        &kJSExecutionDuration,
-        &kJSExecutionErrorCount,
+        &kUdfExecutionDuration,
+        &kUdfExecutionErrorCount,
         &kAuctionErrorCountByErrorCode,
 };
 
@@ -960,10 +964,11 @@ std::unique_ptr<InitiatedRequest<ContextT>> MakeInitiatedRequest(
 template <typename T>
 inline void AddSystemMetric(T* context_map) {
   context_map->AddObserverable(server_common::metrics::kCpuPercent,
-                               server_common::GetCpu);
+                               server_common::SystemMetrics::GetCpu);
   context_map->AddObserverable(server_common::metrics::kMemoryKB,
-                               server_common::GetMemory);
-  context_map->AddObserverable(metric::kThreadCount, server_common::GetThread);
+                               server_common::SystemMetrics::GetMemory);
+  context_map->AddObserverable(metric::kThreadCount,
+                               server_common::SystemMetrics::GetThread);
   context_map->AddObserverable(
       server_common::metrics::kKeyFetchFailureCount,
       server_common::KeyFetchResultCounter::GetKeyFetchFailureCount);

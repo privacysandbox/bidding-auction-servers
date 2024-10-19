@@ -35,8 +35,8 @@
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
 #include "services/buyer_frontend_service/util/bidding_signals.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
+#include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
-#include "services/common/feature_flags.h"
 #include "services/common/loggers/benchmarking_logger.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/metric/server_definition.h"
@@ -169,6 +169,12 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // Helper classes for performing preload actions.
   // These are not owned by this class.
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
+
+  // TODO: this will be initialized in the later commit. Note that this logic
+  // isn't used at the moment.
+  KVAsyncClient* kv_async_client_;
+  int ad_bids_retrieval_timeout_ms_;
+
   BiddingAsyncClient* bidding_async_client_;
   // PAS bidding client should only be set by the caller if the feature is
   // enabled.
@@ -186,6 +192,11 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   const bool chaffing_enabled_;
   // Whether the GetBids request follows the new SFE <> BFE request format.
   bool use_new_payload_encoding_ = false;
+
+  // Pseudo random number generator for chaffing and debug sampling.
+  std::optional<std::mt19937> generator_;
+
+  bool is_sampled_for_debug_;
 
   RequestLogContext log_context_;
 
@@ -219,9 +230,12 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // server
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
                                        const absl::Status& status);
-
-  // Pseudo random number generator for use in chaffing.
-  std::optional<std::mt19937> generator_;
+  [[deprecated]] void MayGetProtectedAudienceBidsV1(
+      const BiddingSignalsRequest& bidding_signals_request);
+  void MayGetProtectedAudienceBidsV2(
+      const BiddingSignalsRequest& bidding_signals_request);
+  void HandleV2Failure(const absl::Status& status,
+                       const std::string& error_message);
 
   // Compression used in the request object; the response will use the same.
   CompressionType compression_type_;

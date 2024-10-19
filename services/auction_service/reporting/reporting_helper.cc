@@ -297,7 +297,7 @@ std::string GetBuyerMetadataJson(
       kMadeHighestScoringOtherBid,
       dispatch_request_data.post_auction_signals.made_highest_scoring_other_bid,
       buyer_reporting_signals_obj.GetAllocator());
-  if (dispatch_request_data.buyer_reporting_metadata.join_count.has_value()) {
+  if (dispatch_request_data.buyer_reporting_metadata.join_count) {
     int join_count =
         dispatch_request_data.buyer_reporting_metadata.join_count.value();
     if (dispatch_request_config.enable_report_win_input_noising) {
@@ -310,7 +310,7 @@ std::string GetBuyerMetadataJson(
     buyer_reporting_signals_obj.AddMember(
         kJoinCount, join_count, buyer_reporting_signals_obj.GetAllocator());
   }
-  if (dispatch_request_data.buyer_reporting_metadata.recency.has_value()) {
+  if (dispatch_request_data.buyer_reporting_metadata.recency) {
     PS_VLOG(kNoisyInfo, dispatch_request_data.log_context)
         << "BuyerReportingMetadata: Recency:"
         << dispatch_request_data.buyer_reporting_metadata.recency.value();

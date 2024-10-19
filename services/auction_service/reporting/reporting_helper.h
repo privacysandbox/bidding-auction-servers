@@ -76,6 +76,8 @@ inline constexpr char kBuyerOriginTag[] = "buyerOrigin";
 inline constexpr char kSellerTag[] = "seller";
 inline constexpr char kAdCostTag[] = "adCost";
 inline constexpr char kBuyerReportingIdTag[] = "buyerReportingId";
+inline constexpr char kBuyerAndSellerReportingIdTag[] =
+    "buyerAndSellerReportingId";
 inline constexpr char kMadeHighestScoringOtherBid[] =
     "madeHighestScoringOtherBid";
 inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
@@ -187,6 +189,7 @@ struct BuyerReportingDispatchRequestData {
   std::string interest_group_name;
   double ad_cost;
   std::optional<std::string> buyer_reporting_id;
+  std::optional<std::string> buyer_and_seller_reporting_id;
   bool made_highest_scoring_other_bid;
   RequestLogContext& log_context;
   std::string buyer_origin;

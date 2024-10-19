@@ -582,7 +582,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"js_execution.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"udf_execution.duration_ms\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -594,7 +594,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "js_execution.duration_ms [MEAN]"
+                "title": "udf_execution.duration_ms [MEAN]"
             }
         },
         {
@@ -605,7 +605,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"js_execution.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"udf_execution.errors_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -617,7 +617,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "js_execution.errors_count [MEAN]"
+                "title": "udf_execution.errors_count [MEAN]"
             }
         },
         {

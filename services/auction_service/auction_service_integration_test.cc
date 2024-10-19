@@ -389,7 +389,7 @@ void BuildScoreAdsRequestForReporting(
       R"json({"renderUrls":{"placeholder_url":[123])json";
   for (int i = 0; i < test_score_ads_request_config.desired_ad_count; i++) {
     auto ad = MakeARandomAdWithBidMetadata(/*min_bid=*/1, /*max_bid=*/1);
-    if (test_score_ads_request_config.buyer_reporting_id.has_value()) {
+    if (test_score_ads_request_config.buyer_reporting_id) {
       ad.set_buyer_reporting_id(
           test_score_ads_request_config.buyer_reporting_id.value());
     }

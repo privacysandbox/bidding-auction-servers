@@ -53,11 +53,11 @@ void SetupBiddingProviderMock(
               on_done,
           absl::Duration timeout, RequestContext context) {
         GetByteSize get_byte_size;
-        if (server_error_to_return.has_value()) {
+        if (server_error_to_return) {
           std::move(on_done)(*server_error_to_return, get_byte_size);
         } else {
           auto bidding_signals = std::make_unique<BiddingSignals>();
-          if (bidding_signals_value.has_value()) {
+          if (bidding_signals_value) {
             bidding_signals->trusted_signals =
                 std::make_unique<std::string>(bidding_signals_value.value());
           }

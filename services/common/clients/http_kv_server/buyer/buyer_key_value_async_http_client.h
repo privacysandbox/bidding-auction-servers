@@ -34,6 +34,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr std::array<absl::string_view, 1> kMandatoryHeaders{
     {"X-BnA-Client-IP"}};
 
+inline constexpr char kDataVersionResponseHeaderName[] = "Data-Version";
+
 // The data used to build the Buyer KV look url suffix
 struct GetBuyerValuesInput {
   // [DSP] List of keys to query values for, under the namespace keys.
@@ -61,6 +63,8 @@ struct GetBuyerValuesOutput {
   // Used for instrumentation purposes in upper layers.
   size_t request_size;
   size_t response_size;
+  // Optional, indicates version of the KV data.
+  uint32_t data_version;
 };
 
 // This class fetches Key/Value pairs from a Buyer Key/Value Server instance

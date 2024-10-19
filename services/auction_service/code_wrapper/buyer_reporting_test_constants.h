@@ -24,8 +24,8 @@ constexpr absl::string_view kTestReportWinUdfWithValidation =
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId){
-          console.error("Missing both interestGroupName and buyerReportingId in input to reportWin")
+        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId && !buyerReportingSignals.buyerAndSellerReportingId){
+          console.error("Missing all interestGroupName, buyerReportingId and buyerAndSellerReportingId in input to reportWin")
           return
         }
         if(!buyerReportingSignals.adCost || buyerReportingSignals.adCost < 1){
@@ -37,6 +37,7 @@ constexpr absl::string_view kTestReportWinUdfWithValidation =
         reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&buyerReportingId="+buyerReportingSignals.buyerReportingId+
+                    "&buyerAndSellerReportingId="+buyerReportingSignals.buyerAndSellerReportingId+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
@@ -119,8 +120,8 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId){
-          console.error("Missing both interestGroupName and buyerReportingId in input to reportWin")
+        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId && !buyerReportingSignals.buyerAndSellerReportingId){
+          console.error("Missing all interestGroupName, buyerReportingId and buyerAndSellerReportingId in input to reportWin")
           return
         }
         if(!buyerReportingSignals.adCost || buyerReportingSignals.adCost < 1){
@@ -132,6 +133,7 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&buyerReportingId="+buyerReportingSignals.buyerReportingId+
+                    "&buyerAndSellerReportingId="+buyerReportingSignals.buyerAndSellerReportingId+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
@@ -214,8 +216,8 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
           console.error("Missing seller in input to reportWin")
           return
         }
-        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId){
-          console.error("Missing both interestGroupName and buyerReportingId in input to reportWin")
+        if(!buyerReportingSignals.interestGroupName && !buyerReportingSignals.buyerReportingId && !buyerReportingSignals.buyerAndSellerReportingId){
+          console.error("Missing all interestGroupName, buyerReportingId and buyerAndSellerReportingId in input to reportWin")
           return
         }
         if(!buyerReportingSignals.adCost || buyerReportingSignals.adCost < 1){
@@ -227,6 +229,7 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&buyerReportingId="+buyerReportingSignals.buyerReportingId+
+                    "&buyerAndSellerReportingId="+buyerReportingSignals.buyerAndSellerReportingId+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
@@ -261,6 +264,7 @@ reportWin = function(
   var reportWinUrl = 'http://test.com?seller=' + buyerReportingSignals.seller +
       '&interestGroupName=' + buyerReportingSignals.interestGroupName +
       '&buyerReportingId=' + buyerReportingSignals.buyerReportingId +
+      '&buyerAndSellerReportingId=' + buyerReportingSignals.buyerAndSellerReportingId +
       '&adCost=' + buyerReportingSignals.adCost + '&highestScoringOtherBid=' +
       buyerReportingSignals.highestScoringOtherBid +
       '&madeHighestScoringOtherBid=' +

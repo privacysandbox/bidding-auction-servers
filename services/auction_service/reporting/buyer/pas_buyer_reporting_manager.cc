@@ -62,9 +62,8 @@ inline std::vector<std::shared_ptr<std::string>> GetPASReportWinInput(
   PS_VLOG(kDispatch, dispatch_request_data.log_context)
       << "\n\nReportWin Input Args:" << "\nAuction Config:\n"
       << *(input[PASReportWinArgIndex(PASReportWinArgs::kAuctionConfig)])
-      << "\nBuyer Reporting Signals:\n"
-      << *(input[PASReportWinArgIndex(
-             PASReportWinArgs::kBuyerReportingSignals)])
+      << "\nPer buyer signals:\n"
+      << *(input[PASReportWinArgIndex(PASReportWinArgs::kPerBuyerSignals)])
       << "\nSignals for winner:\n"
       << *(input[PASReportWinArgIndex(PASReportWinArgs::kSignalsForWinner)])
       << "\nBuyer reporting signals:\n"

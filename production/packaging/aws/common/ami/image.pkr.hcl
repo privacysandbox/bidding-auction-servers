@@ -90,7 +90,7 @@ source "amazon-ebs" "dataserver" {
   ami_regions   = var.regions
   source_ami_filter {
     filters = {
-      name                = "amzn2-ami-kernel-*-x86_64-gp2"
+      name                = "al2023-ami-2023.6.20241010.0-kernel-6.1-x86_64"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -155,7 +155,7 @@ mv /tmp/envoy.yaml /etc/envoy/envoy.yaml
 chmod 555 /etc/envoy/{envoy.yaml,bidding_auction_servers_descriptor_set.pb}
 
 mv /tmp/vsockproxy.service /etc/systemd/system/vsockproxy.service
-mkdir -p /opt/privacysandbox
+sudo mkdir -p /opt/privacysandbox
 mv /tmp/proxy /opt/privacysandbox/proxy
 mv /tmp/server_enclave_image.eif /opt/privacysandbox/server_enclave_image.eif
 mv /tmp/otel_collector_config.yaml /opt/privacysandbox/otel_collector_config.yaml

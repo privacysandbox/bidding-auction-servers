@@ -51,10 +51,10 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
         `tensorflow_v2_14_0`.
     -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the GCS bucket that you have created. Note
         that this _not_ a url. For example, the bucket name can be "test_models".
-    -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
-        bucket. There must be NO spaces between each comma separated model path. For example, within
-        the "test_models" bucket there are saved models "tensorflow/model1" and "tensorflow/model1".
-        To load these two models, this flag should be set to "tensorflow/model1,tensorflow/model2".
+    -   Set `INFERENCE_MODEL_CONFIG_PATH` flag to the path to the model configuration file relative
+        to the model cloud bucket. This metadata file lists models to be fetched.
+    -   Set `INFERENCE_MODEL_FETCH_PERIOD_MS` to the period that the bidding server checks updates
+        in the model configuration file and fetches models.
     -   Set `INFERENCE_SIDECAR_RUNTIME_CONFIG` which has the following format:
 
         ```javascript
@@ -97,10 +97,10 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
         `tensorflow_v2_14_0`.
     -   Set `INFERENCE_MODEL_BUCKET_NAME` to the name of the S3 bucket that you have created. Note
         that this _not_ a url. For example, the bucket name can be "test_models".
-    -   Set `INFERENCE_MODEL_BUCKET_PATHS` to a comma separated list of model paths under the
-        bucket. For example, within the "test_models" bucket there are saved models
-        "tensorflow/model1" and "tensorflow/model1". To load these two models, this flag should be
-        set to "tensorflow/model1,tensorflow/model2".
+    -   Set `INFERENCE_MODEL_CONFIG_PATH` flag to the path to the model configuration file relative
+        to the model cloud bucket. This metadata file lists models to be fetched.
+    -   Set `INFERENCE_MODEL_FETCH_PERIOD_MS` to the period that the bidding server checks updates
+        in the model configuration file and fetches models.
     -   Set `INFERENCE_SIDECAR_RUNTIME_CONFIG` which has the following format:
 
         ```javascript

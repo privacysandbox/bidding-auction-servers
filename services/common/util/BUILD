@@ -305,36 +305,6 @@ cc_library(
 )
 
 cc_library(
-    name = "binary_http_utils",
-    hdrs = [
-        "binary_http_utils.h",
-    ],
-    deps = [
-        "//services/common/loggers:request_log_context",
-        "//services/common/util:request_response_constants",
-        "@com_github_google_quiche//quiche:binary_http_unstable_api",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_protobuf//:protobuf",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
-    ],
-)
-
-cc_test(
-    name = "binary_http_utils_test",
-    size = "small",
-    srcs = [
-        "binary_http_utils_test.cc",
-    ],
-    deps = [
-        ":binary_http_utils",
-        "@com_google_googletest//:gtest_main",
-        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_grpc",
-        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
-    ],
-)
-
-cc_library(
     name = "auction_scope_util",
     srcs = [
         "auction_scope_util.cc",

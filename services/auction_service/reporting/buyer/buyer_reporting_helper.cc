@@ -28,6 +28,34 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 constexpr absl::string_view kReportWinUDFName = "reportWin";
 }  // namespace
+
+void SetBuyerReportingIds(
+    const BuyerReportingDispatchRequestData& buyer_reporting_metadata,
+    rapidjson::Document& seller_device_signals) {
+  // if buyerAndSellerReportingId is present,
+  // it will be used as a substitute for the IG Name. else if buyerReportingId
+  // is present, it will be used as a substitute for the IG Name. else, the
+  // implementation will fallback to using IG name. Reference:
+  // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#12-interest-group-attributes
+  if (buyer_reporting_metadata.buyer_and_seller_reporting_id) {
+    rapidjson::GenericStringRef buyer_and_seller_reporting_id(
+        (buyer_reporting_metadata.buyer_and_seller_reporting_id)->c_str());
+    seller_device_signals.AddMember(kBuyerAndSellerReportingIdTag,
+                                    buyer_and_seller_reporting_id,
+                                    seller_device_signals.GetAllocator());
+  } else if (buyer_reporting_metadata.buyer_reporting_id) {
+    rapidjson::GenericStringRef buyer_reporting_id(
+        (buyer_reporting_metadata.buyer_reporting_id)->c_str());
+    seller_device_signals.AddMember(kBuyerReportingIdTag, buyer_reporting_id,
+                                    seller_device_signals.GetAllocator());
+  } else {
+    rapidjson::GenericStringRef interest_group_name(
+        buyer_reporting_metadata.interest_group_name.c_str());
+    seller_device_signals.AddMember(kInterestGroupNameTag, interest_group_name,
+                                    seller_device_signals.GetAllocator());
+  }
+}
+
 absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
     const BuyerReportingDispatchRequestData& buyer_reporting_metadata,
     rapidjson::Document& seller_device_signals) {
@@ -40,7 +68,7 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
       kMadeHighestScoringOtherBid,
       buyer_reporting_metadata.made_highest_scoring_other_bid,
       seller_device_signals.GetAllocator());
-  if (buyer_reporting_metadata.join_count.has_value()) {
+  if (buyer_reporting_metadata.join_count) {
     int join_count = *buyer_reporting_metadata.join_count;
     absl::StatusOr<int> noised_join_count = NoiseAndBucketJoinCount(join_count);
     if (noised_join_count.ok()) {
@@ -54,7 +82,7 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
              "reporting";
     }
   }
-  if (buyer_reporting_metadata.recency.has_value()) {
+  if (buyer_reporting_metadata.recency) {
     long recency = *buyer_reporting_metadata.recency;
     absl::StatusOr<long> noised_recency = NoiseAndBucketRecency(recency);
     if (noised_recency.ok()) {
@@ -67,7 +95,7 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
           << "Error with noising recency in buyerDeviceSignals for reporting";
     }
   }
-  if (buyer_reporting_metadata.modeling_signals.has_value()) {
+  if (buyer_reporting_metadata.modeling_signals) {
     int modeling_signals = *buyer_reporting_metadata.modeling_signals;
     absl::StatusOr<int> noised_modeling_signals =
         NoiseAndMaskModelingSignals(modeling_signals);
@@ -93,20 +121,8 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
     seller_device_signals.AddMember(kAdCostTag, *ad_cost,
                                     seller_device_signals.GetAllocator());
   }
-  // If buyer_reporting_id is present, interestGroupName should not be set.
-  // Reference:
-  // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#12-interest-group-attributes
-  if (buyer_reporting_metadata.buyer_reporting_id.has_value()) {
-    rapidjson::GenericStringRef buyer_reporting_id(
-        (buyer_reporting_metadata.buyer_reporting_id)->c_str());
-    seller_device_signals.AddMember(kBuyerReportingIdTag, buyer_reporting_id,
-                                    seller_device_signals.GetAllocator());
-  } else {
-    rapidjson::GenericStringRef interest_group_name(
-        buyer_reporting_metadata.interest_group_name.c_str());
-    seller_device_signals.AddMember(kInterestGroupNameTag, interest_group_name,
-                                    seller_device_signals.GetAllocator());
-  }
+  SetBuyerReportingIds(buyer_reporting_metadata, seller_device_signals);
+
   return SerializeJsonDoc(seller_device_signals,
                           buyer_reporting_metadata.buyer_signals.size());
 }

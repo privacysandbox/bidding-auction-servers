@@ -62,10 +62,11 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 SelectAdReactorForWeb::SelectAdReactorForWeb(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool fail_fast,
-    int max_buyers_solicited)
+    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    bool enable_kanon, bool fail_fast, int max_buyers_solicited)
     : SelectAdReactor(context, request, response, clients, config_client,
-                      fail_fast, max_buyers_solicited) {}
+                      enable_cancellation, enable_kanon, fail_fast,
+                      max_buyers_solicited) {}
 
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -96,7 +97,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
              AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
     // If this is server component auction, serialize as proto.
     AuctionResult auction_result;
-    if (high_score.has_value()) {
+    if (high_score) {
       auction_result = AdScoreToAuctionResult(
           high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
           shared_ig_updates_map_, error, auction_scope_,

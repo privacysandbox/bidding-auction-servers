@@ -68,7 +68,7 @@ void AppendFeatureFlagValue(std::string& feature_flags,
 PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score) {
   // If there is no winning ad, return with default signals values.
-  if (!winning_ad_score.has_value()) {
+  if (!winning_ad_score) {
     return {kDefaultWinningInterestGroupName,
             kDefaultWinningInterestGroupOwner,
             kDefaultWinningBid,
@@ -105,7 +105,7 @@ PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
     std::string seller_currency) {
   // If there is no winning ad, return with default signals values.
-  if (!winning_ad_score.has_value()) {
+  if (!winning_ad_score) {
     return {kDefaultWinningInterestGroupName,
             kDefaultWinningInterestGroupOwner,
             kDefaultWinningBid,
@@ -348,9 +348,24 @@ void MayVlogAdTechCodeLogs(bool enable_ad_tech_code_logging,
 absl::StatusOr<std::string> ParseAndGetResponseJson(
     bool enable_ad_tech_code_logging, const std::string& response,
     RequestLogContext& log_context) {
+  PS_VLOG(5) << "Parsing with logging enabled: " << enable_ad_tech_code_logging;
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
   return SerializeJsonDoc(document["response"]);
+}
+
+absl::StatusOr<std::vector<std::string>> ParseAndGetResponseJsonArray(
+    bool enable_ad_tech_code_logging, const std::string& response,
+    RequestLogContext& log_context) {
+  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
+  if (enable_ad_tech_code_logging) {
+    PS_VLOG(5) << "Parsing with logging enabled: "
+               << enable_ad_tech_code_logging;
+    MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
+    return SerializeJsonArrayDocToVector(document["response"]);
+  } else {
+    return SerializeJsonArrayDocToVector(document);
+  }
 }
 
 std::string GetFeatureFlagJson(bool enable_logging,

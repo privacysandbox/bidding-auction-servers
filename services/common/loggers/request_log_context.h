@@ -20,6 +20,9 @@
 #include <utility>
 
 #include "absl/base/no_destructor.h"
+#include "absl/random/bit_gen_ref.h"
+#include "absl/random/discrete_distribution.h"
+#include "absl/random/random.h"
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "src/logger/request_context_impl.h"
@@ -113,19 +116,25 @@ inline constexpr int kDispatch = 4;  // UDF dispatch request and response
 inline constexpr int kOriginated =
     5;  // plaintext B&A request and response originated from server
 inline constexpr int kKVLog = 5;  // KV request response
-inline constexpr int kStats = 5;  // Stats log like time , byte size, etc.
+inline constexpr int kStats = 5;  // Stats log e.g. time, byte size, etc.
 inline constexpr int kEncrypted = 6;
 
 inline bool AllowAnyEventLogging(RequestLogContext& log_context) {
   // if is_debug_response in non prod, it logs to debug kNoisyInfo
   // if is_consented, it logs to event message
   return (log_context.is_debug_response() && !server_common::log::IsProd()) ||
-         log_context.is_consented();
+         log_context.is_consented() || log_context.is_prod_debug();
 }
 
 inline bool AllowAnyUdfLogging(RequestLogContext& log_context) {
   return server_common::log::PS_VLOG_IS_ON(kUdfLog) ||
          AllowAnyEventLogging(log_context);
+}
+
+inline bool RandomSample(int sample_rate_micro, absl::BitGenRef bitgen) {
+  absl::discrete_distribution dist(
+      {1e6 - sample_rate_micro, (double)sample_rate_micro});
+  return dist(bitgen);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

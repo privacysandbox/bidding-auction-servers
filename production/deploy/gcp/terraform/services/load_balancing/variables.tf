@@ -49,22 +49,6 @@ variable "frontend_dns_zone" {
   type        = string
 }
 
-variable "frontend_ip_address" {
-  description = "Frontend ip address"
-  type        = string
-}
-variable "frontend_domain_ssl_certificate_id" {
-  description = "A GCP ssl certificate id. Example: projects/test-project/global/sslCertificates/dev. Used to terminate client-to-external-LB connections. Unused if frontend_certificate_map_id is specified."
-  type        = string
-  default     = ""
-}
-
-variable "frontend_certificate_map_id" {
-  description = "A certificate manager certificate map resource id. Example: projects/test-project/locations/global/certificateMaps/wildcard-cert-map. Takes precedence over frontend_domain_ssl_certificate_id."
-  type        = string
-  default     = ""
-}
-
 variable "frontend_instance_group_managers" {
   description = "Frontend instance group managers."
   type        = set(any)
@@ -72,11 +56,6 @@ variable "frontend_instance_group_managers" {
 
 variable "frontend_service_name" {
   type = string
-}
-
-variable "frontend_service_port" {
-  description = "The grpc port that receives traffic destined for the frontend service."
-  type        = number
 }
 
 variable "frontend_service_healthcheck_port" {

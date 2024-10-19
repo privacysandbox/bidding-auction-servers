@@ -50,6 +50,7 @@ constexpr char kSecret[] = "secret";
 constexpr char kAdRenderUrlPrefixForTest[] = "https://advertising.net/ad?";
 constexpr char kTopLevelSeller[] = "top_level_seller";
 constexpr char kTestConsentToken[] = "testConsentToken";
+constexpr int kTestMultiBidLimit = 10;
 
 // While Roma demands JSON input and enforces it strictly, we follow the
 // javascript style guide for returning objects here, so object keys are
@@ -400,6 +401,46 @@ constexpr absl::string_view kJsCodeWithComponentBidNotAllowed = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_with_multiple_bids_template = R"JS_CODE(
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+
+      forDebuggingOnly.reportAdAuctionLoss("https://example-dsp.com/debugLoss");
+      forDebuggingOnly.reportAdAuctionWin("https://example-dsp.com/debugWin");
+
+      // Reshaped into an AdWithBid.
+      return [
+      {
+        render: "render_1",
+        ad: {"arbitraryMetadataField": 1},
+        bid: 1,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_2",
+        ad: {"arbitraryMetadataField": 2},
+        bid: 2,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_3",
+        ad: {"arbitraryMetadataField": 3},
+        bid: 3,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_4",
+        ad: {"arbitraryMetadataField": 4},
+        bid: 4,
+        allowComponentAuction: false
+      }
+      ];
+    }
+  )JS_CODE";
+
 SignalBucket GetExpectedSignalBucket() {
   BucketOffset bucket_offset;
   bucket_offset.add_value(1);  // Add first 64-bit value
@@ -509,7 +550,8 @@ BuildGenerateBidsRequestFromBrowser(
     absl::flat_hash_map<std::string, std::vector<std::string>>*
         interest_group_to_ad,
     int desired_bid_count = 5, bool set_enable_debug_reporting = false,
-    bool enable_adtech_code_logging = false) {
+    bool enable_adtech_code_logging = false,
+    int multi_bid_limit = kTestMultiBidLimit) {
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
   raw_request.set_enable_debug_reporting(set_enable_debug_reporting);
   for (int i = 0; i < desired_bid_count; i++) {
@@ -525,6 +567,7 @@ BuildGenerateBidsRequestFromBrowser(
     raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
     raw_request.mutable_consented_debug_config()->set_is_consented(true);
   }
+  raw_request.set_multi_bid_limit(multi_bid_limit);
   return raw_request;
 }
 
@@ -1082,6 +1125,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
                                  interest_group.ad_render_ids().end()));
     *raw_request.mutable_interest_group_for_bidding()->Add() =
         std::move(interest_group);
+    raw_request.set_multi_bid_limit(kTestMultiBidLimit);
     // This fails in production, the user Bidding Signals are not being set.
     // use logging to figure out why.
   }
@@ -1165,6 +1209,7 @@ struct GenerateBidHelperConfig {
   int desired_bid_count = 5;
   bool component_auction = false;
   bool enable_private_aggregate_reporting = false;
+  int multi_bid_limit = kTestMultiBidLimit;
 };
 
 void GenerateBidCodeWrapperTestHelper(
@@ -1182,7 +1227,7 @@ void GenerateBidCodeWrapperTestHelper(
   auto req = BuildGenerateBidsRequestFromBrowser(
       &interest_group_to_ad, test_config.desired_bid_count,
       test_config.enable_debug_reporting,
-      test_config.enable_adtech_code_logging);
+      test_config.enable_adtech_code_logging, test_config.multi_bid_limit);
   ASSERT_TRUE(req.ok()) << req.status();
   if (test_config.component_auction) {
     req.value().set_top_level_seller(kTopLevelSeller);
@@ -1571,6 +1616,38 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_EQ(raw_response.bids_size(), 0);
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest, DropsAllBidsIfOverMultiBidLimit) {
+  GenerateBidsResponse response;
+  GenerateBidHelperConfig test_config = {.desired_bid_count = 1,
+                                         .multi_bid_limit = 3};
+  GenerateBidCodeWrapperTestHelper(
+      &response, js_code_with_multiple_bids_template, test_config);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest, ReturnsBidsArrayWithDebugURL) {
+  GenerateBidsResponse response;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = true,
+      .enable_buyer_debug_url_generation = true,
+      .enable_adtech_code_logging = true,
+      .desired_bid_count = 1};
+  GenerateBidCodeWrapperTestHelper(
+      &response, js_code_with_multiple_bids_template, test_config);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(),
+              "https://example-dsp.com/debugWin");
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(),
+              "https://example-dsp.com/debugLoss");
+  }
 }
 
 }  // namespace

@@ -198,7 +198,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
   request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
       MakeARandomInterestGroupFromBrowser().release());
   absl::Notification notification;
-  std::string expected_output = MakeARandomString();
+  std::string expected_bidding_signals = MakeARandomString();
+  const uint32_t expected_data_version = 1215;
 
   EXPECT_CALL(
       *mock_client,
@@ -208,7 +209,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
                                              GetBuyerValuesOutput>>) &&>>(),
               An<absl::Duration>(), _))
       .WillOnce(
-          [&expected_output](
+          [&expected_bidding_signals,
+           data_version_for_mock = expected_data_version](
               std::unique_ptr<GetBuyerValuesInput> input,
               const RequestMetadata& metadata,
               absl::AnyInvocable<void(
@@ -216,7 +218,8 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
                   callback,
               absl::Duration timeout, RequestContext context) {
             auto output = std::make_unique<GetBuyerValuesOutput>();
-            output->result = expected_output;
+            output->result = expected_bidding_signals;
+            output->data_version = data_version_for_mock;
             (std::move(callback))(std::move(output));
             return absl::OkStatus();
           });
@@ -226,10 +229,12 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
   BiddingSignalsRequest bidding_signals_request(request, {});
   class_under_test.Get(
       bidding_signals_request,
-      [&expected_output, &notification](
+      [&expected_bidding_signals, &expected_data_version, &notification](
           absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
           GetByteSize get_byte_size) {
-        EXPECT_EQ(*(signals.value()->trusted_signals), expected_output);
+        EXPECT_EQ(*(signals.value()->trusted_signals),
+                  expected_bidding_signals);
+        EXPECT_EQ(signals.value()->data_version, expected_data_version);
         notification.Notify();
       },
       absl::Milliseconds(100));

@@ -39,6 +39,9 @@ class TensorflowModule final : public ModuleInterface {
 
  private:
   friend class NoFreezeTensorflowTest;
+  // TODO(b/346418962): Move the function into TensorFlowGraphValidator.
+  // Performs a graph traversal and checks if a model's operators are allowed.
+  absl::Status IsModelAllowed(const RegisterModelRequest& request);
   void SetModelStoreForTestOnly(
       std::unique_ptr<ModelStore<tensorflow::SavedModelBundle>> store) {
     store_ = std::move(store);

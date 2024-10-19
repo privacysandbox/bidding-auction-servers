@@ -45,7 +45,7 @@ absl::StatusOr<std::vector<bool>> UnsignedIntFeature::Serialize() {
   }
   std::optional<uint> value;
   PS_ASSIGN_IF_PRESENT(value, value_, "value", Uint);
-  if (!value.has_value()) {
+  if (!value) {
     return absl::InvalidArgumentError(
         "Int feature not found in the egress payload");
   }

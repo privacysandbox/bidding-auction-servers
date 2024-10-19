@@ -15,6 +15,10 @@
 
 source $(dirname "$0")/common
 
+export AUCTION_JS_URL=""
+export BUYER_REPORT_WIN_URL=""
+export BUYER_REPORT_WIN_SCRIPT=""
+
 export SERVER_START_CMD=$(cat << END
 /server/bin/server \
 --init_config_client="false" \

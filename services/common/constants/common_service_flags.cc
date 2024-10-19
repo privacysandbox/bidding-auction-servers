@@ -94,3 +94,8 @@ ABSL_FLAG(std::optional<bool>, enable_chaffing, false,
           "If true, chaff requests are sent out from the SFE. Chaff requests "
           "are requests sent to buyers not participating in an auction to mask "
           "the buyers associated with a client request.");
+ABSL_FLAG(std::optional<int>, debug_sample_rate_micro, 0,
+          "Set a value between 0 (never debug) and 1,000,000 (always debug) to "
+          "determine the sampling rate of requests eligible for debugging. "
+          "Chosen requests export"
+          "privacy_sandbox.bidding_auction_servers.EventMessage");

@@ -19,6 +19,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kTestReportResultUrl[] = "http://reportResultUrl.com";
 constexpr char kTestReportWinUrl[] = "http://reportWinUrl.com";
 constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+constexpr char kTestBuyerAndSellerReportingId[] =
+    "testBuyerAndSellerReportingId";
 constexpr char kTestReportWinUrlWithBuyerReportingId[] =
     "http://reportWinUrl.com&buyerReportingId=testId";
 constexpr char kTestLog[] = "testLog";

@@ -1481,10 +1481,10 @@ absl::StatusOr<std::string> Encode(
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
   auto* cbor_internal = cbor_data_root.get();
 
-  if (error.has_value()) {
+  if (error) {
     PS_RETURN_IF_ERROR(
         CborSerializeError(*error, error_handler, *cbor_internal));
-  } else if (high_score.has_value()) {
+  } else if (high_score) {
     PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
         *high_score, bidding_group_map, update_group_map,
         kanon_auction_result_data, error_handler, *cbor_internal));
@@ -1513,10 +1513,10 @@ absl::StatusOr<std::string> EncodeComponent(
   ScopedCbor cbor_data_root(cbor_new_definite_map(kNumAuctionResultKeys));
   auto* cbor_internal = cbor_data_root.get();
 
-  if (error.has_value()) {
+  if (error) {
     PS_RETURN_IF_ERROR(
         CborSerializeError(*error, error_handler, *cbor_internal));
-  } else if (high_score.has_value()) {
+  } else if (high_score) {
     PS_RETURN_IF_ERROR(CborSerializeComponentScoreAdResponse(
         top_level_seller, *high_score, bidding_group_map, update_group_map,
         error_handler, *cbor_internal));

@@ -122,7 +122,7 @@ void SetupBuyerClientMock(
         if (!top_level_seller.empty()) {
           EXPECT_EQ(get_values_request->top_level_seller(), top_level_seller);
         }
-        if (bid.has_value()) {
+        if (bid) {
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(*bid),
               /* response_metadata= */ {});
@@ -195,13 +195,13 @@ AdWithBid BuildNewAdWithBid(
     bid.add_ad_components(
         absl::StrCat("https://fooAds.com/adComponents?id=", i));
   }
-  if (bid_value.has_value()) {
+  if (bid_value) {
     bid.set_bid(bid_value.value());
   }
-  if (interest_group_name.has_value()) {
+  if (interest_group_name) {
     bid.set_interest_group_name(*interest_group_name);
   }
-  if (bid_currency.has_value()) {
+  if (bid_currency) {
     bid.set_bid_currency(*bid_currency);
   }
   bid.set_ad_cost(kAdCost);
@@ -234,10 +234,10 @@ ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     absl::optional<absl::string_view> bid_currency) {
   ProtectedAppSignalsAdWithBid pas_ad_with_bid;
   pas_ad_with_bid.set_render(ad_render_url);
-  if (bid_value.has_value()) {
+  if (bid_value) {
     pas_ad_with_bid.set_bid(bid_value.value());
   }
-  if (bid_currency.has_value()) {
+  if (bid_currency) {
     pas_ad_with_bid.set_bid_currency(bid_currency.value());
   }
   pas_ad_with_bid.set_ad_cost(kAdCost);
@@ -304,11 +304,11 @@ void SetupScoringProviderMock(
                   seller_egid);
 
         GetByteSize get_byte_size;
-        if (server_error_to_return.has_value()) {
+        if (server_error_to_return) {
           std::move(on_done)(*server_error_to_return, get_byte_size);
         } else {
           auto scoring_signals = std::make_unique<ScoringSignals>();
-          if (scoring_signals_value.has_value()) {
+          if (scoring_signals_value) {
             scoring_signals->scoring_signals =
                 std::make_unique<std::string>(scoring_signals_value.value());
             std::move(on_done)(std::move(scoring_signals), get_byte_size);

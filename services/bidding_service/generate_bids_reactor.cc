@@ -42,7 +42,7 @@ using ::google::protobuf::TextFormat;
 using RawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 using IGForBidding =
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
-constexpr int kArgsSizeWithWrapper = 6;
+constexpr int kArgsSizeWithWrapper = 7;
 
 absl::StatusOr<std::string> ProtoToJson(
     const google::protobuf::Message& proto) {
@@ -235,6 +235,9 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(kEmptyDeviceSignals);
   }
+  generate_bid_request.input[ArgIndex(GenerateBidArgs::kMultiBidLimit)] =
+      std::make_shared<std::string>(
+          absl::StrCat(raw_request.multi_bid_limit()));
   generate_bid_request.input[ArgIndex(GenerateBidArgs::kFeatureFlags)] =
       std::make_shared<std::string>(
           GetFeatureFlagJson(enable_adtech_code_logging,
@@ -385,7 +388,7 @@ void GenerateBidsReactor::Execute() {
             int js_execution_time_ms =
                 (absl::Now() - start_js_execution_time) / absl::Milliseconds(1);
             LogIfError(
-                metric_context_->LogHistogram<metric::kJSExecutionDuration>(
+                metric_context_->LogHistogram<metric::kUdfExecutionDuration>(
                     js_execution_time_ms));
             GenerateBidsCallback(result);
             EncryptResponseAndFinish(grpc::Status::OK);
@@ -450,54 +453,57 @@ void GenerateBidsReactor::GenerateBidsCallback(
           << result.status().ToString(
                  absl::StatusToStringMode::kWithEverything);
       LogIfError(
-          metric_context_->LogUpDownCounter<metric::kJSExecutionErrorCount>(1));
+          metric_context_->AccumulateMetric<metric::kUdfExecutionErrorCount>(
+              1));
       continue;
     }
     // Parse JSON response from the result.
-    AdWithBid bid;
-    absl::StatusOr<std::string> generate_bid_response =
-        enable_adtech_code_logging_
-            ? ParseAndGetResponseJson(enable_adtech_code_logging_, result->resp,
-                                      log_context_)
-            : result->resp;
-    if (!generate_bid_response.ok()) {
+    absl::StatusOr<std::vector<std::string>> generate_bid_responses =
+        ParseAndGetResponseJsonArray(enable_adtech_code_logging_, result->resp,
+                                     log_context_);
+    if (!generate_bid_responses.ok()) {
       PS_LOG(ERROR, log_context_)
           << "Failed to parse response from Roma "
-          << generate_bid_response.status().ToString(
+          << generate_bid_responses.status().ToString(
                  absl::StatusToStringMode::kWithEverything);
+      continue;
     }
     // Convert JSON response to AdWithBid proto.
     google::protobuf::json::ParseOptions parse_options;
     parse_options.ignore_unknown_fields = true;
-    auto valid = google::protobuf::util::JsonStringToMessage(
-        generate_bid_response.value(), &bid, parse_options);
     const std::string interest_group_name = result->id;
-    if (!valid.ok()) {
-      PS_LOG(ERROR, log_context_)
-          << "Invalid json output from code execution for interest_group "
-          << interest_group_name << ": " << result->resp;
-      continue;
-    }
-    // Validate AdWithBid proto.
-    if (absl::Status validation_status =
-            IsValidProtectedAudienceBid(bid, auction_scope_);
-        !validation_status.ok()) {
-      PS_VLOG(kNoisyWarn, log_context_) << validation_status.message();
-      if (validation_status.code() == absl::StatusCode::kInvalidArgument) {
-        zero_bid_count += 1;
-        LogIfError(
-            metric_context_->AccumulateMetric<metric::kBiddingZeroBidCount>(1));
+    for (const auto& bid_response : *generate_bid_responses) {
+      AdWithBid bid;
+      auto valid = google::protobuf::util::JsonStringToMessage(
+          bid_response, &bid, parse_options);
+      if (!valid.ok()) {
+        PS_LOG(ERROR, log_context_)
+            << "Invalid json output from code execution for interest_group "
+            << interest_group_name << ": " << bid_response;
+        continue;
       }
-      continue;
+      // Validate AdWithBid proto.
+      if (absl::Status validation_status =
+              IsValidProtectedAudienceBid(bid, auction_scope_);
+          !validation_status.ok()) {
+        PS_VLOG(kNoisyWarn, log_context_) << validation_status.message();
+        if (validation_status.code() == absl::StatusCode::kInvalidArgument) {
+          zero_bid_count += 1;
+          LogIfError(
+              metric_context_->AccumulateMetric<metric::kBiddingZeroBidCount>(
+                  1));
+        }
+        continue;
+      }
+      // Trim debug URLs for validated AdWithBid proto and add it to
+      // GenerateBidsResponse.
+      total_debug_urls_chars +=
+          TrimAndReturnDebugUrlsSize(bid, max_allowed_size_debug_url_chars_,
+                                     max_allowed_size_all_debug_urls_chars_,
+                                     total_debug_urls_chars, log_context_);
+      bid.set_interest_group_name(interest_group_name);
+      *raw_response_.add_bids() = std::move(bid);
     }
-    // Trim debug URLs for validated AdWithBid proto and add it to
-    // GenerateBidsResponse.
-    total_debug_urls_chars +=
-        TrimAndReturnDebugUrlsSize(bid, max_allowed_size_debug_url_chars_,
-                                   max_allowed_size_all_debug_urls_chars_,
-                                   total_debug_urls_chars, log_context_);
-    bid.set_interest_group_name(interest_group_name);
-    *raw_response_.add_bids() = std::move(bid);
   }
   LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
       (static_cast<double>(zero_bid_count)) / total_bid_count));

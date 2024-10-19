@@ -28,8 +28,12 @@
 
 namespace privacy_sandbox::server_common {
 
-namespace {
+void SystemMetrics::SetInferencePid(pid_t pid) {
+  absl::MutexLock lock(&mu_);
+  inference_pid_ = pid;
+}
 
+namespace {
 constexpr int kLogInterval = 600;
 
 std::vector<size_t> SystemCpuTime() {
@@ -46,31 +50,37 @@ std::vector<size_t> SystemCpuTime() {
   return cpu_times;
 }
 
-std::vector<std::string> SelfStat() {
-  std::ifstream proc_self_stat("/proc/self/stat");
-  if (!proc_self_stat) {
+std::vector<std::string> StatFields(absl::string_view pid) {
+  std::string path = absl::StrCat("/proc/", pid, "/stat");
+  std::ifstream proc_stat(path);
+  if (!proc_stat) {
     ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
-        << "failed to open /proc/self/stat; " << strerror(errno);
+        << "failed to open path: " << path << strerror(errno);
     return {};
   }
-  std::vector<std::string> self_stat_fields;
-  for (std::string field; proc_self_stat >> field;
-       self_stat_fields.push_back(field)) {
+  std::vector<std::string> stat_fields;
+  for (std::string field; proc_stat >> field; stat_fields.push_back(field)) {
   }
-  return self_stat_fields;
+  return stat_fields;
 }
 }  // namespace
 
 namespace internal {
 
-Utilization ReadCpuTime(const std::vector<size_t>& cpu_times,
-                        const std::vector<std::string>& self_stat_fields) {
+Utilization ReadCpuTime(
+    const std::vector<size_t>& cpu_times,
+    const std::vector<std::string>& self_stat_fields,
+    std::optional<std::vector<std::string>> process_stat_fields) {
   static size_t idle_time = 0;
   static size_t total_time = 0;
   static size_t self_time = 0;
-  Utilization ret{0, 0};
+  static size_t process_time = 0;
+  Utilization ret{0, 0, std::nullopt};
 
   constexpr int kCpuIdle = 3;
+  constexpr int kUtime = 13, kStime = 14;
+  constexpr int kStatTotal = 52;
+
   if (cpu_times.size() < kCpuIdle + 1) {
     ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
         << "unknown /proc/stat format " << absl::StrJoin(cpu_times, " ");
@@ -92,7 +102,6 @@ Utilization ReadCpuTime(const std::vector<size_t>& cpu_times,
                   ? 0
                   : 1.0 * (total_time_diff - idle_time_diff) / total_time_diff;
 
-  constexpr int kStatTotal = 52;
   if (self_stat_fields.size() < kStatTotal) {
     ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
         << "unknown /proc/self/stat format "
@@ -100,21 +109,29 @@ Utilization ReadCpuTime(const std::vector<size_t>& cpu_times,
     return ret;
   }
 
-  constexpr int kUtime = 13, kStime = 14;
-  auto utime = std::stoull(self_stat_fields[kUtime]);
-  auto stime = std::stoull(self_stat_fields[kStime]);
-  // calculate and update self_time
-  size_t self_time_new = utime + stime;
-  size_t self_time_diff = self_time_new - self_time;
-  self_time = self_time_new;
-  ret.self = total_time_diff == 0 ? 0 : 1.0 * self_time_diff / total_time_diff;
+  auto CalculateUtilization = [&](size_t& process_time_to_update,
+                                  const std::vector<std::string>& stat_fields) {
+    auto utime = std::stoull(stat_fields[kUtime]);
+    auto stime = std::stoull(stat_fields[kStime]);
+    size_t process_time_new = utime + stime;
+    size_t process_time_diff = process_time_new - process_time_to_update;
+    process_time_to_update = process_time_new;
+    return total_time_diff == 0 ? 0 : 1.0 * process_time_diff / total_time_diff;
+  };
+
+  ret.self = CalculateUtilization(self_time, self_stat_fields);
+
+  if (process_stat_fields && process_stat_fields->size() >= kStatTotal) {
+    ret.process = CalculateUtilization(process_time, *process_stat_fields);
+  }
 
   return ret;
 }
 
 }  // namespace internal
 
-absl::flat_hash_map<std::string, double> GetCpu() {
+absl::flat_hash_map<std::string, double> SystemMetrics::GetCpu()
+    ABSL_LOCKS_EXCLUDED(mu_) {
   struct sysinfo info;
   memset(&info, 0, sizeof(info));
   absl::flat_hash_map<std::string, double> ret;
@@ -125,52 +142,78 @@ absl::flat_hash_map<std::string, double> GetCpu() {
     ret["total load"] =
         (1.0 * info.loads[0] / (1 << SI_LOAD_SHIFT)) / get_nprocs();
   }
-  internal::Utilization cpu_utilization =
-      internal::ReadCpuTime(SystemCpuTime(), SelfStat());
+
+  absl::MutexLock lock(&mu_);
+  internal::Utilization cpu_utilization = internal::ReadCpuTime(
+      SystemCpuTime(), StatFields("self"),
+      inference_pid_ == -1 ? std::optional<std::vector<std::string>>{}
+                           : StatFields(std::to_string(inference_pid_)));
+
+  if (cpu_utilization.process.has_value()) {
+    ret["inference process utilization"] = *cpu_utilization.process;
+  }
   ret["total utilization"] = cpu_utilization.total;
   ret["main process utilization"] = cpu_utilization.self;
   ret["total cpu cores"] = static_cast<double>(get_nprocs());
+
   return ret;
 }
 
-absl::flat_hash_map<std::string, double> GetThread() {
+absl::flat_hash_map<std::string, double> SystemMetrics::GetThread()
+    ABSL_LOCKS_EXCLUDED(mu_) {
   absl::flat_hash_map<std::string, double> ret;
 
-  FILE* fd = fopen("/proc/self/status", "r");
-  if (fd == nullptr) {
-    ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
-        << "Failed to open /proc/self/status; " << strerror(errno);
-    return ret;
-  }
-
-  char buff[256];
-  while (fgets(buff, sizeof(buff), fd) != nullptr) {
-    if (absl::StartsWith(buff, "Threads:")) {
-      int thread_count;
-      if (sscanf(buff, "Threads: %d", &thread_count) == 1) {
-        ret["thread count"] = static_cast<double>(thread_count);
-      } else {
-        ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
-            << "Failed to parse thread count from /proc/self/status";
-      }
-      break;
+  auto ReadThreadCount = [&ret](absl::string_view pid,
+                                absl::string_view label) {
+    std::string path = absl::StrCat("/proc/", pid, "/status");
+    FILE* fd = fopen(path.c_str(), "r");
+    if (fd == nullptr) {
+      ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+          << "Failed to open " << path << "; " << strerror(errno);
+      return;
     }
-  }
-  fclose(fd);
 
+    char buff[256];
+
+    while (fgets(buff, sizeof(buff), fd) != nullptr) {
+      if (absl::StartsWith(buff, "Threads:")) {
+        int thread_count;
+        if (sscanf(buff, "Threads: %d", &thread_count) == 1) {
+          ret[std::string(label)] = static_cast<double>(thread_count);
+        } else {
+          ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+              << "Failed to parse thread count from " << path;
+        }
+        break;
+      }
+    }
+    fclose(fd);
+  };
+
+  // Read thread count for the main process
+  ReadThreadCount("self", "main process thread count");
   if (ret.empty()) {
     ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
         << "Thread count information not found in /proc/self/status";
   }
+  absl::MutexLock lock(&mu_);
+  // Optionally read thread count for the inference process
+  if (inference_pid_ != -1) {
+    ReadThreadCount(std::to_string(inference_pid_),
+                    "inference process thread count");
+  }
   return ret;
 }
 
-absl::flat_hash_map<std::string, double> GetMemory() {
+absl::flat_hash_map<std::string, double> SystemMetrics::GetMemory()
+    ABSL_LOCKS_EXCLUDED(mu_) {
   absl::flat_hash_map<std::string, double> ret;
   char buff[256];
   char name[64];
   int64_t value = 0;
   char unit[16];
+
+  // Read general memory stats
   FILE* fd = fopen("/proc/meminfo", "r");
   if (fd == nullptr) {
     ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
@@ -186,21 +229,37 @@ absl::flat_hash_map<std::string, double> GetMemory() {
   }
   fclose(fd);
 
-  fd = fopen("/proc/self/status", "r");
-  if (fd == nullptr) {
-    ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
-        << "failed to open /proc/self/status; " << strerror(errno);
-    return ret;
-  }
-
-  while (fgets(buff, sizeof(buff), fd) != nullptr) {
-    if (absl::StartsWith(buff, "VmRSS")) {
-      sscanf(buff, "%s %lu %s", name, &value, unit);
-      ret["main process"] = value;
-      break;
+  auto ReadProcessMemory = [&ret](absl::string_view pid,
+                                  absl::string_view label) {
+    char buff[256];
+    char name[64];
+    int64_t value = 0;
+    char unit[16];
+    std::string path = absl::StrCat("/proc/", pid, "/status");
+    FILE* fd = fopen(path.c_str(), "r");
+    if (fd == nullptr) {
+      ABSL_LOG_EVERY_N_SEC(ERROR, kLogInterval)
+          << "Failed to open " << path << "; " << strerror(errno);
+      return;
     }
+
+    while (fgets(buff, sizeof(buff), fd) != nullptr) {
+      if (absl::StartsWith(buff, "VmRSS:")) {
+        sscanf(buff, "%s %lu %s", name, &value, unit);
+        ret[std::string(label)] = value;
+        break;
+      }
+    }
+    fclose(fd);
+  };
+
+  // Read memory stats for the main process
+  ReadProcessMemory("self", "main process");
+  absl::MutexLock lock(&mu_);
+  // Optionally read memory stats for the inference process
+  if (inference_pid_ != -1) {
+    ReadProcessMemory(std::to_string(inference_pid_), "inference process");
   }
-  fclose(fd);
   return ret;
 }
 

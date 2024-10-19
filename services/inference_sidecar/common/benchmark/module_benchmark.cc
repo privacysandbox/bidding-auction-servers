@@ -39,6 +39,8 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/barrier.h"
+#include "absl/synchronization/notification.h"
 #include "benchmark/benchmark.h"
 #include "benchmark/request_utils.h"
 #include "modules/module_interface.h"
@@ -81,7 +83,12 @@ static void ExportMetrics(benchmark::State& state) {
 class ModuleFixture : public benchmark::Fixture {
  public:
   void SetUp(::benchmark::State& state) {
-    if (state.thread_index() != 0) return;
+    if (state.thread_index() != 0) {
+      // Blocks until the model is loaded on the main thread.
+      model_loaded_.WaitForNotification();
+      return;
+    }
+    completion_barrier_ = absl::make_unique<absl::Barrier>(state.threads());
 
     InferenceSidecarRuntimeConfig config;
     module_ = ModuleInterface::Create(config);
@@ -90,15 +97,19 @@ class ModuleFixture : public benchmark::Fixture {
               .ok());
     absl::StatusOr response = module_->RegisterModel(register_model_request_);
     CHECK(response.ok()) << response.status().message();
+    model_loaded_.Notify();
   }
   void TearDown(::benchmark::State& state) {
-    if (state.thread_index() != 0) return;
+    // The last thread reaching the barrier will perform the cleanup.
+    if (!completion_barrier_->Block()) return;
     module_.reset();
   }
 
  protected:
   std::unique_ptr<ModuleInterface> module_;
   RegisterModelRequest register_model_request_;
+  absl::Notification model_loaded_;
+  std::unique_ptr<absl::Barrier> completion_barrier_;
 };
 
 BENCHMARK_DEFINE_F(ModuleFixture, BM_Predict)(benchmark::State& state) {

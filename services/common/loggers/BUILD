@@ -31,6 +31,8 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_proto",
         "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:bit_gen_ref",
         "@google_privacysandbox_servers_common//src/logger:request_context_impl",
     ],
 )

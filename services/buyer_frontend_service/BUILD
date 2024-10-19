@@ -35,14 +35,15 @@ cc_library(
         "get_bids_unary_reactor.h",
     ],
     deps = [
+        ":kv_buyer_signals_adapter",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
-        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/providers:http_bidding_signals_providers",
         "//services/buyer_frontend_service/util:bidding_signals",
         "//services/buyer_frontend_service/util:buyer_frontend_utils",
-        "//services/common:feature_flags",
         "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/bidding_server:async_client",
+        "//services/common/clients/kv_server:kv_async_client",
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:benchmarking_logger",
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
@@ -76,9 +77,10 @@ cc_library(
         ":get_bids_unary_reactor",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
-        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/providers:http_bidding_signals_providers",
         "//services/buyer_frontend_service/util:bidding_signals",
         "//services/buyer_frontend_service/util:buyer_frontend_utils",
+        "//services/common:feature_flags",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/metric:server_definition",
@@ -125,7 +127,7 @@ cc_binary(
         ":runtime_flags",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
-        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/buyer_frontend_service/providers:http_bidding_signals_providers",
         "//services/common/clients/config:config_client",
         "//services/common/clients/config:config_client_util",
         "//services/common/concurrent:local_cache",
@@ -174,4 +176,32 @@ cc_test(
     ],
 )
 
-3
+cc_library(
+    name = "kv_buyer_signals_adapter",
+    srcs = [
+        "kv_buyer_signals_adapter.cc",
+    ],
+    hdrs = [
+        "kv_buyer_signals_adapter.h",
+    ],
+    deps = [
+        "//services/buyer_frontend_service/providers:bidding_signals_providers",
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "kv_buyer_signals_adapter_test",
+    size = "small",
+    srcs = [
+        "kv_buyer_signals_adapter_test.cc",
+    ],
+    deps = [
+        ":kv_buyer_signals_adapter",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+    ],
+)

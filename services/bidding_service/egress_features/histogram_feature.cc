@@ -39,7 +39,7 @@ absl::StatusOr<std::unique_ptr<EgressFeature>> HistogramFeature::Copy() const {
 }
 
 uint32_t HistogramFeature::Size() const {
-  if (!histogram_size_.has_value()) {
+  if (!histogram_size_) {
     uint32_t total_size = 0;
     if (auto histogram_schema = GetArrayMember(*schema_value_, "value");
         histogram_schema.ok()) {

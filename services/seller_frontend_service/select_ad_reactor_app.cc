@@ -69,15 +69,16 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 SelectAdReactorForApp::SelectAdReactorForApp(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool fail_fast)
+    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    bool enable_kanon, bool fail_fast)
     : SelectAdReactor(context, request, response, clients, config_client,
-                      fail_fast) {}
+                      enable_cancellation, enable_kanon, fail_fast) {}
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error) {
   AuctionResult auction_result;
-  if (high_score.has_value()) {
+  if (high_score) {
     auction_result = AdScoreToAuctionResult(
         high_score, GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
         shared_ig_updates_map_, error, auction_scope_,
@@ -219,6 +220,9 @@ SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
                                             const BuyerInput& buyer_input) {
   auto request =
       SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
+
+  // ToDo(b/369159855): use is_debug_eligible from client.
+  request->set_is_debug_eligible(request->enable_unlimited_egress());
   MayPopulateProtectedAppSignalsBuyerInput(buyer_ig_owner, request.get());
   return request;
 }
@@ -228,7 +232,7 @@ SelectAdReactorForApp::CreateScoreAdsRequest() {
   auto request = SelectAdReactor::CreateScoreAdsRequest();
   std::visit(
       [&request, this](const auto& protected_auction_input) {
-        if (enable_kanon_) {
+        if (enable_enforce_kanon_) {
           request->set_num_allowed_ghost_winners(
               protected_auction_input.num_k_anon_ghost_winners());
         }
@@ -255,7 +259,7 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   result.set_egress_payload(input.egress_payload());
   result.set_temporary_unlimited_egress_payload(
       input.temporary_unlimited_egress_payload());
-  if (enable_kanon_) {
+  if (enable_enforce_kanon_) {
     result.set_k_anon_status(k_anon_status);
   }
   return result;

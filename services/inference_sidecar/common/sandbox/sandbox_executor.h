@@ -66,6 +66,9 @@ class SandboxExecutor {
   // You should not call after `StopSandboxee`.
   absl::Status StartSandboxee();
 
+  // Get the pid of inference sidecar
+  pid_t GetPid() const;
+
   // Stops the sandboxee instance. Returns an error status if the sandboxee
   // fails to stop. Returns `sandbox2::Result` if stopped successfully. You can
   // call many times safely. You should not call other operations like

@@ -43,6 +43,12 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
 absl::StatusOr<ReportWinResponse> ParseReportWinResponse(
     const ReportingDispatchRequestConfig& dispatch_request_config,
     absl::string_view response, RequestLogContext& log_context);
+
+// Sets buyerReportingId, buyerAndSellerReportingId,
+// or IG name as necessary
+void SetBuyerReportingIds(
+    const BuyerReportingDispatchRequestData& buyer_reporting_metadata,
+    rapidjson::Document& seller_device_signals);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_HELPER_H_

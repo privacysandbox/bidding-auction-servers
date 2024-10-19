@@ -22,7 +22,6 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/common:feature_flags",
         "//services/common/clients:async_client",
         "//services/common/constants:user_error_strings",
         "//services/common/encryption:crypto_client_wrapper_interface",

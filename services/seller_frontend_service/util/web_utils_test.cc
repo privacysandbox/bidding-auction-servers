@@ -164,12 +164,12 @@ struct cbor_item_t* BuildSampleCborInterestGroup(
                            BuildIntMapPair(kJoinCount, kSampleJoinCount)));
   EXPECT_TRUE(cbor_map_add(browser_signals,
                            BuildIntMapPair(kBidCount, kSampleBidCount)));
-  if (cbor_interest_group_config.recency.has_value()) {
+  if (cbor_interest_group_config.recency) {
     EXPECT_TRUE(cbor_map_add(
         browser_signals,
         BuildIntMapPair(kRecency, cbor_interest_group_config.recency.value())));
   }
-  if (cbor_interest_group_config.recency_ms.has_value()) {
+  if (cbor_interest_group_config.recency_ms) {
     EXPECT_TRUE(cbor_map_add(
         browser_signals,
         BuildIntMapPair(kRecencyMs,
@@ -355,10 +355,10 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   BrowserSignals* signals = expected_ig.mutable_browser_signals();
   signals->set_join_count(kSampleJoinCount);
   signals->set_bid_count(kSampleBidCount);
-  if (cbor_interest_group_config.recency.has_value()) {
+  if (cbor_interest_group_config.recency) {
     signals->set_recency(cbor_interest_group_config.recency.value());
   }
-  if (cbor_interest_group_config.recency_ms.has_value()) {
+  if (cbor_interest_group_config.recency_ms) {
     signals->set_recency_ms(cbor_interest_group_config.recency_ms.value());
   }
   std::string prev_wins_json_str = absl::StrFormat(

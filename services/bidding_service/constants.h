@@ -37,10 +37,11 @@ inline constexpr char kPrepareDataForAdRetrievalArgs[] =
     "sellerAuctionSignals, contextualSignals";
 constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
     "interest_group, auction_signals, buyer_signals, trusted_bidding_signals, "
-    "device_signals";
+    "device_signals, multiBidLimit";
 constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
     "ads, sellerAuctionSignals, buyerSignals, "
-    "preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion";
+    "preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, "
+    "multiBidLimit";
 
 constexpr absl::string_view kEncodedProtectedAppSignalsHandler =
     R"JS_CODE(if (encodedOnDeviceSignals) {
@@ -66,7 +67,7 @@ enum class PrepareDataForRetrievalUdfArgs {
 };
 
 // Params related to the UDF to use to generate bids for the protected signals.
-inline constexpr int kNumGenerateBidsUdfArgs = 9;
+inline constexpr int kNumGenerateBidsUdfArgs = 10;
 enum class GenerateBidsUdfArgs {
   kAds = 0,
   kAuctionSignals,
@@ -74,7 +75,8 @@ enum class GenerateBidsUdfArgs {
   kPreProcessedDataForRetrieval,
   kProtectedAppSignals,
   kProtectedAppSignalsVersion,
-  kFeatureFlags,
+  kMultiBidLimit,
+  kFeatureFlags
 };
 
 inline constexpr char kUnexpectedNumberOfRomaResponses[] =

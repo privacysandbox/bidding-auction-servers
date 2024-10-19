@@ -40,6 +40,7 @@ enum class GenerateBidArgs : int {
   kBuyerSignals,
   kTrustedBiddingSignals,
   kDeviceSignals,
+  kMultiBidLimit,
   kFeatureFlags
 };
 

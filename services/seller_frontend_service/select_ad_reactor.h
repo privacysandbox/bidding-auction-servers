@@ -25,7 +25,6 @@
 
 #include <grpcpp/grpcpp.h>
 
-#include "absl/flags/flag.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
@@ -89,7 +88,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   explicit SelectAdReactor(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
-      const TrustedServersConfigClient& config_client, bool fail_fast = true,
+      const TrustedServersConfigClient& config_client,
+      bool enable_cancellation = false, bool enable_kanon = false,
+      bool fail_fast = true,
       int max_buyers_solicited = metric::kMaxBuyersSolicited);
 
   // Initiate the asynchronous execution of the SelectAdRequest.
@@ -401,9 +402,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   const bool enable_cancellation_;
 
-  const bool enable_kanon_;
-
-  bool enforce_kanon_;
+  bool enable_enforce_kanon_;
 
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;

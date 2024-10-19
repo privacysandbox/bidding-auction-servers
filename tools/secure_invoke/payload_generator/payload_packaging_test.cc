@@ -352,7 +352,7 @@ TEST(PaylodPackagingTest, SetEnableDebugInfo) {
     })JSON";
 
         std::string consent_config;
-        if (json_value.has_value()) {
+        if (json_value) {
           consent_config = absl::Substitute(R"JSON(
           "consented_debug_config": {
             "is_debug_info_in_response": $0
@@ -395,7 +395,7 @@ TEST(PaylodPackagingTest, SetEnableDebugInfo) {
         ASSERT_TRUE(protected_auction_input.ParseFromArray(
             decoded_request->compressed_data.data(),
             decoded_request->compressed_data.size()));
-        if (!json_value.has_value() && !enable_debug_info.has_value()) {
+        if (!json_value.has_value() && !enable_debug_info) {
           ASSERT_FALSE(protected_auction_input.has_consented_debug_config())
               << protected_auction_input.DebugString();
         } else {
