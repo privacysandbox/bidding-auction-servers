@@ -94,13 +94,23 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
+  function checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags) {
+    // Drop all the bids if generateBid response exceed multiBidLimit.
+    if (generate_bid_response.length > multiBidLimit) {
+      generate_bid_response = [];
+      if (featureFlags.enable_logging) {
+          console.error("[Error: more bids returned by generateBid than multiBidLimit]");
+      }
+    }
+    return generate_bid_response;
+  }
     var ps_response = {
-          response: {},
+          response: [],
           logs: [],
           errors: [],
           warnings: []
         };
-    async function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, featureFlags){
+    async function generateBidEntryFunction(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, multiBidLimit, featureFlags){
       if(featureFlags.enable_logging){
         console.log = function(...args) {
           ps_response.logs.push(JSON.stringify(args))
@@ -125,21 +135,41 @@ constexpr absl::string_view kExpectedGenerateBidCode_template = R"JS_CODE(
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
       try {
-      generate_bid_response = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals);
-      //Add private aggregate contributions to the response.
-      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
-      if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
-      }
-      ps_response.response = generate_bid_response
-      if( featureFlags.enable_debug_url_generation &&
-             (forDebuggingOnly_auction_loss_url
-                  || forDebuggingOnly_auction_win_url)) {
-          ps_response.response.debug_report_urls = {
+      generate_bid_response = await generateBid(interest_group, auction_signals, buyer_signals, trusted_bidding_signals, device_signals, multiBidLimit);
+      if (generate_bid_response instanceof Array) {
+        generate_bid_response = checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags);
+
+      // Add private aggregate contributions and debug urls to each response.
+      // If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      generate_bid_response.forEach((response) => {
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
-          }
+          };
         }
+        if (ps_response.paapicontributions) {
+          response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+      });
+        ps_response.response = generate_bid_response;
+      } else {
+        // generateBid returned a single AdWithBid object.
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          generate_bid_response.debug_report_urls = {
+            auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
+            auction_debug_win_url: forDebuggingOnly_auction_win_url
+          };
+        }
+        if (ps_response.paapicontributions) {
+          generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+        ps_response.response.push(generate_bid_response);
+      }
       } catch({error, message}) {
         if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");
@@ -173,13 +203,23 @@ constexpr absl::string_view
   const globalWasmHex = [];
   const globalWasmHelper = globalWasmHex.length ? new WebAssembly.Module(Uint8Array.from(globalWasmHex)) : null;
 
+  function checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags) {
+    // Drop all the bids if generateBid response exceed multiBidLimit.
+    if (generate_bid_response.length > multiBidLimit) {
+      generate_bid_response = [];
+      if (featureFlags.enable_logging) {
+          console.error("[Error: more bids returned by generateBid than multiBidLimit]");
+      }
+    }
+    return generate_bid_response;
+  }
     var ps_response = {
-          response: {},
+          response: [],
           logs: [],
           errors: [],
           warnings: []
         };
-    async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, featureFlags){
+    async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit, featureFlags){
       if(featureFlags.enable_logging){
         console.log = function(...args) {
           ps_response.logs.push(JSON.stringify(args))
@@ -212,21 +252,41 @@ constexpr absl::string_view
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
       try {
-      generate_bid_response = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion);
-      //Add private aggregate contributions to the response.
-      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
-      if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
-      }
-      ps_response.response = generate_bid_response
-      if( featureFlags.enable_debug_url_generation &&
-             (forDebuggingOnly_auction_loss_url
-                  || forDebuggingOnly_auction_win_url)) {
-          ps_response.response.debug_report_urls = {
+      generate_bid_response = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit);
+      if (generate_bid_response instanceof Array) {
+        generate_bid_response = checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags);
+
+      // Add private aggregate contributions and debug urls to each response.
+      // If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      generate_bid_response.forEach((response) => {
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
-          }
+          };
         }
+        if (ps_response.paapicontributions) {
+          response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+      });
+        ps_response.response = generate_bid_response;
+      } else {
+        // generateBid returned a single AdWithBid object.
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          generate_bid_response.debug_report_urls = {
+            auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
+            auction_debug_win_url: forDebuggingOnly_auction_win_url
+          };
+        }
+        if (ps_response.paapicontributions) {
+          generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+        ps_response.response.push(generate_bid_response);
+      }
       } catch({error, message}) {
         if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");

@@ -106,6 +106,7 @@ BuyerReportingDispatchRequestData GetTestBuyerReportingDispatchRequestData(
           .interest_group_name = kTestInterestGroupName,
           .ad_cost = kTestAdCost,
           .buyer_reporting_id = kTestBuyerReportingId,
+          .buyer_and_seller_reporting_id = "",
           .made_highest_scoring_other_bid = true,
           .log_context = log_context};
 }
@@ -115,6 +116,22 @@ TEST(GetBuyerDeviceSignals, ReturnsBuyerReportingSignalsWithBuyerReportingId) {
                                 server_common::ConsentedDebugConfiguration());
   BuyerReportingDispatchRequestData reporting_dispatch_data =
       GetTestBuyerReportingDispatchRequestData(log_context);
+  rapidjson::Document document(rapidjson::kObjectType);
+  absl::StatusOr<std::shared_ptr<std::string>> buyer_device_signals =
+      GenerateBuyerDeviceSignals(reporting_dispatch_data, document);
+  ASSERT_TRUE(buyer_device_signals.ok());
+  VerifyPABuyerReportingSignalsJson(*buyer_device_signals,
+                                    reporting_dispatch_data);
+}
+
+TEST(GetBuyerDeviceSignals,
+     ReturnsBuyerReportingSignalsWithBuyerAndSellerReportingId) {
+  RequestLogContext log_context(/*context_map=*/{},
+                                server_common::ConsentedDebugConfiguration());
+  BuyerReportingDispatchRequestData reporting_dispatch_data =
+      GetTestBuyerReportingDispatchRequestData(log_context);
+  reporting_dispatch_data.buyer_and_seller_reporting_id =
+      kTestBuyerAndSellerReportingId;
   rapidjson::Document document(rapidjson::kObjectType);
   absl::StatusOr<std::shared_ptr<std::string>> buyer_device_signals =
       GenerateBuyerDeviceSignals(reporting_dispatch_data, document);

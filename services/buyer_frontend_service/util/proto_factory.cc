@@ -127,7 +127,7 @@ void CopyIGFromDeviceToIGForBidding(
 std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
     std::unique_ptr<rapidjson::Value> bidding_signals_obj,
-    const size_t signal_size, const bool enable_kanon) {
+    const size_t signal_size, uint32_t data_version, const bool enable_kanon) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
   const BuyerInput& buyer_input = get_bids_raw_request.buyer_input();
 
@@ -168,6 +168,8 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
       CopyIGFromDeviceToIGForBidding(ig_from_device, mutable_ig_for_bidding);
     }
   }
+
+  generate_bids_raw_request->set_data_version(data_version);
 
   // 2. Set auction signals.
   generate_bids_raw_request->set_auction_signals(

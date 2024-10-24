@@ -434,6 +434,17 @@ absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
   return response_obj;
 }
 
+ScoreAdsResponse::AdScore::AdRejectionReason BuildAdRejectionReason(
+    absl::string_view interest_group_owner,
+    absl::string_view interest_group_name,
+    SellerRejectionReason seller_rejection_reason) {
+  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason;
+  ad_rejection_reason.set_interest_group_owner(interest_group_owner);
+  ad_rejection_reason.set_interest_group_name(interest_group_name);
+  ad_rejection_reason.set_rejection_reason(seller_rejection_reason);
+  return ad_rejection_reason;
+}
+
 std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>
 ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
                        absl::string_view interest_group_owner,
@@ -447,16 +458,11 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
   }
   std::string rejection_reason_str =
       score_ad_resp[kRejectReasonPropertyForScoreAd].GetString();
-  SellerRejectionReason rejection_reason =
-      ToSellerRejectionReason(rejection_reason_str);
-  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason;
-  ad_rejection_reason.set_interest_group_owner(interest_group_owner);
-  ad_rejection_reason.set_interest_group_name(interest_group_name);
-  ad_rejection_reason.set_rejection_reason(rejection_reason);
-  return ad_rejection_reason;
+  return BuildAdRejectionReason(interest_group_owner, interest_group_name,
+                                ToSellerRejectionReason(rejection_reason_str));
 }
 
-absl::StatusOr<ScoreAdsResponse::AdScore> ParseScoreAdResponse(
+absl::StatusOr<ScoreAdsResponse::AdScore> ScoreAdResponseJsonToProto(
     const rapidjson::Document& score_ad_resp,
     int max_allowed_size_debug_url_chars,
     int64_t max_allowed_size_all_debug_urls_chars,

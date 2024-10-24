@@ -109,6 +109,12 @@ module "buyer_dashboard" {
   region      = var.region
 }
 
+module "inference_dashboard" {
+  source      = "../../services/dashboards/inference_dashboard"
+  environment = var.environment
+  region      = var.region
+}
+
 module "buyer_app_mesh" {
   # Only create if using service mesh
   count = var.use_service_mesh ? 1 : 0

@@ -59,6 +59,9 @@ struct AuctionServiceRuntimeConfig {
   bool enable_seller_and_buyer_udf_isolation = false;
   // Enables private aggregate reporting.
   bool enable_private_aggregate_reporting = false;
+
+  bool enable_cancellation = false;
+  bool enable_kanon = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

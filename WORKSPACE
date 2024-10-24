@@ -87,11 +87,11 @@ http_archive(
 
 http_archive(
     name = "service_value_key_fledge_privacysandbox",
-    # commit d186bcf8d643888fac81784f9c91ffb2fb48791c 2024-04-19
-    sha256 = "53521403ffbe18a306417b8e7b41c2a13127ba0892ad921229861a451ad2045e",
-    strip_prefix = "protected-auction-key-value-service-d186bcf8d643888fac81784f9c91ffb2fb48791c",
+    # commit bdadee7c80dd84197f9253d4fd92c310f457be00 2024-09-26
+    sha256 = "6f91715f5ac946b2c5a9c4536f8e7deebf74b73e5b75e93163fd0e6276731ac1",
+    strip_prefix = "protected-auction-key-value-service-bdadee7c80dd84197f9253d4fd92c310f457be00",
     urls = [
-        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/d186bcf8d643888fac81784f9c91ffb2fb48791c.zip",
+        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/bdadee7c80dd84197f9253d4fd92c310f457be00.zip",
     ],
 )
 

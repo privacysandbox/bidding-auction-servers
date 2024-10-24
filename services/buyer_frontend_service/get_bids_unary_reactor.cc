@@ -27,6 +27,8 @@
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 
+#include "kv_buyer_signals_adapter.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
@@ -38,6 +40,10 @@ using GenerateProtectedAppSignalsBidsRawRequest =
 using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
+
+using KVLookUpResult =
+    absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesResponse>>;
+
 inline constexpr int kNumDefaultOutboundBiddingCalls = 1;
 
 template <typename T>
@@ -145,18 +151,32 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       key_fetcher_manager_(key_fetcher_manager),
       crypto_client_(crypto_client),
       chaffing_enabled_(config_.is_chaffing_enabled),
-      log_context_([this]() {
+      is_sampled_for_debug_([this]() {
         decrypt_status_ = DecryptRequest();
+        bool is_debug_eligible = raw_request_.is_debug_eligible() &&
+                                 config_.debug_sample_rate_micro > 0;
+        if ((chaffing_enabled_ && raw_request_.is_chaff()) ||
+            is_debug_eligible) {
+          generator_ = std::mt19937(std::hash<std::string>{}(
+              raw_request_.log_context().generation_id()));
+        } else {
+          generator_ = std::nullopt;
+        }
+        return is_debug_eligible &&
+               RandomSample(config_.debug_sample_rate_micro, *generator_);
+      }()),
+      log_context_([this]() {
         return RequestLogContext(
             GetLoggingContext(), raw_request_.consented_debug_config(),
-            [this]() { return get_bids_raw_response_->mutable_debug_info(); });
+            [this]() { return get_bids_raw_response_->mutable_debug_info(); },
+            is_sampled_for_debug_);
       }()),
       async_task_tracker_(kNumDefaultOutboundBiddingCalls, log_context_,
                           [this](bool any_successful_bid) {
                             OnAllBidsDone(any_successful_bid);
                           }),
-      enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
-      enable_enforce_kanon_(absl::GetFlag(FLAGS_enable_kanon) &&
+      enable_cancellation_(config.enable_cancellation),
+      enable_enforce_kanon_(config.enable_kanon &&
                             raw_request_.enforce_kanon()) {
   if (enable_benchmarking) {
     std::string request_id = FormatTime(absl::Now());
@@ -178,13 +198,6 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
   DCHECK(!config_.is_protected_app_signals_enabled ||
          protected_app_signals_bidding_async_client_ != nullptr)
       << "PAS is enabled but no PAS bidding async client available";
-
-  if (chaffing_enabled_ && raw_request_.is_chaff()) {
-    // The RNG is only needed for chaff requests.
-    std::size_t hash =
-        std::hash<std::string>{}(raw_request_.log_context().generation_id());
-    generator_ = std::mt19937(hash);
-  }
 }
 
 GetBidsUnaryReactor::GetBidsUnaryReactor(
@@ -317,7 +330,7 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
 
   std::optional<server_common::PrivateKey> private_key =
       key_fetcher_manager_->GetPrivateKey(request_->key_id());
-  if (!private_key.has_value()) {
+  if (!private_key) {
     return {grpc::StatusCode::INVALID_ARGUMENT, kInvalidKeyIdError};
   }
 
@@ -464,6 +477,8 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   auto protected_app_signals_bid_request =
       CreateGenerateProtectedAppSignalsBidsRawRequest(raw_request_,
                                                       enable_enforce_kanon_);
+  protected_app_signals_bid_request->set_is_sampled_for_debug(
+      is_sampled_for_debug_);
 
   grpc::ClientContext* client_context = client_contexts_.Add(bidding_metadata_);
 
@@ -537,24 +552,11 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
   }
 }
 
-void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
-  if (!config_.is_protected_audience_enabled) {
-    PS_VLOG(kNoisyWarn, log_context_)
-        << "Protected Audience is not enabled, skipping bids fetching for PA";
-    return;
-  }
-
-  if (raw_request_.buyer_input().interest_groups().empty()) {
-    PS_VLOG(kNoisyWarn, log_context_)
-        << "No interest groups found, skipping bidding for protected audience";
-    return;
-  }
-
-  BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
+void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
+    const BiddingSignalsRequest& bidding_signals_request) {
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
           .release();
-
   // Get Bidding Signals.
   bidding_signals_async_provider_->Get(
       bidding_signals_request,
@@ -600,11 +602,107 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
       {log_context_});
 }
 
+void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
+                                          const std::string& error_message) {
+  LogIfError(
+      metric_context_->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
+          1, metric::kBfeBiddingSignalsResponseError));
+  LogInitiatedRequestErrorMetrics(metric::kKv, status);
+  // Return error to client.
+  PS_LOG(ERROR, log_context_) << error_message << status;
+  async_task_tracker_.TaskCompleted(TaskStatus::ERROR, [this, &status]() {
+    bid_errors_.push_back(status.ToString());
+  });
+}
+
+void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
+    const BiddingSignalsRequest& bidding_signals_request) {
+  auto kv_request =
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
+          .release();
+  grpc::ClientContext* client_context = client_contexts_.Add();
+  auto maybe_bidding_signals_request =
+      CreateV2BiddingRequest(bidding_signals_request);
+  if (!maybe_bidding_signals_request.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_) << "Failed creating TKV bidding request. "
+                                      << maybe_bidding_signals_request.status();
+    return;
+  }
+  auto status = kv_async_client_->ExecuteInternal(
+      *std::move(maybe_bidding_signals_request), client_context,
+      CancellationWrapper(
+          context_, enable_cancellation_,
+          [this, kv_request](KVLookUpResult kv_look_up_result,
+                             ResponseMetadata response_metadata) mutable {
+            {
+              // Only logs KV request and response sizes if fetching signals
+              // succeeds.
+              if (kv_look_up_result.ok()) {
+                kv_request->SetRequestSize(response_metadata.request_size);
+                kv_request->SetResponseSize(response_metadata.response_size);
+              }
+              // destruct kv_request, destructor measures request time
+              delete kv_request;
+            }
+            if (!kv_look_up_result.ok()) {
+              HandleV2Failure(kv_look_up_result.status(),
+                              "GetBiddingSignals request failed with status:");
+              return;
+            }
+            auto signals =
+                ConvertV2BiddingSignalsToV1(*std::move(kv_look_up_result));
+            if (!signals.ok()) {
+              HandleV2Failure(signals.status(),
+                              "Failed converting TKV response. ");
+              return;
+            }
+            // Sends protected audience bid request to bidding service.
+            PrepareAndGenerateProtectedAudienceBid(*std::move(signals));
+          },
+          [this, kv_request]() {
+            delete kv_request;
+            async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
+          }),
+      absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
+  if (!status.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "Failed to execute ads metadata KV lookup request: " << status;
+    async_task_tracker_.TaskCompleted(TaskStatus::ERROR, [this, &status]() {
+      bid_errors_.push_back(status.ToString());
+    });
+  }
+}
+
+void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
+  if (!config_.is_protected_audience_enabled) {
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "Protected Audience is not enabled, skipping bids fetching for PA";
+    return;
+  }
+
+  if (raw_request_.buyer_input().interest_groups().empty()) {
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "No interest groups found, skipping bidding for protected audience";
+    return;
+  }
+
+  BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
+  // TODO: this will be coming from GetBidsConfig, and ultimately from terraform
+  // or command line flag.
+  bool use_v2 = false;
+  if (use_v2) {
+    MayGetProtectedAudienceBidsV2(bidding_signals_request);
+  } else {
+    MayGetProtectedAudienceBidsV1(bidding_signals_request);
+  }
+}
+
 // Process Outputs from Actions to prepare bidding request.
 // All Preload actions must have completed before this is invoked.
 void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
     std::unique_ptr<BiddingSignals> bidding_signals) {
   auto start_deserialize_time = absl::Now();
+  uint32_t data_version = bidding_signals->data_version;
   absl::StatusOr<BiddingSignalJsonComponents> parsed_bidding_signals =
       ParseTrustedBiddingSignals(std::move(bidding_signals),
                                  raw_request_.buyer_input());
@@ -634,7 +732,9 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       raw_bidding_input = CreateGenerateBidsRawRequest(
           raw_request_,
           std::move(bidding_signal_json_components_.bidding_signals),
-          bidding_signal_json_components_.raw_size, enable_enforce_kanon_);
+          bidding_signal_json_components_.raw_size, data_version,
+          enable_enforce_kanon_);
+  raw_bidding_input->set_is_sampled_for_debug(is_sampled_for_debug_);
   PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"
                                      << raw_bidding_input->ShortDebugString();
   if (raw_bidding_input->interest_group_for_bidding_size() == 0) {

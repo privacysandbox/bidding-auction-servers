@@ -93,25 +93,41 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   }();
   auto done_callback = [on_done = std::move(on_done), request_size,
                         bid_signal = std::move(bid_signal), context](
-                           absl::StatusOr<std::string> resultStr) mutable {
-    if (resultStr.ok()) {
+                           absl::StatusOr<HTTPResponse> httpResponse) mutable {
+    if (httpResponse.ok()) {
       PS_VLOG(kKVLog, context.log)
           << "BuyerKeyValueAsyncHttpClient response exported in EventMessage";
       if (AllowAnyEventLogging(context.log)) {
-        bid_signal.set_response(resultStr.value());
+        bid_signal.set_response(httpResponse->body);
         context.log.SetEventMessageField(std::move(bid_signal));
       }
-      size_t response_size = resultStr->size();
+      size_t response_size = httpResponse->body.size();
+      uint32_t data_version_value = 0;
+      if (auto dv_header_it =
+              httpResponse->headers.find(kDataVersionResponseHeaderName);
+          dv_header_it != httpResponse->headers.end()) {
+        if (const auto& dv_statusor = dv_header_it->second; dv_statusor.ok()) {
+          if (!absl::SimpleAtoi(dv_statusor.value(), &data_version_value)) {
+            // Out param will be "left in an unspecified state" if parsing
+            // fails, so reset to 0.
+            data_version_value = 0;
+            PS_VLOG(kNoisyWarn, context.log)
+                << "BuyerKeyValueAsyncHttpClient received a non-int, negative, "
+                   "or too-large data version header.";
+          }
+        }
+      }
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
-          std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
-              {std::move(resultStr.value()), request_size, response_size}));
+          std::make_unique<GetBuyerValuesOutput>(
+              GetBuyerValuesOutput({std::move(httpResponse->body), request_size,
+                                    response_size, data_version_value}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
       PS_VLOG(kNoisyWarn, context.log)
           << "BuyerKeyValueAsyncHttpClient Failure Response: "
-          << resultStr.status();
+          << httpResponse.status();
       context.log.SetEventMessageField(std::move(bid_signal));
-      std::move(on_done)(resultStr.status());
+      std::move(on_done)(httpResponse.status());
     }
   };
   PS_VLOG(kKVLog, context.log) << "BTS Request Url:\n"
@@ -119,7 +135,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
   for (const auto& header : request.headers) {
     PS_VLOG(kKVLog, context.log) << header;
   }
-  http_fetcher_async_->FetchUrl(
+  http_fetcher_async_->FetchUrlWithMetadata(
       request, static_cast<int>(absl::ToInt64Milliseconds(timeout)),
       std::move(done_callback));
   return absl::OkStatus();

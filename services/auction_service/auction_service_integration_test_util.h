@@ -44,10 +44,11 @@ constexpr inline char kTestGenerationId[] = "generationId";
 constexpr inline char kExpectedComponentReportWinUrl[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability="
-    "undefined&topLevelSeller=topLevelSeller&modifiedBid=undefined";
+    "buyerAndSellerReportingId=undefined&adCost=2&highestScoringOtherBid=0&"
+    "madeHighestScoringOtherBid=false&signalsForWinner="
+    "{\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&auctionSignals="
+    "3,test,4&desirability=undefined&topLevelSeller=topLevelSeller&"
+    "modifiedBid=undefined";
 constexpr inline char kTestInteractionEvent[] = "clickEvent";
 constexpr inline char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestIgOwner[] = "barStandardAds.com";
@@ -103,6 +104,7 @@ struct TestScoreAdsRequestConfig {
   std::string top_level_seller = "";
   bool is_consented = false;
   std::optional<std::string> buyer_reporting_id;
+  std::optional<std::string> buyer_and_seller_reporting_id;
   std::string interest_group_owner = "";
   TestComponentAuctionResultData component_auction_data;
 };

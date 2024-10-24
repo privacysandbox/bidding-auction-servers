@@ -99,6 +99,10 @@ class GenerateBidsBinaryReactor
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;
 
+  // The timestamp at which the first ROMA execution dispatch was started. Used
+  // to calculate udf_execution.duration_ms metric.
+  absl::Time start_binary_execution_time_;
+
   // Specifies whether this is a single seller or component auction.
   // Impacts the parsing of generateBid output.
   AuctionScope auction_scope_;

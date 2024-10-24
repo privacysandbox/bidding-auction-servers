@@ -18,6 +18,17 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "bidding_signals_providers",
+    hdrs = [
+        "bidding_signals_async_provider.h",
+    ],
+    deps = [
+        "//services/buyer_frontend_service/data:buyer_frontend_data",
+        "//services/common/providers:async_provider",
+    ],
+)
+
+cc_library(
+    name = "http_bidding_signals_providers",
     srcs = [
         "http_bidding_signals_async_provider.cc",
     ],
@@ -26,6 +37,7 @@ cc_library(
         "http_bidding_signals_async_provider.h",
     ],
     deps = [
+        "bidding_signals_providers",
         "//services/buyer_frontend_service/data:buyer_frontend_data",
         "//services/common/clients:client_factory_template",
         "//services/common/clients/http_kv_server/buyer:buyer_key_value_async_http_client",
@@ -39,13 +51,13 @@ cc_library(
 )
 
 cc_test(
-    name = "bidding_signals_providers_test",
+    name = "http_bidding_signals_providers_test",
     size = "small",
     srcs = [
         "http_bidding_signals_async_provider_test.cc",
     ],
     deps = [
-        "bidding_signals_providers",
+        "http_bidding_signals_providers",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "@com_google_googletest//:gtest_main",

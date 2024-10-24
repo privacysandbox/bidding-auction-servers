@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -81,9 +82,10 @@ inline absl::StatusOr<rapidjson::Document> ParseJsonString(
   rapidjson::ParseResult parse_result =
       doc.Parse<rapidjson::kParseFullPrecisionFlag>(str.data());
   if (parse_result.IsError()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("JSON Parse Error: ",
-                     rapidjson::GetParseError_En(parse_result.Code())));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "JSON Parse Error: ", rapidjson::GetParseError_En(parse_result.Code()),
+        " at offset: ", parse_result.Offset(), " troublesome prefix:\n",
+        str.substr(0, parse_result.Offset())));
   }
   return doc;
 }
@@ -136,6 +138,26 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
     return std::string(string_buffer.GetString());
   }
   return absl::InternalError("Unknown JSON to string serialization error");
+}
+
+// Converts rapidjson::Value& to a vector. If any value in Array fails, returns
+// an error.
+inline absl::StatusOr<std::vector<std::string>> SerializeJsonArrayDocToVector(
+    const rapidjson::Value& document) {
+  if (!document.IsArray()) {
+    return absl::InternalError("Expected a JSON array.");
+  }
+  std::vector<std::string> ads;
+  for (auto& value : document.GetArray()) {
+    rapidjson::StringBuffer string_buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
+    if (value.Accept(writer)) {
+      ads.push_back(std::string(string_buffer.GetString()));
+    } else {
+      return absl::InternalError("Error converting inner JSON to String.");
+    }
+  }
+  return ads;
 }
 
 // Retrieves the string value of the specified member in the document.

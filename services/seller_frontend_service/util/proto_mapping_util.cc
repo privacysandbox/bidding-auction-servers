@@ -50,9 +50,9 @@ AuctionResult MapAdScoreToAuctionResult(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error) {
   AuctionResult auction_result;
-  if (error.has_value()) {
+  if (error) {
     *auction_result.mutable_error() = *error;
-  } else if (high_score.has_value()) {
+  } else if (high_score) {
     auction_result.set_is_chaff(false);
     if (high_score->bid() > 0) {
       auction_result.set_bid(high_score->bid());
@@ -200,7 +200,7 @@ AuctionResult AdScoreToAuctionResult(
         generation_id);
     auction_result.mutable_auction_params()->set_component_seller(seller);
     auction_result.set_top_level_seller(top_level_seller);
-    if (bidding_groups.has_value()) {
+    if (bidding_groups) {
       *auction_result.mutable_bidding_groups() = (*std::move(bidding_groups));
     }
 

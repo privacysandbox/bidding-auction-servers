@@ -34,6 +34,9 @@ namespace {
 
 constexpr char kTestPublisher[] = "publisher.com";
 constexpr char kTestIGOwner[] = "interest_group_owner";
+constexpr char kTestIGName[] = "interest_group_name";
+constexpr SellerRejectionReason kTestSellerRejectionReason =
+    SellerRejectionReason::INVALID_BID;
 constexpr char kTestRenderUrl[] = "https://render_url";
 constexpr char kTestComponentSeller[] = "component_seller_origin";
 constexpr char kTestTopLevelSeller[] = "top_level_seller_origin";
@@ -348,6 +351,15 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForAdWithBidMetadata) {
   }
 }
 
+TEST(BuildAdRejectionReasonTest, BuildsAdRejectionReason) {
+  ScoreAdsResponse::AdScore::AdRejectionReason ad_rejection_reason =
+      BuildAdRejectionReason(kTestIGOwner, kTestIGName,
+                             kTestSellerRejectionReason);
+  EXPECT_EQ(ad_rejection_reason.interest_group_owner(), kTestIGOwner);
+  EXPECT_EQ(ad_rejection_reason.interest_group_name(), kTestIGName);
+  EXPECT_EQ(ad_rejection_reason.rejection_reason(), kTestSellerRejectionReason);
+}
+
 TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
   std::vector<bool> flag_values = {true, false};
   for (auto flag_1 : flag_values) {
@@ -380,7 +392,7 @@ TEST(ScoreAdsTest, ParsesScoreAdResponseRespectsDebugUrlLimits) {
       long_loss_url, long_win_url));
   CHECK_OK(scored_ad);
   int64_t current_all_debug_urls_chars = 0;
-  auto parsed_response = ParseScoreAdResponse(
+  auto parsed_response = ScoreAdResponseJsonToProto(
       *scored_ad, /*max_allowed_size_debug_url_chars=*/65536,
       /*max_allowed_size_all_debug_urls_chars=*/1024,
       /*device_component_auction=*/false, current_all_debug_urls_chars);

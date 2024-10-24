@@ -33,7 +33,9 @@ class SelectAdReactorForApp : public SelectAdReactor {
   explicit SelectAdReactorForApp(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
-      const TrustedServersConfigClient& config_client, bool fail_fast = true);
+      const TrustedServersConfigClient& config_client,
+      bool enable_cancellation = false, bool enable_kanon = false,
+      bool fail_fast = true);
   virtual ~SelectAdReactorForApp() = default;
 
   // SelectAdReactorForApp is neither copyable nor movable.

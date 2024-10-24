@@ -129,6 +129,19 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
                 OnDoneFetchUrl done_callback) override
       ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
 
+  // Fetches provided url and response metadata with libcurl.
+  //
+  // http_request: The URL and headers for the HTTP GET request.
+  // timeout_ms: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. This method guarantees that the callback will be
+  // invoked once with the obtained result or error.
+  // Please note: done_callback will run in a threadpool and is not guaranteed
+  // to be the FetchUrl client's thread.
+  void FetchUrlWithMetadata(const HTTPRequest& request, int timeout_ms,
+                            OnDoneFetchUrlWithMetadata done_callback) override
+      ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_);
+
   // PUTs data to the specified url.
   //
   // http_request: The URL, headers, body for the HTTP PUT request.

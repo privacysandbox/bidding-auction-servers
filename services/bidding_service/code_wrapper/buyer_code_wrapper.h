@@ -55,8 +55,18 @@ std::string GetProtectedAppSignalsGenericBuyerWrappedCode(
 //- Exporting logs to Bidding Service using console.log
 //- Hooks in wasm module
 inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
+  function checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags) {
+    // Drop all the bids if generateBid response exceed multiBidLimit.
+    if (generate_bid_response.length > multiBidLimit) {
+      generate_bid_response = [];
+      if (featureFlags.enable_logging) {
+          console.error("[Error: more bids returned by generateBid than multiBidLimit]");
+      }
+    }
+    return generate_bid_response;
+  }
     var ps_response = {
-          response: {},
+          response: [],
           logs: [],
           errors: [],
           warnings: []
@@ -87,20 +97,40 @@ inline constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
       try {
       generate_bid_response = await generateBid($0);
-      //Add private aggregate contributions to the response.
-      //If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
-      if(ps_response.paapicontributions){
-        generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
-      }
-      ps_response.response = generate_bid_response
-      if( featureFlags.enable_debug_url_generation &&
-             (forDebuggingOnly_auction_loss_url
-                  || forDebuggingOnly_auction_win_url)) {
-          ps_response.response.debug_report_urls = {
+      if (generate_bid_response instanceof Array) {
+        generate_bid_response = checkMultiBidLimit(generate_bid_response, multiBidLimit, featureFlags);
+
+      // Add private aggregate contributions and debug urls to each response.
+      // If the private aggregation is enabled, the contributions are expected to be set in ps_response.private_aggregation_contributions.
+      generate_bid_response.forEach((response) => {
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          response.debug_report_urls = {
             auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
             auction_debug_win_url: forDebuggingOnly_auction_win_url
-          }
+          };
         }
+        if (ps_response.paapicontributions) {
+          response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+      });
+        ps_response.response = generate_bid_response;
+      } else {
+        // generateBid returned a single AdWithBid object.
+        if (featureFlags.enable_debug_url_generation &&
+          (forDebuggingOnly_auction_loss_url
+            || forDebuggingOnly_auction_win_url)) {
+          generate_bid_response.debug_report_urls = {
+            auction_debug_loss_url: forDebuggingOnly_auction_loss_url,
+            auction_debug_win_url: forDebuggingOnly_auction_win_url
+          };
+        }
+        if (ps_response.paapicontributions) {
+          generate_bid_response.private_aggregation_contributions = ps_response.paapicontributions;
+        }
+        ps_response.response.push(generate_bid_response);
+      }
       } catch({error, message}) {
         if (featureFlags.enable_logging) {
           console.error("[Error: " + error + "; Message: " + message + "]");

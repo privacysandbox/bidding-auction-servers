@@ -116,6 +116,36 @@ ScoreAdsResponse ScoreAdsReactorTestHelper::ExecuteScoreAds(
   return response;
 }
 
+absl::Status FakeExecute(
+    std::vector<DispatchRequest>& batch,
+    BatchDispatchDoneCallback done_callback,
+    absl::flat_hash_map</*id=*/std::string, /*json_score*/ std::string>
+        json_ad_scores,
+    const bool call_wrapper_method, const bool enable_adtech_code_logging) {
+  std::vector<absl::StatusOr<DispatchResponse>> responses;
+
+  for (const auto& request : batch) {
+    if (std::strcmp(request.handler_name.c_str(),
+                    kReportingDispatchHandlerFunctionName) != 0 &&
+        std::strcmp(request.handler_name.c_str(), kReportResultEntryFunction) !=
+            0 &&
+        std::strcmp(request.handler_name.c_str(), kReportWinEntryFunction) !=
+            0) {
+      EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+    }
+    DispatchResponse dispatch_response;
+    auto it = json_ad_scores.find(request.id);
+    CHECK(it != json_ad_scores.end());
+    dispatch_response.resp = it->second;
+    dispatch_response.id = request.id;
+    PS_VLOG(5) << ">>>> Associated id: " << dispatch_response.id
+               << ", with response: " << dispatch_response.resp;
+    responses.emplace_back(std::move(dispatch_response));
+  }
+  done_callback(responses);
+  return absl::OkStatus();
+}
+
 absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
                          BatchDispatchDoneCallback done_callback,
                          std::vector<std::string> json_ad_scores,
@@ -133,10 +163,10 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
             0) {
       EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
     }
-    DispatchResponse dispatch_response = {};
+    DispatchResponse dispatch_response;
     dispatch_response.resp = *json_ad_score_itr++;
     dispatch_response.id = request.id;
-    responses.emplace_back(dispatch_response);
+    responses.emplace_back(std::move(dispatch_response));
   }
   done_callback(responses);
   return absl::OkStatus();

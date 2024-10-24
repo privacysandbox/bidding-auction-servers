@@ -108,6 +108,7 @@ module "buyer" {
     TELEMETRY_CONFIG                                      = "" # Example: "mode: EXPERIMENT"
     ENABLE_OTEL_BASED_LOGGING                             = "" # Example: "true"
     CONSENTED_DEBUG_TOKEN                                 = "" # Example: "123456"
+    DEBUG_SAMPLE_RATE_MICRO                               = "0"
     TEST_MODE                                             = "" # Example: "false"
     BUYER_CODE_FETCH_CONFIG                               = "" # Example:
 
@@ -165,9 +166,10 @@ module "buyer" {
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
 
-    INFERENCE_SIDECAR_BINARY_PATH = "" # Example: "/server/bin/inference_sidecar_<module_name>"
-    INFERENCE_MODEL_BUCKET_NAME   = "" # Example: "<bucket_name>"
-    INFERENCE_MODEL_BUCKET_PATHS  = "" # Example: "<model_path1>,<model_path2>"
+    INFERENCE_SIDECAR_BINARY_PATH   = "" # Example: "/server/bin/inference_sidecar_<module_name>"
+    INFERENCE_MODEL_BUCKET_NAME     = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_CONFIG_PATH     = "" # Example: "model_config.json"
+    INFERENCE_MODEL_FETCH_PERIOD_MS = "" # Example: "60000"
 
     # TCMalloc related config parameters.
     # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md

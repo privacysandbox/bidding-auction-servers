@@ -82,6 +82,14 @@ absl::Status FakeExecute(std::vector<DispatchRequest>& batch,
                          const bool call_wrapper_method = false,
                          const bool enable_adtech_code_logging = false);
 
+absl::Status FakeExecute(
+    std::vector<DispatchRequest>& batch,
+    BatchDispatchDoneCallback done_callback,
+    absl::flat_hash_map</*id=*/std::string, /*json_score*/ std::string>
+        json_ad_scores,
+    const bool call_wrapper_method = false,
+    const bool enable_adtech_code_logging = false);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_TEST_UTIL_H_

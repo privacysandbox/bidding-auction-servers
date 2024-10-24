@@ -13,6 +13,6 @@
 # limitations under the License.
 
 output "buyer_frontend_url" {
-  value       = "https://${module.buyer.operator}-${module.buyer.environment}.${module.buyer.frontend_domain_name}"
+  value       = module.buyer_frontend_load_balancing.frontend_url
   description = "This is the globally load-balanced entrypoint to the buyer frontend service, to be used by seller front ends."
 }

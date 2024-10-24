@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# OTEL_S3_BUCKET and OTEL_S3_PREFIX will be set as environment variables.
+extensions:
+  health_check:
 
 receivers:
   otlp:
@@ -20,19 +21,61 @@ receivers:
       grpc:
         endpoint: 127.0.0.1:4317
 
+processors:
+  batch/traces:
+    timeout: 1s
+    send_batch_size: 50
+  batch/metrics:
+    timeout: 60s
+  batch/logs:
+    timeout: 60s
+  filter/drop_event:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["ps_tee_log_type"] == "event_message"'
+  filter/drop_non_event:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["ps_tee_log_type"] != "event_message"'
+
 exporters:
-  awss3:
+  awsemf:
+    namespace: '$SERVICE'
+    resource_to_telemetry_conversion:
+        enabled: true
+  awscloudwatchlogs:
+    log_group_name: "bidding-auction"
+    log_stream_name: "consented-log-stream"
+  awss3/consent:
     s3uploader:
-      region: 'us-east-1'
-      s3_bucket: ${env:OTEL_S3_BUCKET}
-      s3_prefix: ${env:OTEL_S3_PREFIX}
+      region: $S3_REGION
+      s3_bucket: $S3_BUCKET
+      s3_prefix: $S3_PREFIX
+      s3_partition: minute
+      file_prefix: $FILE_PREFIX
+    marshaler: body
+  awss3/perfgate:
+    s3uploader:
+      region: 'us-west-1'
+      s3_bucket: 'bna-test-perfgate'
+      s3_prefix: 'e2e-build'
       s3_partition: 'minute'
 
 service:
   pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [awss3]
     metrics:
       receivers: [otlp]
-      exporters: [awss3]
+      processors: [batch/metrics]
+      exporters: [awsemf, awss3/perfgate]
+    logs/1:
+      receivers: [otlp]
+      processors: [batch/logs, filter/drop_event]
+      exporters: [awscloudwatchlogs]
+    logs/2:
+      receivers: [otlp]
+      processors: [filter/drop_non_event]
+      exporters: [awss3/consent]
+
+  extensions: [health_check]

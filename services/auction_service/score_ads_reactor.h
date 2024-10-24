@@ -56,22 +56,30 @@ inline constexpr char kNoValidComponentAuctions[] =
 struct ScoringData {
   // Index of the most desirable ad. This helps us to set the overall response
   // object just once.
-  int index_of_most_desirable_ad = 0;
+  int winner_index = -1;
   // Count of rejected bids.
   int seller_rejected_bid_count = 0;
   // Map of all the desirability/scores and corresponding scored ad's index in
   // the response from the scoreAd's UDF.
   absl::flat_hash_map<float, std::list<int>> score_ad_map;
-  // Saving the desirability allows us to compare desirability between ads
-  // without re-parsing the current most-desirable ad every time.
-  float desirability_of_most_desirable_ad = 0;
   // List of rejection reasons provided by seller.
-  std::vector<ScoreAdsResponse::AdScore::AdRejectionReason>
+  google::protobuf::RepeatedPtrField<
+      ScoreAdsResponse::AdScore::AdRejectionReason>
       ad_rejection_reasons;
-  // The most desirable ad.
-  std::optional<ScoreAdsResponse::AdScore> winning_ad;
+  // The scored bids are sorted in descending order first. The highest scored
+  // ad(s) are added to this list. Note that there can be multiple highest
+  // scored ads that can have the same score -- in such a case the winner is
+  // chosen randomly among these candidates to ensure fairness.
+  std::vector<int> winner_cand_indices;
+  // Indices of ghost winner candidates. Currently, we populate ghost winner
+  // candidates that have the highest and equal scores. If multiple such
+  // candidates are present, and we have to choose a subset from them then
+  // we choose a random sample from these to ensure fairness.
+  std::vector<int> ghost_winner_cand_indices;
+  // Indices of ghost winners.
+  std::vector<int> ghost_winner_indices;
 
-  void UpdateWinner(int index, const ScoreAdsResponse::AdScore& ad_score);
+  void ChooseWinnerAndGhostWinners(size_t max_ghost_winners);
 };
 
 // Fields needed from component level AuctionResult for
@@ -80,6 +88,39 @@ struct ComponentReportingDataInAuctionResult {
   std::string component_seller;
   WinReportingUrls win_reporting_urls;
   std::string buyer_reporting_id;
+  std::string buyer_and_seller_reporting_id;
+};
+
+// Group of data associated with the ad scored via dispatch to Roma.
+struct ScoredAdData {
+  // Response returned from Roma.
+  ScoreAdsResponse::AdScore ad_score;
+
+  // Parsed JSON response object.
+  rapidjson::Document response_json;
+
+  // Populated to a non-null value only if the scored ad was of type Protected
+  // Audience. Note: Underlying object is stored in `ad_data_`
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata*
+      protected_audience_ad_with_bid = nullptr;
+
+  // Populated to a non-null value only if the scored ad was of type Protected
+  // App Signals. Note: Underlying object is stored in
+  // `protected_app_signals_ad_data_`
+  ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata*
+      protected_app_signals_ad_with_bid = nullptr;
+
+  // ID of the request/response to/from Roma.
+  absl::string_view id;
+
+  // K-anon status of the ad (derived from incoming AdWithBidMetadata)
+  bool k_anon_status = false;
+
+  // Swaps the data memberwise.
+  void Swap(ScoredAdData& other);
+
+  // Compares based on score, bid and k-anon status.
+  bool operator>(const ScoredAdData& other) const;
 };
 
 // This is a gRPC reactor that serves a single ScoreAdsRequest.
@@ -108,6 +149,8 @@ class ScoreAdsReactor
       ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
   using ProtectedAppSignalsAdWithBidMetadata =
       ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
+  using OptionalAdRejectionReason =
+      std::optional<ScoreAdsResponse::AdScore::AdRejectionReason>;
   // Finds the ad type of the scored ad and set it. After the function call,
   // expect one of the input pointers to be populated.
   void FindScoredAdType(absl::string_view response_id,
@@ -116,21 +159,27 @@ class ScoreAdsReactor
                             protected_app_signals_ad_with_bid_metadata);
   // Populates the ad render URL and other ad type specific data in the ad score
   // response to be sent back to SFE.
-  void PopulateRelevantFieldsInResponse(int index_of_most_desirable_ad,
-                                        absl::string_view request_id,
-                                        ScoreAdsResponse::AdScore& winning_ad);
+  void PopulateRelevantFieldsInResponse(int index,
+                                        std::vector<ScoredAdData>& parsed_ads);
+
+  // Filters out invalid Roma responses while updating the corresponding error
+  // metrics.
+  //
+  // Returns valid responses.
+  std::vector<ScoredAdData> CollectValidRomaResponses(
+      const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+
   // Finds the winning ad (if one exists) among the responses returned by Roma.
   // Returns all the data associated with scoring that can then be later used
   // for finding second highest bid (among other things).
-  ScoringData FindWinningAd(
-      const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+  ScoringData FindWinningAd(std::vector<ScoredAdData>& parsed_ads);
 
   // Populates the data about the highest second other bid in the response to
   // be returned to SFE.
   void PopulateHighestScoringOtherBidsData(
       int index_of_most_desirable_ad,
       const absl::flat_hash_map<float, std::list<int>>& score_ad_map,
-      const std::vector<absl::StatusOr<DispatchResponse>>& responses,
+      const std::vector<ScoredAdData>& responses,
       ScoreAdsResponse::AdScore& winning_ad);
 
   // Asynchronous callback used by the v8 code executor to return a result. This
@@ -177,6 +226,12 @@ class ScoreAdsReactor
   // fields included in winning_ad_score.
   void InitializeBuyerReportingDispatchRequestData(
       const ScoreAdsResponse::AdScore& winning_ad_score);
+
+  // Initializes buyer_reporting_dispatch_request_data_ and
+  // raw_response_ with buyer reporting IDs included in
+  // AdWithBidMetadata.
+  void SetBuyerReportingIdsInRawResponse(
+      const std::unique_ptr<AdWithBidMetadata>& ad);
 
   // Performs reportResult and reportWin udf execution with seller and buyer
   // code isolation
@@ -252,19 +307,24 @@ class ScoreAdsReactor
       google::protobuf::RepeatedPtrField<ProtectedAppSignalsAdWithBidMetadata>&
           protected_app_signals_ad_bids);
 
-  // Sets the required fields in the passed AdScore object and populates
-  // scoring data.
-  // The AdScore fields that need to be parsed from ROMA response
-  // must be populated separately before this is called.
-  void HandleScoredAd(int index, float buyer_bid,
-                      absl::string_view ad_with_bid_currency,
-                      absl::string_view interest_group_name,
-                      absl::string_view interest_group_owner,
-                      absl::string_view interest_group_origin,
-                      const rapidjson::Document& response_json, AdType ad_type,
-                      ScoreAdsResponse::AdScore& score_ads_response,
-                      ScoringData& scoring_data,
-                      const std::string& dispatch_response_id);
+  // Validates the ad returned by Roma ScoreAd Response (e.g. validates
+  // currency) and sets a rejection reason if the ad is not valid.
+  OptionalAdRejectionReason GetAdRejectionReason(
+      const rapidjson::Document& response_json,
+      const ScoreAdsResponse::AdScore& ad_score);
+
+  // Adds winner ad to the GRPC response.
+  void AddWinnerToResponse(int winner_index, ScoringData& scoring_data,
+                           std::vector<ScoredAdData>& parsed_responses);
+
+  // Adds ghost winner ads to the GRPC response.
+  void AddGhostWinnersToResponse(const std::vector<int>& ghost_winner_indices,
+                                 std::vector<ScoredAdData>& parsed_responses);
+
+  // Performs win and debug reporting (forDebuggingOnly).
+  void DoWinAndDebugReporting(
+      bool enable_debug_reporting, int winner_index,
+      const std::vector<ScoredAdData>& parsed_responses);
 
   CLASS_CANCELLATION_WRAPPER(ReportResultCallback, enable_cancellation_,
                              context_, FinishWithStatus)
@@ -334,6 +394,7 @@ class ScoreAdsReactor
         empty_ad_component_render_urls;
     return empty_ad_component_render_urls;
   }
+  const bool enable_enforce_kanon_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

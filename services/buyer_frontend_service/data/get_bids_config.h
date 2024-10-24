@@ -33,6 +33,10 @@ struct GetBidsConfig {
   bool is_protected_audience_enabled;
   // Whether chaffing is enabled.
   bool is_chaffing_enabled;
+  bool enable_cancellation = false;
+  bool enable_kanon = false;
+  // Sample rate for debug request.
+  int debug_sample_rate_micro;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

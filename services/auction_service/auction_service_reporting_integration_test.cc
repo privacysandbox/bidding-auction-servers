@@ -45,17 +45,26 @@ constexpr absl::string_view kExpectedReportResultUrl =
 constexpr absl::string_view kExpectedReportWinUrl =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
+    "buyerAndSellerReportingId=undefined&adCost=2&highestScoringOtherBid=0"
+    "&madeHighestScoringOtherBid=false&signalsForWinner="
+    "{\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&auctionSignals="
+    "3,test,4&desirability=undefined&topLevelSeller=undefined&"
     "modifiedBid=undefined";
 constexpr absl::string_view kExpectedReportWinUrlWithNullSignalsForWinner =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
+    "buyerAndSellerReportingId=undefined&adCost=2&highestScoringOtherBid=0&"
+    "madeHighestScoringOtherBid=false&signalsForWinner=null&"
+    "perBuyerSignals=1,test,2&auctionSignals=3,test,4&desirability=undefined&"
+    "topLevelSeller=undefined&modifiedBid=undefined";
+constexpr absl::string_view kExpectedReportWinUrlWithBuyerAndSellerReportingId =
+    "http://test.com?seller=http://"
+    "seller.com&interestGroupName=undefined&buyerReportingId=undefined&"
+    "buyerAndSellerReportingId=buyerAndSellerReportingId&"
     "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner=null&perBuyerSignals=1,test,2&auctionSignals=3,test,4&"
-    "desirability=undefined&topLevelSeller=undefined&modifiedBid=undefined";
-
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
+    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
+    "modifiedBid=undefined";
 constexpr absl::string_view kTestTopLevelReportResultUrl =
     "http://"
     "test.com&bid=1&bidCurrency=undefined&highestScoringOtherBid=undefined&"
@@ -335,6 +344,48 @@ TEST_F(AuctionServiceReportingIntegrationTest,
                 .interaction_reporting_urls()
                 .size(),
             0);
+}
+
+TEST_F(AuctionServiceReportingIntegrationTest,
+       ReportingSuccessWithCodeIsolationAndBuyerAndSellerReportingId) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
+                          kTestReportWinUdfWithValidation, kSellerBaseCode,
+                          response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& top_level_seller_reporting_urls =
+      score_ad.win_reporting_urls().top_level_seller_reporting_urls();
+  const auto& component_buyer_reporting_urls =
+      score_ad.win_reporting_urls().buyer_reporting_urls();
+  EXPECT_EQ(top_level_seller_reporting_urls.reporting_url(),
+            kExpectedReportResultUrl);
+  ASSERT_TRUE(
+      top_level_seller_reporting_urls.interaction_reporting_urls().contains(
+          kTestInteractionEvent));
+  EXPECT_EQ(top_level_seller_reporting_urls.interaction_reporting_urls().at(
+                kTestInteractionEvent),
+            kTestInteractionReportingUrl);
+  EXPECT_EQ(component_buyer_reporting_urls.reporting_url(),
+            kExpectedReportWinUrlWithBuyerAndSellerReportingId);
+  ASSERT_TRUE(
+      component_buyer_reporting_urls.interaction_reporting_urls().contains(
+          kTestInteractionEvent));
+  EXPECT_EQ(component_buyer_reporting_urls.interaction_reporting_urls().at(
+                kTestInteractionEvent),
+            kTestInteractionReportingUrl);
 }
 
 }  // namespace

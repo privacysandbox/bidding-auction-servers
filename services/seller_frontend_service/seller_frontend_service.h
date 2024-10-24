@@ -22,12 +22,14 @@
 #include <grpcpp/grpcpp.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/flag.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/auction_server/scoring_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/feature_flags.h"
 #include "services/common/reporters/async_reporter.h"
 #include "services/seller_frontend_service/providers/http_scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/providers/scoring_signals_async_provider.h"
@@ -120,7 +122,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
             *key_fetcher_manager_,
             crypto_client_.get(),
             std::make_unique<AsyncReporter>(
-                std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))} {
+                std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))},
+        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
+        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -129,7 +133,10 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
 
   SellerFrontEndService(const TrustedServersConfigClient* config_client,
                         ClientRegistry clients)
-      : config_client_(*config_client), clients_(std::move(clients)) {
+      : config_client_(*config_client),
+        clients_(std::move(clients)),
+        enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
+        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -188,6 +195,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   const ClientRegistry clients_;
   absl::flat_hash_map<std::string, server_common::CloudPlatform>
       seller_cloud_platforms_map_;
+  const bool enable_cancellation_;
+  const bool enable_kanon_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

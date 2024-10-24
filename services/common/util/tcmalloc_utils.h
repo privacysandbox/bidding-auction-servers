@@ -27,7 +27,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 inline void MaySetBackgroundReleaseRate(
     std::optional<int64_t> release_rate_bytes_per_second) {
-  if (!release_rate_bytes_per_second.has_value()) {
+  if (!release_rate_bytes_per_second) {
     PS_VLOG(4) << "No release_rate_bytes_per_second for TCMalloc "
                   "specified, will use default";
     return;
@@ -42,7 +42,7 @@ inline void MaySetBackgroundReleaseRate(
 
 inline void MaySetMaxTotalThreadCacheBytes(
     std::optional<int64_t> max_total_thread_cache_bytes) {
-  if (!max_total_thread_cache_bytes.has_value()) {
+  if (!max_total_thread_cache_bytes) {
     PS_VLOG(4) << "No max_total_thread_cache_bytes for TCMalloc specified, "
                   "will use default";
     return;

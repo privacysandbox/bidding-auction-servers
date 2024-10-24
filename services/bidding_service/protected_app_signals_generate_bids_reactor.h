@@ -103,7 +103,7 @@ class ProtectedAppSignalsGenerateBidsReactor
   absl::Status ValidateRomaResponse(
       const std::vector<absl::StatusOr<DispatchResponse>>& result);
 
-  absl::StatusOr<ProtectedAppSignalsAdWithBid>
+  absl::StatusOr<std::vector<ProtectedAppSignalsAdWithBid>>
   ParseProtectedSignalsGenerateBidsResponse(const std::string& response);
 
   // Populates the serialized payload in egress_payload output variable, if
@@ -218,6 +218,8 @@ class ProtectedAppSignalsGenerateBidsReactor
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;
+
+  const bool enable_temporary_unlimited_egress_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

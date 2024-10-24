@@ -51,7 +51,7 @@ void AsyncTaskTracker::TaskCompleted(
         << "Unexpected call (indicates either a bug in the initialization or "
            "the usage)";
 
-    if (on_single_task_done.has_value()) {
+    if (on_single_task_done) {
       (*on_single_task_done)();
     }
 

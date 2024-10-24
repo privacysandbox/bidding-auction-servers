@@ -70,8 +70,8 @@ inline void RecordInterestGroupUpdates(
 SelectAdReactor::SelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool fail_fast,
-    int max_buyers_solicited)
+    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    bool enable_kanon, bool fail_fast, int max_buyers_solicited)
     : request_context_(context),
       request_(request),
       response_(response),
@@ -96,8 +96,8 @@ SelectAdReactor::SelectAdReactor(
       max_buyers_solicited_(chaffing_enabled_
                                 ? kMaxBuyersSolicitedChaffingEnabled
                                 : max_buyers_solicited),
-      enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
-      enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
+      enable_cancellation_(enable_cancellation),
+      enable_enforce_kanon_(enable_kanon),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
           [this](bool successful) { OnAllBidsDone(successful); }) {
@@ -160,8 +160,10 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
       break;
     }
   }
-  if (enable_kanon_) {
+  if (enable_enforce_kanon_) {
     result.set_k_anon_status(k_anon_status);
+  } else {
+    result.set_k_anon_status(true);
   }
   if (!input.buyer_reporting_id().empty()) {
     result.set_buyer_reporting_id(input.buyer_reporting_id());
@@ -243,7 +245,7 @@ grpc::Status SelectAdReactor::DecryptRequest() {
   std::visit(
       [this](auto& input) {
         buyer_inputs_ = GetDecodedBuyerinputs(input.buyer_input());
-        enforce_kanon_ = input.enforce_kanon();
+        enable_enforce_kanon_ &= input.enforce_kanon();
       },
       protected_auction_input_);
 
@@ -641,7 +643,7 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
       get_bids_request->set_buyer_signals(
           per_buyer_config_itr->second.buyer_signals());
     }
-    if (enable_kanon_) {
+    if (enable_enforce_kanon_) {
       get_bids_request->set_multi_bid_limit(
           per_buyer_config_itr->second.per_buyer_multi_bid_limit());
     }
@@ -666,7 +668,7 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
         }
         get_bids_request->set_enable_unlimited_egress(
             protected_auction_input.enable_unlimited_egress());
-        if (enable_kanon_) {
+        if (enable_enforce_kanon_) {
           get_bids_request->set_enforce_kanon(
               protected_auction_input.enforce_kanon());
         }
@@ -1068,7 +1070,7 @@ void SelectAdReactor::OnFetchScoringSignalsDone(
 }
 
 bool SelectAdReactor::GetKAnonStatusForAdWithBid(absl::string_view ad_key) {
-  if (!enable_kanon_ || !enforce_kanon_) {
+  if (!enable_enforce_kanon_) {
     PS_VLOG(5) << "k-anon is not enabled or not enforced";
     return true;
   }
@@ -1120,7 +1122,7 @@ SelectAdReactor::CreateScoreAdsRequest() {
           *raw_request->mutable_consented_debug_config() =
               protected_auction_input.consented_debug_config();
         }
-        if (enable_kanon_) {
+        if (enable_enforce_kanon_) {
           raw_request->set_num_allowed_ghost_winners(
               kNumAllowedChromGhostWinners);
           raw_request->set_enforce_kanon(

@@ -24,26 +24,30 @@ namespace privacy_sandbox::server_common {
 namespace {
 
 TEST(ReadSystem, GetMemory) {
-  ABSL_LOG(INFO) << absl::StrJoin(GetMemory(), " ", absl::PairFormatter("->"));
+  ABSL_LOG(INFO) << absl::StrJoin(SystemMetrics::GetMemory(), " ",
+                                  absl::PairFormatter("->"));
 }
 
 TEST(ReadSystem, GetThread) {
-  ABSL_LOG(INFO) << absl::StrJoin(GetThread(), " ", absl::PairFormatter("->"));
+  ABSL_LOG(INFO) << absl::StrJoin(SystemMetrics::GetThread(), " ",
+                                  absl::PairFormatter("->"));
 }
 
 TEST(ReadSystem, ReadCpuTime) {
-  EXPECT_THAT(internal::ReadCpuTime({}, {}), testing::FieldsAre(0, 0));
-  EXPECT_THAT(internal::ReadCpuTime({1, 1, 1, 1}, {}),
-              testing::FieldsAre(0.75, 0));
+  EXPECT_THAT(internal::ReadCpuTime({}, {}, std::nullopt),
+              testing::FieldsAre(0, 0, testing::Eq(std::nullopt)));
+  EXPECT_THAT(internal::ReadCpuTime({1, 1, 1, 1}, {}, std::nullopt),
+              testing::FieldsAre(0.75, 0, testing::Eq(std::nullopt)));
 
   constexpr int kUtime = 13, kStime = 14;
   std::vector<std::string> fields(52, "");
   fields[kUtime] = "1";
   fields[kStime] = "0";
 
-  EXPECT_THAT(internal::ReadCpuTime({2, 1, 1, 2}, fields),
-              testing::FieldsAre(0.5, 0.5));
-  ABSL_LOG(INFO) << absl::StrJoin(GetCpu(), " ", absl::PairFormatter("->"));
+  EXPECT_THAT(internal::ReadCpuTime({2, 1, 1, 2}, fields, std::nullopt),
+              testing::FieldsAre(0.5, 0.5, testing::Eq(std::nullopt)));
+  ABSL_LOG(INFO) << absl::StrJoin(SystemMetrics::GetCpu(), " ",
+                                  absl::PairFormatter("->"));
 }
 
 }  // namespace

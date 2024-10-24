@@ -62,7 +62,7 @@ absl::StatusOr<std::string> HpkeDecrypt(
   }
   std::optional<server_common::PrivateKey> private_key =
       key_fetcher_manager.GetPrivateKey(key_id.data());
-  if (!private_key.has_value()) {
+  if (!private_key) {
     return absl::Status(absl::StatusCode::kInvalidArgument, kInvalidKeyIdError);
   }
   auto decrypt_response = crypto_client.HpkeDecrypt(*private_key, ciphertext);

@@ -161,7 +161,8 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
       absl::StatusOr<std::string> model_checksum =
           ComputeChecksumForBlobs(blob_views);
       if (!model_checksum.ok() || *model_checksum != metadata.checksum()) {
-        PS_LOG(ERROR) << "Model rejected due to incorrect checksum.";
+        PS_LOG(ERROR) << "Model rejected due to incorrect checksum."
+                      << " model_path=" << model_path;
         failure_models.push_back(model_path);
         ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
             absl::StatusCode::kFailedPrecondition);
@@ -206,7 +207,7 @@ void PeriodicModelFetcher::InternalPeriodicModelFetchAndRegistration() {
 }
 
 void PeriodicModelFetcher::End() {
-  if (task_id_.has_value()) {
+  if (task_id_) {
     executor_.Cancel(*task_id_);
     task_id_ = absl::nullopt;
   }

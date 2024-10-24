@@ -193,45 +193,6 @@ resource "google_compute_backend_service" "default" {
   depends_on = [var.mesh, google_network_services_grpc_route.default]
 }
 
-resource "google_compute_url_map" "default" {
-  name            = "${var.operator}-${var.environment}-xlb-grpc-map"
-  default_service = google_compute_backend_service.default.id
-}
-
-
-resource "google_compute_target_https_proxy" "default" {
-  name             = "${var.operator}-${var.environment}-https-lb-proxy"
-  url_map          = google_compute_url_map.default.id
-  ssl_certificates = var.frontend_certificate_map_id == "" ? [var.frontend_domain_ssl_certificate_id] : null
-  certificate_map  = var.frontend_certificate_map_id == "" ? null : var.frontend_certificate_map_id
-}
-
-resource "google_compute_global_forwarding_rule" "xlb_https" {
-  name     = "${var.operator}-${var.environment}-xlb-https-forwarding-rule"
-  provider = google-beta
-
-  ip_protocol           = "TCP"
-  port_range            = "443"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  target                = google_compute_target_https_proxy.default.id
-  ip_address            = var.frontend_ip_address
-
-  labels = {
-    environment = var.environment
-    operator    = var.operator
-    service     = var.frontend_service_name
-  }
-}
-
-resource "google_dns_record_set" "default" {
-  name         = "${var.operator}-${var.environment}.${var.frontend_domain_name}."
-  managed_zone = var.frontend_dns_zone
-  type         = "A"
-  ttl          = 10
-  rrdatas = [
-    var.frontend_ip_address
-  ]
-}
 
 resource "google_compute_health_check" "frontend" {
   name = "${var.operator}-${var.environment}-${var.frontend_service_name}-lb-hc"

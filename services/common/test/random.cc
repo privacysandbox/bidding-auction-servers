@@ -18,6 +18,7 @@
 #include <string>
 
 #include "absl/strings/str_format.h"
+#include "services/buyer_frontend_service/data/bidding_signals.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -274,7 +275,7 @@ std::string MakeTrustedBiddingSignalsForIG(
   return signals_dest;
 }
 
-std::string GetBiddingSignalsFromGenerateBidsRequest(
+BiddingSignals GetBiddingSignalsFromGenerateBidsRequest(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request) {
   std::string signals_dest;
 
@@ -342,7 +343,9 @@ std::string GetBiddingSignalsFromGenerateBidsRequest(
   }
   absl::StrAppend(&signals_dest, "}}");
 
-  return signals_dest;
+  BiddingSignals bidding_signals{std::make_unique<std::string>(signals_dest),
+                                 raw_request.data_version()};
+  return bidding_signals;
 }
 
 InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice() {
@@ -452,6 +455,8 @@ MakeARandomGenerateBidsRawRequestForAndroid(bool enforce_kanon,
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
+  // Android has an 8-bit limit on this field.
+  raw_request.set_data_version(MakeARandomInt(0, UINT8_MAX));
 
   raw_request.set_enforce_kanon(enforce_kanon);
   raw_request.set_multi_bid_limit(multi_bid_limit);
@@ -475,6 +480,7 @@ MakeARandomGenerateBidsRequestForBrowser(bool enforce_kanon,
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 10))).release());
   raw_request.set_seller(MakeARandomString());
   raw_request.set_publisher_name(MakeARandomString());
+  raw_request.set_data_version(MakeARandomInt(0, UINT32_MAX));
 
   raw_request.set_enforce_kanon(enforce_kanon);
   raw_request.set_multi_bid_limit(multi_bid_limit);

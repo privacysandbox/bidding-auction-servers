@@ -286,15 +286,16 @@ void MultiCurlHttpFetcherAsync::FetchUrlsWithMetadata(
     return;
   }
   for (int i = 0; i < requests.size(); i++) {
-    FetchUrl(requests.at(i), absl::ToInt64Milliseconds(timeout),
-             [i, shared_lifetime](absl::StatusOr<HTTPResponse> result) {
-               absl::MutexLock lock_results(&shared_lifetime->results_mu);
-               shared_lifetime->results[i] = std::move(result);
-               if (--shared_lifetime->pending_results == 0) {
-                 std::move(shared_lifetime->all_done_callback)(
-                     std::move(shared_lifetime->results));
-               }
-             });
+    FetchUrlWithMetadata(
+        requests.at(i), absl::ToInt64Milliseconds(timeout),
+        [i, shared_lifetime](absl::StatusOr<HTTPResponse> result) {
+          absl::MutexLock lock_results(&shared_lifetime->results_mu);
+          shared_lifetime->results[i] = std::move(result);
+          if (--shared_lifetime->pending_results == 0) {
+            std::move(shared_lifetime->all_done_callback)(
+                std::move(shared_lifetime->results));
+          }
+        });
   }
 }
 
@@ -381,20 +382,20 @@ void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
 void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
                                          int timeout_ms,
                                          OnDoneFetchUrl done_callback) {
-  FetchUrl(request, timeout_ms,
-           [callback = std::move(done_callback)](
-               absl::StatusOr<HTTPResponse> response) mutable {
-             if (response.ok()) {
-               absl::StatusOr<std::string> string_response =
-                   std::move(response->body);
-               std::move(callback)(std::move(string_response));
-             } else {
-               std::move(callback)(response.status());
-             }
-           });
+  FetchUrlWithMetadata(request, timeout_ms,
+                       [callback = std::move(done_callback)](
+                           absl::StatusOr<HTTPResponse> response) mutable {
+                         if (response.ok()) {
+                           absl::StatusOr<std::string> string_response =
+                               std::move(response->body);
+                           std::move(callback)(std::move(string_response));
+                         } else {
+                           std::move(callback)(response.status());
+                         }
+                       });
 }
 
-void MultiCurlHttpFetcherAsync::FetchUrl(
+void MultiCurlHttpFetcherAsync::FetchUrlWithMetadata(
     const HTTPRequest& request, int timeout_ms,
     OnDoneFetchUrlWithMetadata done_callback) {
   ExecuteCurlRequest(CreateCurlRequest(request, timeout_ms, keepalive_idle_sec_,

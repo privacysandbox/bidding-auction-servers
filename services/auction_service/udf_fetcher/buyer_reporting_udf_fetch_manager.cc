@@ -85,7 +85,7 @@ absl::Status BuyerReportingUdfFetchManager::Start() {
 }
 
 void BuyerReportingUdfFetchManager::End() {
-  if (task_id_.has_value()) {
+  if (task_id_) {
     executor_.Cancel(*task_id_);
     task_id_ = absl::nullopt;
   }

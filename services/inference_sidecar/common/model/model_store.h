@@ -93,14 +93,14 @@ class ModelStore {
                         model_constructor_(config_, request));
 
     absl::MutexLock model_data_lock(&model_data_mutex_);
-    model_data_map_[key] = request;
-
     absl::MutexLock prod_model_lock(&prod_model_mutex_);
-    prod_model_map_[key] = std::move(prod_model);
-
     absl::MutexLock consented_model_lock(&consented_model_mutex_);
-    consented_model_map_[key] = std::move(consented_model);
+    absl::MutexLock lock(&per_model_inference_count_mu_);
 
+    model_data_map_[key] = request;
+    prod_model_map_[key] = std::move(prod_model);
+    consented_model_map_[key] = std::move(consented_model);
+    per_model_inference_count_[key] = 0;
     return absl::OkStatus();
   }
 
@@ -122,15 +122,14 @@ class ModelStore {
     return it->second;
   }
 
-  // Reset a model entry using the model constructor.
-  // This method is thread-safe.
+  // Reset a model entry using the model constructor. If the model doesn't
+  // exist, return ok because there is no need to reset. This method is
+  // thread-safe.
   absl::Status ResetModel(absl::string_view key, bool is_consented = false) {
     absl::MutexLock model_data_lock(&model_data_mutex_);
     auto it = model_data_map_.find(key);
     if (it == model_data_map_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Resetting model '", key,
-                       "' fails because it has not been registered"));
+      return absl::OkStatus();
     }
     const RegisterModelRequest& request = it->second;
     PS_ASSIGN_OR_RETURN(std::shared_ptr<ModelType> model,
@@ -153,13 +152,39 @@ class ModelStore {
     return model_keys;
   }
 
+  // Deletes all resources associated with the given model key including both
+  // the consented and production copies of the model.
+  // This method is thread-safe.
+  absl::Status DeleteModel(absl::string_view key) {
+    absl::MutexLock model_data_lock(&model_data_mutex_);
+    absl::MutexLock prod_model_lock(&prod_model_mutex_);
+    absl::MutexLock consented_model_lock(&consented_model_mutex_);
+    absl::MutexLock lock(&per_model_inference_count_mu_);
+    auto it = model_data_map_.find(key);
+    if (it == model_data_map_.end()) {
+      return absl::NotFoundError(
+          "Failed to delete because the model is not found.");
+    }
+    model_data_map_.erase(it);
+
+    prod_model_map_.erase(key);
+    consented_model_map_.erase(key);
+    per_model_inference_count_.erase(key);
+
+    return absl::OkStatus();
+  }
+
   // Increments the inference count associated with a model key for model
   // resetting purposes. Note that model reset currently only happens for prod
-  // models so no consented flag is required for this method.
+  // models so no consented flag is required for this method. Also, if the model
+  // is not found, this function call has not effect.
   void IncrementModelInferenceCount(absl::string_view key) {
     absl::MutexLock lock(&per_model_inference_count_mu_);
-    ++per_model_inference_count_[std::string(key)];
-    inference_notification_.Notify();
+    if (auto it = per_model_inference_count_.find(key);
+        it != per_model_inference_count_.end()) {
+      ++(it->second);
+      inference_notification_.Notify();
+    }
   }
 
   // Constructs and returns model by invoking the model constructor.
@@ -189,9 +214,12 @@ class ModelStore {
       int count = 0;
       {
         absl::MutexLock lock(&per_model_inference_count_mu_);
-        count = per_model_inference_count_[model_key];
-        // Sets the per-model counter to 0.
-        per_model_inference_count_[model_key] = 0;
+        if (auto it = per_model_inference_count_.find(model_key);
+            it != per_model_inference_count_.end()) {
+          count = it->second;
+          // Sets the per-model counter to 0.
+          it->second = 0;
+        }
       }
       if (count <= 0) continue;
       double random = absl::Uniform(bitgen_, 0.0, 1.0);

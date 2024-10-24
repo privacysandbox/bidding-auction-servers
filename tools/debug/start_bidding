@@ -28,6 +28,7 @@ USAGE
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
 declare GENERATE_BID_FILEPATH=""
+declare -i FETCH_MODE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +42,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --use-with-generateBid-file)
       GENERATE_BID_FILEPATH="$2"
+      FETCH_MODE=2
       shift 2
       ;;
     -h | --help) print_usage ;;
@@ -67,12 +69,13 @@ function get_libcddl_path() {
   done
 }
 
-export INFERENCE_BIDDING_JS_PATH="/src/workspace/services/inference_sidecar/common/tools/debug/generateBidRunInference.js"
+export BIDDING_JS_URL=""
+export EGRESS_SCHEMA_URL=""
 
 # Set default buyer code fetch config
 export BUYER_CODE_FETCH_CONFIG=$(cat << END
 {
-  "fetchMode": 0,
+  "fetchMode": ${FETCH_MODE},
   "biddingJsPath": "/generateBid.js",
   "biddingJsUrl": "${BIDDING_JS_URL}",
   "protectedAppSignalsBiddingJsUrl": "${BIDDING_JS_URL}",
@@ -97,6 +100,8 @@ fi
 
 # Update buyer code fetch config if enabling inference
 if [[ ${ENABLE_INFERENCE} -eq 1 ]]; then
+  GENERATE_BID_FILEPATH="services/inference_sidecar/common/tools/debug/generateBidRunInference.js"
+
   INFERENCE_ARGS=$(cat << END
 --inference_sidecar_binary_path="/server/bin/inference_sidecar_pytorch_v2_1_1" \
 --inference_sidecar_runtime_config='{
@@ -110,7 +115,7 @@ END
   BUYER_CODE_FETCH_CONFIG=$(cat << END
 {
   "fetchMode": 2,
-  "biddingJsPath": "${INFERENCE_BIDDING_JS_PATH}",
+  "biddingJsPath": "/generateBid.js",
   "urlFetchPeriodMs": 13000000,
   "urlFetchTimeoutMs": 30000,
   "enableBuyerDebugUrlGeneration": true

@@ -58,6 +58,7 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api/udf:generate_bid_sdk_cc_proto",
+        "//services/buyer_frontend_service/data:buyer_frontend_data",
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/util:request_response_constants",
         "//services/seller_frontend_service/test:app_test_utils",

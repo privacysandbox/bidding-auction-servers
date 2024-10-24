@@ -51,7 +51,8 @@ class BaseGenerateBidsReactor
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client)
       : CodeDispatchReactor<Request, RawRequest, Response, RawResponse>(
-            request, response, key_fetcher_manager, crypto_client),
+            request, response, key_fetcher_manager, crypto_client,
+            runtime_config.enable_cancellation, runtime_config.enable_kanon),
         enable_buyer_debug_url_generation_(
             runtime_config.enable_buyer_debug_url_generation),
         roma_timeout_ms_(runtime_config.roma_timeout_ms),
@@ -62,8 +63,10 @@ class BaseGenerateBidsReactor
         log_context_(
             GetLoggingContext(this->raw_request_),
             this->raw_request_.consented_debug_config(),
-            [this]() { return this->raw_response_.mutable_debug_info(); }),
-        enable_adtech_code_logging_(log_context_.is_consented()),
+            [this]() { return this->raw_response_.mutable_debug_info(); },
+            this->raw_request_.is_sampled_for_debug()),
+        enable_adtech_code_logging_(log_context_.is_consented() ||
+                                    this->raw_request_.is_sampled_for_debug()),
         max_allowed_size_debug_url_chars_(
             runtime_config.max_allowed_size_debug_url_bytes),
         max_allowed_size_all_debug_urls_chars_(

@@ -86,6 +86,18 @@ class HttpFetcherAsync {
   virtual void FetchUrl(const HTTPRequest& http_request, int timeout_ms,
                         OnDoneFetchUrl done_callback) = 0;
 
+  // Fetches the specified url with response metadata.
+  //
+  // http_request: The URL and headers for the HTTP GET request.
+  // timeout_ms: The request timeout
+  // done_callback: Output param. Invoked either on error or after finished
+  // receiving a response. Please note that done_callback will run in a
+  // threadpool and is not guaranteed to be the FetchUrl client's thread.
+  // Clients can expect done_callback to be called exactly once.
+  virtual void FetchUrlWithMetadata(
+      const HTTPRequest& http_request, int timeout_ms,
+      OnDoneFetchUrlWithMetadata done_callback) = 0;
+
   // PUTs data to the specified url.
   //
   // http_request: The URL, headers, body for the HTTP PUT request.

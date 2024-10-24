@@ -188,8 +188,7 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
     return predict_response;
   }
 
-  AddMetric(predict_response, "kInferenceRequestCount",
-            parsed_requests->size());
+  AddMetric(predict_response, "kInferenceRequestCount", 1);
 
   std::vector<std::future<absl::StatusOr<torch::IValue>>> tasks(
       parsed_requests->size());

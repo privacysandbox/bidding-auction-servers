@@ -39,6 +39,7 @@
 #include "services/common/clients/http_kv_server/buyer/fake_buyer_key_value_async_http_client.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/feature_flags.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
@@ -168,6 +169,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_bfe_tcmalloc_max_total_thread_cache_bytes,
                         BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
+  config_client.SetFlag(FLAGS_debug_sample_rate_micro, DEBUG_SAMPLE_RATE_MICRO);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -271,6 +273,9 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
           config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE),
           config_client.GetBooleanParameter(ENABLE_CHAFFING),
+          absl::GetFlag(FLAGS_enable_cancellation),
+          absl::GetFlag(FLAGS_enable_kanon),
+          config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
       },
       enable_buyer_frontend_benchmarking);
 

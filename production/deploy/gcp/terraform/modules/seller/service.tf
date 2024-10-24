@@ -64,34 +64,25 @@ module "autoscaling" {
 }
 
 module "load_balancing" {
-  source                             = "../../services/load_balancing"
-  environment                        = var.environment
-  operator                           = var.operator
-  gcp_project_id                     = var.gcp_project_id
-  subnets                            = module.networking.subnets
-  mesh                               = module.networking.mesh
-  frontend_ip_address                = module.networking.frontend_address
-  frontend_domain_name               = var.frontend_domain_name
-  frontend_dns_zone                  = var.frontend_dns_zone
-  frontend_domain_ssl_certificate_id = var.frontend_domain_ssl_certificate_id
-  frontend_certificate_map_id        = var.frontend_certificate_map_id
-  frontend_instance_group_managers   = module.autoscaling.frontend_instance_group_managers
-  frontend_service_name              = "sfe"
-  frontend_service_port              = var.envoy_port
-  frontend_service_healthcheck_port  = tonumber(var.runtime_flags["SELLER_FRONTEND_HEALTHCHECK_PORT"])
-  backend_instance_group_managers    = module.autoscaling.backend_instance_group_managers
-  backend_address                    = var.runtime_flags["AUCTION_SERVER_HOST"]
-  backend_service_name               = "auction"
-  backend_service_port               = tonumber(var.runtime_flags["AUCTION_PORT"])
-  collector_instance_group_managers  = module.autoscaling.collector_instance_group_managers
-  collector_service_name             = "collector"
-  collector_service_port             = var.collector_service_port
-  region_config                      = var.region_config
-}
-
-module "seller_dashboard" {
-  source      = "../../services/dashboards/seller_dashboard"
-  environment = var.environment
+  source                            = "../../services/load_balancing"
+  environment                       = var.environment
+  operator                          = var.operator
+  gcp_project_id                    = var.gcp_project_id
+  subnets                           = module.networking.subnets
+  mesh                              = module.networking.mesh
+  frontend_domain_name              = var.frontend_domain_name
+  frontend_dns_zone                 = var.frontend_dns_zone
+  frontend_instance_group_managers  = module.autoscaling.frontend_instance_group_managers
+  frontend_service_name             = "sfe"
+  frontend_service_healthcheck_port = tonumber(var.runtime_flags["SELLER_FRONTEND_HEALTHCHECK_PORT"])
+  backend_instance_group_managers   = module.autoscaling.backend_instance_group_managers
+  backend_address                   = var.runtime_flags["AUCTION_SERVER_HOST"]
+  backend_service_name              = "auction"
+  backend_service_port              = tonumber(var.runtime_flags["AUCTION_PORT"])
+  collector_instance_group_managers = module.autoscaling.collector_instance_group_managers
+  collector_service_name            = "collector"
+  collector_service_port            = var.collector_service_port
+  region_config                     = var.region_config
 }
 
 resource "google_secret_manager_secret" "runtime_flag_secrets" {

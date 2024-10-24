@@ -38,7 +38,8 @@ std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
 CreateGenerateBidsRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
     std::unique_ptr<rapidjson::Value> bidding_signals_obj,
-    const size_t signal_size, const bool enable_kanon = false);
+    const size_t signal_size, uint32_t data_version,
+    const bool enable_kanon = false);
 
 // Creates a request to generate bid for protected app signals.
 std::unique_ptr<GenerateProtectedAppSignalsBidsRequest::

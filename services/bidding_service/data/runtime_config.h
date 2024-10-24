@@ -67,6 +67,10 @@ struct BiddingServiceRuntimeConfig {
       kPrepareDataForAdRetrievalBlobVersion;
   // Enables private aggregate reporting.
   bool enable_private_aggregate_reporting = false;
+
+  bool enable_cancellation = false;
+  bool enable_kanon = false;
+  bool enable_temporary_unlimited_egress = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -2,13 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.2.0 (2024-10-19)
+
+
+### Features
+
+* [BYOB] Add udf_execution metrics for generateBid
+* add proto field to enable buyer debugging for eligible request
+* adding aws inference dashboard
+* Enable B&A experiments in GCP by splitting traffic
+* enable buyer debugging for eligible request
+* Implement Data Version Header for KV Server Clients
+* Implement v2 bidding support - add branch selection
+* Implement v2 bidding support - add kv_buyer_signals_adapter
+* Implement v2 bidding support - update kv dependency
+* output packer logs to stderr on AMI creation failure
+* Pass data version to GenerateBidsRawRequest
+* Support model deletion in model store
+* Update Kv client to match the latest contract
+
+
+### Bug Fixes
+
+* Accumulate js_execution.errors_count metric
+* Copy common signals instead of move in BuildProtectedAudienceBidRequest
+* Fix changelog generation
+* GCP demo terraform outputs url
+* Prevent a potential read-after-delete bug in the inference benchmark
+* start_bidding runs inference default js file
+* typo in bidding_service_integration_test and buyer_code_wrapper
+
 ## 4.1.0 (2024-10-10)
 
-
-### ⚠ BREAKING CHANGES
-
-* All sellers and buyers must update the js_num_workers parameter to udf_num_workers in terraform
-* Sellers must wait for all the integrated buyers to update to 4.1.0 before updating to accomodate serialization changes in the GetBidsRequest.
 
 ### Features
 
@@ -38,6 +63,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Rename JS_NUM_WORKERS to UDF_NUM_WORKERS
 * SFE sends updateIfOlderThanMs data to client
 * update start_bidding with minimal defaults and local file flag
+
 
 ### Bug Fixes
 

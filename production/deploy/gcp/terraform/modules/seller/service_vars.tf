@@ -85,19 +85,6 @@ variable "frontend_dns_zone" {
   type        = string
 }
 
-variable "frontend_domain_ssl_certificate_id" {
-  description = "A GCP ssl certificate id. Example: projects/test-project/global/sslCertificates/dev. Used to terminate client-to-external-LB connections. Unused if frontend_certificate_map_id is specified."
-  type        = string
-  default     = ""
-}
-
-variable "frontend_certificate_map_id" {
-  description = "A certificate manager certificate map resource id. Example: projects/test-project/locations/global/certificateMaps/wildcard-cert-map. Takes precedence over frontend_domain_ssl_certificate_id."
-  type        = string
-  default     = ""
-}
-
-
 variable "vm_startup_delay_seconds" {
   description = "The time it takes to get a service up and responding to heartbeats (in seconds)."
   type        = number

@@ -43,7 +43,7 @@ absl::StatusOr<std::vector<bool>> SignedIntFeature::Serialize() {
   }
   std::optional<int> value;
   PS_ASSIGN_IF_PRESENT(value, value_, "value", Int);
-  if (!value.has_value()) {
+  if (!value) {
     return absl::InvalidArgumentError(
         "Int feature not found in the egress payload");
   }

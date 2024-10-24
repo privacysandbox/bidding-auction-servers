@@ -156,7 +156,10 @@ rapidjson::Document GenerateTestSellerDeviceSignals(
 void VerifyBuyerReportingSignals(
     BuyerReportingDispatchRequestData& observed_buyer_device_signals,
     const BuyerReportingDispatchRequestData& expected_buyer_device_signals) {
-  if (expected_buyer_device_signals.buyer_reporting_id.has_value()) {
+  if (expected_buyer_device_signals.buyer_and_seller_reporting_id) {
+    EXPECT_EQ(*observed_buyer_device_signals.buyer_and_seller_reporting_id,
+              *expected_buyer_device_signals.buyer_and_seller_reporting_id);
+  } else if (expected_buyer_device_signals.buyer_reporting_id) {
     EXPECT_EQ(*observed_buyer_device_signals.buyer_reporting_id,
               *expected_buyer_device_signals.buyer_reporting_id);
   } else {
@@ -200,7 +203,7 @@ void VerifyBuyerReportingSignals(
   }
   EXPECT_EQ(observed_buyer_device_signals.made_highest_scoring_other_bid,
             expected_buyer_device_signals.made_highest_scoring_other_bid);
-  if (observed_buyer_device_signals.egress_payload.has_value()) {
+  if (observed_buyer_device_signals.egress_payload) {
     EXPECT_EQ(*observed_buyer_device_signals.egress_payload,
               *expected_buyer_device_signals.egress_payload);
   }
@@ -219,6 +222,8 @@ void ParseBuyerReportingSignals(
                        String);
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.buyer_reporting_id, document,
                        kBuyerReportingIdTag, String);
+  PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.buyer_and_seller_reporting_id,
+                       document, kBuyerAndSellerReportingIdTag, String);
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.interest_group_name, document,
                        kInterestGroupNameTag, String);
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.ad_cost, document, kAdCostTag,
@@ -337,6 +342,7 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
           .interest_group_name = kTestInterestGroupName,
           .ad_cost = kTestAdCost,
           .buyer_reporting_id = kTestBuyerReportingId,
+          .buyer_and_seller_reporting_id = "",
           .made_highest_scoring_other_bid = true,
           .log_context = log_context,
           .buyer_origin = kTestInterestGroupOwner,

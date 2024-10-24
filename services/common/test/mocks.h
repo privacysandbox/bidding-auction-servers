@@ -202,6 +202,10 @@ class MockHttpFetcherAsync : public HttpFetcherAsync {
               (const HTTPRequest& http_request, int timeout_ms,
                OnDoneFetchUrl done_callback),
               (override));
+  MOCK_METHOD(void, FetchUrlWithMetadata,
+              (const HTTPRequest& http_request, int timeout_ms,
+               OnDoneFetchUrlWithMetadata done_callback),
+              (override));
   MOCK_METHOD(void, PutUrl,
               (const HTTPRequest& http_request, int timeout_ms,
                OnDoneFetchUrl done_callback),

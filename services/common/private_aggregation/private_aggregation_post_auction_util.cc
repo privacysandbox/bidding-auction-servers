@@ -50,7 +50,7 @@ absl::StatusOr<Bucket128Bit> GetPrivateAggregationBucketPostAuction(
       base_value_numerical_value = base_values.highest_scoring_other_bid;
       break;
     case BaseValue::BASE_VALUE_BID_REJECTION_REASON:
-      if (!base_values.reject_reason.has_value()) {
+      if (!base_values.reject_reason) {
         return absl::InvalidArgumentError(kBaseValuesRejectReasonNotAvailable);
       }
       base_value_numerical_value = base_values.reject_reason.value();
@@ -114,7 +114,7 @@ absl::StatusOr<int> GetPrivateAggregationValuePostAuction(
       final_value = base_values.highest_scoring_other_bid;
       break;
     case BaseValue::BASE_VALUE_BID_REJECTION_REASON:
-      if (!base_values.reject_reason.has_value()) {
+      if (!base_values.reject_reason) {
         return absl::InvalidArgumentError(kBaseValuesRejectReasonNotAvailable);
       }
       final_value = base_values.reject_reason.value();

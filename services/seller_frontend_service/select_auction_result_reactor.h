@@ -51,7 +51,8 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
   explicit SelectAuctionResultReactor(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
-      const TrustedServersConfigClient& config_client);
+      const TrustedServersConfigClient& config_client,
+      bool enable_cancellation = false);
   virtual ~SelectAuctionResultReactor() = default;
 
   // SelectAuctionResultReactor is neither copyable nor movable.

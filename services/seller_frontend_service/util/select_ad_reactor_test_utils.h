@@ -162,10 +162,12 @@ template <class T>
 SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
                             const ClientRegistry& clients,
                             const SelectAdRequest& request,
-                            int max_buyers_solicited = 2) {
+                            int max_buyers_solicited = 2,
+                            bool enable_kanon = false) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
+            /*enable_cancellation=*/false, enable_kanon,
             /*fail_fast=*/true, max_buyers_solicited);
   reactor.Execute();
   return response;
@@ -362,7 +364,7 @@ GetSelectAdRequestAndClientRegistryForTest(
                            ad_render_urls, /*repeated_get_allowed=*/true);
 
   float bid_value = kNonZeroBidValue;
-  if (buyer_bid.has_value()) {
+  if (buyer_bid) {
     bid_value = *buyer_bid;
   }
   using ScoreAdsDoneCallback =
@@ -456,11 +458,12 @@ template <typename T>
 SelectAdResponse RunReactorRequest(
     const TrustedServersConfigClient& config_client,
     const ClientRegistry& clients, const SelectAdRequest& request,
-    bool fail_fast = false) {
+    bool enable_kanon = false, bool fail_fast = false) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
-  T reactor(&context, &request, &response, clients, config_client, fail_fast);
+  T reactor(&context, &request, &response, clients, config_client,
+            /*enable_cancellation=*/false, enable_kanon, fail_fast);
   reactor.Execute();
   return response;
 }

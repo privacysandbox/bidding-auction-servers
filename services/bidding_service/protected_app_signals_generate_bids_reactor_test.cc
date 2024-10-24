@@ -151,7 +151,7 @@ class GenerateBidsReactorTest : public ::testing::Test {
   RawResponse RunReactorWithRequest(const RawRequest& raw_request,
                                     std::optional<BiddingServiceRuntimeConfig>
                                         runtime_config = std::nullopt) {
-    if (!runtime_config.has_value()) {
+    if (!runtime_config) {
       runtime_config = {
           .enable_buyer_debug_url_generation = false,
       };
@@ -693,31 +693,16 @@ TEST_F(GenerateBidsReactorTest, KvInputIsCorrect) {
 }
 
 TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
-  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(
       dispatcher_, num_roma_dispatches,
       /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
       absl::Substitute(R"JSON(
-        {
-        "bid" : $0,
-        "render": "$1",
-        "temporaryUnlimitedEgressPayload" :
-          "{\"features\":
-            [
-              {\"name\": \"unsigned-integer-feature\", \"value\": 2},
-              {\"name\": \"boolean-feature\", \"value\": true},
-              {\"name\": \"histogram-feature\",
-               \"value\": [
-                  {
-                    \"name\": \"signed-integer-feature\",
-                    \"value\": -1
-                  }
-                ]
-              }
-            ]
-          }"
-        }
+        [{
+          "bid": $0,
+          "render": "$1",
+          "temporaryUnlimitedEgressPayload": "{\"features\":[{\"name\":\"unsigned-integer-feature\",\"value\":2},{\"name\":\"boolean-feature\",\"value\":true},{\"name\":\"histogram-feature\",\"value\":[{\"name\":\"signed-integer-feature\",\"value\":-1}]}]}"
+        }]
       )JSON",
                        kTestWinningBid, kTestRenderUrl));
 
@@ -742,7 +727,10 @@ TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
       kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
-  auto raw_response = RunReactorWithRequest(raw_request);
+  auto raw_response = RunReactorWithRequest(
+      raw_request,
+      BiddingServiceRuntimeConfig({.enable_buyer_debug_url_generation = false,
+                                   .enable_temporary_unlimited_egress = true}));
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
   // is expected.
@@ -758,7 +746,6 @@ TEST_F(GenerateBidsReactorTest, TemporaryEgressVectorGetsPopulated) {
 
 TEST_F(GenerateBidsReactorTest,
        TemporaryEgressVectorNotPopulatedWhenNotEnabled) {
-  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
@@ -783,7 +770,10 @@ TEST_F(GenerateBidsReactorTest,
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
       kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/false);
-  auto raw_response = RunReactorWithRequest(raw_request);
+  auto raw_response = RunReactorWithRequest(
+      raw_request,
+      BiddingServiceRuntimeConfig({.enable_buyer_debug_url_generation = false,
+                                   .enable_temporary_unlimited_egress = true}));
 
   // One dispatch to `preparedDataForAdRetrieval` and another to `generateBids`
   // is expected.
@@ -799,7 +789,6 @@ TEST_F(GenerateBidsReactorTest,
 
 TEST_F(GenerateBidsReactorTest,
        TemporaryEgressVectorNotPopulatedWhenFeatureIsOff) {
-  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, false);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(dispatcher_, num_roma_dispatches);
 
@@ -839,31 +828,16 @@ TEST_F(GenerateBidsReactorTest,
 }
 
 TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
-  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(
       dispatcher_, num_roma_dispatches,
       /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
       absl::Substitute(R"JSON(
-        {
+        [{
         "bid" : $0,
         "render": "$1",
-        "temporaryUnlimitedEgressPayload" :
-          "{\"features\":
-            [
-              {\"name\": \"unsigned-integer-feature\", \"value\": 2},
-              {\"name\": \"boolean-feature\", \"value\": true},
-              {\"name\": \"histogram-feature\",
-               \"value\": [
-                  {
-                    \"name\": \"signed-integer-feature\",
-                    \"value\": -1
-                  }
-                ]
-              }
-            ]
-          }"
-        }
+        "temporaryUnlimitedEgressPayload": "{\"features\":[{\"name\": \"unsigned-integer-feature\", \"value\": 2},{\"name\": \"boolean-feature\", \"value\": true},{\"name\": \"histogram-feature\",\"value\": [{\"name\": \"signed-integer-feature\",\"value\": -1}]}]}"
+        }]
       )JSON",
                        kTestWinningBid, kTestRenderUrl));
 
@@ -888,7 +862,10 @@ TEST_F(GenerateBidsReactorTest, SerializesEgressVector) {
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
       kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
-  auto raw_response = RunReactorWithRequest(raw_request);
+  auto raw_response = RunReactorWithRequest(
+      raw_request,
+      BiddingServiceRuntimeConfig({.enable_buyer_debug_url_generation = false,
+                                   .enable_temporary_unlimited_egress = true}));
 
   ASSERT_EQ(raw_response.bids().size(), 1);
   const auto& generated_bid = raw_response.bids()[0];
@@ -916,24 +893,11 @@ TEST_F(GenerateBidsReactorTest, SerializesMultipleFeatures) {
       dispatcher_, num_roma_dispatches,
       /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
       absl::Substitute(R"JSON(
-        {
+        [{
         "bid" : $0,
         "render": "$1",
-        "egressPayload" :
-          "{\"features\": [
-              {\"name\": \"boolean-feature\", \"value\": true},
-              {\"name\": \"unsigned-integer-feature\", \"value\": 127},
-              {\"name\": \"histogram-feature\",
-               \"value\": [
-                  {
-                      \"name\": \"signed-integer-feature\",
-                      \"value\": -1
-                    }
-                  ]
-                }
-              ]
-            }"
-        }
+        "egressPayload" : "{\"features\": [{\"name\": \"boolean-feature\", \"value\": true},{\"name\": \"unsigned-integer-feature\", \"value\": 127},{\"name\": \"histogram-feature\",\"value\": [{\"name\": \"signed-integer-feature\",\"value\": -1}]}]}"
+        }]
       )JSON",
                        kTestWinningBid, kTestRenderUrl));
 
@@ -987,11 +951,11 @@ TEST_F(GenerateBidsReactorTest, EgressClearedIfOverLimit) {
       dispatcher_, num_roma_dispatches,
       /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
       absl::Substitute(R"JSON(
-        {
+        [{
         "bid" : $0,
         "render": "$1",
         "egressPayload" : "{\"features\": [{\"name\": \"boolean-feature\", \"value\": true}, {\"name\": \"unsigned-integer-feature\", \"value\": 127}]}"
-        }
+        }]
       )JSON",
                        kTestWinningBid, kTestRenderUrl));
 
@@ -1027,18 +991,17 @@ TEST_F(GenerateBidsReactorTest, EgressClearedIfOverLimit) {
 }
 
 TEST_F(GenerateBidsReactorTest, ReturnsEmptyEgressVectorWhenNonePresent) {
-  absl::SetFlag(&FLAGS_enable_temporary_unlimited_egress, true);
   int num_roma_dispatches = 0;
   SetupProtectedAppSignalsRomaExpectations(
       dispatcher_, num_roma_dispatches,
       /*prepare_data_for_ad_retrieval_udf_response=*/absl::nullopt,
       absl::Substitute(R"JSON(
-        {
+        [{
         "bid" : $0,
         "render": "$1",
         "temporaryUnlimitedEgressPayload" : "",
         "egressPayload": ""
-        }
+        }]
       )JSON",
                        kTestWinningBid, kTestRenderUrl));
 
@@ -1063,7 +1026,10 @@ TEST_F(GenerateBidsReactorTest, ReturnsEmptyEgressVectorWhenNonePresent) {
       CreateProtectedAppSignals(kTestAppInstallSignals, kTestEncodingVersion),
       kTestSeller, kTestPublisherName, /*contextual_pas_data=*/absl::nullopt,
       /*enable_unlimited_egress=*/true);
-  auto raw_response = RunReactorWithRequest(raw_request);
+  auto raw_response = RunReactorWithRequest(
+      raw_request,
+      BiddingServiceRuntimeConfig({.enable_buyer_debug_url_generation = false,
+                                   .enable_temporary_unlimited_egress = true}));
 
   ASSERT_EQ(raw_response.bids().size(), 1);
   const auto& generated_bid = raw_response.bids()[0];

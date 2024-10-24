@@ -31,6 +31,7 @@
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "api/udf/generate_bid_udf_interface.pb.h"
+#include "services/buyer_frontend_service/data/bidding_signals.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
@@ -112,7 +113,7 @@ std::string MakeTrustedBiddingSignalsForIG(
 //           "key2": ["val3"]},
 //  "perInterestGroupData": {"ig1": ["val1", "val2", "val3"]}
 //                           "ig2": ["val3"]}}
-std::string GetBiddingSignalsFromGenerateBidsRequest(
+BiddingSignals GetBiddingSignalsFromGenerateBidsRequest(
     const GenerateBidsRequest::GenerateBidsRawRequest& raw_request);
 
 InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice();

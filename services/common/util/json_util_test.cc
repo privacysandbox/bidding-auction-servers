@@ -271,5 +271,37 @@ TEST(SerializeJsonDoc, GetBoolMember_ComplainsOnNonBoolType) {
   EXPECT_FALSE(actual_value.ok()) << actual_value.status();
 }
 
+TEST(SerializeJsonDoc, WorksForValidArrayDoc) {
+  std::string json_str = R"json({"key": ["bid1", "bid2", "bid3"]})json";
+  const auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  absl::StatusOr<std::vector<std::string>> actualArray =
+      SerializeJsonArrayDocToVector(document.value()["key"]);
+  ASSERT_TRUE(actualArray.ok()) << actualArray.status();
+
+  const std::vector<std::string> expectedArray = {"\"bid1\"", "\"bid2\"",
+                                                  "\"bid3\""};
+  EXPECT_EQ(*actualArray, expectedArray);
+}
+
+TEST(SerializeJsonArrayDocToVector, ComplainsOnNonArrayType) {
+  std::string key = MakeARandomString();
+  std::string value = MakeARandomString();
+  std::string expected_output = "{\"" + key + "\":\"" + value + "\"}";
+
+  rapidjson::Document document;
+  document.SetObject();
+  rapidjson::Value key_v;
+  key_v.SetString(key.c_str(), document.GetAllocator());
+  rapidjson::Value val_v;
+  val_v.SetString(value.c_str(), document.GetAllocator());
+  document.AddMember(key_v, val_v, document.GetAllocator());
+
+  absl::StatusOr<std::vector<std::string>> output =
+      SerializeJsonArrayDocToVector(key_v);
+  EXPECT_FALSE(output.ok()) << output.status();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

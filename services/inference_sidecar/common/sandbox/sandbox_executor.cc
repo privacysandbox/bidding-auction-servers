@@ -235,6 +235,21 @@ absl::Status SandboxExecutor::StartSandboxee() {
   return absl::OkStatus();
 }
 
+pid_t SandboxExecutor::GetPid() const {
+  if (!sandbox_) {
+    ABSL_LOG(ERROR) << "Sandbox object is null. Cannot retrieve PID.";
+    return -1;
+  }
+
+  pid_t pid = sandbox_->pid();
+  if (pid <= 0) {
+    ABSL_LOG(ERROR) << "Failed to obtain PID for the inference sidecar. PID: "
+                    << pid;
+    return -1;
+  }
+  return pid;
+}
+
 absl::StatusOr<sandbox2::Result> SandboxExecutor::StopSandboxee() {
   if (sandboxee_state_ == SandboxeeState::kStopped) {
     return run_result_;

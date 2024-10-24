@@ -387,7 +387,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, /*max_buyers_solicited=*/3);
+      this->config_, clients, this->request_, /*max_buyers_solicited=*/3,
+      /*enable_kanon=*/false);
   // Hard limit is calling 3 buyers since we upped it.
   EXPECT_EQ(num_buyers_solicited, 3);
 }
@@ -642,7 +643,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
  * buyer or seller currency is specified, breaks nothing.
  */
 TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
-  absl::SetFlag(&FLAGS_enable_kanon, true);
+  bool enable_kanon = true;
   this->SetupRequest(/*num_buyers=*/2,
                      /*set_buyer_egid=*/false,
                      /*set_seller_egid=*/false,
@@ -754,8 +755,116 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
       scoring_signals_provider,      scoring_client,           buyer_clients,
       this->key_fetcher_manager_,
       /* crypto_client = */ nullptr, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, /*max_buyers_solicited=*/2,
+      enable_kanon);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           WhenKAnonDisabledAdsAreConsideredKAnonByDefault) {
+  bool enable_kanon = false;
+  this->SetupRequest(/*num_buyers=*/2,
+                     /*set_buyer_egid=*/false,
+                     /*set_seller_egid=*/false,
+                     /*seller_currency=*/"",
+                     /*buyer_currency=*/"",
+                     /*num_k_anon_ghost_winners=*/10,
+                     /*enforce_kanon=*/true);
+  absl::flat_hash_map<BuyerHostname, AdUrl> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  absl::flat_hash_map<AdUrl, AdWithBid> bids;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    AdUrl url = buyer_to_ad_url.at(buyer);
+    // Set the bid currency on the AdWithBids.
+    GetBidsResponse::GetBidsRawResponse response =
+        BuildGetBidsResponseWithSingleAd(
+            /*ad_url = */ url,
+            /*interest_group_name = */ absl::nullopt,
+            /*bid_value = */ absl::nullopt,
+            /*enable_event_level_debug_reporting = */ false,
+            /*number_ad_component_render_urls = */ kDefaultNumAdComponents,
+            /*bid_currency = */ kEurosIsoCode);
+    bids.insert_or_assign(url, response.bids()[0]);
+    SetupBuyerClientMock(buyer, buyer_clients, response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
+  }
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Scoring signals provider
+  // Scoring signals must be nonzero for scoring to be attempted.
+  std::string scoring_signals_value =
+      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                           scoring_signals_value);
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .WillOnce([select_ad_req = this->request_,
+                 protected_auction_input = this->protected_auction_input_,
+                 scoring_signals_value, bids](
+                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                        score_ads_raw_request,
+                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        google::protobuf::util::MessageDifferencer diff;
+        std::string diff_output;
+        diff.ReportDifferencesToString(&diff_output);
+
+        EXPECT_EQ(score_ads_raw_request->publisher_hostname(),
+                  protected_auction_input.publisher_name());
+        EXPECT_EQ(score_ads_raw_request->seller_signals(),
+                  select_ad_req.auction_config().seller_signals());
+        EXPECT_EQ(score_ads_raw_request->auction_signals(),
+                  select_ad_req.auction_config().auction_signals());
+        EXPECT_EQ(score_ads_raw_request->scoring_signals(),
+                  scoring_signals_value);
+        EXPECT_EQ(score_ads_raw_request->per_buyer_signals().size(), 2);
+        // No ghost winner allowed since k-anon is not enabled.
+        EXPECT_EQ(score_ads_raw_request->num_allowed_ghost_winners(), 0);
+        for (const auto& actual_ad_with_bid_metadata :
+             score_ads_raw_request->ad_bids()) {
+          AdWithBid actual_ad_with_bid_for_test;
+          BuildAdWithBidFromAdWithBidMetadata(actual_ad_with_bid_metadata,
+                                              &actual_ad_with_bid_for_test);
+          EXPECT_TRUE(
+              diff.Compare(actual_ad_with_bid_for_test,
+                           bids.at(actual_ad_with_bid_for_test.render())));
+          // When k-anon is not being enforced, consider all the bids as k-anon.
+          EXPECT_TRUE(actual_ad_with_bid_metadata.k_anon_status());
+        }
+        EXPECT_EQ(diff_output, "");
+        EXPECT_EQ(score_ads_raw_request->seller(),
+                  select_ad_req.auction_config().seller());
+        EXPECT_EQ(request_config.chaff_request_size, 0);
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
+        return absl::OkStatus();
+      });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Client Registry
+  ClientRegistry clients{
+      scoring_signals_provider,      scoring_client,           buyer_clients,
+      this->key_fetcher_manager_,
+      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, /*max_buyers_solicited=*/2,
+      enable_kanon);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
@@ -1772,7 +1881,7 @@ auto EqGetBidsRawRequestKAnonFields(
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
-  absl::SetFlag(&FLAGS_enable_kanon, true);
+  bool enable_kanon = true;
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
@@ -1846,12 +1955,12 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
   buyer_config.set_buyer_signals(kSampleBuyerSignals);
   buyer_config.set_per_buyer_multi_bid_limit(10);
 
-  RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
+  RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request,
+                                           enable_kanon);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
            VerifyKAnonFieldsDontPropagateToBuyersWhenFeatDisabled) {
-  absl::SetFlag(&FLAGS_enable_kanon, false);
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;

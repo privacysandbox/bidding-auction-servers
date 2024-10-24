@@ -101,12 +101,12 @@ ProtectedAuctionInput GetProtectedAuctionInput(
   // Enable debug reporting for all calls from this tool.
   protected_auction_input.set_enable_debug_reporting(enable_debug_reporting);
 
-  if (enable_debug_info.has_value()) {
+  if (enable_debug_info) {
     protected_auction_input.mutable_consented_debug_config()
         ->set_is_debug_info_in_response(*enable_debug_info);
   }
 
-  if (enable_unlimited_egress.has_value()) {
+  if (enable_unlimited_egress) {
     protected_auction_input.set_enable_unlimited_egress(
         *enable_unlimited_egress);
   }

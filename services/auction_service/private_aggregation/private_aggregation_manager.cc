@@ -227,7 +227,7 @@ absl::StatusOr<PrivateAggregateContribution> ParseAndProcessContribution(
   }
 
   PS_ASSIGN_IF_PRESENT(int_value, value_it->value, kSignalValueIntValue, Int64);
-  if (int_value.has_value()) {
+  if (int_value) {
     contribution.mutable_value()->set_int_value(*int_value);
   } else if (!value_it->value.HasMember(kSignalValueExtendedValue)) {
     return absl::InvalidArgumentError(kInvalidPrivateAggregationValueType);

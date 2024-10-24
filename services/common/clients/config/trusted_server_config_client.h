@@ -100,7 +100,7 @@ class TrustedServersConfigClient {
   void SetFlag(const absl::Flag<std::optional<T>>& flag,
                absl::string_view config_name) {
     std::optional<T> flag_value = absl::GetFlag(flag);
-    if (flag_value.has_value()) {
+    if (flag_value) {
       config_entries_map_[config_name] = absl::StrCat(*flag_value);
     }
   }
@@ -108,7 +108,7 @@ class TrustedServersConfigClient {
   void SetFlag(const absl::Flag<std::optional<bool>>& flag,
                absl::string_view config_name) {
     std::optional<bool> flag_value = absl::GetFlag(flag);
-    if (flag_value.has_value()) {
+    if (flag_value) {
       config_entries_map_[config_name] = *flag_value ? kTrue : kFalse;
     }
   }
@@ -119,7 +119,7 @@ class TrustedServersConfigClient {
       absl::string_view config_name) {
     std::optional<server_common::telemetry::TelemetryFlag> flag_value =
         absl::GetFlag(flag);
-    if (flag_value.has_value()) {
+    if (flag_value) {
       config_entries_map_[config_name] = AbslUnparseFlag(*flag_value);
     }
   }

@@ -71,9 +71,13 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
       MakeAnAd(MakeARandomString(), MakeARandomString(), 2));
   ad.set_bid(1.0);
   ad.add_ad_components("adComponent.com");
-  if (test_score_ads_request_config.buyer_reporting_id.has_value()) {
+  if (test_score_ads_request_config.buyer_reporting_id) {
     ad.set_buyer_reporting_id(
         *test_score_ads_request_config.buyer_reporting_id);
+  }
+  if (test_score_ads_request_config.buyer_and_seller_reporting_id) {
+    ad.set_buyer_and_seller_reporting_id(
+        *test_score_ads_request_config.buyer_and_seller_reporting_id);
   }
   ad.set_bid_currency(kEurosIsoCode);
   ad.set_ad_cost(

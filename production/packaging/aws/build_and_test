@@ -102,7 +102,7 @@ DIST="${WORKSPACE}"/dist
 mkdir -p "${DIST}"/aws
 chmod 770 "${DIST}" "${DIST}"/aws
 
-printf "==== build AWS artifacts using build-amazonlinux2 =====\n"
+printf "==== build AWS artifacts using build-amazonlinux2023 =====\n"
 declare server_image=""
 declare image_uri=""
 declare image_tag=""
@@ -117,7 +117,7 @@ for service in "${SERVICE_LIST[@]}"; do
   image_uri="bazel/production/packaging/aws/${service}"
   image_tag=$(mktemp --dry-run temp-XXXXXX)
 
-  builder::cbuild_al2 $"
+  builder::cbuild_al2023 $"
   set -o errexit
   # extract server docker image into local docker client and retag it
   docker load -i ${server_image}
@@ -134,7 +134,7 @@ for service in "${SERVICE_LIST[@]}"; do
   docker image rm "${image_uri}:${image_tag}"
 done
 
-builder::cbuild_al2 $"
+builder::cbuild_al2023 $"
 trap _collect_logs EXIT
 function _collect_logs() {
   local -r -i STATUS=\$?
@@ -169,9 +169,12 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
   printf "==== build AWS AMI (using packer) =====\n"
   regions="$(arr_to_string_list AMI_REGIONS)"
   build_version="$(git -C ${WORKSPACE} describe --tags --always || echo no-git-version)"
+
+  packer_pids=()
+
   for service in "${SERVICE_LIST[@]}"; do
       log_file="${WORKSPACE}/dist/${service}_aws_build_log.txt"
-      (builder::cbuild_al2 "
+      (builder::cbuild_al2023 "
       set -o errexit
       packer build \
         -var=regions='${regions}' \
@@ -184,6 +187,24 @@ if [[ -n ${AMI_REGIONS[0]} ]]; then
         -var=workspace=/src/workspace \
         production/packaging/aws/common/ami/image.pkr.hcl
       " 2>&1 >> "$log_file") &
+      packer_pids+=($!)  # Store the packer build process ID
   done
-  wait
+
+  failed=0
+  i=0
+  for pid in "${packer_pids[@]}"; do
+    wait "${pid}" || {
+      built_service="${SERVICE_LIST[${i}]}"
+      service_build_logs="${WORKSPACE}/dist/${built_service}_aws_build_log.txt"
+      echo "----- Log output for $built_service -----" >&2
+      cat "${service_build_logs}" >&2
+      echo "Error: packer build failed for process ${pid} (service: ${built_service})." >&2
+      failed=1
+    }
+    i=$((i+1))
+  done
+
+  if [[ $failed -eq 1 ]]; then
+    exit 1
+  fi
 fi
