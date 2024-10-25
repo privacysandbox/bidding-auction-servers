@@ -79,6 +79,27 @@ absl::StatusOr<RegisterModelResponse> TestModule::RegisterModel(
   return response;
 }
 
+absl::StatusOr<DeleteModelResponse> TestModule::DeleteModel(
+    const DeleteModelRequest& request) {
+  const DeleteModelResponse response;
+  if (munmap(model_ptr_, model_size_) == -1) {
+    ABSL_LOG(ERROR) << "Failed to munmap.";
+    return response;
+  }
+
+  if (close(model_fd_) == -1) {
+    ABSL_LOG(ERROR) << "Failed to close the file.";
+    return response;
+  }
+
+  model_fd_ = -1;
+  model_size_ = 0;
+  model_ptr_ = nullptr;
+  model_path_ = "";
+
+  return response;
+}
+
 std::unique_ptr<ModuleInterface> ModuleInterface::Create(
     const InferenceSidecarRuntimeConfig& config) {
   return std::make_unique<TestModule>(config);

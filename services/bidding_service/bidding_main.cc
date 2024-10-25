@@ -61,6 +61,7 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
+#include "services/common/metric/udf_metric.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/read_system.h"
@@ -296,6 +297,17 @@ DispatchConfig GetV8DispatchConfig(
     config.worker_queue_max_items =
         config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
     config.number_of_workers = config_client.GetIntParameter(UDF_NUM_WORKERS);
+
+    PS_LOG(INFO) << "Register logCustomMetric API.";
+    auto log_custom_metric_binding =
+        std::make_unique<google::scp::roma::FunctionBindingObjectV2<
+            RomaRequestSharedContextBidding>>();
+    log_custom_metric_binding->function_name =
+        std::string(kLogMetricFunctionName);
+    log_custom_metric_binding->function =
+        CustomMetricCallBack<RomaRequestSharedContextBidding>;
+    config.RegisterFunctionBinding(std::move(log_custom_metric_binding));
+
     if (enable_inference) {
       PS_LOG(INFO) << "Register runInference API.";
       auto run_inference_function_object =

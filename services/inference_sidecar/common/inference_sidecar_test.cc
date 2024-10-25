@@ -100,6 +100,27 @@ TEST(InferenceSidecarTest, RegisterModelAndRunInference_Grpc) {
     thread.join();
   }
 
+  {
+    DeleteModelRequest delete_model_request;
+    delete_model_request.mutable_model_spec()->set_model_path(
+        std::string(kTestModelPath));
+    DeleteModelResponse delete_model_response;
+    grpc::ClientContext context;
+    grpc::Status status = stub->DeleteModel(&context, delete_model_request,
+                                            &delete_model_response);
+    EXPECT_TRUE(status.ok()) << status.error_message();
+  }
+
+  // Verify that the test model is deleted.
+  {
+    GetModelPathsRequest request;
+    GetModelPathsResponse response;
+    grpc::ClientContext context;
+    grpc::Status status = stub->GetModelPaths(&context, request, &response);
+    ASSERT_TRUE(status.ok()) << status.error_message();
+    EXPECT_EQ(response.model_specs_size(), 0);
+  }
+
   absl::StatusOr<sandbox2::Result> result = executor.StopSandboxee();
   ASSERT_TRUE(result.ok());
   ASSERT_EQ(result->final_status(), sandbox2::Result::EXTERNAL_KILL);

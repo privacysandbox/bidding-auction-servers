@@ -170,6 +170,8 @@ void VerifyBuyerReportingSignals(
             expected_buyer_device_signals.seller);
   EXPECT_EQ(observed_buyer_device_signals.ad_cost,
             expected_buyer_device_signals.ad_cost);
+  EXPECT_EQ(observed_buyer_device_signals.data_version,
+            expected_buyer_device_signals.data_version);
   if (expected_buyer_device_signals.join_count.has_value() &&
       *observed_buyer_device_signals.join_count !=
           *expected_buyer_device_signals.join_count) {
@@ -236,6 +238,8 @@ void ParseBuyerReportingSignals(
                        kModelingSignalsTag, Int);
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.made_highest_scoring_other_bid,
                        document, kMadeHighestScoringOtherBid, Bool);
+  PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.data_version, document,
+                       kDataVersionTag, Uint);
   ASSERT_FALSE(document.HasMember(kModifiedBid));
 }
 
@@ -343,6 +347,7 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
           .ad_cost = kTestAdCost,
           .buyer_reporting_id = kTestBuyerReportingId,
           .buyer_and_seller_reporting_id = "",
+          .data_version = kTestDataVersion,
           .made_highest_scoring_other_bid = true,
           .log_context = log_context,
           .buyer_origin = kTestInterestGroupOwner,

@@ -342,6 +342,7 @@ cc_binary(
         "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
+        "//services/common/metric:udf_metric",
         "//services/common/telemetry:configure_telemetry",
         "//services/common/util:file_util",
         "//services/common/util:read_system",

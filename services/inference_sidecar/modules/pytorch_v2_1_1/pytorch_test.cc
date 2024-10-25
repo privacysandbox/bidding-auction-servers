@@ -1272,6 +1272,42 @@ TEST(PyTorchModulePredictTest,
   EXPECT_EQ(result->metrics_list().size(), 7);
 }
 
+TEST(PyTorchModuleDeleteModelTest, DeleteNonExistentModelReturnsNotFound) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+
+  DeleteModelRequest delete_request;
+  delete_request.mutable_model_spec()->set_model_path(kSimpleModel);
+  auto status = torch_module->DeleteModel(delete_request);
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.status().code(), absl::StatusCode::kNotFound);
+}
+
+TEST(PyTorchModuleDeleteModelTest, DeleteModelOk) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  DeleteModelRequest delete_request;
+  delete_request.mutable_model_spec()->set_model_path(kSimpleModel);
+  EXPECT_TRUE(torch_module->DeleteModel(delete_request).ok());
+
+  // Verify model is deleted.
+  PredictRequest predict_request;
+  predict_request.set_input(kSimpleRequest);
+  auto predict_result = torch_module->Predict(predict_request);
+  ASSERT_TRUE(predict_result.ok());
+  EXPECT_THAT(
+      predict_result->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"simple_model","error":{"error_type":"MODEL_NOT_FOUND","description")"));
+}
+
 constexpr char kStatefulModelRequest[] = R"json({
   "request" : [{
     "model_path" : "stateful_model",

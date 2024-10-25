@@ -53,5 +53,21 @@ TEST(TestModule, Success_ReadModel) {
   EXPECT_GT(module->model_size(), 0);
 }
 
+TEST(TestModule, Success_DeleteModel) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<TestModule> module = std::make_unique<TestModule>(config);
+  module->set_model_path(kModelPath);
+  RegisterModelRequest request;
+  auto register_result = module->RegisterModel(request);
+  EXPECT_TRUE(register_result.ok());
+  EXPECT_GT(module->model_size(), 0);
+
+  DeleteModelRequest delete_request;
+  delete_request.mutable_model_spec()->set_model_path(kModelPath);
+  auto delete_result = module->DeleteModel(delete_request);
+  EXPECT_TRUE(delete_result.ok());
+  EXPECT_EQ(module->model_size(), 0);
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

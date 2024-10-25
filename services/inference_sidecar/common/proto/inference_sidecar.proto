@@ -23,6 +23,9 @@ service InferenceService {
   // Registers model.
   rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse) {
   }
+  // Deletes a model.
+  rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse) {
+  }
   // Gets model paths for successfully registered models.
   rpc GetModelPaths(GetModelPathsRequest) returns (GetModelPathsResponse) {
   }
@@ -80,6 +83,13 @@ message RegisterModelRequest {
 }
 
 message RegisterModelResponse {
+}
+
+message DeleteModelRequest {
+  ModelSpec model_spec = 1;
+}
+
+message DeleteModelResponse {
 }
 
 message GetModelPathsRequest {

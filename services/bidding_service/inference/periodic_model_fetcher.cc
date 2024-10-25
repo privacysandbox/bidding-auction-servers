@@ -162,7 +162,11 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
           ComputeChecksumForBlobs(blob_views);
       if (!model_checksum.ok() || *model_checksum != metadata.checksum()) {
         PS_LOG(ERROR) << "Model rejected due to incorrect checksum."
-                      << " model_path=" << model_path;
+                      << " model_path=" << model_path
+                      << " status=" << model_checksum.status();
+        if (model_checksum.ok()) {
+          PS_LOG(ERROR) << "actual_checksum=" << *model_checksum;
+        }
         failure_models.push_back(model_path);
         ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
             absl::StatusCode::kFailedPrecondition);
@@ -176,7 +180,8 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
         inference_stub_->RegisterModel(&context, request, &response);
 
     if (!status.ok()) {
-      PS_LOG(ERROR) << "Registering model failure for: " << model_path;
+      PS_LOG(ERROR) << "Registering model failure for: " << model_path
+                    << " because of " << status.error_message();
       failure_models.push_back(model_path);
       ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
           server_common::ToAbslStatus(status).code());

@@ -673,7 +673,7 @@ inline constexpr server_common::metrics::Definition<
         "Total number of inference requests input batch size by model",
         /*partition_type*/ "model",
         /*max_partitions_contributed*/ 1,
-        /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*public_partitions*/ kDefaultDynamicPartition,
         /*upper_bound*/ 50,
         /*lower_bound*/ 0);
 
@@ -699,6 +699,9 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
+        &server_common::metrics::kCustom1,
+        &server_common::metrics::kCustom2,
+        &server_common::metrics::kCustom3,
         &kRequestFailedCountByStatus,
         &kBiddingTotalBidsCount,
         &kBiddingZeroBidCount,

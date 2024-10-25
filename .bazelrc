@@ -91,6 +91,10 @@ build:non_prod --//:inference_build=yes
 build:non_prod --//:inference_runtime=all
 build:non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
 build:prod --//:build_flavor=prod
+# TODO(b/325487321): Change the default value of inference_build and
+# inference_runtime.
+build:prod --//:inference_build=yes
+build:prod --//:inference_runtime=all
 build:prod --@google_privacysandbox_servers_common//:build_flavor=prod
 
 # Address sanitizer, set action_env to segregate cache entries

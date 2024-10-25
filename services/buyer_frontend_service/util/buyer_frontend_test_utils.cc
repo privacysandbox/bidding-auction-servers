@@ -102,4 +102,25 @@ SetupBiddingProviderMock(
   return provider;
 }
 
+void SetupBiddingProviderMockV2(
+    KVAsyncClientMock* kv_async_client,
+    const kv_server::v2::GetValuesResponse& response) {
+  EXPECT_CALL(
+      *kv_async_client,
+      ExecuteInternal(
+          An<std::unique_ptr<GetValuesRequest>>(), An<grpc::ClientContext*>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
+      .WillOnce(
+          [response](std::unique_ptr<GetValuesRequest> get_values_raw_request,
+                     grpc::ClientContext* context, auto on_done,
+                     absl::Duration timeout, RequestConfig request_config) {
+            std::move(on_done)(std::make_unique<GetValuesResponse>(response),
+                               /* response_metadata= */ {});
+            return absl::OkStatus();
+          });
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

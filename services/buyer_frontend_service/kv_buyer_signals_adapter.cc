@@ -80,7 +80,7 @@ absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
     std::unique_ptr<kv_server::v2::GetValuesResponse> response) {
   rapidjson::Document ig_signals(rapidjson::kObjectType);
   std::vector<rapidjson::Document> docs;
-  docs.reserve(response->mutable_compression_groups()->size());
+  docs.reserve(response->compression_groups().size());
 
   // ParseJsonString doesn't copy, it creates a Document that points to the
   // underlying string. We no longer need the response object, so we are ok to
@@ -88,7 +88,7 @@ absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
   // object for each compression group must exist until SerializeJsonDoc is
   // called. Otherwise the chain of pointers is broken and we get undefined
   // behavior.
-  for (auto& group : *(response->mutable_compression_groups())) {
+  for (auto& group : response->compression_groups()) {
     PS_ASSIGN_OR_RETURN(auto json, ParseJsonString(group.content()));
     docs.push_back(std::move(json));
   }

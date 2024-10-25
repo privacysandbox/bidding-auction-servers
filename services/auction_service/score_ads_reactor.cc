@@ -763,6 +763,7 @@ void ScoreAdsReactor::PerformReportingWithSellerAndBuyerCodeIsolation(
         ad->modeling_signals();
     buyer_reporting_dispatch_request_data_.ad_cost = ad->ad_cost();
     buyer_reporting_dispatch_request_data_.winning_ad_render_url = ad->render();
+    buyer_reporting_dispatch_request_data_.data_version = ad->data_version();
 
     SetBuyerReportingIdsInRawResponse(std::move(ad));
 
@@ -827,7 +828,8 @@ void ScoreAdsReactor::PerformReporting(
           .modeling_signals = ad->modeling_signals(),
           .seller = raw_request_.seller(),
           .interest_group_name = winning_ad_score.interest_group_name(),
-          .ad_cost = ad->ad_cost()};
+          .ad_cost = ad->ad_cost(),
+          .data_version = ad->data_version()};
       if (!ad->buyer_reporting_id().empty()) {
         raw_response_.mutable_ad_score()->set_buyer_reporting_id(
             ad->buyer_reporting_id());

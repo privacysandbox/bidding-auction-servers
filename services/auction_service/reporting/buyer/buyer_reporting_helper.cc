@@ -123,6 +123,11 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
   }
   SetBuyerReportingIds(buyer_reporting_metadata, seller_device_signals);
 
+  if (buyer_reporting_metadata.data_version > 0) {
+    seller_device_signals.AddMember(kDataVersionTag,
+                                    buyer_reporting_metadata.data_version,
+                                    seller_device_signals.GetAllocator());
+  }
   return SerializeJsonDoc(seller_device_signals,
                           buyer_reporting_metadata.buyer_signals.size());
 }

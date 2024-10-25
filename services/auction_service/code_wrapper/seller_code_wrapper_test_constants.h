@@ -71,11 +71,16 @@ constexpr absl::string_view kBuyerBaseCode =
         }
         var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
-                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
-                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&adCost="+buyerReportingSignals.adCost+
+                    "&modelingSignals="+buyerReportingSignals.modelingSignals+
+                    "&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
+                    "&joinCount="+buyerReportingSignals.joinCount+
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&dataVersion="+buyerReportingSignals.dataVersion
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
         }
@@ -109,7 +114,10 @@ constexpr absl::string_view kBuyerBaseCodeWithValidation =
                     "&adCost="+buyerReportingSignals.adCost+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability;
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&dataVersion="+buyerReportingSignals.dataVersion;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -336,6 +344,7 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        buyerReportingSignals.dataVersion = buyerReportingMetadata.dataVersion
         if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
           buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
         }
@@ -422,11 +431,16 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
         }
         var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
                     "&interestGroupName="+buyerReportingSignals.interestGroupName+
-                    "&adCost="+buyerReportingSignals.adCost+"&modelingSignals="+
-                    buyerReportingSignals.modelingSignals+"&recency="+buyerReportingSignals.recency+
+                    "&adCost="+buyerReportingSignals.adCost+
+                    "&modelingSignals="+buyerReportingSignals.modelingSignals+
+                    "&recency="+buyerReportingSignals.recency+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
-                    "&joinCount="+buyerReportingSignals.joinCount+"&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability
+                    "&joinCount="+buyerReportingSignals.joinCount+
+                    "&signalsForWinner="+JSON.stringify(signalsForWinner)+
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&dataVersion="+buyerReportingSignals.dataVersion
         if(buyerReportingSignals.hasOwnProperty("buyerReportingId")){
             reportWinUrl = reportWinUrl+"&buyerReportingId="+buyerReportingSignals.buyerReportingId
         }
@@ -578,6 +592,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        buyerReportingSignals.dataVersion = buyerReportingMetadata.dataVersion
         if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
           buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
         }
@@ -723,6 +738,7 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        buyerReportingSignals.dataVersion = buyerReportingMetadata.dataVersion
         if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
           buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
         }
@@ -937,6 +953,7 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        buyerReportingSignals.dataVersion = buyerReportingMetadata.dataVersion
         if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
           buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
         }

@@ -249,6 +249,7 @@ struct AdWithBidMetadataParams {
   absl::string_view interest_group_owner = kTestInterestGroupOwner;
   absl::string_view interest_group_origin = kInterestGroupOrigin;
   double ad_cost = kTestAdCost;
+  uint32_t data_version = kTestDataVersion;
   absl::string_view buyer_reporting_id = "";
   int number_of_component_ads = kTestNumOfComponentAds;
   bool k_anon_status = false;
@@ -274,6 +275,7 @@ AdWithBidMetadata BuildTestAdWithBidMetadata(
     ad_with_bid_metadata.set_buyer_reporting_id(params.buyer_reporting_id);
   }
   ad_with_bid_metadata.set_ad_cost(params.ad_cost);
+  ad_with_bid_metadata.set_data_version(params.data_version);
   ad_with_bid_metadata.set_k_anon_status(params.k_anon_status);
   PS_VLOG(5) << "Generated ad bid with metadata: " << ad_with_bid_metadata;
   return ad_with_bid_metadata;
@@ -284,7 +286,7 @@ void GetTestAdWithBidFoo(AdWithBidMetadata& foo,
   foo = BuildTestAdWithBidMetadata(
       {kTestRenderUrl, kTestBid, kTestInterestGroupName,
        kTestInterestGroupOwner, kInterestGroupOrigin, kTestAdCost,
-       buyer_reporting_id});
+       kTestDataVersion, buyer_reporting_id});
 }
 
 void PopulateTestAdWithBidMetdata(
@@ -312,6 +314,7 @@ void PopulateTestAdWithBidMetdata(
   foo.set_ad_cost(kTestAdCost);
   foo.set_bid(post_auction_signals.winning_bid);
   foo.set_bid_currency(kEurosIsoCode);
+  foo.set_data_version(buyer_dispatch_data.data_version);
 }
 
 void GetTestAdWithBidSameComponentAsFoo(AdWithBidMetadata& foo) {
@@ -3436,18 +3439,20 @@ TEST_F(ScoreAdsReactorTest,
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
   BuyerReportingDispatchRequestData buyer_dispatch_data =
       GetTestBuyerDispatchRequestData(log_context);
+  EXPECT_EQ(buyer_dispatch_data.data_version, kTestDataVersion);
   buyer_dispatch_data.made_highest_scoring_other_bid =
       post_auction_signals.made_highest_scoring_other_bid;
   RawRequest raw_request;
   AdWithBidMetadata foo;
   PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, foo);
+  EXPECT_EQ(foo.data_version(), kTestDataVersion);
   BuildRawRequest({foo}, kTestSellerSignals, kTestAuctionSignals,
                   kTestScoringSignals, kTestPublisherHostName, raw_request);
   absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
   absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
       foo.interest_group_owner(), AuctionType::kProtectedAudience);
+  EXPECT_EQ(raw_request.ad_bids(0).data_version(), kTestDataVersion);
 
-  absl::flat_hash_map<double, AdWithBidMetadata> score_to_ad;
   {
     InSequence s;
     EXPECT_CALL(dispatcher, BatchExecute)

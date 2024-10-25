@@ -62,14 +62,15 @@ constexpr char kTestReportWinUrlWithSignals[] =
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=true&joinCount=5&"
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined";
+    "auctionSignals=3,test,4&desirability=undefined&dataVersion=1689";
 
 constexpr char kTestReportWinUrlWithBuyerReportingId[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&adCost=2&"
     "modelingSignals=4&recency=3&madeHighestScoringOtherBid=true&joinCount=5&"
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined&buyerReportingId="
+    "auctionSignals=3,test,4&desirability=undefined&dataVersion=1689&"
+    "buyerReportingId="
     "testBuyerReportingId";
 
 constexpr char kTestReportWinUrlWithNoising[] =
@@ -77,7 +78,7 @@ constexpr char kTestReportWinUrlWithNoising[] =
     "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
     "madeHighestScoringOtherBid=true&"
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined";
+    "auctionSignals=3,test,4&desirability=undefined&dataVersion=1689";
 
 constexpr char kTestComponentWinReportingUrl[] =
     "http://componentReportingUrl.com";
@@ -87,6 +88,7 @@ constexpr char kTestComponentInteractionReportingUrl[] =
 constexpr absl::string_view kTestComponentSeller = "http://componentSeller.com";
 constexpr char kTestGenerationId[] = "testGenerationId";
 constexpr char kTestComponentIgOwner[] = "http://componentIgOwner.com";
+constexpr uint32_t kTestDataVersion = 1689;
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -301,6 +303,7 @@ struct TestBuyerReportingSignals {
   int join_count = kTestJoinCount;
   std::string buyer_signals = kTestBuyerSignals;
   std::string auction_signals = kTestAuctionSignals;
+  uint32_t data_version = kTestDataVersion;
 };
 
 struct TestScoreAdsRequestConfig {
@@ -408,6 +411,8 @@ void BuildScoreAdsRequestForReporting(
         absl::StrFormat("%s/ads?id=%d", kDefaultBarInterestGroupOwner, i));
     ad.set_recency(
         test_score_ads_request_config.test_buyer_reporting_signals.recency);
+    ad.set_data_version(test_score_ads_request_config
+                            .test_buyer_reporting_signals.data_version);
     *raw_request.mutable_ad_bids()->Add() = ad;
     raw_request.mutable_per_buyer_signals()->try_emplace(
         ad.interest_group_owner(),

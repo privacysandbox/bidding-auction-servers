@@ -95,6 +95,7 @@ inline constexpr char kReportWinWrapperFunctionName[] = "reportWinWrapper";
         perBuyerSignals = buyerReportingMetadata.perBuyerSignals
         buyerReportingSignals.seller = buyerReportingMetadata.seller
         buyerReportingSignals.adCost = buyerReportingMetadata.adCost
+        buyerReportingSignals.dataVersion = buyerReportingMetadata.dataVersion
         if(buyerReportingMetadata.hasOwnProperty("buyerReportingId")){
           buyerReportingSignals.buyerReportingId = buyerReportingMetadata.buyerReportingId
         }

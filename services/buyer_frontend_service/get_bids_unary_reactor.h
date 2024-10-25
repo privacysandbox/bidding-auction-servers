@@ -79,7 +79,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      bool enable_benchmarking = false);
+      KVAsyncClient* kv_async_client, bool enable_benchmarking = false);
 
   explicit GetBidsUnaryReactor(
       grpc::CallbackServerContext& context,
@@ -90,7 +90,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      bool enable_benchmarking = false);
+      KVAsyncClient* kv_async_client, bool enable_benchmarking = false);
 
   // GetBidsUnaryReactor is neither copyable nor movable.
   GetBidsUnaryReactor(const GetBidsUnaryReactor&) = delete;
@@ -170,8 +170,6 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // These are not owned by this class.
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
 
-  // TODO: this will be initialized in the later commit. Note that this logic
-  // isn't used at the moment.
   KVAsyncClient* kv_async_client_;
   int ad_bids_retrieval_timeout_ms_;
 
@@ -235,7 +233,7 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   void MayGetProtectedAudienceBidsV2(
       const BiddingSignalsRequest& bidding_signals_request);
   void HandleV2Failure(const absl::Status& status,
-                       const std::string& error_message);
+                       absl::string_view error_message);
 
   // Compression used in the request object; the response will use the same.
   CompressionType compression_type_;

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.3.0 (2024-10-25)
+
+
+### Features
+
+* Add priority fields to B&A API
+* Add support for DNS routing by regional LB latency in AWS
+* Data Version in BuyerReporting
+* Implement delete model rpc for inference sidecar
+* Implement v2 bidding support - config flags propagation
+* Launch the B&A inference for both PA and PAS
+* Pass Data Version to AuctionService
+* Set Data Version on AdWithBid
+* Validate DV Header values for size based on client type
+
+
+### Bug Fixes
+
+* Log inference model registration failure reason
+* update GCP cloudbuild with correct git tag name
+
 ## 4.2.0 (2024-10-19)
 
 

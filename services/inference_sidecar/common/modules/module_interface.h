@@ -42,6 +42,9 @@ class ModuleInterface {
   // Registers a new model.
   virtual absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) = 0;
+  // Delete an existing model.
+  virtual absl::StatusOr<DeleteModelResponse> DeleteModel(
+      const DeleteModelRequest& request) = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

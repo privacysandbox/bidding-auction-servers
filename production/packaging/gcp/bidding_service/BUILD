@@ -193,8 +193,6 @@ container_image(
     }),
     ports = ["50051"],
     tars = [
-        "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
-        "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
         "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
         "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_tar_{user}".format(user = user.user),
         "//tools/udf_samples:sample_udf_execs_tar",

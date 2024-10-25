@@ -1309,6 +1309,44 @@ TEST(TensorflowModuleTest, CanReturnPartialBatchOutputWithError) {
                     HasSubstr("\"tensors\":")));
 }
 
+TEST(TensorflowModuleTest, Failure_DeleteModel_NotFound) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  DeleteModelRequest delete_request;
+  delete_request.mutable_model_spec()->set_model_path(
+      std::string(kFrozenModel1Dir));
+  auto status = tensorflow_module->DeleteModel(delete_request);
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.status().code(), absl::StatusCode::kNotFound);
+}
+
+TEST(TensorflowModuleTest, Success_DeleteModel) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
+  absl::StatusOr<RegisterModelResponse> status_or =
+      tensorflow_module->RegisterModel(register_request);
+  ASSERT_TRUE(status_or.ok()) << status_or.status();
+
+  DeleteModelRequest delete_request;
+  delete_request.mutable_model_spec()->set_model_path(
+      std::string(kFrozenModel1Dir));
+  EXPECT_TRUE(tensorflow_module->DeleteModel(delete_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kFrozenPcvrJsonRequest);
+  auto predict_response = tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_response.ok());
+  EXPECT_THAT(
+      predict_response->output(),
+      StartsWith(
+          R"({"response":[{"model_path":"./benchmark_models/frozen_pcvr","error":{"error_type":"MODEL_NOT_FOUND","description")"));
+}
+
 constexpr char kJsonRequestStatefulModel[] = R"json({
   "request" : [{
     "model_path" : "./benchmark_models/stateful",

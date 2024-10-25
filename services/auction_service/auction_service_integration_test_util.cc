@@ -95,6 +95,8 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
       "%s/ads", test_score_ads_request_config.interest_group_owner));
   ad.set_recency(
       test_score_ads_request_config.test_buyer_reporting_signals.recency);
+  ad.set_data_version(
+      test_score_ads_request_config.test_buyer_reporting_signals.data_version);
   return ad;
 }
 

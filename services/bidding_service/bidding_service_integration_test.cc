@@ -52,6 +52,8 @@ constexpr char kTopLevelSeller[] = "top_level_seller";
 constexpr char kTestConsentToken[] = "testConsentToken";
 constexpr int kTestMultiBidLimit = 10;
 
+constexpr uint32_t kDataVersion = 1991;
+
 // While Roma demands JSON input and enforces it strictly, we follow the
 // javascript style guide for returning objects here, so object keys are
 // unquoted on output even though they MUST be quoted on input.
@@ -408,8 +410,51 @@ constexpr absl::string_view js_code_with_multiple_bids_template = R"JS_CODE(
                          trusted_bidding_signals,
                          device_signals) {
 
-      forDebuggingOnly.reportAdAuctionLoss("https://example-dsp.com/debugLoss");
-      forDebuggingOnly.reportAdAuctionWin("https://example-dsp.com/debugWin");
+      // Reshaped into an AdWithBid.
+      return [
+      {
+        render: "render_1",
+        ad: {"arbitraryMetadataField": 1},
+        bid: 1,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_2",
+        ad: {"arbitraryMetadataField": 2},
+        bid: 2,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_3",
+        ad: {"arbitraryMetadataField": 3},
+        bid: 3,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_4",
+        ad: {"arbitraryMetadataField": 4},
+        bid: 4,
+        allowComponentAuction: false
+      }
+      ];
+    }
+  )JS_CODE";
+
+constexpr absl::string_view js_code_with_debug_url_map_template = R"JS_CODE(
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+
+      forDebuggingOnly.reportAdAuctionLoss(new Map([ ["render_1", "https://render_1.com/debugLoss"],
+                                                       ["render_2", "https://render_2.com/debugLoss"],
+                                                       ["render_3", "https://render_3.com/debugLoss"],
+                                                       ["render_4", "https://render_4.com/debugLoss"]]));
+      forDebuggingOnly.reportAdAuctionWin(new Map([ ["render_1", "https://render_1.com/debugWin"],
+                                                      ["render_2", "https://render_2.com/debugWin"],
+                                                      ["render_3", "https://render_3.com/debugWin"],
+                                                      ["render_4", "https://render_4.com/debugWin"]]));
 
       // Reshaped into an AdWithBid.
       return [
@@ -435,6 +480,42 @@ constexpr absl::string_view js_code_with_multiple_bids_template = R"JS_CODE(
         render: "render_4",
         ad: {"arbitraryMetadataField": 4},
         bid: 4,
+        allowComponentAuction: false
+      }
+      ];
+    }
+  )JS_CODE";
+
+constexpr absl::string_view js_code_with_debug_url_missing_key_template =
+    R"JS_CODE(
+    function generateBid(interest_group,
+                         auction_signals,
+                         buyer_signals,
+                         trusted_bidding_signals,
+                         device_signals) {
+
+      forDebuggingOnly.reportAdAuctionLoss("https://example-dsp.com/debugLoss");
+      forDebuggingOnly.reportAdAuctionWin(new Map([ ["render_1", "https://render_1.com/debugWin"],
+                                                    ["render_2", "https://render_2.com/debugWin"]]));
+
+      // Reshaped into an AdWithBid.
+      return [
+      {
+        render: "render_1",
+        ad: {"arbitraryMetadataField": 1},
+        bid: 1,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_2",
+        ad: {"arbitraryMetadataField": 2},
+        bid: 2,
+        allowComponentAuction: false
+      },
+      {
+        render: "render_3",
+        ad: {"arbitraryMetadataField": 3},
+        bid: 3,
         allowComponentAuction: false
       }
       ];
@@ -554,6 +635,7 @@ BuildGenerateBidsRequestFromBrowser(
     int multi_bid_limit = kTestMultiBidLimit) {
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
   raw_request.set_enable_debug_reporting(set_enable_debug_reporting);
+  raw_request.set_data_version(kDataVersion);
   for (int i = 0; i < desired_bid_count; i++) {
     auto interest_group = MakeARandomInterestGroupForBiddingFromBrowser();
     interest_group_to_ad->try_emplace(
@@ -685,6 +767,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsByInterestGroupCode) {
                   .at("arbitraryMetadataField")
                   .number_value(),
               1.0);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -762,6 +845,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerReportingIdSetInResponse) {
   for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     EXPECT_EQ(ad_with_bid.buyer_reporting_id(), test_buyer_reporting_id);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -852,6 +936,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
                   .at("arbitraryMetadataField")
                   .number_value(),
               1.0);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -928,6 +1013,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignals) {
     EXPECT_EQ(
         ad_with_bid.ad().struct_value().fields().at("tbsLength").number_value(),
         1);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1004,6 +1090,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReceivesTrustedBiddingSignalsKeys) {
                   .number_value(),
               raw_request.interest_group_for_bidding(0)
                   .trusted_bidding_signals_keys_size());
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1114,6 +1201,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
   GenerateBidsRequest request;
   request.set_key_id(kKeyId);
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
+  raw_request.set_data_version(kDataVersion);
   absl::flat_hash_map<std::string, std::vector<std::string>>
       interest_group_to_ad;
   for (int i = 0; i < desired_bid_count; i++) {
@@ -1198,6 +1286,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, GeneratesBidsFromDevice) {
                   .at("arbitraryMetadataField")
                   .number_value(),
               1.0);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1304,9 +1393,10 @@ TEST_F(GenerateBidsReactorIntegrationTest, BuyerDebugUrlGenerationDisabled) {
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    EXPECT_FALSE(adWithBid.has_debug_report_urls());
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_FALSE(ad_with_bid.has_debug_report_urls());
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1326,9 +1416,10 @@ TEST_F(GenerateBidsReactorIntegrationTest, EventLevelDebugReportingDisabled) {
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    EXPECT_FALSE(adWithBid.has_debug_report_urls());
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_FALSE(ad_with_bid.has_debug_report_urls());
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1348,12 +1439,13 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(),
               "https://example-dsp.com/debugWin");
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url(),
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(),
               "https://example-dsp.com/debugLoss");
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1374,9 +1466,9 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    auto& contributions = adWithBid.private_aggregation_contributions();
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    auto& contributions = ad_with_bid.private_aggregation_contributions();
     EXPECT_EQ(contributions.size(), 1);
     EXPECT_EQ(contributions.at(0).event().event_type(),
               EventType::EVENT_TYPE_WIN);
@@ -1389,6 +1481,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
         << "bucket_128_bit has not been set in the contribution";
     EXPECT_EQ(contributions.at(0).value().int_value(), 200)
         << "int_value has not been set correctly in the contribution";
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }
 
@@ -1409,9 +1502,10 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    auto& contributions = adWithBid.private_aggregation_contributions();
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
+    auto& contributions = ad_with_bid.private_aggregation_contributions();
     EXPECT_EQ(contributions.size(), 1);
     EXPECT_EQ(contributions.at(0).event().event_type(),
               EventType::EVENT_TYPE_WIN);
@@ -1447,11 +1541,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_TRUE(adWithBid.has_debug_report_urls());
-    EXPECT_GT(adWithBid.debug_report_urls().auction_debug_win_url().length(),
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
+    EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
+    EXPECT_GT(ad_with_bid.debug_report_urls().auction_debug_win_url().length(),
               0);
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url().length(),
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url().length(),
               0);
   }
 }
@@ -1479,6 +1574,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   EXPECT_GT(raw_response.bids_size(), 0);
   long actual_debug_urls_size = 0;
   for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
     if (ad_with_bid.has_debug_report_urls()) {
       actual_debug_urls_size +=
           ad_with_bid.debug_report_urls().auction_debug_win_url().length() +
@@ -1505,11 +1601,12 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_GT(adWithBid.bid(), 0);
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_win_url(),
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_GT(ad_with_bid.bid(), 0);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(),
               "https://example-dsp.com/debugWin");
-    EXPECT_EQ(adWithBid.debug_report_urls().auction_debug_loss_url(),
+    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(),
               "https://example-dsp.com/debugLoss");
   }
 }
@@ -1582,8 +1679,8 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_GT(raw_response.bids_size(), 0);
-  for (const auto& adWithBid : raw_response.bids()) {
-    EXPECT_EQ(adWithBid.bid(), 1);
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    EXPECT_EQ(ad_with_bid.bid(), 1);
   }
 }
 
@@ -1598,6 +1695,7 @@ TEST_F(GenerateBidsReactorIntegrationTest, ParsesFieldsForComponentAuction) {
   EXPECT_GT(raw_response.bids_size(), 0);
   for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_EQ(ad_with_bid.allow_component_auction(), true);
+    EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
     const auto& top_level_seller_it =
         ad_with_bid.ad().struct_value().fields().find("topLevelSeller");
     ASSERT_TRUE(top_level_seller_it !=
@@ -1637,16 +1735,57 @@ TEST_F(GenerateBidsReactorIntegrationTest, ReturnsBidsArrayWithDebugURL) {
       .enable_adtech_code_logging = true,
       .desired_bid_count = 1};
   GenerateBidCodeWrapperTestHelper(
-      &response, js_code_with_multiple_bids_template, test_config);
+      &response, js_code_with_debug_url_map_template, test_config);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
   EXPECT_GT(raw_response.bids_size(), 0);
   for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
-    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(),
-              "https://example-dsp.com/debugWin");
-    EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(),
-              "https://example-dsp.com/debugLoss");
+    EXPECT_TRUE(absl::StrContains(
+        ad_with_bid.debug_report_urls().auction_debug_win_url(), "debugWin"));
+    EXPECT_TRUE(absl::StrContains(
+        ad_with_bid.debug_report_urls().auction_debug_win_url(),
+        ad_with_bid.render()));
+    EXPECT_TRUE(absl::StrContains(
+        ad_with_bid.debug_report_urls().auction_debug_loss_url(), "debugLoss"));
+    EXPECT_TRUE(absl::StrContains(
+        ad_with_bid.debug_report_urls().auction_debug_loss_url(),
+        ad_with_bid.render()));
+  }
+}
+
+TEST_F(GenerateBidsReactorIntegrationTest, DoesNotAttachUndefinedDebugURLs) {
+  GenerateBidsResponse response;
+  GenerateBidHelperConfig test_config = {
+      .enable_debug_reporting = true,
+      .enable_buyer_debug_url_generation = true,
+      .enable_adtech_code_logging = true,
+      .desired_bid_count = 1};
+  GenerateBidCodeWrapperTestHelper(
+      &response, js_code_with_debug_url_missing_key_template, test_config);
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  EXPECT_GT(raw_response.bids_size(), 0);
+  for (const auto& ad_with_bid : raw_response.bids()) {
+    // If the given debug url is a string but multiple bids are generated
+    // in one generateBid() call, that url is not attached.
+    EXPECT_TRUE(
+        ad_with_bid.debug_report_urls().auction_debug_loss_url().empty());
+
+    if (ad_with_bid.bid() == 3) {
+      // If the given debug url is a map but matching render key does not exist,
+      // that url is not attached.
+      EXPECT_TRUE(
+          ad_with_bid.debug_report_urls().auction_debug_win_url().empty());
+    } else {
+      // If one of the debug urls is a map and matching render key exists,
+      // that url gets attached.
+      EXPECT_TRUE(absl::StrContains(
+          ad_with_bid.debug_report_urls().auction_debug_win_url(), "debugWin"));
+      EXPECT_TRUE(absl::StrContains(
+          ad_with_bid.debug_report_urls().auction_debug_win_url(),
+          ad_with_bid.render()));
+    }
   }
 }
 

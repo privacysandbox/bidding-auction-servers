@@ -133,7 +133,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-    CryptoClientWrapperInterface* crypto_client, bool enable_benchmarking)
+    CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
+    bool enable_benchmarking)
     : context_(&context),
       request_(&get_bids_request),
       get_bids_response_(&get_bids_response),
@@ -145,6 +146,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       bidding_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
                                                       kBiddingMetadata)),
       bidding_signals_async_provider_(&bidding_signals_async_provider),
+      kv_async_client_(kv_async_client),
+      ad_bids_retrieval_timeout_ms_(config.generate_bid_timeout_ms),
       bidding_async_client_(&bidding_async_client),
       protected_app_signals_bidding_async_client_(pas_bidding_async_client),
       config_(config),
@@ -206,11 +209,12 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     BiddingSignalsAsyncProvider& bidding_signals_async_provider,
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-    CryptoClientWrapperInterface* crypto_client, bool enable_benchmarking)
+    CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
+    bool enable_benchmarking)
     : GetBidsUnaryReactor(context, get_bids_request, get_bids_response,
                           bidding_signals_async_provider, bidding_async_client,
                           config, /*pas_bidding_async_client=*/nullptr,
-                          key_fetcher_manager, crypto_client,
+                          key_fetcher_manager, crypto_client, kv_async_client,
                           enable_benchmarking) {}
 
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
@@ -603,7 +607,7 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
 }
 
 void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
-                                          const std::string& error_message) {
+                                          absl::string_view error_message) {
   LogIfError(
       metric_context_->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
           1, metric::kBfeBiddingSignalsResponseError));
@@ -687,10 +691,7 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
   }
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
-  // TODO: this will be coming from GetBidsConfig, and ultimately from terraform
-  // or command line flag.
-  bool use_v2 = false;
-  if (use_v2) {
+  if (config_.is_tkv_v2_enabled) {
     MayGetProtectedAudienceBidsV2(bidding_signals_request);
   } else {
     MayGetProtectedAudienceBidsV1(bidding_signals_request);

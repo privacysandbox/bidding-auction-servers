@@ -15,6 +15,8 @@
 #ifndef SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_TEST_CONSTANTS_H_
 #define SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_TEST_CONSTANTS_H_
 
+#include <cstdint>
+
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kTestReportResultUrl[] = "http://reportResultUrl.com";
 constexpr char kTestReportWinUrl[] = "http://reportWinUrl.com";
@@ -48,7 +50,7 @@ constexpr int kTestJoinCount = 1;
 constexpr float kTestRecency = 2.1;
 constexpr int kTestModelingSignals = 3;
 constexpr char kTestBuyerMetadata[] =
-    R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":false,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","adCost":5.0,"interestGroupName":"testInterestGroupName"})";
+    R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":false,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","adCost":5.0,"interestGroupName":"testInterestGroupName","dataVersion":1648})";
 constexpr char kTestBuyerMetadataWithProtectedAppSignals[] =
     R"({"enableReportWinUrlGeneration":true,"enableProtectedAppSignals":true,"perBuyerSignals":{"testkey":"testvalue"},"buyerOrigin":"testOwner","madeHighestScoringOtherBid":true,"joinCount":1,"recency":2,"modelingSignals":3,"seller":"http://seller.com","interestGroupName":"testInterestGroupName","adCost":5.0})";
 constexpr char kTestBuyerSignals[] = "{\"testkey\":\"testvalue\"}";
@@ -62,6 +64,7 @@ constexpr bool kTestEnableReportWinInputNoisingTrue = true;
 constexpr char kTestEgressPayload[] = "testEgressPayload";
 constexpr char kTestTemporaryUnlimitedEgressPayload[] =
     "testTemporaryUnlimitedEgressPayload";
+constexpr uint32_t kTestDataVersion = 1648;  // NOLINT
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_TEST_CONSTANTS_H_

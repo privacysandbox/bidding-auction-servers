@@ -99,3 +99,14 @@ ABSL_FLAG(std::optional<int>, debug_sample_rate_micro, 0,
           "determine the sampling rate of requests eligible for debugging. "
           "Chosen requests export"
           "privacy_sandbox.bidding_auction_servers.EventMessage");
+ABSL_FLAG(
+    std::optional<bool>, enable_tkv_v2, false,
+    "If true, TKV requests are sent in v2 format. Historically, they were "
+    "sent in a simpler v1 protocol B&A needs to support both for some "
+    "time. Eventually, only v2 should be supported and this flag "
+    "should go away");
+ABSL_FLAG(std::optional<bool>, tkv_egress_tls, false,
+          "If true, TKV service gRPC client uses TLS.");
+ABSL_FLAG(std::optional<bool>, enable_priority_vector, false,
+          "Enable priority vector to filter out lower priority interest groups "
+          "on the buyer side");
