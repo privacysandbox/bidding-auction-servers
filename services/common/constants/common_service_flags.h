@@ -60,6 +60,9 @@ ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_chaffing);
 ABSL_DECLARE_FLAG(std::optional<int>, debug_sample_rate_micro);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_tkv_v2);
+ABSL_DECLARE_FLAG(std::optional<bool>, tkv_egress_tls);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_priority_vector);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -104,6 +107,9 @@ inline constexpr char MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB[] =
     "MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB";
 inline constexpr char ENABLE_CHAFFING[] = "ENABLE_CHAFFING";
 inline constexpr char DEBUG_SAMPLE_RATE_MICRO[] = "DEBUG_SAMPLE_RATE_MICRO";
+inline constexpr char ENABLE_TKV_V2[] = "ENABLE_TKV_V2";
+inline constexpr char TKV_EGRESS_TLS[] = "TKV_EGRESS_TLS";
+inline constexpr char ENABLE_PRIORITY_VECTOR[] = "ENABLE_PRIORITY_VECTOR";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     PUBLIC_KEY_ENDPOINT,
@@ -132,6 +138,9 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB,
     ENABLE_CHAFFING,
     DEBUG_SAMPLE_RATE_MICRO,
+    ENABLE_TKV_V2,
+    TKV_EGRESS_TLS,
+    ENABLE_PRIORITY_VECTOR,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

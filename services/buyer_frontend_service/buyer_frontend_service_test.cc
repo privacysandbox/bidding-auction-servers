@@ -16,6 +16,7 @@
 
 #include <gmock/gmock-matchers.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -62,9 +63,36 @@ using GenerateProtectedAppSignalsBidsRawResponse =
     GenerateProtectedAppSignalsBidsResponse::
         GenerateProtectedAppSignalsBidsRawResponse;
 using GetBidsRawResponse = GetBidsResponse::GetBidsRawResponse;
+using google::protobuf::TextFormat;
 
 constexpr char valid_bidding_signals[] =
     R"JSON({"keys":{"key":[123,456]}})JSON";
+
+constexpr char compression_group[] = R"JSON(
+  [
+    {
+      "id": 0,
+      "keyGroupOutputs": [
+        {
+          "tags": [
+            "keys"
+          ],
+          "keyValues": {
+            "key": {
+              "value": "[123,456]"
+            }
+          }
+        }
+      ]
+    }
+  ])JSON";
+
+constexpr char compression_group_wrapper[] =
+    R"(
+    compression_groups {
+      compression_group_id : 33
+      content : "%s"
+  })";
 
 TrustedServersConfigClient CreateTrustedServerConfigClient() {
   TrustedServersConfigClient config_client({});
@@ -126,7 +154,8 @@ ClientRegistry CreateClientRegistry(
     std::unique_ptr<MockBiddingSignalsProvider> bidding_signals_async_provider,
     std::unique_ptr<BiddingAsyncClientMock> bidding_async_client,
     std::unique_ptr<ProtectedAppSignalsBiddingAsyncClientMock>
-        protected_app_signals_bidding_async_client) {
+        protected_app_signals_bidding_async_client,
+    std::unique_ptr<KVAsyncClientMock> kv_async_client = nullptr) {
   auto config_client = CreateTrustedServerConfigClient();
   return {.bidding_signals_async_provider =
               std::move(bidding_signals_async_provider),
@@ -135,13 +164,15 @@ ClientRegistry CreateClientRegistry(
               std::move(protected_app_signals_bidding_async_client),
           .key_fetcher_manager = CreateKeyFetcherManager(
               config_client, CreatePublicKeyFetcher(config_client)),
-          .crypto_client = CreateCryptoClient()};
+          .crypto_client = CreateCryptoClient(),
+          .kv_async_client = std::move(kv_async_client)};
 }
 
-GetBidsConfig CreateGetBidsConfig() {
+GetBidsConfig CreateGetBidsConfig(bool is_tkv_v2_enabled = false) {
   return {.protected_app_signals_generate_bid_timeout_ms = 60000,
           .is_protected_app_signals_enabled = true,
-          .is_protected_audience_enabled = true};
+          .is_protected_audience_enabled = true,
+          .is_tkv_v2_enabled = is_tkv_v2_enabled};
 }
 
 class BuyerFrontEndServiceTest : public ::testing::Test {
@@ -183,14 +214,6 @@ std::unique_ptr<BiddingAsyncClientMock> GetValidBiddingAsyncClientMock() {
                            /* response_metadata= */ {});
         return absl::OkStatus();
       });
-  return bidding_async_client;
-}
-
-std::unique_ptr<BiddingAsyncClientMock>
-GetValidBiddingAsyncClientMockNotCalled() {
-  std::unique_ptr<BiddingAsyncClientMock> bidding_async_client =
-      std::make_unique<BiddingAsyncClientMock>();
-  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
   return bidding_async_client;
 }
 
@@ -247,7 +270,42 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceAndProtectedAppSignalsBidsFetchedV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+
+  auto bidding_async_client = GetValidBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 1);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
 }
@@ -280,9 +338,51 @@ TEST_F(
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(
+    BuyerFrontEndServiceTest,
+    NoProtectedAudienceButSomeProtectedAppSignalsBidsFetchedForEmptySignalsV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+
+  auto bidding_async_client = std::make_unique<BiddingAsyncClientMock>();
+  // We never expect the Bidding client to be called; this call should be
+  // skipped for lack of trusted bidding signals.
+  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+std::unique_ptr<BiddingAsyncClientMock>
+GetValidBiddingAsyncClientMockNotCalled() {
+  std::unique_ptr<BiddingAsyncClientMock> bidding_async_client =
+      std::make_unique<BiddingAsyncClientMock>();
+  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
+  return bidding_async_client;
 }
 
 std::unique_ptr<MockBiddingSignalsProvider>
@@ -326,7 +426,56 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+std::unique_ptr<KVAsyncClientMock> GetBiddingSignalsProviderErrorMockV2() {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  EXPECT_CALL(
+      *kv_async_client,
+      ExecuteInternal(
+          An<std::unique_ptr<GetValuesRequest>>(), An<grpc::ClientContext*>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
+      .WillOnce([](std::unique_ptr<GetValuesRequest> get_values_raw_request,
+                   grpc::ClientContext* context, auto on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(absl::InternalError(kInternalServerError),
+                           /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
+  return kv_async_client;
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       BiddingSignalsErrorAndProtectedAppSignalsBidsFetchedV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      GetBiddingSignalsProviderErrorMockV2();
+  auto bidding_async_client = GetValidBiddingAsyncClientMockNotCalled();
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
 }
@@ -379,7 +528,40 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceBiddingErrorButProtectedAppSignalsBidsFetchedV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetErrorBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
 }
@@ -434,7 +616,40 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceBidFetchedButProtectedAppSignalsBidsErroredV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetValidBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetErrorProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 1);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
 }
@@ -486,7 +701,40 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceBidEmptyButProtectedAppSignalsBidsFetchedv2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetEmptyBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
 }
@@ -541,7 +789,40 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceBidFetchedButProtectedAppSignalsBidsEmptyV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetValidBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetEmptyProtectedAppSignalsBiddingClientMock();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 1);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
 }
@@ -570,27 +851,32 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
-       ProtectedAudienceBidEmptyAndProtectedAppSignalsBidsErrorIsOk) {
-  auto bidding_signals_async_provider = SetupBiddingProviderMock(
-      /*bidding_signals_value=*/valid_bidding_signals,
-      /*repeated_get_allowed=*/false,
-      /*server_error_to_return=*/std::nullopt);
+       BothProtectedAudienceBidAndProtectedAppSignalsBidsEmptyIsOkV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
   auto bidding_async_client = GetEmptyBiddingAsyncClientMock();
   auto protected_app_signals_bidding_async_client =
-      GetErrorProtectedAppSignalsBiddingClientMock();
+      GetEmptyProtectedAppSignalsBiddingClientMock();
 
   BuyerFrontEndService buyer_frontend_service(
       CreateClientRegistry(
-          std::move(bidding_signals_async_provider),
+          /*bidding_signals_async_provider=*/nullptr,
           std::move(bidding_async_client),
-          std::move(protected_app_signals_bidding_async_client)),
-      CreateGetBidsConfig());
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -599,7 +885,7 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
 }
@@ -629,7 +915,45 @@ TEST_F(
 
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 0);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  EXPECT_THAT(status.error_message(),
+              HasSubstr(kRejectionReasonBidBelowAuctionFloor));
+  EXPECT_THAT(status.error_message(),
+              HasSubstr(kRejectionReasonCategoryExclusions));
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       PABidErrorAndProtectedAppSignalsBidErrorMeansOverallErrorV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetErrorBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetErrorProtectedAppSignalsBiddingClientMock();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 0);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
   EXPECT_THAT(status.error_message(),
@@ -671,7 +995,41 @@ TEST_F(BuyerFrontEndServiceTest,
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
   GetBidsResponse::GetBidsRawResponse raw_response;
-  raw_response.ParseFromString(response_.response_ciphertext());
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       RPCFinishesEvenWhenProtectedAppSignalsAreNotProvidedV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+  auto bidding_async_client = GetValidBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
+                                  /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
   EXPECT_EQ(raw_response.bids_size(), 1);
   EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
 }
@@ -692,8 +1050,40 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
       CreateGetBidsConfig());
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
-                                  /*add_protected_audience_input=*/false);
+  request_ = CreateGetBidsRequest(
+      /*add_protectRPCErrorsWhenProtectedAppSignals
+        AndProtectedAudienceNotProvideded_signals_input=*/
+      false,
+      /*add_protected_audience_input=*/false);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
+  EXPECT_THAT(status.error_message(), HasSubstr(kMissingInputs));
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       RPCErrorsWhenProtectedAppSignalsAndProtectedAudienceNotProvidedV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  EXPECT_CALL(*kv_async_client, ExecuteInternal).Times(0);
+  auto bidding_async_client = std::make_unique<BiddingAsyncClientMock>();
+  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
+  auto protected_app_signals_bidding_async_client =
+      GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+  request_ = CreateGetBidsRequest(
+      /*add_protectRPCErrorsWhenProtectedAppSign
+      alsAndProtectedAudienceNotProvideded_signals_input=*/
+      false,
+      /*add_protected_audience_input=*/false);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
@@ -711,7 +1101,6 @@ TEST_F(BuyerFrontEndServiceTest,
   EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
   auto protected_app_signals_bidding_async_client =
       GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
-
   GetBidsConfig config = CreateGetBidsConfig();
   config.is_chaffing_enabled = true;
   BuyerFrontEndService buyer_frontend_service(
@@ -720,6 +1109,43 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
       config);
+  GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_is_chaff(true);
+  raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
+  absl::StatusOr<std::string> encoded_payload =
+      EncodeAndCompressGetBidsPayload(raw_request, CompressionType::kGzip, 999);
+  for (int i = 0; i < 5; i++) (*encoded_payload)[i] = 'q';
+
+  *request_.mutable_request_ciphertext() = *std::move(encoded_payload);
+  *request_.mutable_key_id() = "key_id";
+
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  absl::Status absl_status = server_common::ToAbslStatus(status);
+  ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
+  ASSERT_EQ(status.error_code(), grpc::StatusCode::INVALID_ARGUMENT);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ThrowsInvalidInputOnMalformedCiphertext_NewRequestFormatV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  EXPECT_CALL(*kv_async_client, ExecuteInternal).Times(0);
+  auto bidding_async_client = std::make_unique<BiddingAsyncClientMock>();
+  EXPECT_CALL(*bidding_async_client, ExecuteInternal).Times(0);
+  auto protected_app_signals_bidding_async_client =
+      GetProtectedAppSignalsBiddingClientMockThatWillNotBeCalled();
+  GetBidsConfig config = CreateGetBidsConfig();
+  config.is_chaffing_enabled = true;
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);

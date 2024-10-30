@@ -521,6 +521,8 @@ MakeARandomAdWithBidMetadata(float min_bid, float max_bid,
   ad_with_bid.set_interest_group_origin(
       absl::StrCat("interest_group_origin_", MakeARandomString()));
 
+  ad_with_bid.set_data_version(MakeARandomInt(1, 255));
+
   return ad_with_bid;
 }
 

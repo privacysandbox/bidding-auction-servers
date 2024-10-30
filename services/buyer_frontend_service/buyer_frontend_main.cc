@@ -170,6 +170,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
   config_client.SetFlag(FLAGS_debug_sample_rate_micro, DEBUG_SAMPLE_RATE_MICRO);
+  config_client.SetFlag(FLAGS_enable_tkv_v2, ENABLE_TKV_V2);
+  config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -241,19 +243,44 @@ absl::Status RunServer() {
           : grpc_event_engine::experimental::GetDefaultEventEngine());
   std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>
       buyer_kv_async_http_client;
+  // we're moving away from the async providers and
+  // the http client it points to above,
+  // and the propagation of that member to the downstream components
+  // we're moving away to the kv client below.
+  // Keeping it here for migration purposes.
+  std::unique_ptr<HttpBiddingSignalsAsyncProvider>
+      bidding_signals_async_providers;
+  std::unique_ptr<KVAsyncClient> kv_async_client;
+  std::unique_ptr<server_common::KeyFetcherManagerInterface>
+      key_fetcher_manager = CreateKeyFetcherManager(
+          config_client, CreatePublicKeyFetcher(config_client));
   if (buyer_kv_server_addr == "E2E_TEST_MODE") {
     buyer_kv_async_http_client =
         std::make_unique<FakeBuyerKeyValueAsyncHttpClient>(
             buyer_kv_server_addr);
-  } else {
+    bidding_signals_async_providers =
+        std::make_unique<HttpBiddingSignalsAsyncProvider>(
+            std::move(buyer_kv_async_http_client));
+  } else if (!config_client.GetBooleanParameter(ENABLE_TKV_V2)) {
     buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
         buyer_kv_server_addr,
         std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
+    bidding_signals_async_providers =
+        std::make_unique<HttpBiddingSignalsAsyncProvider>(
+            std::move(buyer_kv_async_http_client));
+  } else {
+    auto ad_retrieval_stub =
+        kv_server::v2::KeyValueService::NewStub(CreateChannel(
+            buyer_kv_server_addr,
+            /*compression=*/true,
+            /*secure=*/config_client.GetBooleanParameter(TKV_EGRESS_TLS),
+            /*grpc_arg_default_authority=*/grpc_arg_default_authority));
+    kv_async_client = std::make_unique<KVAsyncGrpcClient>(
+        key_fetcher_manager.get(), std::move(ad_retrieval_stub));
   }
 
   BuyerFrontEndService buyer_frontend_service(
-      std::make_unique<HttpBiddingSignalsAsyncProvider>(
-          std::move(buyer_kv_async_http_client)),
+      std::move(bidding_signals_async_providers),
       BiddingServiceClientConfig{
           .server_addr = bidding_server_addr,
           .compression = enable_bidding_compression,
@@ -262,9 +289,8 @@ absl::Status RunServer() {
           .is_pas_enabled =
               config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
           .grpc_arg_default_authority = grpc_arg_default_authority},
-      CreateKeyFetcherManager(config_client,
-                              CreatePublicKeyFetcher(config_client)),
-      CreateCryptoClient(),
+      std::move(key_fetcher_manager), CreateCryptoClient(),
+      std::move(kv_async_client),
       GetBidsConfig{
           config_client.GetIntParameter(GENERATE_BID_TIMEOUT_MS),
           config_client.GetIntParameter(BIDDING_SIGNALS_LOAD_TIMEOUT_MS),
@@ -273,6 +299,7 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
           config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE),
           config_client.GetBooleanParameter(ENABLE_CHAFFING),
+          config_client.GetBooleanParameter(ENABLE_TKV_V2),
           absl::GetFlag(FLAGS_enable_cancellation),
           absl::GetFlag(FLAGS_enable_kanon),
           config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),

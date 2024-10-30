@@ -87,6 +87,7 @@ inline constexpr char kInterestGroupOwnerTag[] = "interestGroupOwner";
 inline constexpr char kInterestGroupNameTag[] = "interestGroupName";
 inline constexpr char kJoinCountTag[] = "joinCount";
 inline constexpr char kRecencyTag[] = "recency";
+inline constexpr char kDataVersionTag[] = "dataVersion";
 constexpr int kStochasticalRoundingBits = 8;
 
 // [[deprecated("DEPRECATED. Please use
@@ -117,6 +118,7 @@ struct BuyerReportingMetadata {
   std::string interest_group_name;
   double ad_cost;
   std::string buyer_reporting_id;
+  uint32_t data_version;
 };
 
 struct ComponentReportingMetadata {
@@ -190,6 +192,7 @@ struct BuyerReportingDispatchRequestData {
   double ad_cost;
   std::optional<std::string> buyer_reporting_id;
   std::optional<std::string> buyer_and_seller_reporting_id;
+  uint32_t data_version;
   bool made_highest_scoring_other_bid;
   RequestLogContext& log_context;
   std::string buyer_origin;

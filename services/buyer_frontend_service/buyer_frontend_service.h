@@ -23,6 +23,7 @@
 #include "services/buyer_frontend_service/data/get_bids_config.h"
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
+#include "services/common/clients/kv_server/kv_async_client.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -37,6 +38,7 @@ struct ClientRegistry {
   std::unique_ptr<server_common::KeyFetcherManagerInterface>
       key_fetcher_manager;
   std::unique_ptr<CryptoClientWrapperInterface> crypto_client;
+  std::unique_ptr<KVAsyncClient> kv_async_client;
 };
 
 // BuyerFrontEndService provides the async server implementation to be used
@@ -53,6 +55,7 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
       std::unique_ptr<server_common::KeyFetcherManagerInterface>
           key_fetcher_manager,
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
+      std::unique_ptr<KVAsyncClient> kv_async_client,
       const GetBidsConfig config, bool enable_benchmarking = false);
 
   explicit BuyerFrontEndService(ClientRegistry client_registry,
@@ -94,6 +97,7 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
   std::unique_ptr<BiddingAsyncClient> bidding_async_client_;
   std::unique_ptr<ProtectedAppSignalsBiddingAsyncClient>
       protected_app_signals_bidding_async_client_;
+  std::unique_ptr<KVAsyncClient> kv_async_client_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

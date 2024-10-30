@@ -26,6 +26,8 @@ namespace {
 
 constexpr char kEgId[] = "1776";
 constexpr uint32_t kDataVersionHeaderValue = 1689;
+constexpr uint64_t kTooBigDataVersionHeaderValue =
+    uint64_t(UINT32_MAX) + uint64_t(UINT16_MAX);
 constexpr absl::string_view kIvalidDataVersionHeaderStringValue = "abcxyz";
 // Don't check these. They are not calculated from the request or response.
 constexpr size_t kRequestSizeDontCheck = 0;
@@ -191,13 +193,117 @@ TEST_F(KeyValueAsyncHttpClientTest,
         absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
         headers[kDataVersionResponseHeaderName] = absl::StatusOr<std::string>(
             absl::StrFormat("%d", kDataVersionHeaderValue));
-        actual_http_response.headers = headers;
-        // Pack said response into a statusOr
-        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
-            absl::StatusOr<HTTPResponse>(actual_http_response);
+        actual_http_response.headers = std::move(headers);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(actual_http_response_statusor);
+        std::move(done_callback)(actual_http_response);
+      });
+
+  // Finally, actually call the function to perform the test
+  CheckGetValuesFromKeysViaHttpClient(std::move(input), {},
+                                      std::move(done_callback_to_check_val));
+  callback_invoked.WaitForNotification();
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
+  // Our client will be given this input object.
+  const GetBuyerValuesInput getValuesClientInput = {
+      {"1j1043317685", "1j112014758"},
+      {"ig_name_likes_boots"},
+      "www.usatoday.com",
+      ClientType::CLIENT_TYPE_UNKNOWN,
+      kEgId};
+  // We must transform it to a unique ptr to match the function signature.
+  std::unique_ptr<GetBuyerValuesInput> input =
+      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+  // This is the URL we expect to see built from the input object.
+  absl::flat_hash_set<std::string> expected_urls;
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j1043317685,1j112014758&"
+      "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j112014758,1j1043317685&"
+      "interestGroupNames=ig_name_likes_boots"));
+  // Now we define what we expect to get back out of the client, which is a
+  // GetBuyerValuesOutput struct.
+  const std::string expected_response_body_json_string = R"json({
+            "keys": {
+              "1j1043317685": {
+                "constitution_author": "madison",
+                "money_man": "hamilton"
+              },
+              "1j112014758": {
+                "second_president": "adams"
+              }
+            },
+            "perInterestGroupData": {
+              "ig_name_likes_boots": {
+                "priorityVector": {
+                  "signal1": 1776
+                }
+              }
+            }
+          })json";
+
+  // Negative DV Header Value is invalid so expect a zero value.
+  std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
+      std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+          {expected_response_body_json_string, kRequestSizeDontCheck,
+           kResponseSizeDontCheck, /*dv_hdr=*/0}));
+
+  // Define the lambda function which is the callback.
+  // Inside this callback, we will actually check that the client correctly
+  // parses what it gets back from the "server" (mocked below).
+  absl::Notification callback_invoked;
+  absl::AnyInvocable<
+      void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
+      done_callback_to_check_val =
+          // Capture the expected output struct for comparison
+      [&callback_invoked,
+       expectedOutputStructUPtr = std::move(expectedOutputStructUPtr)](
+          // This is what the client actually passes back
+          absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
+              actualOutputStruct) {
+        // We can't make any assertions here because if we do and they fail the
+        // callback will never be notified.
+        EXPECT_TRUE(actualOutputStruct.ok());
+        if (actualOutputStruct.ok()) {
+          EXPECT_EQ(actualOutputStruct.value()->result,
+                    expectedOutputStructUPtr->result);
+          EXPECT_EQ(actualOutputStruct.value()->data_version,
+                    expectedOutputStructUPtr->data_version);
+        }
+        callback_invoked.Notify();
+      };
+
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the URL being expectedUrl.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      // If and when that happens: DEFINE that the FetchUrlWithMetadata function
+      // SHALL do the following:
+      //  (This part is NOT an assertion of expected behavior but rather a mock
+      //  defining what it shall be)
+      .WillOnce([actual_response_body_json_string =
+                     expected_response_body_json_string,
+                 &expected_urls](
+                    const HTTPRequest& request, int timeout_ms,
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                        done_callback) {
+        EXPECT_TRUE(expected_urls.contains(request.url));
+        HTTPResponse actual_http_response;
+        actual_http_response.body = actual_response_body_json_string;
+        // Add a valid header.
+        absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+        headers[kDataVersionResponseHeaderName] =
+            absl::StatusOr<std::string>(absl::StrFormat("%d", -5));
+        actual_http_response.headers = std::move(headers);
+        // Now, call the callback (Note: we defined it above!) with the
+        // 'response' from the 'server'
+        std::move(done_callback)(actual_http_response);
       });
 
   // Finally, actually call the function to perform the test
@@ -295,8 +401,9 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
-      std::make_unique<GetBuyerValuesOutput>(
-          GetBuyerValuesOutput({expected_response_body_json_string}));
+      std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+          {expected_response_body_json_string, kRequestSizeDontCheck,
+           kResponseSizeDontCheck, /*dv_hdr=*/0}));
 
   absl::Notification callback_invoked;
   // Define the lambda function which is the callback.
@@ -340,13 +447,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
         absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
         headers[kDataVersionResponseHeaderName] =
             absl::StatusOr<std::string>(kIvalidDataVersionHeaderStringValue);
-        actual_http_response.headers = headers;
-        // Pack said string into a statusOr
-        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
-            absl::StatusOr<HTTPResponse>(actual_http_response);
+        actual_http_response.headers = std::move(headers);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(actual_http_response_statusor);
+        std::move(done_callback)(actual_http_response);
       });
 
   // Finally, actually call the function to perform the test
@@ -559,10 +663,13 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
             },
           })json";
 
+  // Expect output data version header value of 0 because
+  // kTooBigDataVersionHeaderValue cannot be represented in 32 bits
+  // and should fail conversion.
   std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
       std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
           {expected_response_body_json_string, kRequestSizeDontCheck,
-           kResponseSizeDontCheck, kDataVersionHeaderValue}));
+           kResponseSizeDontCheck, /*dv_hdr=*/0}));
 
   // Define the lambda function which is the callback.
   // Inside this callback, we will actually check that the client correctly
@@ -605,14 +712,11 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
         actual_http_response.body = actual_response_body_json_string;
         absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
         headers[kDataVersionResponseHeaderName] = absl::StatusOr<std::string>(
-            absl::StrCat("", kDataVersionHeaderValue));
-        actual_http_response.headers = headers;
-        // Pack said string into a statusOr
-        absl::StatusOr<HTTPResponse> actual_http_response_statusor =
-            absl::StatusOr<HTTPResponse>(actual_http_response);
+            absl::StrCat("", kTooBigDataVersionHeaderValue));
+        actual_http_response.headers = std::move(headers);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'
-        std::move(done_callback)(actual_http_response_statusor);
+        std::move(done_callback)(actual_http_response);
       });
 
   // Finally, actually call the function to perform the test

@@ -17,8 +17,9 @@
 #ifndef SERVICES_COMMON_TEST_UTILS_TEST_UTILS_H_
 #define SERVICES_COMMON_TEST_UTILS_TEST_UTILS_H_
 
-#include "api/bidding_auction_servers.pb.h"
+#include <string>
 
+#include "api/bidding_auction_servers.pb.h"
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char kTestKeyId[] = "key_id";
@@ -68,6 +69,9 @@ AdWithBid CreateAdWithBid();
 
 // Creates an ProtectedAppSignalsAdWithBid for testing purposes.
 ProtectedAppSignalsAdWithBid CreateProtectedAppSignalsAdWithBid();
+
+// Remove white spaces
+std::string RemoveWhiteSpaces(std::string s);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

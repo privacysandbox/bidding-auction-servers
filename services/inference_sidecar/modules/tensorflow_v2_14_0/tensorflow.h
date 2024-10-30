@@ -36,6 +36,8 @@ class TensorflowModule final : public ModuleInterface {
       const RequestContext& request_context) override;
   absl::StatusOr<RegisterModelResponse> RegisterModel(
       const RegisterModelRequest& request) override;
+  absl::StatusOr<DeleteModelResponse> DeleteModel(
+      const DeleteModelRequest& request) override;
 
  private:
   friend class NoFreezeTensorflowTest;

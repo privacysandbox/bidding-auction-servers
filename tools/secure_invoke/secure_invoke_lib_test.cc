@@ -157,13 +157,15 @@ class SecureInvokeLib : public testing::Test {
       bidding_signals_provider_ = std::make_unique<
           MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>();
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
+  std::unique_ptr<KVAsyncClientMock> kv_async_client_ =
+      std::make_unique<KVAsyncClientMock>();
 };
 
 TEST_F(SecureInvokeLib, RequestToBfeNeedsClientIp) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   absl::SetFlag(&FLAGS_host_addr,
@@ -175,8 +177,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsClientIp) {
 TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   EXPECT_DEATH(auto unused = SendRequestToBfe(default_keyset_, false),
@@ -186,8 +188,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsServerAddress) {
 TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   absl::SetFlag(&FLAGS_host_addr,
@@ -202,8 +204,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsUserAgent) {
 TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   absl::SetFlag(&FLAGS_host_addr,
@@ -218,8 +220,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsAcceptLanguage) {
 TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   std::unique_ptr<BuyerFrontEnd::StubInterface> stub =
@@ -237,8 +239,8 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponse) {
 TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponseWithDebugReportingEnabled) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   bool enable_debug_reporting = true;
@@ -258,8 +260,8 @@ TEST_F(SecureInvokeLib, RequestToBfeReturnsAResponseWithDebugReportingEnabled) {
 TEST_F(SecureInvokeLib, IncludesTopLevelSellerInBfeInput) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   bool enable_debug_reporting = true;
@@ -279,8 +281,8 @@ TEST_F(SecureInvokeLib, IncludesTopLevelSellerInBfeInput) {
 TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   std::unique_ptr<BuyerFrontEnd::StubInterface> stub =
@@ -301,8 +303,8 @@ TEST_F(SecureInvokeLib, RequestToBfeNeedsValidKey) {
 TEST_F(SecureInvokeLib, UsesKeyForBfeEncryption) {
   BuyerFrontEndService buyer_front_end_service{
       std::move(bidding_signals_provider_), bidding_service_client_config_,
-      std::move(key_fetcher_manager_), std::move(crypto_client_),
-      get_bids_config_};
+      std::move(key_fetcher_manager_),      std::move(crypto_client_),
+      std::move(kv_async_client_),          get_bids_config_};
 
   auto start_service_result = StartLocalService(&buyer_front_end_service);
   std::unique_ptr<BuyerFrontEnd::StubInterface> stub =

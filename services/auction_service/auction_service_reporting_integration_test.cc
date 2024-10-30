@@ -49,14 +49,14 @@ constexpr absl::string_view kExpectedReportWinUrl =
     "&madeHighestScoringOtherBid=false&signalsForWinner="
     "{\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&auctionSignals="
     "3,test,4&desirability=undefined&topLevelSeller=undefined&"
-    "modifiedBid=undefined";
+    "modifiedBid=undefined&dataVersion=1689";
 constexpr absl::string_view kExpectedReportWinUrlWithNullSignalsForWinner =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
     "buyerAndSellerReportingId=undefined&adCost=2&highestScoringOtherBid=0&"
     "madeHighestScoringOtherBid=false&signalsForWinner=null&"
     "perBuyerSignals=1,test,2&auctionSignals=3,test,4&desirability=undefined&"
-    "topLevelSeller=undefined&modifiedBid=undefined";
+    "topLevelSeller=undefined&modifiedBid=undefined&dataVersion=1689";
 constexpr absl::string_view kExpectedReportWinUrlWithBuyerAndSellerReportingId =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=undefined&"
@@ -64,7 +64,7 @@ constexpr absl::string_view kExpectedReportWinUrlWithBuyerAndSellerReportingId =
     "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
-    "modifiedBid=undefined";
+    "modifiedBid=undefined&dataVersion=1689";
 constexpr absl::string_view kTestTopLevelReportResultUrl =
     "http://"
     "test.com&bid=1&bidCurrency=undefined&highestScoringOtherBid=undefined&"

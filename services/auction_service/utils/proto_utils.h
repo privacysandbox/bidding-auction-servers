@@ -137,8 +137,12 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
     const bool enable_adtech_code_logging, absl::string_view bid_metadata,
     absl::string_view code_version) {
   std::string ad_object_json;
-  PS_RETURN_IF_ERROR(
-      google::protobuf::util::MessageToJsonString(ad.ad(), &ad_object_json));
+  if (ad.ad().has_struct_value()) {
+    PS_RETURN_IF_ERROR(
+        google::protobuf::util::MessageToJsonString(ad.ad(), &ad_object_json));
+  } else {
+    ad_object_json = ad.ad().string_value();
+  }
   return BuildScoreAdRequest(
       ad.render(), ad_object_json, scoring_signals.at(ad.render()).GetString(),
       ad.bid(), auction_config, bid_metadata, log_context,

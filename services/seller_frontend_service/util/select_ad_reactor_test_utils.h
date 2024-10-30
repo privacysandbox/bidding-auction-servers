@@ -76,6 +76,7 @@ inline constexpr char kTestAdMetadata[] = "testAdMetadata";
 inline constexpr char kEurosIsoCode[] = "EUR";
 inline constexpr char kUsdIsoCode[] = "USD";
 inline constexpr char kYenIsoCode[] = "JPY";
+inline constexpr uint32_t kDefaultDataVersion = 1689;
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -127,7 +128,8 @@ AdWithBid BuildNewAdWithBid(
     const absl::optional<absl::string_view>& bid_currency = absl::nullopt,
     absl::string_view buyer_reporting_id = "",
     absl::string_view buyer_and_seller_reporting_id = "",
-    absl::string_view selectable_buyer_and_seller_reporting_id = "");
+    absl::string_view selectable_buyer_and_seller_reporting_id = "",
+    uint32_t data_version = kDefaultDataVersion);
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
@@ -351,8 +353,8 @@ GetSelectAdRequestAndClientRegistryForTest(
       /*is_consented_debug=*/false, top_level_seller,
       server_component_auction_params.top_level_cloud_platform);
 
-  // Sets up buyer client while populating the expected buyer bids that can then
-  // be used to setup the scoring signals provider.
+  // Sets up buyer client while populating the expected buyer bids that can
+  // then be used to setup the scoring signals provider.
   expected_buyer_bids = GetBuyerClientsAndBidsForReactor(
       encrypted_request_with_context.select_ad_request,
       encrypted_request_with_context.protected_auction_input,
@@ -418,12 +420,12 @@ GetSelectAdRequestAndClientRegistryForTest(
                 score->set_ad_metadata(kTestAdMetadata);
                 score->set_allow_component_auction(true);
                 // B&A logic makes a modified bid of zero coming out of the
-                // ScoreAdsReactor impossible, so this flag is for testing an
-                // unreachable error case.
+                // ScoreAdsReactor impossible, so this flag is for testing
+                // an unreachable error case.
                 if (!force_set_modified_bid_to_zero) {
-                  // Normally the ScoreAdsReactor would replace a zero modified
-                  // bid with the nonzero buyer bid, but we mocked it so we need
-                  // to set this to a nonzero value manually.
+                  // Normally the ScoreAdsReactor would replace a zero
+                  // modified bid with the nonzero buyer bid, but we mocked
+                  // it so we need to set this to a nonzero value manually.
                   score->set_bid(kNonZeroBidValue);
                 }
               }

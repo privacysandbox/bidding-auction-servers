@@ -73,6 +73,24 @@ class InferenceServiceImpl final : public InferenceService::Service {
     return grpc::Status::OK;
   }
 
+  grpc::Status DeleteModel(grpc::ServerContext* context,
+                           const DeleteModelRequest* request,
+                           DeleteModelResponse* response) override {
+    absl::StatusOr<DeleteModelResponse> delete_model_response =
+        inference_module_->DeleteModel(*request);
+    if (!delete_model_response.ok()) {
+      return server_common::FromAbslStatus(delete_model_response.status());
+    }
+
+    // save the model path since it was registered successfully
+    absl::WriterMutexLock write_model_paths_lock(&model_paths_mutex_);
+    model_paths_.erase(request->model_spec().model_path());
+
+    *response = delete_model_response.value();
+
+    return grpc::Status::OK;
+  }
+
   grpc::Status Predict(grpc::ServerContext* context,
                        const PredictRequest* request,
                        PredictResponse* response) override {

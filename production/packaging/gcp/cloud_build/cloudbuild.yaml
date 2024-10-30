@@ -33,7 +33,7 @@ steps:
       --service-path auction_service \
       --instance gcp --platform gcp \
       --build-flavor ${_BUILD_FLAVOR} \
-      --gcp-image-tag ${GIT_TAG} \
+      --gcp-image-tag ${TAG_NAME} \
       --gcp-image-repo ${_GCP_IMAGE_REPO} \
       --no-tests --no-precommit
 substitutions:

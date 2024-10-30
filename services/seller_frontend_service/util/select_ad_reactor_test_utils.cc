@@ -167,6 +167,7 @@ void BuildAdWithBidFromAdWithBidMetadata(
   result->set_interest_group_name(input.interest_group_name());
   result->set_ad_cost(kAdCost);
   result->set_modeling_signals(kModelingSignals);
+  result->set_data_version(input.data_version());
   if (!buyer_reporting_id.empty()) {
     result->set_buyer_reporting_id(buyer_reporting_id);
   }
@@ -188,7 +189,8 @@ AdWithBid BuildNewAdWithBid(
     const absl::optional<absl::string_view>& bid_currency,
     absl::string_view buyer_reporting_id,
     absl::string_view buyer_and_seller_reporting_id,
-    absl::string_view selectable_buyer_and_seller_reporting_id) {
+    absl::string_view selectable_buyer_and_seller_reporting_id,
+    uint32_t data_version) {
   AdWithBid bid;
   bid.set_render(ad_url);
   for (int i = 0; i < number_ad_component_render_urls; i++) {
@@ -225,6 +227,7 @@ AdWithBid BuildNewAdWithBid(
     bid.set_selectable_buyer_and_seller_reporting_id(
         selectable_buyer_and_seller_reporting_id);
   }
+  bid.set_data_version(data_version);
   return bid;
 }
 

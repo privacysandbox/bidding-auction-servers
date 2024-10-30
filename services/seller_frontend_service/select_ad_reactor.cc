@@ -131,6 +131,7 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_ad_cost(input.ad_cost());
   result.set_modeling_signals(input.modeling_signals());
   result.set_bid_currency(input.bid_currency());
+  result.set_data_version(input.data_version());
 
   // Then set fields passed in externally.
   result.set_interest_group_owner(interest_group_owner);

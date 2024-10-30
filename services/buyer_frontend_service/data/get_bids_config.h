@@ -33,6 +33,8 @@ struct GetBidsConfig {
   bool is_protected_audience_enabled;
   // Whether chaffing is enabled.
   bool is_chaffing_enabled;
+  // Enable v2 for tkv
+  bool is_tkv_v2_enabled;
   bool enable_cancellation = false;
   bool enable_kanon = false;
   // Sample rate for debug request.

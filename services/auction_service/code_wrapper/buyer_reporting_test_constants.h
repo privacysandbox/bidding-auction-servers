@@ -42,7 +42,12 @@ constexpr absl::string_view kTestReportWinUdfWithValidation =
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability+"&topLevelSeller="+buyerReportingSignals.topLevelSeller+"&modifiedBid="+buyerReportingSignals.modifiedBid;
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&topLevelSeller="+buyerReportingSignals.topLevelSeller+
+                    "&modifiedBid="+buyerReportingSignals.modifiedBid+
+                    "&dataVersion="+buyerReportingSignals.dataVersion;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -138,7 +143,12 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability+"&topLevelSeller="+buyerReportingSignals.topLevelSeller+"&modifiedBid="+buyerReportingSignals.modifiedBid;
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&topLevelSeller="+buyerReportingSignals.topLevelSeller+
+                    "&modifiedBid="+buyerReportingSignals.modifiedBid+
+                    "&dataVersion="+buyerReportingSignals.dataVersion;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")
@@ -234,7 +244,12 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                     "&highestScoringOtherBid="+buyerReportingSignals.highestScoringOtherBid+
                     "&madeHighestScoringOtherBid="+buyerReportingSignals.madeHighestScoringOtherBid+
                     "&signalsForWinner="+JSON.stringify(signalsForWinner)+
-                    "&perBuyerSignals="+perBuyerSignals+"&auctionSignals="+auctionSignals+"&desirability="+buyerReportingSignals.desirability+"&topLevelSeller="+buyerReportingSignals.topLevelSeller+"&modifiedBid="+buyerReportingSignals.modifiedBid;
+                    "&perBuyerSignals="+perBuyerSignals+
+                    "&auctionSignals="+auctionSignals+
+                    "&desirability="+buyerReportingSignals.desirability+
+                    "&topLevelSeller="+buyerReportingSignals.topLevelSeller+
+                    "&modifiedBid="+buyerReportingSignals.modifiedBid+
+                    "&dataVersion="+buyerReportingSignals.dataVersion;
         }
         console.log("Logging from ReportWin");
         console.error("Logging error from ReportWin")

@@ -399,6 +399,12 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
   return RegisterModelResponse();
 }
 
+absl::StatusOr<DeleteModelResponse> TensorflowModule::DeleteModel(
+    const DeleteModelRequest& request) {
+  PS_RETURN_IF_ERROR(store_->DeleteModel(request.model_spec().model_path()));
+  return DeleteModelResponse();
+}
+
 std::unique_ptr<ModuleInterface> ModuleInterface::Create(
     const InferenceSidecarRuntimeConfig& config) {
   return std::make_unique<TensorflowModule>(config);

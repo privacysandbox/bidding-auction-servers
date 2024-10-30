@@ -107,6 +107,7 @@ BuyerReportingDispatchRequestData GetTestBuyerReportingDispatchRequestData(
           .ad_cost = kTestAdCost,
           .buyer_reporting_id = kTestBuyerReportingId,
           .buyer_and_seller_reporting_id = "",
+          .data_version = kTestDataVersion,
           .made_highest_scoring_other_bid = true,
           .log_context = log_context};
 }

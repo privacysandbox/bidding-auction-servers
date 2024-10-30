@@ -749,6 +749,15 @@ message SelectAdRequest {
       // If the seller doesn't set the limit, a default would be set by the
       // Bidding server.
       int32 per_buyer_multi_bid_limit = 9;
+
+      // Optional.
+      // Represents a serialized JSON map containing priority signal entries
+      // (Map<String,Double>) used by buyers to construct the priority
+      // signals vector. Any map entries with matching keys in the
+      // priority_signals field below will be overriden by the value
+      // provided in *this* field. Implying that priority_signals_overrides
+      // values take precedence over the values in the priority_signals below.
+      string priority_signals_overrides = 10;
     }
 
     // The key in the map corresponds to Interest Group Owner (IGOwner), a
@@ -825,6 +834,14 @@ message SelectAdRequest {
     // multiseller auction only. The key in the map corresponds to the seller
     // identifier in AuctionResult.auction_params.component_seller.
     map<string, PerComponentSellerConfig> per_component_seller_config = 12;
+
+    // Optional.
+    // Represents a serialized JSON map containing priority signal entries used by
+    // buyers to construct the priority signals vector. Entries in this
+    // field will be forwarded to all buyers participating in the auction
+    // To override an entry for a particular buyer, see
+    // 'PerBuyerConfig.priority_signals_overrides'.
+    string priority_signals = 13;
   }
   message ComponentAuctionResult {
     //  AuctionResult from a server component auction.
@@ -990,6 +1007,11 @@ message GetBidsRequest {
     // A boolean value which indicates whether this request can be used for debugging.
     // current eligible request: Android request with ad-id
     bool is_debug_eligible = 17;
+
+    // Optional.
+    // Represents a serialized JSON map containing priority signal entries used to
+    // construct the priority signals vector.
+    string priority_signals = 18;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -1093,6 +1115,9 @@ message AdWithBid {
   // Optional. selectableBuyerAndSellerReportingId in buyerReportingMetadata of
   // reportWin(). If provided, this will be substituted for interestGroupName.
   string selectable_buyer_and_seller_reporting_id = 14;
+
+  // Optional. Value of the data version header from the buyer kv server. This is passed through to the buyer reporting function.
+  int32 data_version = 15;
 }
 // (-- LINT.ThenChange(bid_generate_bid) --)
 
@@ -1506,6 +1531,10 @@ message ScoreAdsRequest {
       bool k_anon_status = 17;
 
       reserved 18;
+
+      // Optional. Value of the data version header from the buyer kv server.
+      // This is passed through to the buyer reporting function.
+      uint32 data_version = 19;
     }
 
     // Ad with bid.

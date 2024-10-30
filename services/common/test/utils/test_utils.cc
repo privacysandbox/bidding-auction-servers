@@ -95,4 +95,9 @@ ProtectedAppSignalsAdWithBid CreateProtectedAppSignalsAdWithBid() {
   return ad_with_bid;
 }
 
+std::string RemoveWhiteSpaces(std::string s) {
+  s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
+  return s;
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

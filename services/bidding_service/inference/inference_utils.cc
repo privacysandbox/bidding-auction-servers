@@ -235,14 +235,6 @@ void RunInference(
       roma_request_context = wrapper.metadata.GetRomaRequestContext();
 
   if (roma_request_context.ok()) {
-    // Check if it is a Protected Audience request and the build flavor is prod
-    if ((*roma_request_context)->IsProtectedAudienceRequest() &&
-        PS_IS_PROD_BUILD) {
-      PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
-          << "Inference is not supported for Protected Audience requests in "
-             "production build.";
-      return;
-    }
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
   }
 

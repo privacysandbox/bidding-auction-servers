@@ -26,15 +26,11 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// TODO(b/374727613): once this is done in KV, and the pointer to the repo is
+// bumped, these should be reused.
 inline constexpr std::string_view kKVContentTypeHeader = "kv-content-type";
 inline constexpr std::string_view kContentEncodingProtoHeaderValue =
     "message/ad-auction-trusted-signals-request+proto";
-// TODO: once the KV dependency is bumped, these constants are available and
-// should be reused.
-inline constexpr absl::string_view kKVOhttpRequestLabel =
-    "message/ad-auction-trusted-signals-request";
-inline constexpr absl::string_view kKVOhttpResponseLabel =
-    "message/ad-auction-trusted-signals-response";
 
 using ::google::cmrt::sdk::public_key_service::v1::PublicKey;
 
@@ -75,7 +71,7 @@ void KVAsyncGrpcClient::SendRpc(
         PS_VLOG(6) << "SendRPC completion status ok";
         auto plain_text_http_response = FromObliviousHTTPResponse(
             *params->ResponseRef()->mutable_data(),
-            *captured_oblivious_http_context, kKVOhttpResponseLabel);
+            *captured_oblivious_http_context, kv_server::kKVOhttpResponseLabel);
         if (!plain_text_http_response.ok()) {
           // Passing an incorrect label will result in "SslErrorAsStatus("Failed
           // to export secret.")" see
@@ -143,12 +139,12 @@ absl::Status KVAsyncGrpcClient::ExecuteInternal(
         << "Padding failed: " << maybe_padded_request.status().message();
     return maybe_padded_request.status();
   }
-  PS_ASSIGN_OR_RETURN(
-      auto oblivious_http_request,
-      ToObliviousHTTPRequest(*maybe_padded_request, unescaped_public_key_bytes,
-                             stoi(public_key.key_id()),
-                             kv_server::kKEMParameter, kv_server::kKDFParameter,
-                             kv_server::kAEADParameter, kKVOhttpRequestLabel));
+  PS_ASSIGN_OR_RETURN(auto oblivious_http_request,
+                      ToObliviousHTTPRequest(
+                          *maybe_padded_request, unescaped_public_key_bytes,
+                          stoi(public_key.key_id()), kv_server::kKEMParameter,
+                          kv_server::kKDFParameter, kv_server::kAEADParameter,
+                          kv_server::kKVOhttpRequestLabel));
   PS_VLOG(6) << "Encapsulating and serializing request";
   std::string encrypted_request =
       oblivious_http_request.EncapsulateAndSerialize();

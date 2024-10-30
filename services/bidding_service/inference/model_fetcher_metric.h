@@ -164,7 +164,8 @@ inline void SetModelPartition(const std::vector<std::string>& partitions) {
   context_map->ResetPartitionAsync(
       {metric::kInferenceRequestCountByModel.name_,
        metric::kInferenceRequestDurationByModel.name_,
-       metric::kInferenceRequestFailedCountByModel.name_},
+       metric::kInferenceRequestFailedCountByModel.name_,
+       metric::kInferenceRequestBatchCountByModel.name_},
       partitions, partitions.size());
 }
 

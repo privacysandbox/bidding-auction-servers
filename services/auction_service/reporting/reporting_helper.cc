@@ -379,6 +379,13 @@ std::string GetBuyerMetadataJson(
         kInterestGroupName, std::move(interest_group_name),
         buyer_reporting_signals_obj.GetAllocator());
   }
+  if (dispatch_request_data.buyer_reporting_metadata.data_version > 0) {
+    buyer_reporting_signals_obj.AddMember(
+        kDataVersionTag,
+        dispatch_request_data.buyer_reporting_metadata.data_version,
+        buyer_reporting_signals_obj.GetAllocator());
+  }
+
   absl::StatusOr<std::string> buyer_reporting_metadata_json =
       SerializeJsonDoc(buyer_reporting_signals_obj);
   if (!buyer_reporting_metadata_json.ok()) {

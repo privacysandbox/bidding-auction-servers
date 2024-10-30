@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "absl/strings/numbers.h"
-#include "absl/strings/str_format.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/error_categories.h"
@@ -152,7 +152,7 @@ void ExportLogsByType(
   if (!logs.empty()) {
     for (const std::string& log : logs) {
       std::string formatted_log =
-          absl::StrFormat("[%s] %s: %s", log_type, ig_name, log);
+          absl::StrCat("[", log_type, "] ", ig_name, ": ", log);
       PS_VLOG(kUdfLog, log_context) << formatted_log;
       log_context.SetEventMessageField(formatted_log);
     }

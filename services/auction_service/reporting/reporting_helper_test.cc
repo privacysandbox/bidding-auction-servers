@@ -178,6 +178,7 @@ BuyerReportingMetadata GetTestBuyerReportingMetadata() {
       .seller = kTestSeller,
       .interest_group_name = kTestInterestGroupName,
       .ad_cost = kTestAdCost,
+      .data_version = kTestDataVersion,
   };
 }
 
@@ -197,14 +198,8 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
       .publisher_hostname = kTestPublisherHostName,
       .log_context = log_context};
   if (dispatch_request_config.enable_report_win_url_generation) {
-    reporting_dispatch_request_data.buyer_reporting_metadata = {
-        .buyer_signals = kTestBuyerSignals,
-        .join_count = kTestJoinCount,
-        .recency = kTestRecency,
-        .modeling_signals = kTestModelingSignals,
-        .seller = kTestSeller,
-        .interest_group_name = kTestInterestGroupName,
-        .ad_cost = kTestAdCost};
+    reporting_dispatch_request_data.buyer_reporting_metadata =
+        GetTestBuyerReportingMetadata();
   }
   return reporting_dispatch_request_data;
 }
@@ -313,6 +308,8 @@ absl::StatusOr<BuyerReportingMetadata> ParseBuyerReportingMetadata(
   PS_ASSIGN_IF_PRESENT(reporting_metadata.recency, document, kRecency, Int64);
   PS_ASSIGN_IF_PRESENT(reporting_metadata.modeling_signals, document,
                        kModelingSignalsTag, Int);
+  PS_ASSIGN_IF_PRESENT(reporting_metadata.data_version, document,
+                       kDataVersionTag, Uint);
   return reporting_metadata;
 }
 
@@ -330,6 +327,8 @@ void VerifyBuyerReportingMetadata(
             expected_buyer_reporting_metadata.seller);
   EXPECT_EQ(buyer_reporting_metadata.value().ad_cost,
             expected_buyer_reporting_metadata.ad_cost);
+  EXPECT_EQ(buyer_reporting_metadata.value().data_version,
+            expected_buyer_reporting_metadata.data_version);
   if (expected_buyer_reporting_metadata.join_count.has_value() &&
       buyer_reporting_metadata.value().join_count.value() !=
           expected_buyer_reporting_metadata.join_count.value()) {

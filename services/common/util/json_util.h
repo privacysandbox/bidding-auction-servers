@@ -126,6 +126,7 @@ inline absl::StatusOr<std::string> SerializeJsonDoc(
   if (document.Accept(writer)) {
     return std::string(string_buffer.GetString());
   }
+
   return absl::InternalError("Error converting inner JSON to String.");
 }
 

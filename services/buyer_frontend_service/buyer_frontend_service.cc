@@ -32,7 +32,8 @@ BuyerFrontEndService::BuyerFrontEndService(
     std::unique_ptr<server_common::KeyFetcherManagerInterface>
         key_fetcher_manager,
     std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
-    const GetBidsConfig config, bool enable_benchmarking)
+    std::unique_ptr<KVAsyncClient> kv_async_client, const GetBidsConfig config,
+    bool enable_benchmarking)
     : bidding_signals_async_provider_(
           std::move(bidding_signals_async_provider)),
       config_(config),
@@ -45,7 +46,8 @@ BuyerFrontEndService::BuyerFrontEndService(
                         client_config.grpc_arg_default_authority))),
       bidding_async_client_(std::make_unique<BiddingAsyncGrpcClient>(
           key_fetcher_manager_.get(), crypto_client_.get(), client_config,
-          stub_.get())) {
+          stub_.get())),
+      kv_async_client_(std::move(kv_async_client)) {
   if (config_.is_protected_app_signals_enabled) {
     protected_app_signals_bidding_async_client_ =
         std::make_unique<ProtectedAppSignalsBiddingAsyncGrpcClient>(
@@ -67,7 +69,8 @@ BuyerFrontEndService::BuyerFrontEndService(ClientRegistry client_registry,
       crypto_client_(std::move(client_registry.crypto_client)),
       bidding_async_client_(std::move(client_registry.bidding_async_client)),
       protected_app_signals_bidding_async_client_(std::move(
-          client_registry.protected_app_signals_bidding_async_client)) {}
+          client_registry.protected_app_signals_bidding_async_client)),
+      kv_async_client_(std::move(client_registry.kv_async_client)) {}
 
 grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
     grpc::CallbackServerContext* context, const GetBidsRequest* request,
@@ -79,7 +82,8 @@ grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
       *context, *request, *response, *bidding_signals_async_provider_,
       *bidding_async_client_, config_,
       protected_app_signals_bidding_async_client_.get(),
-      key_fetcher_manager_.get(), crypto_client_.get(), enable_benchmarking_);
+      key_fetcher_manager_.get(), crypto_client_.get(), kv_async_client_.get(),
+      enable_benchmarking_);
   reactor->Execute();
   return reactor.release();
 }

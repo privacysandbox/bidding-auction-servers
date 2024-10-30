@@ -46,14 +46,6 @@ class RomaRequestContext {
 
   RequestLogContext& GetLogContext() { return request_logging_context_; }
 
-  // Set if it is a protected audience request.
-  void SetIsProtectedAudienceRequest(bool is_protected_audience_request) {
-    is_protected_audience_request_ = is_protected_audience_request;
-  }
-  // Returns true if this is a Protected Audience request.
-  bool IsProtectedAudienceRequest() const {
-    return is_protected_audience_request_;
-  }
   // Set the unique bidding metric context
   void SetMetricContext(std::unique_ptr<MetricContextT> context) {
     metric_context_ = std::move(context);
@@ -71,7 +63,6 @@ class RomaRequestContext {
 
  private:
   RequestLogContext request_logging_context_;
-  bool is_protected_audience_request_ = false;
   std::unique_ptr<MetricContextT> metric_context_;
 };
 

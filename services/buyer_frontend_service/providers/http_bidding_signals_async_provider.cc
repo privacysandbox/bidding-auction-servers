@@ -51,15 +51,27 @@ void HttpBiddingSignalsAsyncProvider::Get(
 
   auto status = http_buyer_kv_async_client_->Execute(
       std::move(request), bidding_signals_request.filtering_metadata_,
-      [res = std::move(output), on_done = std::move(on_done)](
+      [res = std::move(output), on_done = std::move(on_done),
+       client_type =
+           bidding_signals_request.get_bids_raw_request_.client_type()](
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               buyer_kv_output) mutable {
         GetByteSize get_byte_size;
         if (buyer_kv_output.ok()) {
           // TODO(b/258281777): Add ads and buyer signals from KV.
-          res.value()->trusted_signals =
+          (*res)->trusted_signals =
               std::make_unique<std::string>((*buyer_kv_output)->result);
-          res.value()->data_version = (*buyer_kv_output)->data_version;
+          if (client_type == ClientType::CLIENT_TYPE_ANDROID) {
+            // Android enforces an 8-bit limit on DV Header
+            if ((*buyer_kv_output)->data_version <= UINT8_MAX) {
+              (*res)->data_version = (*buyer_kv_output)->data_version;
+            }
+            // If the header does not fit it is dropped entirely.
+          } else {
+            // Chrome enforces a 32-bit limit on DV Header. This value is
+            // already a uint32_t.
+            (*res)->data_version = (*buyer_kv_output)->data_version;
+          }
           get_byte_size.request = (*buyer_kv_output)->request_size;
           get_byte_size.response = (*buyer_kv_output)->response_size;
         } else {

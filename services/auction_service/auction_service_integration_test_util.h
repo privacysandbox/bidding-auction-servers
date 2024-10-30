@@ -34,6 +34,7 @@ constexpr int kTestModelingSignals = 4;
 constexpr int kTestJoinCount = 5;
 constexpr absl::string_view kTestBuyerSignals = R"([1,"test",[2]])";
 constexpr absl::string_view kTestAuctionSignals = R"([[3,"test",[4]]])";
+constexpr uint32_t kTestDataVersion = 1689;
 constexpr inline char kExpectedComponentReportResultUrl[] =
     "http://"
     "test.com&bid=1&bidCurrency=EUR&highestScoringOtherBid=0&"
@@ -48,7 +49,7 @@ constexpr inline char kExpectedComponentReportWinUrl[] =
     "madeHighestScoringOtherBid=false&signalsForWinner="
     "{\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&auctionSignals="
     "3,test,4&desirability=undefined&topLevelSeller=topLevelSeller&"
-    "modifiedBid=undefined";
+    "modifiedBid=undefined&dataVersion=1689";
 constexpr inline char kTestInteractionEvent[] = "clickEvent";
 constexpr inline char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestIgOwner[] = "barStandardAds.com";
@@ -95,6 +96,7 @@ struct TestBuyerReportingSignals {
   int join_count = kTestJoinCount;
   absl::string_view buyer_signals = kTestBuyerSignals;
   absl::string_view auction_signals = kTestAuctionSignals;
+  uint32_t data_version = kTestDataVersion;
 };
 
 struct TestScoreAdsRequestConfig {

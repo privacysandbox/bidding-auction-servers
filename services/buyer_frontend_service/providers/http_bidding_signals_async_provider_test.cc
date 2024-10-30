@@ -240,5 +240,63 @@ TEST(HttpBiddingSignalsAsyncProviderTest,
       absl::Milliseconds(100));
   notification.WaitForNotification();
 }
+
+TEST(HttpBiddingSignalsAsyncProviderTest,
+     MapsBuyerValuesAsyncClientResponseToBiddingSignalsWithAndroidClient) {
+  auto mock_client = std::make_unique<
+      AsyncClientMock<GetBuyerValuesInput, GetBuyerValuesOutput>>();
+  auto request = GetRequest();
+  // Android has an 8-bit limit for DV Header value
+  request.set_client_type(ClientType::CLIENT_TYPE_ANDROID);
+  request.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+      MakeARandomInterestGroupFromBrowser().release());
+  absl::Notification notification;
+  std::string expected_bidding_signals = MakeARandomString();
+  // Obviously this value cannot fit into eight bits.
+  const uint32_t too_big_data_version_for_android = UINT8_MAX + 1;
+
+  EXPECT_CALL(
+      *mock_client,
+      Execute(An<std::unique_ptr<GetBuyerValuesInput>>(),
+              An<const RequestMetadata&>(),
+              An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                             GetBuyerValuesOutput>>) &&>>(),
+              An<absl::Duration>(), _))
+      .WillOnce(
+          [&expected_bidding_signals,
+           data_version_for_mock = too_big_data_version_for_android](
+              std::unique_ptr<GetBuyerValuesInput> input,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>)&&>
+                  callback,
+              absl::Duration timeout, RequestContext context) {
+            auto output = std::make_unique<GetBuyerValuesOutput>();
+            output->result = expected_bidding_signals;
+            output->data_version = data_version_for_mock;
+            (std::move(callback))(std::move(output));
+            return absl::OkStatus();
+          });
+
+  HttpBiddingSignalsAsyncProvider class_under_test(std::move(mock_client));
+
+  BiddingSignalsRequest bidding_signals_request(request, {});
+  class_under_test.Get(
+      bidding_signals_request,
+      [&expected_bidding_signals, &notification](
+          absl::StatusOr<std::unique_ptr<BiddingSignals>> signals,
+          GetByteSize get_byte_size) {
+        EXPECT_EQ(*(signals.value()->trusted_signals),
+                  expected_bidding_signals);
+        EXPECT_EQ(signals.value()->data_version, 0)
+            << "Data version value should be zero because the header value "
+               "passed in was too large; it violated the Android spec by "
+               "exceeding eight bits.";
+        notification.Notify();
+      },
+      absl::Milliseconds(100));
+  notification.WaitForNotification();
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

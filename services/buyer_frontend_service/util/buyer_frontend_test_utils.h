@@ -38,6 +38,10 @@ SetupBiddingProviderMock(
     bool repeated_get_allowed,
     const std::optional<absl::Status>& server_error_to_return);
 
+void SetupBiddingProviderMockV2(
+    KVAsyncClientMock* kv_async_client,
+    const kv_server::v2::GetValuesResponse& response);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_BUYER_FRONTEND_SERVICE_UTIL_BUYER_FRONTEND_TEST_UTILS_H_

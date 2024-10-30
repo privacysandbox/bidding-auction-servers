@@ -359,7 +359,6 @@ void GenerateBidsReactor::Execute() {
       if (roma_shared_context.ok()) {
         std::shared_ptr<RomaRequestContextBidding> roma_request_context =
             roma_shared_context.value();
-        roma_request_context->SetIsProtectedAudienceRequest(true);
         roma_request_context->SetMetricContext(
             std::move(metric_context.value()));
       } else {
@@ -501,6 +500,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
           TrimAndReturnDebugUrlsSize(bid, max_allowed_size_debug_url_chars_,
                                      max_allowed_size_all_debug_urls_chars_,
                                      total_debug_urls_chars, log_context_);
+      bid.set_data_version(raw_request_.data_version());
       bid.set_interest_group_name(interest_group_name);
       *raw_response_.add_bids() = std::move(bid);
     }
