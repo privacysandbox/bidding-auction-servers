@@ -39,6 +39,12 @@ variable "gcp_project_id" {
   type        = string
 }
 
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
+}
+
 variable "frontend_domain_name" {
   description = "Domain name for global external LB"
   type        = string
@@ -90,8 +96,6 @@ variable "collector_instance_group_managers" {
 variable "collector_service_name" {
   type = string
 }
-
-
 
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
