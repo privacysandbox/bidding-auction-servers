@@ -91,6 +91,11 @@ variable "collector_service_name" {
   type = string
 }
 
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+}
+
 
 
 variable "collector_service_port" {
