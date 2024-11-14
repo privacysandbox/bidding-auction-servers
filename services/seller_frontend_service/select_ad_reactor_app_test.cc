@@ -36,6 +36,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
@@ -71,27 +72,34 @@ inline constexpr char kTestEgressPayload[] = "TestegressPayload";
 inline constexpr char kTestTemporaryEgressPayload[] =
     "TestTemporaryEgressPayload";
 inline constexpr char kTestRender[] = "https://test-render.com";
-inline constexpr char kAdRenderUrls[] = "AdRenderUrls";
 inline constexpr char kTestMetadataKey[] = "TestMetadataKey";
 inline constexpr int kTestMetadataValue = 53;
+inline constexpr bool kUseKvV2 = true;
 
 template <typename T>
 class SelectAdReactorForAppTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
+    privacy_sandbox::bidding_auction_servers::CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto));
+    config_ = CreateConfig();
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+    config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
+    config_.SetOverride("", K_ANON_API_KEY);
+    config_.SetOverride(kFalse, TEST_MODE);
   }
 
-  TrustedServersConfigClient config_ = CreateConfig();
+  TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
 };
 
@@ -104,16 +112,18 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam, kUseKvV2>(
           CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain);
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
@@ -180,6 +190,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -189,11 +200,12 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
   absl::string_view top_level_seller = "";
   bool enable_reporting = true;
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam, kUseKvV2>(
           CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
-          expect_all_buyers_solicited, top_level_seller, enable_reporting);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain, expect_all_buyers_solicited, top_level_seller,
+          enable_reporting);
 
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
@@ -269,6 +281,7 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -279,10 +292,11 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClient(crypto_client);
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam, kUseKvV2>(
           CLIENT_TYPE_ANDROID, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/false,
@@ -336,16 +350,18 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam, kUseKvV2>(
           CLIENT_TYPE_ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain);
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
       buyer_front_end_async_client_factory_mock);
@@ -385,16 +401,18 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<TypeParam, kUseKvV2>(
           CLIENT_TYPE_ANDROID, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
   auto& protected_auction_input = request_with_context.protected_auction_input;
   auto& request = request_with_context.select_ad_request;
@@ -462,7 +480,12 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+    config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
+    config_.SetOverride("", K_ANON_API_KEY);
+    config_.SetOverride(kFalse, TEST_MODE);
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));
@@ -599,6 +622,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
   TrustedServersConfigClient config_ = CreateConfig();
   BuyerFrontEndAsyncClientFactoryMock
       buyer_front_end_async_client_factory_mock_;
+  KVAsyncClientMock kv_async_client_;
   ScoringAsyncClientMock scoring_client_;
   BuyerBidsResponseMap expected_buyer_bids_;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager_ =
@@ -606,6 +630,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
   ClientRegistry clients_{scoring_signals_provider_,
                           scoring_client_,
                           buyer_front_end_async_client_factory_mock_,
+                          kv_async_client_,
                           *key_fetcher_manager_,
                           /* *crypto_client = */ nullptr,
                           std::make_unique<MockAsyncReporter>(
@@ -736,7 +761,7 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
                       select_ad_req.auction_config().seller_signals());
             EXPECT_EQ(request->auction_signals(),
                       select_ad_req.auction_config().auction_signals());
-            EXPECT_EQ(request->scoring_signals(), kAdRenderUrls);
+            EXPECT_EQ(request->scoring_signals(), kValidScoringSignalsJsonKvV2);
             EXPECT_EQ(request->protected_app_signals_ad_bids().size(), 1);
 
             const auto& observed_bid_with_metadata =
@@ -768,8 +793,10 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
       GetTestPASAdWithBid());
   expected_buyer_bids_.emplace(kSampleBuyer,
                                std::move(expected_get_bids_response));
-  SetupScoringProviderMock(scoring_signals_provider_, expected_buyer_bids_,
-                           kAdRenderUrls);
+  kv_server::v2::GetValuesResponse kv_response;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kKvV2CompressionGroup, &kv_response));
+  SetupKvAsyncClientMock(kv_async_client_, kv_response, expected_buyer_bids_);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
           config_, clients_, request_with_context.select_ad_request);

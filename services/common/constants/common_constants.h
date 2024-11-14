@@ -26,6 +26,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr absl::string_view kIgnoredPlaceholderValue = "PLACEHOLDER";
 inline constexpr absl::string_view kBiddingAuctionCompressionHeader =
     "bidding-auction-compression-type";
+inline constexpr char kDataVersion[] = "dataVersion";
+inline constexpr char kKvRenderUrls[] = "renderUrls";
+inline constexpr char kKvAdComponentRenderUrls[] = "adComponentRenderUrls";
+inline constexpr char kKvExperimentGroupId[] = "experiment_group_id";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

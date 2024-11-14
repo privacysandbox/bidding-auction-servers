@@ -29,6 +29,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
 #include "services/common/data_fetch/fetcher_interface.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/core/interface/async_context.h"
@@ -63,10 +64,16 @@ PeriodicBucketCodeFetcher::PeriodicBucketCodeFetcher(
 
 bool PeriodicBucketCodeFetcher::OnFetch(
     const AsyncContext<GetBlobRequest, GetBlobResponse>& context) {
-  const std::string version = context.request->blob_metadata().blob_name();
+  const absl::StatusOr<std::string> version = GetBucketBlobVersion(
+      GetBucketName(), context.request->blob_metadata().blob_name());
+  if (!version.ok()) {
+    PS_LOG(ERROR, SystemLogContext())
+        << "Failed to fetch blob: " << version.status();
+    return false;
+  }
   if (!context.result.Successful()) {
     PS_LOG(ERROR, SystemLogContext())
-        << "Failed to fetch blob: " << version
+        << "Failed to fetch blob: " << *version
         << GetErrorMessage(context.result.status_code);
     return false;
   }
@@ -75,9 +82,10 @@ bool PeriodicBucketCodeFetcher::OnFetch(
   // Construct the success log message before calling LoadSync so that we can
   // move the code.
   std::string success_log_message =
-      absl::StrCat("Current code loaded into Roma for version ", version, ":\n",
-                   wrapped_code);
-  absl::Status roma_result = loader_.LoadSync(version, std::move(wrapped_code));
+      absl::StrCat("Current code loaded into Roma for version ", *version,
+                   ":\n", wrapped_code);
+  absl::Status roma_result =
+      loader_.LoadSync(*version, std::move(wrapped_code));
   if (!roma_result.ok()) {
     PS_LOG(ERROR, SystemLogContext())
         << "Roma failed to load blob: " << roma_result;

@@ -25,11 +25,24 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+inline constexpr char kDeviceSignalsOne[] = "deviceSignals.one";
+inline constexpr char kDeviceSignalsAgeInMinutes[] =
+    "deviceSignals.ageInMinutes";
+inline constexpr char kDeviceSignalsAgeInMinutesMax60[] =
+    "deviceSignals.ageInMinutesMax60";
+inline constexpr char kDeviceSignalsAgeInHoursMax24[] =
+    "deviceSignals.ageInHoursMax24";
+inline constexpr char kDeviceSignalsAgeInDaysMax30[] =
+    "deviceSignals.ageInDaysMax30";
+
 // Parses a priority vector from a JSON string.
 // Any entries where the key is not a string or the value is not a number are
 // dropped.
 absl::StatusOr<rapidjson::Document> ParsePriorityVector(
     const std::string& priority_vector_json);
+
+// Drops entries where the key is not a string or the value is not a number.
+void SanitizePriorityVector(rapidjson::Value& priority_vector);
 
 // Merges the priority signal overrides in the per_buyer_config for a particular
 // buyer into (a copy of) the provided priority_signals document. Returns the
@@ -40,6 +53,16 @@ absl::StatusOr<std::string> GetBuyerPrioritySignals(
                                 SelectAdRequest::AuctionConfig::PerBuyerConfig>&
         per_buyer_config,
     const std::string& buyer_ig_owner);
+
+// Returns a map of the interest group name to its priority by computing the dot
+// product of the priority signals and priority vector. The returned map will
+// have as many entries as the buyer_input has interest groups. Any interest
+// groups without an entry in per_ig_priority_vectors will be assigned a
+// priority of 0.
+absl::flat_hash_map<std::string, double> CalculateInterestGroupPriorities(
+    rapidjson::Document& priority_signals, const BuyerInput& buyer_input,
+    const absl::flat_hash_map<std::string, rapidjson::Value>&
+        per_ig_priority_vectors);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

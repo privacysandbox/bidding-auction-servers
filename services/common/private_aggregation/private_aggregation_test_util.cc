@@ -78,10 +78,9 @@ PrivateAggregateContribution GetTestContributionWithSignalObjects(
 
   // Create the BucketOffset
   BucketOffset bucket_offset;
+  bucket_offset.add_value(static_cast<uint64_t>(1));  // Add 64-bit values
   bucket_offset.add_value(
-      static_cast<uint64_t>(12345678901234567890ULL));  // Add 64-bit values
-  bucket_offset.add_value(static_cast<uint64_t>(
-      112233445566778899ULL));          // Add another 64-bit value
+      static_cast<uint64_t>(0));        // Add another 64-bit value
   bucket_offset.set_is_negative(true);  // Set the is_negative flag
 
   // Set the BucketOffset in SignalBucket
@@ -136,6 +135,8 @@ AdWithBid GetAdWithBidWithPrivateAggregationContributions(
   return ad_with_bid;
 }
 
+// Returns reserved.win and reserved.loss Private Aggregation Contributions
+// for winning and lossing interest groups.
 GetBidsResponse::GetBidsRawResponse
 GetBidsRawResponseWithPrivateAggregationContributions(
     absl::string_view ig_name_win, absl::string_view ig_name_loss) {

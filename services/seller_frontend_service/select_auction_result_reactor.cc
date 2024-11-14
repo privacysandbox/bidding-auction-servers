@@ -39,20 +39,41 @@ absl::string_view GetGenerationId(
 }  // namespace
 
 void SelectAuctionResultReactor::SetLoggingContextWithProtectedAuctionInput() {
-  log_context_.Update(
-      std::visit(
-          [this](const auto& protected_input)
-              -> absl::btree_map<std::string, std::string> {
-            return {
+  std::visit(
+      [this](auto& protected_input) mutable {
+        is_sampled_for_debug_ = SetGeneratorAndSample(
+            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+            /*chaffing_enabled=*/false,
+            request_->client_type() == CLIENT_TYPE_ANDROID &&
+                protected_input.enable_unlimited_egress(),
+            protected_input.generation_id(), generator_);
+
+        if (config_client_.GetBooleanParameter(CONSENT_ALL_REQUESTS)) {
+          ModifyConsent(*protected_input.mutable_consented_debug_config());
+        }
+        log_context_.Update(
+            // -> absl::btree_map<std::string, std::string> {
+            {
                 {kGenerationId, protected_input.generation_id()},
-                {kSellerDebugId, request_->auction_config().seller_debug_id()}};
-          },
-          protected_auction_input_),
-      std::visit(
-          [](const auto& protected_input) {
-            return protected_input.consented_debug_config();
-          },
-          protected_auction_input_));
+                {kSellerDebugId, request_->auction_config().seller_debug_id()},
+            },
+            protected_input.consented_debug_config(), is_sampled_for_debug_);
+
+        if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+          PS_VLOG(kPlain, log_context_)
+              << "Headers:\n"
+              << absl::StrJoin(
+                     request_context_->client_metadata(), "\n",
+                     absl::PairFormatter(absl::StreamFormatter(), " : ",
+                                         absl::StreamFormatter()));
+          log_context_.SetEventMessageField(protected_input);
+          PS_VLOG(kPlain, log_context_)
+              << (is_protected_auction_request_ ? "ProtectedAuctionInput"
+                                                : "ProtectedAudienceInput")
+              << " exported in EventMessage if consented" << "\n";
+        }
+      },
+      protected_auction_input_);
 }
 
 void SelectAuctionResultReactor::LogRequestMetrics() {
@@ -78,12 +99,13 @@ void SelectAuctionResultReactor::ScoreAds(
     return;
   }
 
-  auto raw_request = CreateTopLevelScoreAdsRawRequest(
-      request_->auction_config(), protected_auction_input_,
-      component_auction_results);
+  std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> raw_request =
+      CreateTopLevelScoreAdsRawRequest(request_->auction_config(),
+                                       protected_auction_input_,
+                                       component_auction_results);
+  raw_request->set_is_sampled_for_debug(is_sampled_for_debug_);
   PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
                                      << raw_request->DebugString();
-  std::string x = raw_request->DebugString();
   auto auction_request_metric =
       metric::MakeInitiatedRequest(metric::kAs, metric_context_.get())
           .release();
@@ -188,6 +210,7 @@ void SelectAuctionResultReactor::FinishWithStatus(const grpc::Status& status) {
     LogIfError(metric_context_->LogHistogram<metric::kSfeWithWinnerTimeMs>(
         static_cast<int>((absl::Now() - start_) / absl::Milliseconds(1))));
   }
+  log_context_.ExportEventMessage(/*if_export_consented=*/true);
   Finish(status);
 }
 
@@ -306,6 +329,12 @@ void SelectAuctionResultReactor::Execute() {
     PS_LOG(ERROR, log_context_) << error_msg;
     FinishWithServerVisibleErrors(error_msg);
     return;
+  }
+
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    log_context_.SetEventMessageField(component_auction_results);
+    PS_VLOG(kPlain, log_context_)
+        << "component auction results exported in EventMessage if consented";
   }
 
   // Keep bidding groups for adding to response.

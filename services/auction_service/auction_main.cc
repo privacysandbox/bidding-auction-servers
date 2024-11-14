@@ -1,4 +1,3 @@
-
 //  Copyright 2022 Google LLC
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +44,7 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
@@ -68,9 +68,6 @@ ABSL_FLAG(
     " command line from cloud metadata store. False by default.");
 ABSL_FLAG(std::optional<bool>, enable_auction_service_benchmark, std::nullopt,
           "Benchmark the auction server and write the runtimes to the logs.");
-ABSL_FLAG(
-    std::optional<std::string>, seller_code_fetch_config, std::nullopt,
-    "The JSON string for config fields necessary for AdTech code fetching.");
 ABSL_FLAG(
     std::optional<std::int64_t>, udf_num_workers, std::nullopt,
     "The number of workers/threads for executing AdTech code in parallel.");
@@ -97,19 +94,12 @@ using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
-namespace {
-bool ShouldEnableSellerAndBuyerUdfIsolation(bool test_mode) {
-  if (test_mode) {
-    return false;
-  }
-  return true;
-}
-}  // namespace
-
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
+  config_client.SetFlag(FLAGS_https_fetch_skips_tls_verification,
+                        HTTPS_FETCH_SKIPS_TLS_VERIFICATION);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_enable_auction_service_benchmark,
                         ENABLE_AUCTION_SERVICE_BENCHMARK);
@@ -189,6 +179,29 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   return config_client;
 }
 
+void SetBuyersEnabledForReportWinInRunTimeConfig(
+    const auction_service::SellerCodeFetchConfig& code_fetch_proto,
+    AuctionServiceRuntimeConfig& runtime_config) {
+  for (const auto& [buyer_origin, report_win_endpoint] :
+       code_fetch_proto.buyer_report_win_js_urls()) {
+    if (report_win_endpoint.empty()) {
+      PS_LOG(ERROR) << "reportWin not configured for buyer:" << buyer_origin;
+      continue;
+    }
+    runtime_config.buyers_with_report_win_enabled.insert(buyer_origin);
+  }
+  for (const auto& [buyer_origin, report_win_endpoint] :
+       code_fetch_proto.protected_app_signals_buyer_report_win_js_urls()) {
+    if (report_win_endpoint.empty()) {
+      // PS_LOG(WARN, SystemLogContext()) << "reportWin not configured for
+      // buyer:" << buyer_origin;
+      continue;
+    }
+    runtime_config.protected_app_signals_buyers_with_report_win_enabled.insert(
+        buyer_origin);
+  }
+}
+
 // Brings up the gRPC AuctionService on FLAGS_port.
 absl::Status RunServer() {
   TrustedServerConfigUtil config_util(absl::GetFlag(FLAGS_init_config_client));
@@ -234,7 +247,8 @@ absl::Status RunServer() {
   CHECK(result.ok()) << "Could not parse SELLER_CODE_FETCH_CONFIG JsonString "
                         "to a proto message: "
                      << result;
-
+  bool test_mode = config_client.GetBooleanParameter(TEST_MODE);
+  code_fetch_proto.set_test_mode(test_mode);
   bool enable_seller_debug_url_generation =
       code_fetch_proto.enable_seller_debug_url_generation();
   bool enable_adtech_code_logging =
@@ -247,9 +261,7 @@ absl::Status RunServer() {
       code_fetch_proto.enable_private_aggregate_reporting();
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  bool test_mode = config_client.GetBooleanParameter(TEST_MODE);
-  bool enable_seller_and_buyer_udf_isolation =
-      ShouldEnableSellerAndBuyerUdfIsolation(test_mode);
+  bool enable_seller_and_buyer_udf_isolation = true;
 
   code_fetch_proto.set_enable_seller_and_buyer_udf_isolation(
       enable_seller_and_buyer_udf_isolation);
@@ -297,11 +309,6 @@ absl::Status RunServer() {
             runtime_config);
       };
 
-  std::string default_code_version =
-      code_fetch_proto.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET
-          ? code_fetch_proto.auction_js_bucket_default_blob()
-          : kScoreAdBlobVersion;
-
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
       .roma_timeout_ms =
@@ -318,12 +325,17 @@ absl::Status RunServer() {
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_DEBUG_URL_BYTES),
       .max_allowed_size_all_debug_urls_kb =
           config_client.GetIntParameter(MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB),
-      .default_code_version = default_code_version,
       .enable_seller_and_buyer_udf_isolation =
           enable_seller_and_buyer_udf_isolation,
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
       .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
       .enable_kanon = absl::GetFlag(FLAGS_enable_kanon)};
+
+  PS_RETURN_IF_ERROR(
+      code_fetch_manager.ConfigureRuntimeDefaults(runtime_config))
+      << "Could not init runtime defaults for udf fetching.";
+  SetBuyersEnabledForReportWinInRunTimeConfig(code_fetch_proto, runtime_config);
+
   AuctionService auction_service(
       std::move(score_ads_reactor_factory),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),

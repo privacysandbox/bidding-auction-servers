@@ -43,8 +43,12 @@ constexpr char kTestTopLevelSeller[] = "top_level_seller_origin";
 constexpr char kTestAdComponentUrl_1[] = "https://compoennt_1";
 constexpr char kTestAdComponentUrl_2[] = "https://component_2";
 constexpr char kTestBidCurrency[] = "ABC";
+constexpr uint32_t kTestSellerDataVersion = 1989;
 
 using ::google::protobuf::util::MessageDifferencer;
+using AdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
+using google::scp::core::test::EqualsProto;
 
 google::protobuf::RepeatedPtrField<std::string> MakeMockAdComponentUrls() {
   google::protobuf::RepeatedPtrField<std::string> component_urls;
@@ -61,56 +65,46 @@ rapidjson::Document ParseJson(absl::string_view output) {
   return parsed_output;
 }
 
+void CheckGenericOutput(const rapidjson::Document& parsed_output) {
+  EXPECT_EQ(parsed_output["topWindowHostname"], kTestPublisher);
+  EXPECT_EQ(parsed_output["interestGroupOwner"], kTestIGOwner);
+  EXPECT_EQ(parsed_output["renderUrl"], kTestRenderUrl);
+  ASSERT_TRUE(parsed_output["adComponents"].IsArray());
+  EXPECT_EQ(parsed_output["adComponents"].GetArray()[0], kTestAdComponentUrl_1);
+  EXPECT_EQ(parsed_output["adComponents"].GetArray()[1], kTestAdComponentUrl_2);
+  EXPECT_EQ(parsed_output["bidCurrency"], kTestBidCurrency);
+  ASSERT_TRUE(parsed_output["dataVersion"].IsUint());
+  EXPECT_EQ(parsed_output["dataVersion"].GetUint(), kTestSellerDataVersion);
+}
+
 TEST(MakeBidMetadataForTopLevelAuctionTest, PopulatesExpectedValues) {
   std::string output = MakeBidMetadataForTopLevelAuction(
       kTestPublisher, kTestIGOwner, kTestRenderUrl, MakeMockAdComponentUrls(),
-      kTestComponentSeller, kTestBidCurrency);
+      kTestComponentSeller, kTestBidCurrency, kTestSellerDataVersion);
 
-  auto parsed_output = ParseJson(output);
-  EXPECT_EQ(parsed_output["topWindowHostname"], kTestPublisher);
-  EXPECT_EQ(parsed_output["interestGroupOwner"], kTestIGOwner);
-  EXPECT_EQ(parsed_output["renderUrl"], kTestRenderUrl);
+  const rapidjson::Document parsed_output = ParseJson(output);
+  CheckGenericOutput(parsed_output);
   EXPECT_EQ(parsed_output["componentSeller"], kTestComponentSeller);
-  ASSERT_TRUE(parsed_output["adComponents"].IsArray());
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[0], kTestAdComponentUrl_1);
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[1], kTestAdComponentUrl_2);
-  EXPECT_EQ(parsed_output["bidCurrency"], kTestBidCurrency);
 }
 
 TEST(MakeBidMetadataTest, PopulatesExpectedValues) {
-  std::string output =
-      MakeBidMetadata(kTestPublisher, kTestIGOwner, kTestRenderUrl,
-                      MakeMockAdComponentUrls(), "", kTestBidCurrency);
+  std::string output = MakeBidMetadata(
+      kTestPublisher, kTestIGOwner, kTestRenderUrl, MakeMockAdComponentUrls(),
+      "", kTestBidCurrency, kTestSellerDataVersion);
 
-  auto parsed_output = ParseJson(output);
-  EXPECT_EQ(parsed_output["topWindowHostname"], kTestPublisher);
-  EXPECT_EQ(parsed_output["interestGroupOwner"], kTestIGOwner);
-  EXPECT_EQ(parsed_output["renderUrl"], kTestRenderUrl);
-  ASSERT_TRUE(parsed_output["adComponents"].IsArray());
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[0], kTestAdComponentUrl_1);
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[1], kTestAdComponentUrl_2);
-  EXPECT_EQ(parsed_output["bidCurrency"], kTestBidCurrency);
+  const rapidjson::Document parsed_output = ParseJson(output);
+  CheckGenericOutput(parsed_output);
 }
 
 TEST(MakeBidMetadataTest, PopulatesExpectedValuesForComponentAuction) {
   std::string output = MakeBidMetadata(
       kTestPublisher, kTestIGOwner, kTestRenderUrl, MakeMockAdComponentUrls(),
-      kTestTopLevelSeller, kTestBidCurrency);
+      kTestTopLevelSeller, kTestBidCurrency, kTestSellerDataVersion);
 
-  auto parsed_output = ParseJson(output);
-  EXPECT_EQ(parsed_output["topWindowHostname"], kTestPublisher);
-  EXPECT_EQ(parsed_output["interestGroupOwner"], kTestIGOwner);
-  EXPECT_EQ(parsed_output["renderUrl"], kTestRenderUrl);
-  ASSERT_TRUE(parsed_output["adComponents"].IsArray());
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[0], kTestAdComponentUrl_1);
-  EXPECT_EQ(parsed_output["adComponents"].GetArray()[1], kTestAdComponentUrl_2);
+  const rapidjson::Document parsed_output = ParseJson(output);
+  CheckGenericOutput(parsed_output);
   EXPECT_EQ(parsed_output["topLevelSeller"], kTestTopLevelSeller);
-  EXPECT_EQ(parsed_output["bidCurrency"], kTestBidCurrency);
 }
-
-using AdWithBidMetadata =
-    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
-using google::scp::core::test::EqualsProto;
 
 TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   AuctionResult auction_result = MakeARandomComponentAuctionResult(

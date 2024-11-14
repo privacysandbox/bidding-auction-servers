@@ -94,7 +94,10 @@ module "buyer" {
     BIDDING_SERVER_ADDR              = local.use_service_mesh ? "dns:///bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}:50051" : "dns:///bidding-${local.environment}.${local.buyer_root_domain}:443"
     GRPC_ARG_DEFAULT_AUTHORITY       = local.use_service_mesh ? "bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
     # Refers to BYOS Buyer Key-Value Server only.
-    BUYER_KV_SERVER_ADDR                                  = "" # Example: "https://kvserver.com/trusted-signals"
+    BUYER_KV_SERVER_ADDR                                  = ""            # Example: "https://kvserver.com/trusted-signals"
+    BUYER_TKV_V2_SERVER_ADDR                              = "PLACEHOLDER" # Example: "dns:///kvserver:443"
+    ENABLE_TKV_V2_BROWSER                                 = ""            # Example: "false"
+    TKV_EGRESS_TLS                                        = ""            # Example: "false"
     TEE_AD_RETRIEVAL_KV_SERVER_ADDR                       = "${local.tee_ad_retrieval_kv_server_address}"
     TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY = local.use_service_mesh ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
     TEE_KV_SERVER_ADDR                                    = "${local.tee_kv_server_address}"
@@ -177,6 +180,9 @@ module "buyer" {
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
+
+    ENABLE_CHAFFING        = "false"
+    ENABLE_PRIORITY_VECTOR = "false"
   }
   consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
 }

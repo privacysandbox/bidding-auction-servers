@@ -54,6 +54,13 @@ absl::flat_hash_map<std::string, std::string> MakeARandomMap(int entries = 2);
 
 int MakeARandomInt(int min, int max);
 
+template <typename NumType>
+std::string FormatNumber(NumType num, int precision = 1) {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(precision) << num;
+  return oss.str();
+}
+
 template <typename num_type>
 num_type MakeARandomNumber(num_type min, num_type max) {
   std::default_random_engine curr_time_generator(ToUnixMillis(absl::Now()));
@@ -132,7 +139,8 @@ InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser();
 
 GenerateBidsRequest::GenerateBidsRawRequest
 MakeARandomGenerateBidsRawRequestForAndroid(
-    bool enforce_kanon = false, int multi_bid_limit = kDefaultMultiBidLimit);
+    bool enforce_kanon = false, int multi_bid_limit = kDefaultMultiBidLimit,
+    int num_igs = 2);
 
 GenerateBidsRequest::GenerateBidsRawRequest
 MakeARandomGenerateBidsRequestForBrowser(

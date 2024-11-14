@@ -67,6 +67,7 @@ cc_library(
         "//services/auction_service/reporting:noiser_and_bucketer",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
+        "//services/common/constants:common_constants",
         "//services/common/util:json_util",
         "@com_google_absl//absl/status:statusor",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",

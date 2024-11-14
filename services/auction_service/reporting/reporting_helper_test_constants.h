@@ -33,12 +33,13 @@ constexpr char kTestInteractionEvent[] = "click";
 constexpr char kTestInteractionUrl[] = "http://event.com";
 constexpr char kTestPublisherHostName[] = "publisherName";
 constexpr char kTestAuctionConfig[] = "testAuctionConfig";
+constexpr uint32_t kSellerDataVersion = 1989;
 constexpr char kTestSellerReportingSignalsForComponentSeller[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0,"modifiedBidCurrency":"USD","componentSeller":"http://seller.com"})";
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","dataVersion":1989,"highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0,"modifiedBidCurrency":"USD","componentSeller":"http://seller.com"})";
 constexpr char kTestSellerReportingSignalsWithOtherBidCurrency[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5})";
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","dataVersion":1989,"highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5})";
 constexpr char kTestSellerReportingSignals[] =
-    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"???","highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5})";
+    R"({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"???","dataVersion":1989,"highestScoringOtherBidCurrency":"???","desirability":2.0,"highestScoringOtherBid":0.5})";
 constexpr char kTestInterestGroupOwner[] = "testOwner";
 constexpr char kTestInterestGroupName[] = "testInterestGroupName";
 constexpr char kTestRender[] = "http://testurl.com";

@@ -35,9 +35,10 @@ constexpr int kTestJoinCount = 5;
 constexpr absl::string_view kTestBuyerSignals = R"([1,"test",[2]])";
 constexpr absl::string_view kTestAuctionSignals = R"([[3,"test",[4]]])";
 constexpr uint32_t kTestDataVersion = 1689;
+constexpr uint32_t kTestSellerDataVersion = 1989;
 constexpr inline char kExpectedComponentReportResultUrl[] =
     "http://"
-    "test.com&bid=1&bidCurrency=EUR&highestScoringOtherBid=0&"
+    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=0&"
     "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
     "com&interestGroupOwner=barStandardAds.com&topLevelSeller=topLevelSeller&"
     "modifiedBid=2";
@@ -109,6 +110,7 @@ struct TestScoreAdsRequestConfig {
   std::optional<std::string> buyer_and_seller_reporting_id;
   std::string interest_group_owner = "";
   TestComponentAuctionResultData component_auction_data;
+  const uint32_t seller_data_version = kTestSellerDataVersion;
 };
 
 // This function simulates a E2E successful call to ScoreAds in the

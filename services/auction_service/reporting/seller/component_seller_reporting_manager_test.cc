@@ -32,12 +32,12 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 constexpr absl::string_view kExpectedSellerDeviceSignals =
-    R"JSON({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0})JSON";
+    R"JSON({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","dataVersion":1989,"highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5,"topLevelSeller":"testTopLevelSeller","modifiedBid":1.0})JSON";
 
 TEST(TestSellerReportingManager, ReturnsRapidJsonDocOfSellerDeviceSignals) {
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
   SellerReportingDispatchRequestData dispatch_request_data =

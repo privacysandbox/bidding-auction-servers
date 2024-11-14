@@ -171,7 +171,6 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   const BiddingSignalsAsyncProvider* bidding_signals_async_provider_;
 
   KVAsyncClient* kv_async_client_;
-  int ad_bids_retrieval_timeout_ms_;
 
   BiddingAsyncClient* bidding_async_client_;
   // PAS bidding client should only be set by the caller if the feature is
@@ -243,6 +242,9 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // after it is intially set, its fields may be moved; see the struct
   // definition for more specifics on its usage and fields.
   BiddingSignalJsonComponents bidding_signal_json_components_;
+
+  // JSON map of the priority signals supplied by SSP.
+  rapidjson::Document priority_signals_vector_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

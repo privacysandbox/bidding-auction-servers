@@ -13,16 +13,6 @@ python_deps()
 
 python_register_toolchains("//builders/bazel")
 
-# TODO: Remove bazel_clang_tidy once we sync to the common repo commit 9edb0c3 (4/3/2024) or later
-http_archive(
-    name = "bazel_clang_tidy",
-    sha256 = "352aeb57ad7ed53ff6e02344885de426421fb6fd7a3890b04d14768d759eb598",
-    strip_prefix = "bazel_clang_tidy-4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39",
-    urls = [
-        "https://github.com/erenon/bazel_clang_tidy/archive/4884c32e09c1ea9ac96b3f08c3004f3ac4c3fe39.zip",
-    ],
-)
-
 http_archive(
     name = "google_privacysandbox_servers_common",
     # 2024-10-09

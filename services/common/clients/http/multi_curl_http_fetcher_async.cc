@@ -21,10 +21,12 @@
 
 #include <curl/curl.h>
 
+#include "absl/flags/flag.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "event2/thread.h"
+#include "services/common/constants/common_service_flags.h"
 #include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -146,6 +148,9 @@ MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
     : executor_(executor),
       keepalive_idle_sec_(keepalive_idle_sec),
       keepalive_interval_sec_(keepalive_interval_sec),
+      skip_tls_verification_(
+          absl::GetFlag(FLAGS_https_fetch_skips_tls_verification)
+              .value_or(false)),
       // Shutdown timer event is persistent because we don't want to remove
       // it from the event loop the first time it fires. With this timer, we
       // periodically check for fetcher shutdown and terminate the event loop
@@ -330,6 +335,12 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(
   // encodings. See https://curl.se/libcurl/c/CURLOPT_ACCEPT_ENCODING.html.
   curl_easy_setopt(req_handle, CURLOPT_ACCEPT_ENCODING, "");
 
+  if (skip_tls_verification_) {
+    curl_easy_setopt(req_handle, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(req_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYHOST, 0L);
+  }
   // Set HTTP headers.
   if (!request.headers.empty()) {
     curl_easy_setopt(req_handle, CURLOPT_HTTPHEADER,

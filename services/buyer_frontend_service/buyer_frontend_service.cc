@@ -54,8 +54,6 @@ BuyerFrontEndService::BuyerFrontEndService(
             key_fetcher_manager_.get(), crypto_client_.get(), client_config,
             stub_.get());
   }
-  CHECK(config_.debug_sample_rate_micro >= 0 &&
-        config_.debug_sample_rate_micro <= 1'000'000);
 }
 
 BuyerFrontEndService::BuyerFrontEndService(ClientRegistry client_registry,

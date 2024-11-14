@@ -59,18 +59,26 @@ struct BiddingServiceRuntimeConfig {
   // Whether GRPC client to KV server should use TLS.
   bool kv_server_egress_tls = true;
   // Default UDF versions:
-  std::string default_protected_auction_generate_bid_version =
+  std::string default_protected_audience_generate_bid_version =
       kProtectedAudienceGenerateBidBlobVersion;
   std::string default_protected_app_signals_generate_bid_version =
       kProtectedAppSignalsGenerateBidBlobVersion;
-  std::string default_ad_retrieval_version =
+  std::string default_prepare_data_for_ad_retrieval_version =
       kPrepareDataForAdRetrievalBlobVersion;
+  // Flag for whether or not to allow default version override.
+  bool use_per_request_udf_versioning = false;
+
   // Enables private aggregate reporting.
   bool enable_private_aggregate_reporting = false;
 
   bool enable_cancellation = false;
   bool enable_kanon = false;
   bool enable_temporary_unlimited_egress = false;
+
+  // Default Egress schema versions:
+  bool use_per_request_schema_versioning = false;
+  std::string default_egress_schema_version = kDefaultEgressSchemaId;
+  std::string default_unlimited_egress_schema_version = kDefaultEgressSchemaId;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

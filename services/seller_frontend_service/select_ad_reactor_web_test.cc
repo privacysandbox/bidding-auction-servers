@@ -34,6 +34,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/cbor_test_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
@@ -59,25 +60,41 @@ using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                             GetByteSize) &&>;
 
+template <typename T, bool UseKvV2ForBrowser>
+struct TypeDefinitions {
+  typedef T InputType;
+  static constexpr bool kUseKvV2ForBrowser = UseKvV2ForBrowser;
+};
+
 template <typename T>
 class SelectAdReactorForWebTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // initialize
+    privacy_sandbox::bidding_auction_servers::CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<SelectAdRequest>(
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto));
+    config_ = CreateConfig();
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
+    if (T::kUseKvV2ForBrowser) {
+      config_.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
+    }
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+    config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
+    config_.SetOverride("", K_ANON_API_KEY);
+    config_.SetOverride(kFalse, TEST_MODE);
   }
 
-  void SetProtectedAuctionCipherText(const T& protected_auction_input,
-                                     const std::string& ciphertext,
-                                     SelectAdRequest& select_ad_request) {
+  void SetProtectedAuctionCipherText(
+      const typename T::InputType& protected_auction_input,
+      const std::string& ciphertext, SelectAdRequest& select_ad_request) {
     const auto* descriptor = protected_auction_input.GetDescriptor();
     if (descriptor->name() == kProtectedAuctionInput) {
       *select_ad_request.mutable_protected_auction_ciphertext() = ciphertext;
@@ -86,12 +103,15 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     }
   }
 
-  TrustedServersConfigClient config_ = CreateConfig();
+  TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
 };
 
 using ProtectedAuctionInputTypes =
-    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+    ::testing::Types<TypeDefinitions<ProtectedAudienceInput, false>,
+                     TypeDefinitions<ProtectedAudienceInput, true>,
+                     TypeDefinitions<ProtectedAuctionInput, false>,
+                     TypeDefinitions<ProtectedAuctionInput, true>>;
 TYPED_TEST_SUITE(SelectAdReactorForWebTest, ProtectedAuctionInputTypes);
 
 template <typename T>
@@ -108,16 +128,19 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain);
 
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
@@ -180,16 +203,19 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain);
 
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
@@ -250,6 +276,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -262,6 +289,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
+                         kv_async_client,
                          *key_fetcher_manager,
                          /* *crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -344,8 +372,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   // Set log context that should be propagated to the downstream services.
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_BROWSER,
-                                          kSellerOriginDomain);
+      GetSampleSelectAdRequest<typename TypeParam::InputType>(
+          CLIENT_TYPE_BROWSER, kSellerOriginDomain);
   request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
   auto& buyer_config = (*request.mutable_auction_config()
                              ->mutable_per_buyer_config())[kSampleBuyer];
@@ -364,16 +392,19 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
   // Setup bad request that should be validated by our validation logic.
@@ -452,16 +483,19 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
   // Setup bad request that should be validated by our validation logic.
@@ -516,16 +550,19 @@ TYPED_TEST(SelectAdReactorForWebTest,
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
   // Set up a buyer input map with no usable buyer/IGs that could be used to get
@@ -608,6 +645,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -620,6 +658,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
+                         kv_async_client,
                          *key_fetcher_manager,
                          /* *crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -706,9 +745,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   // Set consented debug config that should be propagated to the downstream
   // services.
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(CLIENT_TYPE_BROWSER,
-                                          kSellerOriginDomain,
-                                          /*is_consented_debug=*/true);
+      GetSampleSelectAdRequest<typename TypeParam::InputType>(
+          CLIENT_TYPE_BROWSER, kSellerOriginDomain,
+          /*is_consented_debug=*/true);
 
   request.mutable_auction_config()->set_seller_debug_id(kSampleSellerDebugId);
   auto& buyer_config = (*request.mutable_auction_config()
@@ -729,16 +768,19 @@ TYPED_TEST(SelectAdReactorForWebTest,
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true,
           kTestTopLevelSellerOriginDomain);
 
@@ -807,6 +849,7 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -814,10 +857,12 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
       .WillRepeatedly(Return(GetPrivateKey()));
 
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/true);
@@ -845,6 +890,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  KVAsyncClientMock kv_async_client;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
       std::make_unique<server_common::MockKeyFetcherManager>();
@@ -856,10 +902,12 @@ TYPED_TEST(SelectAdReactorForWebTest,
   MockCryptoClientWrapper crypto_client;
   SetupMockCryptoClient(crypto_client);
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/false,

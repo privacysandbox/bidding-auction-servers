@@ -46,6 +46,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
@@ -86,20 +87,37 @@ using AdWithBidMetadata =
 using BuyerHostname = std::string;
 using AdUrl = std::string;
 
+template <typename T, bool UseKvV2ForBrowser>
+struct TypeDefinitions {
+  typedef T InputType;
+  static constexpr bool kUseKvV2ForBrowser = UseKvV2ForBrowser;
+};
+
 template <typename T>
 class SellerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    privacy_sandbox::bidding_auction_servers::CommonTestInit();
     auto [protected_auction_input, request, context] =
-        GetSampleSelectAdRequest<T>(CLIENT_TYPE_BROWSER, kSellerOriginDomain);
+        GetSampleSelectAdRequest<typename T::InputType>(CLIENT_TYPE_BROWSER,
+                                                        kSellerOriginDomain);
     protected_auction_input_ = std::move(protected_auction_input);
     request_ = std::move(request);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(context));
+    config_ = CreateConfig();
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
+    if (T::kUseKvV2ForBrowser) {
+      config_.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
+    }
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+    config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
+    config_.SetOverride("", K_ANON_API_KEY);
+    config_.SetOverride(kFalse, TEST_MODE);
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
         .Times(testing::AnyNumber())
         .WillRepeatedly(
@@ -123,7 +141,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
                     absl::string_view buyer_currency = "",
                     int num_k_anon_ghost_winners = 1,
                     bool enforce_kanon = false) {
-    protected_auction_input_ = MakeARandomProtectedAuctionInput<T>(num_buyers);
+    protected_auction_input_ =
+        MakeARandomProtectedAuctionInput<typename T::InputType>(num_buyers);
     protected_auction_input_.set_num_k_anon_ghost_winners(
         num_k_anon_ghost_winners);
     protected_auction_input_.set_enforce_kanon(enforce_kanon);
@@ -132,7 +151,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
         kSellerOriginDomain, protected_auction_input_, set_buyer_egid,
         set_seller_egid, seller_currency, buyer_currency);
     auto [encrypted_protected_auction_input, encryption_context] =
-        GetCborEncodedEncryptedInputAndOhttpContext<T>(
+        GetCborEncodedEncryptedInputAndOhttpContext<typename T::InputType>(
             protected_auction_input_);
     SetProtectedAuctionCipherText(encrypted_protected_auction_input);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
@@ -150,22 +169,26 @@ class SellerFrontEndServiceTest : public ::testing::Test {
 
   void PopulateProtectedAudienceInputCiphertextOnRequest() {
     auto [encrypted_protected_auction_input, encryption_context] =
-        GetCborEncodedEncryptedInputAndOhttpContext<T>(
+        GetCborEncodedEncryptedInputAndOhttpContext<typename T::InputType>(
             protected_auction_input_);
     SetProtectedAuctionCipherText(encrypted_protected_auction_input);
     context_ = std::make_unique<quiche::ObliviousHttpRequest::Context>(
         std::move(encryption_context));
   }
 
-  T protected_auction_input_;
+  typename T::InputType protected_auction_input_;
   Request request_;
   std::unique_ptr<quiche::ObliviousHttpRequest::Context> context_;
-  TrustedServersConfigClient config_ = CreateConfig();
+  TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   server_common::MockKeyFetcherManager key_fetcher_manager_;
+  ReportWinMap report_win_map_;
 };
 
 using ProtectedAuctionInputTypes =
-    ::testing::Types<ProtectedAudienceInput, ProtectedAuctionInput>;
+    ::testing::Types<TypeDefinitions<ProtectedAudienceInput, false>,
+                     TypeDefinitions<ProtectedAudienceInput, true>,
+                     TypeDefinitions<ProtectedAuctionInput, false>,
+                     TypeDefinitions<ProtectedAuctionInput, true>>;
 TYPED_TEST_SUITE(SellerFrontEndServiceTest, ProtectedAuctionInputTypes);
 
 TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
@@ -175,7 +198,10 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -239,7 +265,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
-    auto decoded_buyer_input = DecodeBuyerInput(
+    auto buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
@@ -247,7 +273,6 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
         << error_accumulator.GetAccumulatedErrorString(
                ErrorVisibility::CLIENT_VISIBLE)
         << "\n\n";
-    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
           return SetupMockBuyer(buyer_input, hostname);
@@ -266,15 +291,16 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          this->key_fetcher_manager_,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -287,7 +313,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -353,12 +382,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
-    auto decoded_buyer_input = DecodeBuyerInput(
+    auto buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
-    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .Times(::testing::AtMost(1))
         .WillOnce([SetupMockBuyer, buyer_input,
@@ -379,15 +407,17 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          this->key_fetcher_manager_,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, /*max_buyers_solicited=*/3,
+      this->config_, clients, this->request_, this->report_win_map_,
+      /*max_buyers_solicited=*/3,
       /*enable_kanon=*/false);
   // Hard limit is calling 3 buyers since we upped it.
   EXPECT_EQ(num_buyers_solicited, 3);
@@ -402,7 +432,10 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -449,12 +482,11 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
-    auto decoded_buyer_input = DecodeBuyerInput(
+    auto buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
-    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .Times(::testing::AtMost(1))
         .WillOnce([SetupMockBuyer, buyer_input,
@@ -475,15 +507,16 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          this->key_fetcher_manager_,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   // Hard limit is calling 2 buyers.
   EXPECT_EQ(num_buyers_solicited, 2);
 }
@@ -498,7 +531,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ScoringAsyncClientMock scoring_client;
 
   // KV Client
-  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -538,12 +574,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
-    auto decoded_buyer_input = DecodeBuyerInput(
+    auto buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
-    const BuyerInput& buyer_input = std::move(decoded_buyer_input);
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
           return SetupMockBuyer(buyer_input);
@@ -560,16 +595,17 @@ TYPED_TEST(SellerFrontEndServiceTest,
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          this->key_fetcher_manager_,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
 }
 
 /**
@@ -613,29 +649,34 @@ TYPED_TEST(SellerFrontEndServiceTest,
   // Scoring Signals Provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  SetupScoringProviderMock(
-      /*provider=*/scoring_signals_provider,
-      /*expected_buyer_bids=*/expected_buyer_bids,
-      /*scoring_signals_value=*/"",
-      /*repeated_get_allowed=*/false,
-      /*server_error_to_return=*/std::nullopt,
-      /*expected_num_bids=*/-1,
-      /*seller_egid=*/
-      absl::StrCat(this->request_.auction_config()
-                       .code_experiment_spec()
-                       .seller_kv_experiment_group_id()));
-  // Reporting Client.
+  KVAsyncClientMock kv_async_client;
+  auto seller_egid = absl::StrCat(this->request_.auction_config()
+                                      .code_experiment_spec()
+                                      .seller_kv_experiment_group_id());
+  if (TypeParam::kUseKvV2ForBrowser) {
+    kv_server::v2::GetValuesResponse kv_response;
+    SetupKvAsyncClientMock(kv_async_client, kv_response, expected_buyer_bids,
+                           {.seller_egid = seller_egid});
+  } else {
+    SetupScoringProviderMock(
+        scoring_signals_provider, expected_buyer_bids,
+        {.scoring_signals_value = "",
+         .seller_egid = seller_egid});  // Reporting Client.
+  }
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
 }
 
 /**
@@ -662,7 +703,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
   BuyerBidsResponseMap expected_buyer_bids;
   std::string buyer_reporting_id = "testBuyerReportingId";
   std::string buyer_and_seller_reporting_id = "buyerAndSellerReportingId";
-  std::string selectable_buyer_and_seller_reporting_id =
+  std::string selected_buyer_and_seller_reporting_id =
       "selectableBuyerAndSellerReportingId";
   for (const auto& [buyer, unused] :
        this->protected_auction_input_.buyer_input()) {
@@ -677,7 +718,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
             /*number_ad_component_render_urls = */ kDefaultNumAdComponents,
             /*bid_currency = */ kEurosIsoCode, buyer_reporting_id,
             buyer_and_seller_reporting_id,
-            selectable_buyer_and_seller_reporting_id);
+            selected_buyer_and_seller_reporting_id);
     bids.insert_or_assign(url, response.bids().at(0));
     SetupBuyerClientMock(buyer, buyer_clients, response);
     expected_buyer_bids.try_emplace(
@@ -687,22 +728,20 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
   MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
                                 buyer_clients);
 
-  // Scoring signals provider
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
+
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillOnce([select_ad_req = this->request_,
-                 protected_auction_input = this->protected_auction_input_,
-                 scoring_signals_value, bids, buyer_reporting_id,
-                 buyer_and_seller_reporting_id,
-                 selectable_buyer_and_seller_reporting_id](
+                 protected_auction_input = this->protected_auction_input_, bids,
+                 buyer_reporting_id, buyer_and_seller_reporting_id,
+                 selected_buyer_and_seller_reporting_id](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_raw_request,
                     grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
@@ -718,7 +757,15 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
         EXPECT_EQ(score_ads_raw_request->auction_signals(),
                   select_ad_req.auction_config().auction_signals());
         EXPECT_EQ(score_ads_raw_request->scoring_signals(),
-                  scoring_signals_value);
+                  TypeParam::kUseKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                                : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            score_ads_raw_request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
+        EXPECT_EQ(score_ads_raw_request->score_ad_version(),
+                  select_ad_req.auction_config()
+                      .code_experiment_spec()
+                      .score_ad_version());
         EXPECT_EQ(score_ads_raw_request->per_buyer_signals().size(), 2);
         // Even though input request specifies 10 k anon ghost winners,
         // we should only see 1 winner count hardcoded for chrome.
@@ -729,7 +776,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
           BuildAdWithBidFromAdWithBidMetadata(
               actual_ad_with_bid_metadata, &actual_ad_with_bid_for_test,
               buyer_reporting_id, buyer_and_seller_reporting_id,
-              selectable_buyer_and_seller_reporting_id);
+              selected_buyer_and_seller_reporting_id);
           EXPECT_TRUE(
               diff.Compare(actual_ad_with_bid_for_test,
                            bids.at(actual_ad_with_bid_for_test.render())));
@@ -751,13 +798,16 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, /*max_buyers_solicited=*/2,
-      enable_kanon);
+      this->config_, clients, this->request_, this->report_win_map_,
+      /*max_buyers_solicited=*/2, enable_kanon);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -801,23 +851,23 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                 buyer_clients);
 
   // Scoring signals provider
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
+
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillOnce([select_ad_req = this->request_,
                  protected_auction_input = this->protected_auction_input_,
-                 scoring_signals_value, bids](
-                    std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
-                        score_ads_raw_request,
-                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
-                    absl::Duration timeout, RequestConfig request_config) {
+                 bids](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                           score_ads_raw_request,
+                       grpc::ClientContext* context,
+                       ScoreAdsDoneCallback on_done, absl::Duration timeout,
+                       RequestConfig request_config) {
         google::protobuf::util::MessageDifferencer diff;
         std::string diff_output;
         diff.ReportDifferencesToString(&diff_output);
@@ -829,7 +879,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
         EXPECT_EQ(score_ads_raw_request->auction_signals(),
                   select_ad_req.auction_config().auction_signals());
         EXPECT_EQ(score_ads_raw_request->scoring_signals(),
-                  scoring_signals_value);
+                  TypeParam::kUseKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                                : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            score_ads_raw_request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(score_ads_raw_request->per_buyer_signals().size(), 2);
         // No ghost winner allowed since k-anon is not enabled.
         EXPECT_EQ(score_ads_raw_request->num_allowed_ghost_winners(), 0);
@@ -857,14 +911,18 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
+
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, /*max_buyers_solicited=*/2,
-      enable_kanon);
+      this->config_, clients, this->request_, this->report_win_map_,
+      /*max_buyers_solicited=*/2, enable_kanon);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
@@ -893,11 +951,17 @@ TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
                                 buyer_clients);
 
   // Scoring signals provider
-  std::string scoring_signals_value = "";
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  if (TypeParam::kUseKvV2ForBrowser) {
+    kv_server::v2::GetValuesResponse kv_response;
+    SetupKvAsyncClientMock(kv_async_client, kv_response, expected_buyer_bids);
+  } else {
+    SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+                             {.scoring_signals_value = ""});
+  }
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   // Scoring client should NOT be called when scoring signals are empty.
@@ -908,12 +972,15 @@ TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   // Decrypt to examine whether the result really is chaff.
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), *this->context_);
@@ -954,11 +1021,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -974,6 +1040,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
+        EXPECT_EQ(score_ads_request->scoring_signals(),
+                  TypeParam::kUseKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                                : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            score_ads_request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         // Last bid wins.
         for (const auto& bid : score_ads_request->ad_bids()) {
           EXPECT_EQ(bid.ad_cost(), kAdCost);
@@ -1024,12 +1096,15 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.Wait();
 
   AuctionResult auction_result = DecryptBrowserAuctionResult(
@@ -1216,15 +1291,15 @@ TYPED_TEST(SellerFrontEndServiceTest,
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
   // Inside the ScoringProviderMock, the expected_filtered_buyer_bids_map
-  // are compared to the actual bids recieved. This checks whether the bids not
-  // in USD made it to fetching scoring signals, which they should not have.
-  SetupScoringProviderMock(scoring_signals_provider,
-                           expected_filtered_buyer_bids_map,
-                           scoring_signals_value);
+  // are compared to the actual bids recieved. This checks whether the bids
+  // not in USD made it to fetching scoring signals, which they should not
+  // have.
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      expected_filtered_buyer_bids_map);
 
   MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
                                 buyer_clients);
@@ -1243,6 +1318,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
         ScoreAdsResponse::ScoreAdsRawResponse response;
         float i = 1;
         ErrorAccumulator error_accumulator;
+        EXPECT_EQ(score_ads_request->scoring_signals(),
+                  TypeParam::kUseKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                                : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            score_ads_request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(score_ads_request->ad_bids_size(), num_buyers * num_matched);
         // Last ad_with_bid_metadata wins.
         for (const auto& ad_with_bid_metadata : score_ads_request->ad_bids()) {
@@ -1297,13 +1378,16 @@ TYPED_TEST(SellerFrontEndServiceTest,
           std::make_unique<MockHttpFetcherAsync>());
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   // Filtered bids checked above in the scoring signals provider mock.
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.Wait();
 
   // Decrypt the response.
@@ -1324,9 +1408,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
 TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   // Setup a buyer input with two interest groups that will have non-zero bids
-  // from the bidding service, another interest group with 0 bid and the last
-  // interest group that is not present in the bidding data returned by the
-  // bidding service.
+  // from the bidding service, another interest group with 0 bid and the
+  // last interest group that is not present in the bidding data returned by
+  // the bidding service.
   const std::string expected_ig_1 = "interest_group_1";
   const std::string expected_ig_2 = "interest_group_2";
   const std::string unexpected_ig_1 = "unexpected_interest_group_1";
@@ -1358,10 +1442,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   }
   this->protected_auction_input_.set_generation_id(MakeARandomString());
   this->protected_auction_input_.set_publisher_name(MakeARandomString());
-  this->request_.set_client_type(ClientType::CLIENT_TYPE_ANDROID);
-
-  // KV Client
-  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals> scoring_provider;
+  this->request_.set_client_type(ClientType::CLIENT_TYPE_BROWSER);
 
   // Buyer Clients
   BuyerFrontEndAsyncClientFactoryMock buyer_clients;
@@ -1393,11 +1474,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   }
 
   // Scoring signals provider
-  std::string ad_render_urls = "test scoring signals";
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           ad_render_urls);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -1405,6 +1487,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
                    absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(request->scoring_signals(), TypeParam::kUseKvV2ForBrowser
+                                                  ? kValidScoringSignalsJsonKvV2
+                                                  : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(request->ad_bids_size(), 3);
         EXPECT_EQ(request_config.chaff_request_size, 0);
         // We can return only one score as a winner, so we arbitrarily
@@ -1436,16 +1524,19 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
                                 buyer_clients);
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   auto [encrypted_protected_auction_input, encrypted_context] =
-      GetCborEncodedEncryptedInputAndOhttpContext<TypeParam>(
-          this->protected_auction_input_);
+      GetCborEncodedEncryptedInputAndOhttpContext<
+          typename TypeParam::InputType>(this->protected_auction_input_);
   this->SetProtectedAuctionCipherText(encrypted_protected_auction_input);
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   AuctionResult auction_result = DecryptBrowserAuctionResult(
       *response.mutable_auction_result_ciphertext(), encrypted_context);
 
@@ -1494,11 +1585,10 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -1513,6 +1603,13 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
               grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
             ScoreAdsResponse::ScoreAdsRawResponse response;
+            EXPECT_EQ(request->scoring_signals(),
+                      TypeParam::kUseKvV2ForBrowser
+                          ? kValidScoringSignalsJsonKvV2
+                          : kValidScoringSignalsJson);
+            EXPECT_EQ(
+                request->seller_data_version(),
+                TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
             float i = 1;
             // Last bid wins.
             for (const auto& bid : request->ad_bids()) {
@@ -1558,13 +1655,16 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
                                 buyer_clients);
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
 
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.WaitForNotification();
   reporting_count.Wait();
 }
@@ -1572,7 +1672,6 @@ TYPED_TEST(SellerFrontEndServiceTest, PerformsDebugReportingAfterScoring) {
 TYPED_TEST(SellerFrontEndServiceTest,
            DoesntPerformDebugReportingAfterScoringFails) {
   this->SetupRequest(/*num_buyers=*/2);
-  std::string decision_logic = "function scoreAds(){}";
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
   // Buyer Clients
@@ -1593,11 +1692,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -1610,6 +1708,13 @@ TYPED_TEST(SellerFrontEndServiceTest,
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
+            EXPECT_EQ(request->scoring_signals(),
+                      TypeParam::kUseKvV2ForBrowser
+                          ? kValidScoringSignalsJsonKvV2
+                          : kValidScoringSignalsJson);
+            EXPECT_EQ(
+                request->seller_data_version(),
+                TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
             EXPECT_EQ(request_config.chaff_request_size, 0);
             std::move(on_done)(
                 absl::Status(absl::StatusCode::kInternal, "No Ads found"),
@@ -1617,6 +1722,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
             scoring_done.Notify();
             return absl::OkStatus();
           });
+
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
@@ -1627,12 +1733,15 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                 buyer_clients);
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.WaitForNotification();
 }
 
@@ -1666,11 +1775,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
@@ -1683,6 +1791,12 @@ TYPED_TEST(SellerFrontEndServiceTest,
                         score_ads_request,
                     grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
                     absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(score_ads_request->scoring_signals(),
+                  TypeParam::kUseKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                                : kValidScoringSignalsJson);
+        EXPECT_EQ(
+            score_ads_request->seller_data_version(),
+            TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(request_config.chaff_request_size, 0);
         EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
         std::move(on_done)(
@@ -1701,12 +1815,15 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                 buyer_clients);
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,      scoring_client,           buyer_clients,
-      this->key_fetcher_manager_,
-      /* crypto_client = */ nullptr, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.WaitForNotification();
 }
 
@@ -1741,22 +1858,27 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
   // Scoring signal provider
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
-  // Scoring signals must be nonzero for scoring to be attempted.
-  std::string scoring_signals_value =
-      R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
-  SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
-                           scoring_signals_value);
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client, expected_buyer_bids);
 
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
   absl::Notification scoring_done;
+  bool useKvV2ForBrowser = TypeParam::kUseKvV2ForBrowser;
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .Times(1)
-      .WillOnce([&top_level_seller, &scoring_done](
+      .WillOnce([&top_level_seller, &scoring_done, useKvV2ForBrowser](
                     std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
                         score_ads_request,
                     grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
                     absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_EQ(score_ads_request->scoring_signals(),
+                  useKvV2ForBrowser ? kValidScoringSignalsJsonKvV2
+                                    : kValidScoringSignalsJson);
+        EXPECT_EQ(score_ads_request->seller_data_version(),
+                  useKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(request_config.chaff_request_size, 0);
         EXPECT_EQ(top_level_seller, score_ads_request->top_level_seller());
         std::move(on_done)(
@@ -1780,11 +1902,15 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
                                 buyer_clients);
 
   // Client Registry
-  ClientRegistry clients{
-      scoring_signals_provider,   scoring_client, buyer_clients,
-      this->key_fetcher_manager_, &crypto_client, std::move(async_reporter)};
-  Response response =
-      RunRequest<SelectAdReactorForWeb>(this->config_, clients, this->request_);
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         &crypto_client,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
   scoring_done.WaitForNotification();
   ASSERT_FALSE(response.auction_result_ciphertext().empty());
   EXPECT_EQ(response.key_id(), key.key_id());
@@ -1806,6 +1932,8 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyUnlimitedEgressFlagPropagates) {
       std::make_unique<server_common::MockKeyFetcherManager>();
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
   // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
@@ -1813,6 +1941,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyUnlimitedEgressFlagPropagates) {
   ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
+                         kv_async_client,
                          *key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -1856,7 +1985,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyUnlimitedEgressFlagPropagates) {
   // Set consented debug config that should be propagated to the downstream
   // services.
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(
+      GetSampleSelectAdRequest<typename TypeParam::InputType>(
           ClientType::CLIENT_TYPE_ANDROID, kSellerOriginDomain,
           /*is_consented_debug=*/false,
           /* top_level_seller=*/"",
@@ -1885,6 +2014,8 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
@@ -1898,6 +2029,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
   ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
+                         kv_async_client,
                          *key_fetcher_manager,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
@@ -1940,7 +2072,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
                                 buyer_front_end_async_client_factory_mock);
 
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(
+      GetSampleSelectAdRequest<typename TypeParam::InputType>(
           ClientType::CLIENT_TYPE_ANDROID, kSellerOriginDomain,
           /*is_consented_debug=*/false,
           /* top_level_seller=*/"",
@@ -1964,6 +2096,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
@@ -1977,6 +2111,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   ClientRegistry clients{scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
+                         kv_async_client,
                          *key_fetcher_manager,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
@@ -2019,7 +2154,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                 buyer_front_end_async_client_factory_mock);
 
   auto [protected_auction_input, request, context] =
-      GetSampleSelectAdRequest<TypeParam>(
+      GetSampleSelectAdRequest<typename TypeParam::InputType>(
           ClientType::CLIENT_TYPE_ANDROID, kSellerOriginDomain,
           /*is_consented_debug=*/false,
           /* top_level_seller=*/"",
@@ -2043,6 +2178,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsResponseMap expected_buyer_bids;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
@@ -2051,11 +2188,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
       .WillRepeatedly(Return(GetPrivateKey()));
   const float winning_bid = 999.0F;
   auto [request_with_context, clients] =
-      GetSelectAdRequestAndClientRegistryForTest<TypeParam>(
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
           CLIENT_TYPE_BROWSER, winning_bid, scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          key_fetcher_manager.get(), expected_buyer_bids, kSellerOriginDomain,
-          false);
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain, false);
 
   std::string chaff_buyer_name = "chaff_buyer";
   GetBidsResponse::GetBidsRawResponse response;
@@ -2133,6 +2271,111 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   EXPECT_TRUE(auction_result.ok()) << auction_result.status();
   EXPECT_FALSE(auction_result->is_chaff());
   EXPECT_EQ(auction_result->bid(), winning_bid);
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
+  const absl::string_view kPriorityJsonTemplate =
+      R"({"priority_field_key":$0})";
+
+  this->config_.SetOverride(kTrue, ENABLE_PRIORITY_VECTOR);
+  this->SetupRequest(/* num_buyers= */ 2, /* set_buyer_egid= */ true);
+  this->request_.mutable_auction_config()->set_priority_signals("{}");
+
+  // Collect the priority signals JSONs that each buyer is expected to receive
+  // in a set. Below, we'll verify each of the expected JSONs is sent out in a
+  // BFE request. The JSONs are collected in a set because we don't have a way
+  // to map from <BuyerName, PrioritySignalsJson> below where we do the check
+  // for these JSONs. So we just check that each JSON in the set was sent in one
+  // of the BFE request objects.
+  absl::flat_hash_set<std::string> expected_priority_signals_jsons;
+  for (int i = 0; i < this->request_.auction_config().buyer_list().size();
+       i++) {
+    const auto& buyer_ig_owner =
+        this->request_.auction_config().buyer_list()[i];
+    auto& buyer_config = (*this->request_.mutable_auction_config()
+                               ->mutable_per_buyer_config())[buyer_ig_owner];
+
+    double overridden_value = i;
+    std::string priority_signals_overrides_json =
+        absl::Substitute(kPriorityJsonTemplate, FormatNumber(overridden_value));
+    buyer_config.set_priority_signals_overrides(
+        priority_signals_overrides_json);
+
+    expected_priority_signals_jsons.insert(priority_signals_overrides_json);
+  }
+
+  ScoringAsyncClientMock scoring_client;
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  KVAsyncClientMock kv_async_client;
+
+  bool success = true;
+  auto SetupMockBuyer = [&expected_priority_signals_jsons, &success](
+                            const BuyerInput& buyer_input,
+                            absl::string_view buyer_ig_owner) {
+    auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
+    EXPECT_CALL(*buyer, ExecuteInternal)
+        .Times(1)
+        .WillOnce([&expected_priority_signals_jsons, &success](
+                      std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                          get_bids_request,
+                      grpc::ClientContext* context, GetBidDoneCallback on_done,
+                      absl::Duration timeout, RequestConfig request_config) {
+          const std::string& per_buyer_priority_signals =
+              get_bids_request->priority_signals();
+          // Check to see if the priority signals JSON for this BFE request is
+          // in the set of expected JSONs.
+          if (!expected_priority_signals_jsons.contains(
+                  per_buyer_priority_signals)) {
+            success = false;
+          }
+          expected_priority_signals_jsons.erase(per_buyer_priority_signals);
+
+          std::move(on_done)(
+              std::make_unique<GetBidsResponse::GetBidsRawResponse>(), {});
+          return absl::OkStatus();
+        });
+    return buyer;
+  };
+  ErrorAccumulator error_accumulator;
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+      entries;
+  for (const auto& buyer_ig_owner :
+       this->request_.auction_config().buyer_list()) {
+    const BuyerInput& buyer_input = DecodeBuyerInput(
+        buyer_ig_owner,
+        this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
+        error_accumulator);
+    EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
+        .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
+          return SetupMockBuyer(buyer_input, hostname);
+        });
+
+    entries.emplace_back(buyer_ig_owner,
+                         std::make_shared<BuyerFrontEndAsyncClientMock>());
+  }
+
+  EXPECT_CALL(buyer_clients, Entries)
+      .WillRepeatedly(Return(std::move(entries)));
+
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  ClientRegistry clients{scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         kv_async_client,
+                         this->key_fetcher_manager_,
+                         /* crypto_client = */ nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->report_win_map_);
+
+  EXPECT_TRUE(success) << "The expected priority signal JSONs were not all "
+                          "present in the BFE requests";
 }
 
 }  // namespace

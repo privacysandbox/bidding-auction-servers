@@ -19,6 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/file_util.h"
@@ -138,9 +139,9 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPA) {
             return absl::OkStatus();
           });
   EXPECT_CALL(*loader_, LoadSync)
-      .WillOnce([&pa_js_object, &pa_js_data](std::string_view version,
-                                             absl::string_view blob_data) {
-        EXPECT_EQ(version, pa_js_object);
+      .WillOnce([&pa_js_bucket, &pa_js_object, &pa_js_data](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(pa_js_bucket, pa_js_object));
         EXPECT_EQ(blob_data, GetBuyerWrappedCode(pa_js_data, {}));
         return absl::OkStatus();
       });
@@ -226,9 +227,10 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFailsForNoAdsRetrievalBucket) {
       .auction_type = AuctionType::kProtectedAppSignals,
       .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
   EXPECT_CALL(*loader_, LoadSync)
-      .WillOnce([&pas_js_object, &pas_js_data, &pas_js_wrapper_config](
-                    std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, pas_js_object);
+      .WillOnce([&pas_js_bucket, &pas_js_object, &pas_js_data,
+                 &pas_js_wrapper_config](std::string_view version,
+                                         absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(pas_js_bucket, pas_js_object));
         EXPECT_EQ(blob_data,
                   GetBuyerWrappedCode(pas_js_data, pas_js_wrapper_config));
         return absl::OkStatus();
@@ -328,16 +330,17 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPAS) {
       .auction_type = AuctionType::kProtectedAppSignals,
       .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
   EXPECT_CALL(*loader_, LoadSync)
-      .WillOnce([&pas_js_object, &pas_js_data, &pas_js_wrapper_config](
-                    std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, pas_js_object);
+      .WillOnce([&pas_js_bucket, &pas_js_object, &pas_js_data,
+                 &pas_js_wrapper_config](std::string_view version,
+                                         absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(pas_js_bucket, pas_js_object));
         EXPECT_EQ(blob_data,
                   GetBuyerWrappedCode(pas_js_data, pas_js_wrapper_config));
         return absl::OkStatus();
       })
-      .WillOnce([&ads_js_object, &ads_js_data](std::string_view version,
-                                               absl::string_view blob_data) {
-        EXPECT_EQ(version, ads_js_object);
+      .WillOnce([&ads_js_bucket, &ads_js_object, &ads_js_data](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(ads_js_bucket, ads_js_object));
         EXPECT_EQ(blob_data, GetProtectedAppSignalsGenericBuyerWrappedCode(
                                  ads_js_data, kUnusedWasmBlob,
                                  kPrepareDataForAdRetrievalHandler,
@@ -472,23 +475,25 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPAAndPAS) {
       .auction_type = AuctionType::kProtectedAppSignals,
       .auction_specific_setup = kEncodedProtectedAppSignalsHandler};
   EXPECT_CALL(*loader_, LoadSync)
-      .WillOnce([&pa_js_object, &pa_js_data, &pa_js_wrapper_config](
-                    std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, pa_js_object);
+      .WillOnce([&pa_js_bucket, &pa_js_object, &pa_js_data,
+                 &pa_js_wrapper_config](std::string_view version,
+                                        absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(pa_js_bucket, pa_js_object));
         EXPECT_EQ(blob_data,
                   GetBuyerWrappedCode(pa_js_data, pa_js_wrapper_config));
         return absl::OkStatus();
       })
-      .WillOnce([&pas_js_object, &pas_js_data, &pas_js_wrapper_config](
-                    std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, pas_js_object);
+      .WillOnce([&pas_js_bucket, &pas_js_object, &pas_js_data,
+                 &pas_js_wrapper_config](std::string_view version,
+                                         absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(pas_js_bucket, pas_js_object));
         EXPECT_EQ(blob_data,
                   GetBuyerWrappedCode(pas_js_data, pas_js_wrapper_config));
         return absl::OkStatus();
       })
-      .WillOnce([&ads_js_object, &ads_js_data](std::string_view version,
-                                               absl::string_view blob_data) {
-        EXPECT_EQ(version, ads_js_object);
+      .WillOnce([&ads_js_bucket, &ads_js_object, &ads_js_data](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, *GetBucketBlobVersion(ads_js_bucket, ads_js_object));
         EXPECT_EQ(blob_data, GetProtectedAppSignalsGenericBuyerWrappedCode(
                                  ads_js_data, kUnusedWasmBlob,
                                  kPrepareDataForAdRetrievalHandler,

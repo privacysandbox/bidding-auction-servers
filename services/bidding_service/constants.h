@@ -23,6 +23,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+inline constexpr char kDefaultEgressSchemaId[] = "default";
 inline constexpr char kProtectedAudienceGenerateBidBlobVersion[] = "v1";
 inline constexpr char kProtectedAppSignalsGenerateBidBlobVersion[] = "v2";
 inline constexpr char kPrepareDataForAdRetrievalBlobVersion[] = "v3";
@@ -58,7 +59,7 @@ constexpr absl::string_view kEncodedProtectedAppSignalsHandler =
 // embeddings that can later be used to fetch the top-k ads from ads retrieval
 // service.
 inline constexpr int kNumPrepareDataForRetrievalUdfArgs = 5;
-enum class PrepareDataForRetrievalUdfArgs {
+enum class PrepareDataForRetrievalUdfArgs : std::uint8_t {
   kProtectedAppSignals = 0,
   kProtectedAppSignalsVersion,
   kAuctionSignals,
@@ -68,7 +69,7 @@ enum class PrepareDataForRetrievalUdfArgs {
 
 // Params related to the UDF to use to generate bids for the protected signals.
 inline constexpr int kNumGenerateBidsUdfArgs = 10;
-enum class GenerateBidsUdfArgs {
+enum class GenerateBidsUdfArgs : std::uint8_t {
   kAds = 0,
   kAuctionSignals,
   kBuyerSignals,

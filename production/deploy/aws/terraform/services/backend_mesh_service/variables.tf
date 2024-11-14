@@ -128,3 +128,8 @@ variable "ad_retrieval_kv_server_virtual_service_name" {
   type        = string
   description = "Full name of the virtual service for the Ad Retrieval KV server."
 }
+
+variable "region" {
+  description = "AWS region in which services have been created"
+  type        = string
+}

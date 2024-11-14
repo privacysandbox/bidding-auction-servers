@@ -35,8 +35,10 @@
 #include "services/common/feature_flags.h"
 #include "services/common/reporters/async_reporter.h"
 #include "services/common/util/auction_scope_util.h"
+#include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/kv_seller_signals_adapter.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/communication/ohttp_utils.h"
@@ -55,6 +57,8 @@ using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
+using KVLookUpResult =
+    absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesResponse>>;
 
 inline void RecordInterestGroupUpdates(
     std::string buyer, UpdateGroupMap& all_updates,
@@ -70,13 +74,15 @@ inline void RecordInterestGroupUpdates(
 SelectAdReactor::SelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    const TrustedServersConfigClient& config_client,
+    const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool fail_fast, int max_buyers_solicited)
     : request_context_(context),
       request_(request),
       response_(response),
       clients_(clients),
       config_client_(config_client),
+      report_win_map_(report_win_map),
       auction_scope_(GetAuctionScope(*request_)),
       // TODO(b/278039901): Add integration test for metadata forwarding.
       buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
@@ -92,15 +98,19 @@ SelectAdReactor::SelectAdReactor(
           (auction_scope_ == AuctionScope::AUCTION_SCOPE_SINGLE_SELLER)),
       is_protected_audience_enabled_(
           config_client_.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE)),
+      is_tkv_v2_browser_enabled_(
+          config_client_.GetBooleanParameter(ENABLE_TKV_V2_BROWSER)),
       chaffing_enabled_(config_client_.GetBooleanParameter(ENABLE_CHAFFING)),
       max_buyers_solicited_(chaffing_enabled_
                                 ? kMaxBuyersSolicitedChaffingEnabled
                                 : max_buyers_solicited),
       enable_cancellation_(enable_cancellation),
       enable_enforce_kanon_(enable_kanon),
+      priority_signals_vector_(rapidjson::kObjectType),
       async_task_tracker_(
           request->auction_config().buyer_list_size(), log_context_,
-          [this](bool successful) { OnAllBidsDone(successful); }) {
+          [this](bool successful) { OnAllBidsDone(successful); }),
+      k_anon_api_key_(config_client_.GetStringParameter(K_ANON_API_KEY)) {
   if (config_client_.GetBooleanParameter(ENABLE_SELLER_FRONTEND_BENCHMARKING)) {
     benchmarking_logger_ =
         std::make_unique<BuildInputProcessResponseBenchmarkingLogger>(
@@ -173,9 +183,9 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
     result.set_buyer_and_seller_reporting_id(
         input.buyer_and_seller_reporting_id());
   }
-  if (!input.selectable_buyer_and_seller_reporting_id().empty()) {
-    result.set_selectable_buyer_and_seller_reporting_id(
-        input.selectable_buyer_and_seller_reporting_id());
+  if (!input.selected_buyer_and_seller_reporting_id().empty()) {
+    result.set_selected_buyer_and_seller_reporting_id(
+        input.selected_buyer_and_seller_reporting_id());
   }
   return result;
 }
@@ -250,16 +260,6 @@ grpc::Status SelectAdReactor::DecryptRequest() {
       },
       protected_auction_input_);
 
-  if (chaffing_enabled_) {
-    std::visit(
-        [this](const auto& protected_auction_input) {
-          std::size_t hash =
-              std::hash<std::string>{}(protected_auction_input.generation_id());
-          generator_ = std::mt19937(hash);
-        },
-        protected_auction_input_);
-  }
-
   return grpc::Status::OK;
 }
 
@@ -324,6 +324,19 @@ void SelectAdReactor::MayPopulateAdServerVisibleErrors() {
           AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
     ReportError(ErrorVisibility::AD_SERVER_VISIBLE,
                 kDeviceComponentAuctionWithAndroid, ErrorCode::CLIENT_SIDE);
+  }
+
+  if (config_client_.HasParameter(ENABLE_PRIORITY_VECTOR) &&
+      config_client_.GetBooleanParameter(ENABLE_PRIORITY_VECTOR) &&
+      !request_->auction_config().priority_signals().empty()) {
+    absl::StatusOr<rapidjson::Document> priority_signals_vector =
+        ParsePriorityVector(request_->auction_config().priority_signals());
+    if (!priority_signals_vector.ok()) {
+      ReportError(ErrorVisibility::AD_SERVER_VISIBLE,
+                  "Malformed priority signals JSON", ErrorCode::CLIENT_SIDE);
+    }
+
+    priority_signals_vector_ = *std::move(priority_signals_vector);
   }
 }
 
@@ -395,7 +408,9 @@ ChaffingConfig SelectAdReactor::GetChaffingConfig(
         num_chaff_requests_lower_bound, (int)chaff_request_candidates.size());
     std::uniform_int_distribution<int> num_chaff_buyers_dist(
         num_chaff_requests_lower_bound, chaff_request_candidates.size());
-    num_chaff_requests = num_chaff_buyers_dist(*generator_);
+    if (generator_) {
+      num_chaff_requests = num_chaff_buyers_dist(*generator_);
+    }
   }
 
   return {.chaff_request_candidates = std::move(chaff_request_candidates),
@@ -481,8 +496,10 @@ void SelectAdReactor::FetchBids() {
       get_bids_requests.push_back({it->data(), std::move(get_bids_request)});
     }
 
-    std::shuffle(get_bids_requests.begin(), get_bids_requests.end(),
-                 *generator_);
+    if (generator_) {
+      std::shuffle(get_bids_requests.begin(), get_bids_requests.end(),
+                   *generator_);
+    }
   }
 
   int num_buyers_solicited = 0;
@@ -513,27 +530,38 @@ void SelectAdReactor::Execute() {
   }
   grpc::Status decrypt_status = DecryptRequest();
 
-  // Populates the logging context needed for request tracing. should be called
-  // after decrypting and decoding the request.
-  log_context_.Update(
-      std::visit(
-          [this](const auto& protected_input)
-              -> absl::btree_map<std::string, std::string> {
-            return {
+  std::visit(
+      [this](auto& protected_input) mutable {
+        is_sampled_for_debug_ = SetGeneratorAndSample(
+            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+            chaffing_enabled_,
+            request_->client_type() == CLIENT_TYPE_ANDROID &&
+                protected_input.enable_unlimited_egress(),
+            protected_input.generation_id(), generator_);
+
+        if (config_client_.GetBooleanParameter(CONSENT_ALL_REQUESTS)) {
+          ModifyConsent(*protected_input.mutable_consented_debug_config());
+        }
+        // Populates the logging context needed for request tracing. should be
+        // called after decrypting and decoding the request.
+        log_context_.Update(
+            {
                 {kGenerationId, protected_input.generation_id()},
-                {kSellerDebugId, request_->auction_config().seller_debug_id()}};
-          },
-          protected_auction_input_),
-      std::visit(
-          [](const auto& protected_input) {
-            return protected_input.consented_debug_config();
-          },
-          protected_auction_input_));
+                {kSellerDebugId, request_->auction_config().seller_debug_id()},
+            },
+            protected_input.consented_debug_config(), is_sampled_for_debug_);
+      },
+      protected_auction_input_);
+
+  EventMessage::MetaData meta_data;
+  meta_data.set_is_consented(log_context_.is_consented());
+  meta_data.set_is_prod_debug(log_context_.is_prod_debug());
+  log_context_.SetEventMessageField(std::move(meta_data));
 
   if (log_context_.is_consented()) {
     std::string generation_id = std::visit(
-        [](const auto& protected_input) -> std::string {
-          return {protected_input.generation_id()};
+        [](const auto& protected_input) {
+          return protected_input.generation_id();
         },
         protected_auction_input_);
     metric_context_->SetConsented(generation_id);
@@ -549,9 +577,11 @@ void SelectAdReactor::Execute() {
   LogIfError(metric_context_->LogHistogram<metric::kAuctionConfigSize>(
       (int)request_->auction_config().ByteSizeLong()));
 
-  PS_VLOG(kEncrypted, log_context_)
-      << "Encrypted SelectAdRequest exported in EventMessage";
-  log_context_.SetEventMessageField(*request_);
+  if (server_common::log::PS_VLOG_IS_ON(kEncrypted)) {
+    PS_VLOG(kEncrypted, log_context_)
+        << "Encrypted SelectAdRequest exported in EventMessage if consented";
+    log_context_.SetEventMessageField(*request_);
+  }
 
   PS_VLOG(kPlain, log_context_)
       << "Headers:\n"
@@ -564,15 +594,17 @@ void SelectAdReactor::Execute() {
                                 << server_common::ToAbslStatus(decrypt_status);
     return;
   }
-  std::visit(
-      [this](auto& input) {
-        log_context_.SetEventMessageField(input);
-        PS_VLOG(kPlain, log_context_)
-            << (is_protected_auction_request_ ? "ProtectedAuctionInput"
-                                              : "ProtectedAudienceInput")
-            << " exported in EventMessage";
-      },
-      protected_auction_input_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    std::visit(
+        [this](auto& input) {
+          log_context_.SetEventMessageField(input);
+          PS_VLOG(kPlain, log_context_)
+              << (is_protected_auction_request_ ? "ProtectedAuctionInput"
+                                                : "ProtectedAudienceInput")
+              << " exported in EventMessage if consented";
+        },
+        protected_auction_input_);
+  }
   MayLogBuyerInput();
   MayPopulateAdServerVisibleErrors();
   if (HaveAdServerVisibleErrors()) {
@@ -683,6 +715,17 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
            "audience support is disabled";
     get_bids_request->mutable_buyer_input()->clear_interest_groups();
   }
+
+  if (config_client_.HasParameter(ENABLE_PRIORITY_VECTOR) &&
+      config_client_.GetBooleanParameter(ENABLE_PRIORITY_VECTOR)) {
+    auto priority_signals = GetBuyerPrioritySignals(
+        priority_signals_vector_, request_->auction_config().per_buyer_config(),
+        buyer_ig_owner);
+    if (priority_signals.ok()) {
+      get_bids_request->set_priority_signals(*std::move(priority_signals));
+    }
+  }
+
   return get_bids_request;
 }
 
@@ -720,7 +763,7 @@ void SelectAdReactor::FetchBid(
   bfe_request->SetBuyer(buyer_ig_owner);
 
   size_t chaff_request_size = 0;
-  if (chaffing_enabled_ && get_bids_request->is_chaff()) {
+  if (chaffing_enabled_ && get_bids_request->is_chaff() && generator_) {
     std::uniform_int_distribution<size_t> request_size_dist(
         kMinChaffRequestSizeBytes, kMaxChaffRequestSizeBytes);
     chaff_request_size = request_size_dist(*generator_);
@@ -995,18 +1038,8 @@ bool SelectAdReactor::FilterBidsWithMismatchingCurrency() {
   return any_valid_bids;
 }
 
-void SelectAdReactor::CancellableFetchScoringSignals() {
-  ScoringSignalsRequest scoring_signals_request(
-      shared_buyer_bids_map_, buyer_metadata_, request_->client_type());
-  if (request_->auction_config().has_code_experiment_spec() &&
-      request_->auction_config()
-          .code_experiment_spec()
-          .has_seller_kv_experiment_group_id()) {
-    scoring_signals_request.seller_kv_experiment_group_id_ =
-        absl::StrCat(request_->auction_config()
-                         .code_experiment_spec()
-                         .seller_kv_experiment_group_id());
-  }
+void SelectAdReactor::CancellableFetchScoringSignalsV1(
+    const ScoringSignalsRequest& scoring_signals_request) {
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
           .release();
@@ -1039,6 +1072,95 @@ void SelectAdReactor::CancellableFetchScoringSignals() {
       absl::Milliseconds(config_client_.GetIntParameter(
           KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS)),
       {log_context_});
+}
+
+void SelectAdReactor::CancellableFetchScoringSignalsV2(
+    const ScoringSignalsRequest& scoring_signals_request) {
+  auto kv_request =
+      metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
+          .release();
+  std::optional<server_common::ConsentedDebugConfiguration>
+      consented_debug_config = std::nullopt;
+  std::visit(
+      [&consented_debug_config](const auto& protected_auction_input) {
+        if (protected_auction_input.has_consented_debug_config()) {
+          consented_debug_config =
+              protected_auction_input.consented_debug_config();
+        }
+      },
+      protected_auction_input_);
+  auto maybe_scoring_signals_request = CreateV2ScoringRequest(
+      scoring_signals_request, is_pas_enabled_, consented_debug_config);
+  if (!maybe_scoring_signals_request.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_) << "Failed creating TKV scoring request. "
+                                      << maybe_scoring_signals_request.status();
+    return;
+  }
+  grpc::ClientContext* client_context = client_contexts_.Add();
+  auto status = clients_.kv_async_client.ExecuteInternal(
+      *std::move(maybe_scoring_signals_request), client_context,
+      CancellationWrapper(
+          request_context_, enable_cancellation_,
+          [this, kv_request](KVLookUpResult kv_look_up_result,
+                             ResponseMetadata response_metadata) mutable {
+            {
+              // Only logs KV request and response sizes if fetching signals
+              // succeeds.
+              if (kv_look_up_result.ok()) {
+                kv_request->SetRequestSize(response_metadata.request_size);
+                kv_request->SetResponseSize(response_metadata.response_size);
+              }
+              // destruct kv_request, destructor measures request time
+              delete kv_request;
+            }
+            if (!kv_look_up_result.ok()) {
+              LogIfError(
+                  metric_context_
+                      ->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+                          1, metric::kSfeScoringSignalsResponseError));
+              LogInitiatedRequestErrorMetrics(metric::kKv,
+                                              kv_look_up_result.status());
+              PS_LOG(ERROR, log_context_)
+                  << "Scoring signals fetch from key-value server failed: "
+                  << kv_look_up_result.status();
+              ReportError(ErrorVisibility::AD_SERVER_VISIBLE, kInternalError,
+                          ErrorCode::SERVER_SIDE);
+              OnScoreAdsDone(
+                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+              return;
+            }
+            auto signals = ConvertV2ResponseToV1ScoringSignals(
+                *std::move(kv_look_up_result));
+            OnFetchScoringSignalsDone(*std::move(signals));
+          },
+          [this, kv_request]() {
+            delete kv_request;
+            FinishWithStatus(
+                grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
+          }),
+      absl::Milliseconds(config_client_.GetIntParameter(
+          KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS)));
+}
+
+void SelectAdReactor::CancellableFetchScoringSignals() {
+  ScoringSignalsRequest scoring_signals_request(
+      shared_buyer_bids_map_, buyer_metadata_, request_->client_type());
+  if (request_->auction_config().has_code_experiment_spec() &&
+      request_->auction_config()
+          .code_experiment_spec()
+          .has_seller_kv_experiment_group_id()) {
+    scoring_signals_request.seller_kv_experiment_group_id_ =
+        absl::StrCat(request_->auction_config()
+                         .code_experiment_spec()
+                         .seller_kv_experiment_group_id());
+  }
+  if (is_tkv_v2_browser_enabled_ ||
+      (request_->client_type() == CLIENT_TYPE_ANDROID &&
+       !config_client_.GetBooleanParameter(TEST_MODE))) {
+    CancellableFetchScoringSignalsV2(scoring_signals_request);
+  } else {
+    CancellableFetchScoringSignalsV1(scoring_signals_request);
+  }
 }
 
 void SelectAdReactor::OnFetchScoringSignalsDone(
@@ -1104,10 +1226,13 @@ SelectAdReactor::CreateScoreAdsRequest() {
       request_->auction_config().seller_signals();
   raw_request->set_top_level_seller(
       request_->auction_config().top_level_seller());
+  raw_request->set_score_ad_version(
+      request_->auction_config().code_experiment_spec().score_ad_version());
   if (scoring_signals_ != nullptr) {
     // Ad scoring signals cannot be used after this.
     raw_request->set_allocated_scoring_signals(
         scoring_signals_->scoring_signals.release());
+    raw_request->set_seller_data_version(scoring_signals_->data_version);
   }
   std::visit(
       [&raw_request, this](const auto& protected_auction_input) {
@@ -1138,6 +1263,7 @@ SelectAdReactor::CreateScoreAdsRequest() {
         buyer, per_buyer_config.buyer_signals());
   }
   raw_request->set_seller(request_->auction_config().seller());
+  raw_request->set_is_sampled_for_debug(is_sampled_for_debug_);
   return raw_request;
 }
 
@@ -1280,6 +1406,10 @@ void SelectAdReactor::OnScoreAdsDone(
     return;
   }
 
+  PS_VLOG(kEncrypted, log_context_)
+      << "SelectAdResponse.auction_result_ciphertext base64:\n"
+      << absl::Base64Escape(response_->auction_result_ciphertext());
+
   PS_VLOG(kEncrypted, log_context_) << "Encrypted SelectAdResponse:\n"
                                     << response_->ShortDebugString();
 
@@ -1319,7 +1449,7 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
   }
 
   if (!encapsulated_response.ok()) {
-    PS_VLOG(4, log_context_)
+    PS_LOG(ERROR, log_context_)
         << absl::StrFormat("Error during response encryption/encapsulation: %s",
                            encapsulated_response.status().message());
 
@@ -1357,7 +1487,8 @@ void SelectAdReactor::PerformDebugReporting(
   }
 
   PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
-      high_score, request_->auction_config().seller_currency());
+      high_score, request_->auction_config().seller_currency(),
+      (scoring_signals_ == nullptr) ? 0 : scoring_signals_->data_version);
   for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
     for (int i = 0; i < get_bid_response->bids_size(); i++) {
       const AdWithBid& ad_with_bid = get_bid_response->bids().at(i);

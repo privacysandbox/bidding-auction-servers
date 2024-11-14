@@ -143,7 +143,7 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
              auto result = CborDecodeAuctionResultToProto(encoded_data);
              if (result.ok()) {
                log_context.SetEventMessageField(*result);
-               return std::string("exported in EventMessage");
+               return std::string("exported in EventMessage if consented");
              } else {
                return result.status().ToString();
              }
@@ -163,8 +163,11 @@ absl::StatusOr<std::string> PackageAuctionResultForApp(
   // Map to AuctionResult proto and serialized to bytes array.
 
   AuctionResult result = MapAdScoreToAuctionResult(high_score, error);
-  PS_VLOG(kPlain, log_context) << "AuctionResult exported in EventMessage";
-  log_context.SetEventMessageField(result);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context)
+        << "AuctionResult exported in EventMessage if consented";
+    log_context.SetEventMessageField(result);
+  }
   return PackageAuctionResultCiphertext(result.SerializeAsString(),
                                         decrypted_request);
 }

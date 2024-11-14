@@ -14,6 +14,7 @@
 
 #include "services/bidding_service/egress_schema_cache.h"
 
+#include <cstdint>
 #include <utility>
 
 #include "absl/strings/string_view.h"
@@ -65,7 +66,8 @@ absl::StatusOr<std::vector<std::unique_ptr<EgressFeature>>> ExtractFeatures(
 
 }  // namespace
 
-absl::Status EgressSchemaCache::Update(absl::string_view egress_schema)
+absl::Status EgressSchemaCache::Update(absl::string_view egress_schema,
+                                       absl::string_view id)
     ABSL_LOCKS_EXCLUDED(mu_) {
   PS_ASSIGN_OR_RETURN(auto json_doc, ParseJsonString(egress_schema));
   PS_ASSIGN_OR_RETURN(int schema_version,
@@ -75,7 +77,7 @@ absl::Status EgressSchemaCache::Update(absl::string_view egress_schema)
   PS_ASSIGN_OR_RETURN(auto cddl_spec, cddl_spec_cache_->Get(cddl_version));
   if (!AdtechEgresSchemaValid(egress_schema, cddl_spec)) {
     std::string err =
-        absl::StrCat("Adtech egress schema version: ", schema_version,
+        absl::StrCat("Adtech egress schema id: ", id,
                      " doesn't conform with the CDDL spec: ", cddl_version);
     PS_VLOG(5) << err;
     return absl::InvalidArgumentError(std::move(err));
@@ -85,7 +87,9 @@ absl::Status EgressSchemaCache::Update(absl::string_view egress_schema)
   // objects that can be used by the bidding service when it has to serialize
   // the features.
   absl::MutexLock lock(&mu_);
-  version_features_[schema_version] = std::move(extracted_features);
+  version_features_[std::string(id)] =
+      EgressSchemaData({.version = static_cast<uint32_t>(schema_version),
+                        .features = std::move(extracted_features)});
   return absl::OkStatus();
 }
 
@@ -93,32 +97,33 @@ EgressSchemaCache::EgressSchemaCache(
     std::unique_ptr<const CddlSpecCache> cddl_spec_cache)
     : cddl_spec_cache_(std::move(cddl_spec_cache)) {}
 
-absl::StatusOr<std::vector<std::unique_ptr<EgressFeature>>>
-EgressSchemaCache::Get(int schema_version) ABSL_LOCKS_EXCLUDED(mu_) {
-  PS_VLOG(5) << "Getting schema version: " << schema_version;
+absl::StatusOr<EgressSchemaData> EgressSchemaCache::Get(
+    absl::string_view schema_id) ABSL_LOCKS_EXCLUDED(mu_) {
+  PS_VLOG(5) << "Getting schema id: " << schema_id;
   absl::ReaderMutexLock lock(&mu_);
   // If version exists, returns the previously parsed features to the caller.
   // We need to ensure that we return a copy of the schema here since the
   // caller will be updating it later on.
-  auto it = version_features_.find(schema_version);
+  auto it = version_features_.find(schema_id);
   if (it == version_features_.end()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Adtech schema version not found in cache: ", schema_version));
+    return absl::InvalidArgumentError(
+        absl::StrCat("Adtech schema version not found in cache: ", schema_id));
   }
   // We have to return a copy here because this cache will be called multiple
   // times by the reactors and the returned features will be updated and we
   // don't want the requests to see each other's updates.
-  const int num_features = it->second.size();
+  const int num_features = it->second.features.size();
   std::vector<std::unique_ptr<EgressFeature>> egress_features;
   egress_features.reserve(num_features);
   PS_VLOG(5) << "Creating copies of " << num_features << " egress features";
   int idx = 0;
-  for (const auto& feat : it->second) {
+  for (const auto& feat : it->second.features) {
     PS_VLOG(5) << "Copying feature at index: " << idx++;
     PS_ASSIGN_OR_RETURN(auto feat_copy, feat->Copy());
     egress_features.emplace_back(std::move(feat_copy));
   }
-  return egress_features;
+  return EgressSchemaData(
+      {.version = it->second.version, .features = std::move(egress_features)});
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

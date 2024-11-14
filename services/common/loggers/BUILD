@@ -27,6 +27,10 @@ cc_library(
 
 cc_library(
     name = "request_log_context",
+    srcs = select({
+        "//:non_prod_build": ["request_log_context_non_prod.cc"],
+        "//conditions:default": ["request_log_context_prod.cc"],
+    }),
     hdrs = ["request_log_context.h"],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
@@ -38,11 +42,16 @@ cc_library(
 )
 
 cc_test(
-    name = "request_log_context_test",
+    name = "request_log_context_prod_test",
     timeout = "short",
-    srcs = ["request_log_context_test.cc"],
+    srcs =
+        select({
+            "//:non_prod_build": ["request_log_context_non_prod_test.cc"],
+            "//conditions:default": ["request_log_context_prod_test.cc"],
+        }),
     deps = [
         ":request_log_context",
+        "//services/common/test/utils:test_init",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -153,5 +153,51 @@ TEST(ParsePerInterestGroupData, SkipBadUpdateIfOlderThanMsValue) {
   EXPECT_TRUE(parsed_bidding_signals->update_igs.interest_groups().empty());
 }
 
+TEST(ParsePerInterestGroupData, ParsesPriorityVector) {
+  BuyerInput input;
+  BuyerInput::InterestGroup input_ig_first;
+  input_ig_first.set_name("first_ig_name");
+  BuyerInput::InterestGroup input_ig_second;
+  input_ig_second.set_name("second_ig_name");
+  *input.add_interest_groups() = std::move(input_ig_first);
+  *input.add_interest_groups() = std::move(input_ig_second);
+  auto bidding_signals = std::make_unique<BiddingSignals>();
+  bidding_signals->trusted_signals = std::make_unique<std::string>(
+      R"JSON(
+{
+    "keys": {},
+    "perInterestGroupData": {
+        "first_ig_name": {
+            "priorityVector": {
+              "entry1": 1.0,
+              "entry2": "NAN"
+            },
+            "updateIfOlderThanMs": 100
+        },
+        "second_ig_name": {
+            "priorityVector": {
+              "entry1": 100
+            },
+            "updateIfOlderThanMs": 200
+        }
+    }
+}
+  )JSON");
+
+  auto output = ParseTrustedBiddingSignals(std::move(bidding_signals), input);
+
+  EXPECT_TRUE(output.ok());
+  EXPECT_EQ(output->update_igs.interest_groups()[0].index(), 0);
+  EXPECT_EQ(output->update_igs.interest_groups()[1].index(), 1);
+  EXPECT_EQ(output->update_igs.interest_groups()[0].update_if_older_than_ms(),
+            100);
+  EXPECT_EQ(output->update_igs.interest_groups()[1].update_if_older_than_ms(),
+            200);
+  EXPECT_EQ(output->per_ig_priority_vectors["first_ig_name"]["entry1"], 1.0);
+  EXPECT_FALSE(
+      output->per_ig_priority_vectors["first_ig_name"].HasMember("entry2"));
+  EXPECT_EQ(output->per_ig_priority_vectors["second_ig_name"]["entry1"], 100.0);
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

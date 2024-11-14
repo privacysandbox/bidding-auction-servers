@@ -28,7 +28,7 @@
 using kv_server::v2::GetValuesResponse;
 
 namespace privacy_sandbox::bidding_auction_servers {
-// Convert a TKV V2 response to a serilized json string of format that
+// Convert a TKV V2 response to a serialized json string of format that
 // `PrepareAndGenerateProtectedAudienceBid` expects.
 // {
 //   "keys" :

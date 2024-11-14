@@ -141,14 +141,13 @@ void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
         get_blob_request, [&blobs_remaining, this](const auto& context) {
           {
             absl::MutexLock lock(&some_load_success_mu_);
-            some_load_success_ = OnFetch(context);
+            some_load_success_ = OnFetch(context) || some_load_success_;
           }
           blobs_remaining.DecrementCount();
         });
 
     if (absl::Status status = blob_storage_client_.GetBlob(get_blob_context);
         !status.ok()) {
-      blobs_remaining.DecrementCount();
       PS_LOG(ERROR, SystemLogContext()) << "GetBlob attempt failed for "
                                         << md.blob_name() << status.message();
     }

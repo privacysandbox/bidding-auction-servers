@@ -19,6 +19,7 @@
 
 #include <include/gmock/gmock-actions.h>
 
+#include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/json_util.h"
 
@@ -52,6 +53,18 @@ PerBuyerConfigMap CreatePerBuyerConfig(
   return per_buyer_config;
 }
 
+BuyerInput::InterestGroup CreateInterestGroup(const std::string& name,
+                                              absl::Duration ig_age) {
+  BrowserSignals browser_signals;
+  browser_signals.set_recency_ms(absl::ToInt64Milliseconds(ig_age));
+
+  BuyerInput::InterestGroup interest_group;
+  interest_group.set_name(name);
+  *interest_group.mutable_browser_signals() = std::move(browser_signals);
+
+  return interest_group;
+}
+
 TEST_F(PriorityVectorUtilsTest, ParsePriorityVectorTest) {
   rapidjson::Document document(rapidjson::kObjectType);
   document.AddMember("a", "a string value", document.GetAllocator());
@@ -69,6 +82,20 @@ TEST_F(PriorityVectorUtilsTest, ParsePriorityVectorTest) {
       << absl::StrCat("Actual: ", (*priority_vector_doc)["b"].GetDouble());
   EXPECT_EQ((*priority_vector_doc)["c"].GetDouble(), 10.0)
       << absl::StrCat("Actual: ", (*priority_vector_doc)["c"].GetDouble());
+}
+
+TEST_F(PriorityVectorUtilsTest, SanitizePriorityVectorTest) {
+  rapidjson::Document priority_signals(rapidjson::kObjectType);
+  priority_signals.AddMember("a", "a string value",
+                             priority_signals.GetAllocator());
+  priority_signals.AddMember("b", 5, priority_signals.GetAllocator());
+  priority_signals.AddMember("d", "100", priority_signals.GetAllocator());
+  SanitizePriorityVector(priority_signals);
+
+  EXPECT_EQ(priority_signals.MemberCount(), 1)
+      << absl::StrCat("Actual: ", priority_signals.MemberCount());
+  EXPECT_EQ(priority_signals["b"].GetDouble(), 5.0)
+      << absl::StrCat("Actual: ", priority_signals["b"].GetDouble());
 }
 
 TEST_F(PriorityVectorUtilsTest,
@@ -120,6 +147,59 @@ TEST_F(PriorityVectorUtilsTest,
   ASSERT_TRUE(result_doc.ok()) << result_doc.status();
   EXPECT_EQ((*result_doc)["a"].GetDouble(), 1)
       << absl::StrCat("Actual: ", (*result_doc)["a"].GetDouble());
+}
+
+TEST_F(PriorityVectorUtilsTest,
+       CalculateInterestGroupPrioritiesTest_VerifyDeviceSignalFields) {
+  rapidjson::Document priority_signals(rapidjson::kObjectType);
+  priority_signals.AddMember("a", 1, priority_signals.GetAllocator());
+
+  absl::flat_hash_map<std::string, rapidjson::Value> per_ig_priority_vectors;
+
+  rapidjson::Document priority_vector_doc;
+  rapidjson::Value priority_vector(rapidjson::kObjectType);
+  priority_vector.AddMember("a", -1, priority_vector_doc.GetAllocator());
+  priority_vector.AddMember("deviceSignals.one", 5,
+                            priority_vector_doc.GetAllocator());
+  priority_vector.AddMember("deviceSignals.ageInMinutes", -10,
+                            priority_vector_doc.GetAllocator());
+  priority_vector.AddMember("deviceSignals.ageInMinutesMax60", 15,
+                            priority_vector_doc.GetAllocator());
+  priority_vector.AddMember("deviceSignals.ageInHoursMax24", -20,
+                            priority_vector_doc.GetAllocator());
+  priority_vector.AddMember("deviceSignals.ageInDaysMax30", 25,
+                            priority_vector_doc.GetAllocator());
+
+  absl::Duration ig_age = absl::Minutes(30);
+  BuyerInput::InterestGroup interest_group =
+      CreateInterestGroup("ig_name", ig_age);
+
+  rapidjson::Value priority_vector_copy(rapidjson::kObjectType);
+  priority_vector_copy.CopyFrom(priority_vector,
+                                priority_vector_doc.GetAllocator());
+  per_ig_priority_vectors[interest_group.name()] =
+      std::move(priority_vector_copy);
+
+  BuyerInput buyer_input;
+  *buyer_input.mutable_interest_groups()->Add() = std::move(interest_group);
+
+  double expected_priority =
+      (priority_vector["a"].GetDouble() * priority_signals["a"].GetDouble()) +
+      (priority_vector["deviceSignals.one"].GetDouble() * 1) +
+      (priority_vector["deviceSignals.ageInMinutes"].GetDouble() *
+       absl::ToDoubleMinutes(ig_age)) +
+      (priority_vector["deviceSignals.ageInMinutesMax60"].GetDouble() *
+       absl::ToDoubleMinutes(ig_age)) +
+      (priority_vector["deviceSignals.ageInHoursMax24"].GetDouble() *
+       absl::ToDoubleHours(ig_age)) +
+      (priority_vector["deviceSignals.ageInDaysMax30"].GetDouble() *
+       (absl::ToDoubleHours(ig_age) / 24));
+
+  absl::flat_hash_map<std::string, double> per_ig_priorities =
+      CalculateInterestGroupPriorities(priority_signals, buyer_input,
+                                       per_ig_priority_vectors);
+  EXPECT_EQ(expected_priority, per_ig_priorities["ig_name"]);
+  EXPECT_EQ(priority_signals.MemberCount(), 1);
 }
 
 }  // namespace

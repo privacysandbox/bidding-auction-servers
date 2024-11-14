@@ -95,11 +95,13 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
                         bid_signal = std::move(bid_signal), context](
                            absl::StatusOr<HTTPResponse> httpResponse) mutable {
     if (httpResponse.ok()) {
-      PS_VLOG(kKVLog, context.log)
-          << "BuyerKeyValueAsyncHttpClient response exported in EventMessage";
-      if (AllowAnyEventLogging(context.log)) {
-        bid_signal.set_response(httpResponse->body);
-        context.log.SetEventMessageField(std::move(bid_signal));
+      if (server_common::log::PS_VLOG_IS_ON(kKVLog)) {
+        PS_VLOG(kKVLog, context.log) << "BuyerKeyValueAsyncHttpClient response "
+                                        "exported in EventMessage if consented";
+        if (AllowAnyEventLogging(context.log)) {
+          bid_signal.set_response(httpResponse->body);
+          context.log.SetEventMessageField(std::move(bid_signal));
+        }
       }
       size_t response_size = httpResponse->body.size();
       uint32_t data_version_value = 0;
@@ -126,7 +128,9 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
       PS_VLOG(kNoisyWarn, context.log)
           << "BuyerKeyValueAsyncHttpClient Failure Response: "
           << httpResponse.status();
-      context.log.SetEventMessageField(std::move(bid_signal));
+      if (server_common::log::PS_VLOG_IS_ON(kKVLog)) {
+        context.log.SetEventMessageField(std::move(bid_signal));
+      }
       std::move(on_done)(httpResponse.status());
     }
   };

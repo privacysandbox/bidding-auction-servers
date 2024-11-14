@@ -15,6 +15,7 @@
 #ifndef SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_MANAGER_H_
 #define SERVICES_AUCTION_SERVICE_REPORTING_BUYER_REPORTING_MANAGER_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,7 +28,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 inline constexpr int kPAReportWinArgSize = 6;
-enum class PAReportWinArgs : int {
+enum class PAReportWinArgs : std::uint8_t {
   kAuctionConfig,
   kPerBuyerSignals,
   kSignalsForWinner,

@@ -28,6 +28,7 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/utils/validation.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/error_categories.h"
 #include "services/common/util/json_util.h"
@@ -70,7 +71,8 @@ constexpr char kEmptyDeviceSignals[] = R"JSON({})JSON";
 std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
                                         absl::string_view seller,
                                         absl::string_view top_level_seller,
-                                        const BrowserSignals& browser_signals) {
+                                        const BrowserSignals& browser_signals,
+                                        uint32_t data_version) {
   std::string device_signals_str = absl::StrCat(
       R"JSON({")JSON", kTopWindowHostname, kJsonStringValueStart,
       publisher_name, kJsonStringEnd, kSeller, kJsonStringValueStart, seller);
@@ -92,7 +94,7 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
       recency_ms, kJsonValueEnd, kPrevWins, kJsonValueStart,
       browser_signals.prev_wins().empty() ? kJsonEmptyString
                                           : browser_signals.prev_wins(),
-      "}");
+      kJsonValueEnd, kDataVersion, kJsonValueStart, data_version, "}");
   return device_signals_str;
 }
 
@@ -196,11 +198,10 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     const std::vector<std::shared_ptr<std::string>>& base_input,
     const bool enable_buyer_debug_url_generation,
     RequestLogContext& log_context, const bool enable_adtech_code_logging,
-    const std::string& version) {
+    absl::string_view version) {
   // Construct the wrapper struct for our V8 Dispatch Request.
   DispatchRequest generate_bid_request;
   generate_bid_request.id = interest_group.name();
-  // TODO(b/258790164) Update after code is fetched periodically.
   generate_bid_request.version_string = version;
   // Copy base input and amend with custom interest_group
   generate_bid_request.input = base_input;
@@ -220,7 +221,8 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(MakeBrowserSignalsForScript(
             raw_request.publisher_name(), raw_request.seller(),
-            raw_request.top_level_seller(), interest_group.browser_signals()));
+            raw_request.top_level_seller(), interest_group.browser_signals(),
+            raw_request.data_version()));
   } else if (interest_group.has_android_signals() &&
              interest_group.android_signals().IsInitialized() &&
              !differencer.Equals(AndroidSignals::default_instance(),
@@ -289,9 +291,7 @@ GenerateBidsReactor::GenerateBidsReactor(
       auction_scope_(
           raw_request_.top_level_seller().empty()
               ? AuctionScope::AUCTION_SCOPE_SINGLE_SELLER
-              : AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER),
-      protected_auction_generate_bid_version_(
-          runtime_config.default_protected_auction_generate_bid_version) {
+              : AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
@@ -300,6 +300,15 @@ GenerateBidsReactor::GenerateBidsReactor(
     }
     return absl::OkStatus();
   }()) << "BiddingContextMap()->Get(request) should have been called";
+
+  if (runtime_config.use_per_request_udf_versioning) {
+    protected_audience_generate_bid_version_ =
+        raw_request_.blob_versions().protected_audience_generate_bid_udf();
+  }
+  if (protected_audience_generate_bid_version_.empty()) {
+    protected_audience_generate_bid_version_ =
+        runtime_config.default_protected_audience_generate_bid_version;
+  }
 }
 
 void GenerateBidsReactor::Execute() {
@@ -309,13 +318,17 @@ void GenerateBidsReactor::Execute() {
     return;
   }
   benchmarking_logger_->BuildInputBegin();
-
-  PS_VLOG(kEncrypted, log_context_)
-      << "Encrypted GenerateBidsRequest exported in EventMessage";
-  log_context_.SetEventMessageField(*request_);
-  PS_VLOG(kPlain, log_context_)
-      << "GenerateBidsRawRequest exported in EventMessage";
-  log_context_.SetEventMessageField(raw_request_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    if (server_common::log::PS_VLOG_IS_ON(kEncrypted)) {
+      PS_VLOG(kEncrypted, log_context_)
+          << "Encrypted GenerateBidsRequest exported in EventMessage if "
+             "consented";
+      log_context_.SetEventMessageField(*request_);
+    }
+    PS_VLOG(kPlain, log_context_)
+        << "GenerateBidsRawRequest exported in EventMessage if consented";
+    log_context_.SetEventMessageField(raw_request_);
+  }
 
   auto interest_groups = raw_request_.interest_group_for_bidding();
   if (interest_groups.empty()) {
@@ -336,7 +349,7 @@ void GenerateBidsReactor::Execute() {
         BuildGenerateBidRequest(interest_groups.at(i), raw_request_, base_input,
                                 enable_buyer_debug_url_generation_,
                                 log_context_, enable_adtech_code_logging_,
-                                protected_auction_generate_bid_version_);
+                                protected_audience_generate_bid_version_);
     if (!generate_bid_request.ok()) {
       PS_VLOG(kNoisyWarn, log_context_)
           << "Unable to build GenerateBidRequest: "
@@ -513,9 +526,11 @@ void GenerateBidsReactor::GenerateBidsCallback(
 }
 
 void GenerateBidsReactor::EncryptResponseAndFinish(grpc::Status status) {
-  PS_VLOG(kPlain, log_context_)
-      << "GenerateBidsRawResponse exported in EventMessage";
-  log_context_.SetEventMessageField(raw_response_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context_)
+        << "GenerateBidsRawResponse exported in EventMessage if consented";
+    log_context_.SetEventMessageField(raw_response_);
+  }
   // ExportEventMessage before encrypt response
   log_context_.ExportEventMessage(/*if_export_consented=*/true);
 

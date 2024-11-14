@@ -64,6 +64,25 @@ absl::Status PeriodicModelFetcher::Start() {
   return absl::OkStatus();
 }
 
+void PeriodicModelFetcher::GarbageCollectModels(
+    const absl::flat_hash_set<std::string>& model_paths) {
+  for (const auto& model_path : model_paths) {
+    grpc::ClientContext context;
+    DeleteModelRequest request;
+    request.mutable_model_spec()->set_model_path(model_path);
+    DeleteModelResponse response;
+    grpc::Status status =
+        inference_stub_->DeleteModel(&context, request, &response);
+    if (!status.ok()) {
+      PS_LOG(ERROR) << "Failed to delete model: " << model_path
+                    << " due to: " << status.error_message();
+    } else {
+      model_entry_map_.erase(model_path);
+      PS_LOG(INFO) << "Successful deletion of model: " << model_path;
+    }
+  }
+}
+
 absl::StatusOr<ModelConfig> PeriodicModelFetcher::FetchModelConfig() {
   PS_RETURN_IF_ERROR(
       blob_fetcher_->FetchSync({.included_prefixes = {config_path_}}))
@@ -94,16 +113,36 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
     return;
   }
 
+  // Models later found in the newly fetched model configuration will be removed
+  // from this container.
+  absl::flat_hash_set<std::string> garbage_collectable_models;
+  for (const auto& [model_path, model_entry] : model_entry_map_) {
+    garbage_collectable_models.insert(model_path);
+  }
+
   BlobFetcherBase::FilterOptions filter_options;
   std::vector<ModelMetadata> pending_model_metadata;
   for (const ModelMetadata& metadata : config->model_metadata()) {
     const std::string& model_path = metadata.model_path();
-    if (!model_path.empty() &&
-        current_models_.find(model_path) == current_models_.end()) {
+    if (model_path.empty()) {
+      continue;
+    }
+    auto it = model_entry_map_.find(model_path);
+    if (it != model_entry_map_.end() &&
+        it->second.checksum == metadata.checksum()) {
+      // If a given model with matched checksum has already been loaded, there
+      // is no need to load it again, and it is also not eligible for garbage
+      // collection.
+      garbage_collectable_models.erase(model_path);
+    } else {
+      // Fetches the model if the model at the given model path has not been
+      // loaded or the checksum doesn't match.
       filter_options.included_prefixes.push_back(model_path);
       pending_model_metadata.push_back(metadata);
     }
   }
+
+  GarbageCollectModels(garbage_collectable_models);
 
   if (filter_options.included_prefixes.empty()) {
     PS_LOG(INFO) << "No additional model to load.";
@@ -139,7 +178,11 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
 
     std::vector<BlobFetcherBase::BlobView> blob_views;
     for (const BlobFetcherBase::Blob& blob : bucket_snapshot) {
-      if (absl::StartsWith(blob.path, model_path)) {
+      // When model path ends with "/", we match all files under the directory.
+      // When model path does not end with "/", we perform exact matching.
+      if ((absl::EndsWith(model_path, "/") &&
+           absl::StartsWith(blob.path, model_path)) ||
+          blob.path == model_path) {
         (*request.mutable_model_files())[blob.path] = blob.bytes;
         blob_views.push_back(blob.CreateBlobView());
       }
@@ -187,7 +230,7 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
           server_common::ToAbslStatus(status).code());
     } else {
       PS_VLOG(10) << "Registering model success for: " << model_path;
-      current_models_.insert(model_path);
+      model_entry_map_[model_path] = {.checksum = metadata.checksum()};
       success_models.push_back(model_path);
     }
   }
@@ -195,13 +238,15 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
   ModelFetcherMetric::UpdateRecentModelRegistrationSuccess(success_models);
   // We only reset the metrics partitioned by model when new models are loaded.
   if (!success_models.empty()) {
-    SetModelPartition(std::vector<std::string>{current_models_.begin(),
-                                               current_models_.end()});
+    std::vector<std::string> current_models;
+    for (const auto& [model_path, model_entry] : model_entry_map_) {
+      current_models.push_back(model_path);
+    }
+    SetModelPartition(current_models);
+    ModelFetcherMetric::UpdateAvailableModels(current_models);
   }
 
   ModelFetcherMetric::UpdateRecentModelRegistrationFailure(failure_models);
-  ModelFetcherMetric::UpdateAvailableModels(
-      {current_models_.begin(), current_models_.end()});
 }
 
 void PeriodicModelFetcher::InternalPeriodicModelFetchAndRegistration() {

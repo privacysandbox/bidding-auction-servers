@@ -38,7 +38,10 @@ struct GetBidsConfig {
   bool enable_cancellation = false;
   bool enable_kanon = false;
   // Sample rate for debug request.
-  int debug_sample_rate_micro;
+  int debug_sample_rate_micro = 0;
+  // make all request consented in non_prod
+  bool consent_all_requests = false;
+  bool priority_vector_enabled = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

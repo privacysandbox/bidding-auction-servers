@@ -28,6 +28,14 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Trusted bidding signals field name constants.
+inline constexpr absl::string_view kUpdateIfOlderThanMsStr =
+    "updateIfOlderThanMs";
+inline constexpr absl::string_view kPerInterestGroupData =
+    "perInterestGroupData";
+inline constexpr absl::string_view kPriorityVector = "priorityVector";
+inline constexpr absl::string_view kKeys = "keys";
+
 inline constexpr absl::string_view kGetBiddingSignalsSuccessButEmpty =
     "GetBiddingSignals request succeeded but was empty.";
 inline constexpr absl::string_view kBiddingSignalsJsonNotParseable =
@@ -65,6 +73,9 @@ struct BiddingSignalJsonComponents {
   // The parent Document owns the Allocator responsible for the memory
   // backing the Values' data.
   rapidjson::Document bidding_signals_document;
+
+  // Map of interest group name to priority vector entries map.
+  absl::flat_hash_map<std::string, rapidjson::Value> per_ig_priority_vectors;
 };
 
 // Given a BiddingSignals resopnse from the KV server, we parse

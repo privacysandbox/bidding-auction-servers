@@ -30,6 +30,7 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 class TensorflowModule final : public ModuleInterface {
  public:
   explicit TensorflowModule(const InferenceSidecarRuntimeConfig& config);
+  ~TensorflowModule() override;
 
   absl::StatusOr<PredictResponse> Predict(
       const PredictRequest& request,
@@ -41,9 +42,6 @@ class TensorflowModule final : public ModuleInterface {
 
  private:
   friend class NoFreezeTensorflowTest;
-  // TODO(b/346418962): Move the function into TensorFlowGraphValidator.
-  // Performs a graph traversal and checks if a model's operators are allowed.
-  absl::Status IsModelAllowed(const RegisterModelRequest& request);
   void SetModelStoreForTestOnly(
       std::unique_ptr<ModelStore<tensorflow::SavedModelBundle>> store) {
     store_ = std::move(store);

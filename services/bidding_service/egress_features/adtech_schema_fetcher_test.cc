@@ -94,7 +94,8 @@ TEST_F(AdtechSchemaFetcherTest, UpdatesEgressSchemaCacheOnFetch) {
           });
 
   EXPECT_CALL(*egress_schema_cache_, Update)
-      .WillOnce([&schema_cache_update_done](absl::string_view egress_schema) {
+      .WillOnce([&schema_cache_update_done](absl::string_view egress_schema,
+                                            absl::string_view schema_id) {
         EXPECT_EQ(egress_schema, kTestEgressSchema);
         schema_cache_update_done.Notify();
         return absl::OkStatus();
@@ -126,10 +127,11 @@ TEST_F(AdtechSchemaFetcherTest, FetchConsideredAsFailedIfBadJsonFetched) {
           });
 
   EXPECT_CALL(*egress_schema_cache_, Update)
-      .WillOnce([](absl::string_view egress_schema) {
-        EXPECT_EQ(egress_schema, "Malformed JSON");
-        return absl::InvalidArgumentError("Failed to parse adtech schema");
-      });
+      .WillOnce(
+          [](absl::string_view egress_schema, absl::string_view schema_id) {
+            EXPECT_EQ(egress_schema, "Malformed JSON");
+            return absl::InvalidArgumentError("Failed to parse adtech schema");
+          });
   auto status = adtech_schema_fetcher_->Start();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.message(), HasSubstr("No blob loaded successfully."));

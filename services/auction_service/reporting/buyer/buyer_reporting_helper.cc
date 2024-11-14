@@ -21,6 +21,7 @@
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 
@@ -64,6 +65,9 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
   // https://github.com/privacysandbox/protected-auction-services-docs/blob/main/bidding_auction_multiseller_event_level_reporting.md
   seller_device_signals.RemoveMember(kDesirabilityTag);
   seller_device_signals.RemoveMember(kModifiedBid);
+  // Buyer is not to know seller's data version, and the property has the same
+  // name for each.
+  seller_device_signals.RemoveMember(kSellerDataVersionTag);
   seller_device_signals.AddMember(
       kMadeHighestScoringOtherBid,
       buyer_reporting_metadata.made_highest_scoring_other_bid,
@@ -124,7 +128,7 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
   SetBuyerReportingIds(buyer_reporting_metadata, seller_device_signals);
 
   if (buyer_reporting_metadata.data_version > 0) {
-    seller_device_signals.AddMember(kDataVersionTag,
+    seller_device_signals.AddMember(kDataVersion,
                                     buyer_reporting_metadata.data_version,
                                     seller_device_signals.GetAllocator());
   }

@@ -62,10 +62,6 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
 constexpr absl::string_view kRamFileSystemScheme = "ram://";
-// Tensorflow's ram filesystem allows file overwrite. Without this mutex,
-// multiple model registration requests registering models with the same path
-// could cause race conditions.
-absl::Mutex tf_ram_fs_mu;
 
 // TODO(b/316960066): Move the code to a separate file with more unit tests.
 absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
@@ -81,21 +77,18 @@ absl::Status SaveToRamFileSystem(const RegisterModelRequest& request) {
   return absl::OkStatus();
 }
 
-// Delete a directory at the given path. Deletion is not guaranteed to succeed.
-// It can fail either when the path is non-existent or there are write-protected
-// files under the path. With normal operations of the sidecar, these
-// two scenarios will not happen. Crash the sidecar if deletion fails as this
-// indicates abnormalities.
 void DeleteFromRamFileSystem(const std::string& path) {
   const std::string& ram_fs_path = absl::StrCat(kRamFileSystemScheme, path);
   tensorflow::int64 undeleted_files;
   tensorflow::int64 undeleted_dirs;
   absl::Status status = tsl::Env::Default()->DeleteRecursively(
       ram_fs_path, &undeleted_files, &undeleted_dirs);
-  CHECK_OK(status) << "DeleteFromRamFileSystem failed: " << status
-                   << " #undeleted files = " << undeleted_files
-                   << " #undeleted dirs =" << undeleted_dirs
-                   << " path = " << ram_fs_path;
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "DeleteFromRamFileSystem failed: " << status
+                    << " #undeleted files = " << undeleted_files
+                    << " #undeleted dirs =" << undeleted_dirs
+                    << " path = " << ram_fs_path;
+  }
 }
 
 absl::StatusOr<std::vector<TensorWithName>> PredictPerModel(
@@ -194,23 +187,12 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
   const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
   auto model_bundle = std::make_shared<tensorflow::SavedModelBundle>();
-
-  {
-    absl::MutexLock tf_ram_fs_lock(&tf_ram_fs_mu);
-    // TODO(b/374168406): Improve Tensorflow model loading performance.
-    // Tensorflow needs to load models from a file system.
-    PS_RETURN_IF_ERROR(SaveToRamFileSystem(request));
-    auto status = tensorflow::LoadSavedModel(
-        session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
-        tags, model_bundle.get());
-    // Note that the deletion function itself doesn't guarantee success.
-    // Deletion failure indicates abnormalities and so the sidecar is made to
-    // crash in that case.
-    DeleteFromRamFileSystem(model_path);
-    if (!status.ok()) {
-      return absl::InternalError(
-          absl::StrCat("Error loading model: ", model_path));
-    }
+  if (auto status = tensorflow::LoadSavedModel(
+          session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
+          tags, model_bundle.get());
+      !status.ok()) {
+    return absl::InternalError(
+        absl::StrCat("Error loading model: ", model_path));
   }
 
   // TODO(b/361373900): Freeze a model only once at RegisterModel().
@@ -252,6 +234,12 @@ TensorflowModule::TensorflowModule(const InferenceSidecarRuntimeConfig& config)
     : runtime_config_(config),
       store_(std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
           config, TensorFlowModelConstructor)) {}
+
+TensorflowModule::~TensorflowModule() {
+  for (const std::string& path : store_->ListModels()) {
+    DeleteFromRamFileSystem(path);
+  }
+}
 
 absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     const PredictRequest& request, const RequestContext& request_context) {
@@ -367,16 +355,27 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   return predict_response;
 }
 
-absl::Status TensorflowModule::IsModelAllowed(
-    const RegisterModelRequest& request) {
-  PS_ASSIGN_OR_RETURN(std::shared_ptr<tensorflow::SavedModelBundle> model,
-                      store_->ConstructModel(request));
-  const tensorflow::GraphDef& graph_def = model->meta_graph_def.graph_def();
+// TODO(b/346418962): Move the function into TensorFlowGraphValidator.
+absl::Status IsModelAllowed(const RegisterModelRequest& request) {
+  tensorflow::SessionOptions session_options;
+  const std::unordered_set<std::string> tags = {"serve"};
+  const auto& model_path = request.model_spec().model_path();
+  auto model_bundle = std::make_unique<tensorflow::SavedModelBundle>();
+  if (auto status = tensorflow::LoadSavedModel(
+          session_options, {}, absl::StrCat(kRamFileSystemScheme, model_path),
+          tags, model_bundle.get());
+      !status.ok()) {
+    return absl::InternalError(
+        absl::StrCat("Error loading model: ", model_path));
+  }
+
+  const tensorflow::GraphDef& graph_def =
+      model_bundle->meta_graph_def.graph_def();
   if (!TensorFlowGraphValidator(graph_def).IsGraphAllowed()) {
     // TODO(b/368395202): Improve error messages by including the specific
     // operation that is disallowed.
     return absl::InternalError(
-        absl::StrCat("Error: model ", request.model_spec().model_path(),
+        absl::StrCat("Error: model ", model_path,
                      " is not allowed due to using a disallowed operator"));
   }
   return absl::OkStatus();
@@ -393,9 +392,16 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     return absl::AlreadyExistsError(
         absl::StrCat("Model ", model_path, " has already been registered"));
   }
-
+  PS_RETURN_IF_ERROR(SaveToRamFileSystem(request));
   PS_RETURN_IF_ERROR(IsModelAllowed(request));
-  PS_RETURN_IF_ERROR(store_->PutModel(model_path, request));
+
+  RegisterModelRequest model_request;
+  *model_request.mutable_model_spec() = request.model_spec();
+  if (!request.warm_up_batch_request_json().empty()) {
+    model_request.set_warm_up_batch_request_json(
+        request.warm_up_batch_request_json());
+  }
+  PS_RETURN_IF_ERROR(store_->PutModel(model_path, model_request));
   return RegisterModelResponse();
 }
 

@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_udf_fetch_manager.h"
@@ -66,6 +67,10 @@ class SellerUdfFetchManager {
   absl::Status Init();
 
   absl::Status End();
+
+  // Configures the runtime versioning defaults to be used by reactors.
+  absl::Status ConfigureRuntimeDefaults(
+      AuctionServiceRuntimeConfig& runtime_config);
 
  private:
   WrapCodeForDispatch GetUdfWrapper();

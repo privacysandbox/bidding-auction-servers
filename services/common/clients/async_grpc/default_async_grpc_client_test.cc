@@ -21,6 +21,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -146,6 +147,7 @@ class TestDefaultAsyncGrpcClient
 };
 
 TEST(TestDefaultAsyncGrpcClient, SendsMessageWithCorrectParams) {
+  CommonTestInit();
   absl::Notification notification;
   MockRequest req;
   RequestMetadata metadata = MakeARandomMap();

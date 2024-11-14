@@ -17,6 +17,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -127,9 +128,18 @@ void CopyIGFromDeviceToIGForBidding(
 std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
     std::unique_ptr<rapidjson::Value> bidding_signals_obj,
-    const size_t signal_size, uint32_t data_version, const bool enable_kanon) {
+    const size_t signal_size, uint32_t data_version,
+    const PriorityVectorConfig& priority_vector_config,
+    const bool enable_kanon) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
   const BuyerInput& buyer_input = get_bids_raw_request.buyer_input();
+
+  absl::flat_hash_map<std::string, double> interest_group_priorities;
+  if (priority_vector_config.priority_vector_enabled) {
+    interest_group_priorities = CalculateInterestGroupPriorities(
+        priority_vector_config.priority_signals, buyer_input,
+        priority_vector_config.per_ig_priority_vectors);
+  }
 
   // 1. Set interest groups (IGs) for bidding.
   if (buyer_input.interest_groups_size() > 0) {
@@ -143,6 +153,16 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
           ig_from_device.bidding_signals_keys().empty()) {
         continue;
       }
+
+      if (priority_vector_config.priority_vector_enabled &&
+          interest_group_priorities[ig_from_device.name()] < 0) {
+        PS_VLOG(8) << absl::StrFormat(
+            "Filtered out IG from bid generation: (IG name: %s, priority: %f)",
+            ig_from_device.name(),
+            interest_group_priorities[ig_from_device.name()]);
+        continue;
+      }
+
       // Get parsed trusted bidding signals for this IG.
       absl::StatusOr<ParsedTrustedBiddingSignals> parsed_signals =
           GetSignalsForIG(ig_from_device.bidding_signals_keys(),
@@ -224,6 +244,13 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
       generate_bids_raw_request->set_multi_bid_limit(bid_limit);
     }
   }
+
+  // 12. Set BuyerBlobVersions
+  if (get_bids_raw_request.has_blob_versions()) {
+    *generate_bids_raw_request->mutable_blob_versions() =
+        get_bids_raw_request.blob_versions();
+  }
+
   return generate_bids_raw_request;
 }
 
@@ -281,6 +308,11 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
     if (bid_limit > 0) {
       generate_bids_raw_request->set_multi_bid_limit(bid_limit);
     }
+  }
+
+  if (raw_request.has_blob_versions()) {
+    *generate_bids_raw_request->mutable_blob_versions() =
+        raw_request.blob_versions();
   }
 
   return generate_bids_raw_request;

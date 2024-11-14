@@ -33,3 +33,8 @@ variable "ssh_instance_arn" {
   description = "The SSH instance (jump instance) arn."
   type        = string
 }
+
+variable "region" {
+  description = "AWS region in which services have been created"
+  type        = string
+}

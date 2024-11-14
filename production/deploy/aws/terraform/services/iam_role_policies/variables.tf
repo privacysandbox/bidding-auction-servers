@@ -37,3 +37,8 @@ variable "autoscaling_group_arns" {
   description = "ARNs for autoscaling groups."
   type        = set(string)
 }
+
+variable "region" {
+  description = "AWS region in which services have been created"
+  type        = string
+}

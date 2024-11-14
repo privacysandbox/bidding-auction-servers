@@ -17,6 +17,7 @@
 #ifndef SERVICES_COMMON_CLIENTS_COMPRESSION_UTILS_H_
 #define SERVICES_COMMON_CLIENTS_COMPRESSION_UTILS_H_
 
+#include <cstdint>
 #include <string>
 
 #include "absl/status/statusor.h"
@@ -24,7 +25,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-enum CompressionType { kUncompressed = 0, kGzip = 1 };
+enum CompressionType : std::uint8_t { kUncompressed = 0, kGzip = 1 };
 
 absl::StatusOr<CompressionType> ToCompressionType(int num);
 

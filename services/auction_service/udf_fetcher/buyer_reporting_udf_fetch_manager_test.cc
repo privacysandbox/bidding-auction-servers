@@ -34,8 +34,8 @@ namespace {
 struct BuyerConfig {
   std::string pa_buyer_origin = "http://PABuyerOrigin.com";
   std::string pas_buyer_origin = "http://PASBuyerOrigin.com";
-  std::string pa_buyer_udf_url = "foo.com/";
-  std::string pas_buyer_udf_url = "bar.com/";
+  std::string pa_buyer_udf_url = "PABuyerOrigin.com/foo";
+  std::string pas_buyer_udf_url = "PASBuyerOrigin.com/bar";
   bool enable_report_win_url_generation = true;
 };
 
@@ -89,8 +89,8 @@ class BuyerReportingUdfFetchManagerTest : public ::testing::Test {
 TEST_F(BuyerReportingUdfFetchManagerTest,
        LoadsHttpFetcherResultIntoV8Dispatcher) {
   BuyerConfig buyer_config;
-  std::string expected_pa_version = "pa_foo.com";
-  std::string expected_pas_version = "pas_bar.com";
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
   absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
       R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){})JS_CODE",
@@ -106,6 +106,7 @@ TEST_F(BuyerReportingUdfFetchManagerTest,
 
   auction_service::SellerCodeFetchConfig udf_config =
       GetTestSellerUdfConfig(buyer_config);
+  udf_config.set_test_mode(false);
   MockV8Dispatcher dispatcher;
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
   auto executor = std::make_unique<MockExecutor>();
@@ -138,9 +139,90 @@ TEST_F(BuyerReportingUdfFetchManagerTest,
       .WillRepeatedly([&done, &expected_wrapped_code, &expected_pa_version,
                        &expected_pas_version](std::string_view version,
                                               absl::string_view js) {
-        PS_VLOG(4) << "version:" << version
-                   << " expected:" << expected_pa_version << " or "
-                   << expected_pas_version << "\n";
+        std::cerr << "version:" << version
+                  << " expected:" << expected_pa_version << " or "
+                  << expected_pas_version << "\n";
+        EXPECT_TRUE(version == expected_pa_version ||
+                    version == expected_pas_version);
+        EXPECT_EQ(js, expected_wrapped_code);
+        done.DecrementCount();
+        return absl::OkStatus();
+      });
+
+  BuyerReportingUdfFetchManager code_fetcher_manager(
+      &udf_config, curl_http_fetcher.get(), executor.get(),
+      std::move(buyer_code_wrapper), &dispatcher);
+  auto status = code_fetcher_manager.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  absl::flat_hash_map<std::string, std::string>
+      protected_audience_code_blob_per_origin =
+          code_fetcher_manager
+              .GetProtectedAudienceReportingByOriginForTesting();
+  absl::flat_hash_map<std::string, std::string>
+      protected_app_signals_code_blob_per_origin =
+          code_fetcher_manager
+              .GetProtectedAppSignalsReportingByOriginForTesting();
+  EXPECT_EQ(protected_audience_code_blob_per_origin.size(), 1);
+  EXPECT_EQ(protected_app_signals_code_blob_per_origin.size(), 1);
+  EXPECT_EQ(
+      protected_audience_code_blob_per_origin.at(buyer_config.pa_buyer_origin),
+      expected_wrapped_code);
+  EXPECT_EQ(protected_app_signals_code_blob_per_origin.at(
+                buyer_config.pas_buyer_origin),
+            expected_wrapped_code);
+}
+
+TEST_F(BuyerReportingUdfFetchManagerTest,
+       LoadsHttpFetcherResultIntoV8DispatcherWithTestMode) {
+  BuyerConfig buyer_config;
+  buyer_config.pa_buyer_udf_url = "foo.com";
+  buyer_config.pas_buyer_udf_url = "bar.com";
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
+  absl::StatusOr<HTTPResponse> expected_pa_response = GetValidUdfResponse(
+      R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){})JS_CODE",
+      buyer_config.pa_buyer_udf_url);
+  absl::StatusOr<HTTPResponse> expected_pas_response = GetValidUdfResponse(
+      R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){})JS_CODE",
+      buyer_config.pas_buyer_udf_url);
+
+  std::string expected_wrapped_code =
+      R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){})JS_CODE";
+
+  auction_service::SellerCodeFetchConfig udf_config =
+      GetTestSellerUdfConfig(buyer_config);
+  udf_config.set_test_mode(true);
+  MockV8Dispatcher dispatcher;
+  auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
+  auto executor = std::make_unique<MockExecutor>();
+  WrapSingleCodeBlobForDispatch buyer_code_wrapper =
+      [expected_wrapped_code](const std::string& adtech_code_blob) {
+        return expected_wrapped_code;
+      };
+  absl::BlockingCounter done(2);
+  EXPECT_CALL(*curl_http_fetcher, FetchUrlsWithMetadata)
+      .WillOnce([&buyer_config, &expected_pa_response, &expected_pas_response](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout,
+                    absl::AnyInvocable<void(
+                        std::vector<absl::StatusOr<HTTPResponse>>)&&>
+                        done_callback) {
+        EXPECT_EQ(buyer_config.pa_buyer_udf_url, requests[0].url);
+        EXPECT_EQ(buyer_config.pas_buyer_udf_url, requests[1].url);
+        std::move(done_callback)({expected_pa_response, expected_pas_response});
+      });
+
+  EXPECT_CALL(dispatcher, LoadSync)
+      .WillRepeatedly([&done, &expected_wrapped_code, &expected_pa_version,
+                       &expected_pas_version](std::string_view version,
+                                              absl::string_view js) {
+        std::cerr << "version:" << version
+                  << " expected:" << expected_pa_version << " or "
+                  << expected_pas_version << "\n";
         EXPECT_TRUE(version == expected_pa_version ||
                     version == expected_pas_version);
         EXPECT_EQ(js, expected_wrapped_code);
@@ -182,6 +264,7 @@ TEST_F(BuyerReportingUdfFetchManagerTest, StripsUrlBeforeFetching) {
 
   auction_service::SellerCodeFetchConfig udf_config =
       GetTestSellerUdfConfig(buyer_config);
+  udf_config.set_test_mode(false);
   MockV8Dispatcher dispatcher;
   auto curl_http_fetcher = std::make_unique<MockHttpFetcherAsync>();
   auto executor = std::make_unique<MockExecutor>();

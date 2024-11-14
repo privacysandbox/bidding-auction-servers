@@ -17,6 +17,8 @@
 #ifndef SERVICES_COMMON_UTIL_ERROR_CATEGORIES_H_
 #define SERVICES_COMMON_UTIL_ERROR_CATEGORIES_H_
 
+#include <cstdint>
+
 #include "absl/strings/string_view.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -28,10 +30,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 //
 //  2) Errors that need to be reported back to the clients (e.g. bad buyer
 //     inputs or issues related to encoding/decoding).
-enum class ErrorVisibility { CLIENT_VISIBLE, AD_SERVER_VISIBLE };
+enum class ErrorVisibility : std::uint8_t { CLIENT_VISIBLE, AD_SERVER_VISIBLE };
 
 // Later we can leverage more fine grained status codes here.
-enum class ErrorCode { CLIENT_SIDE = 400, SERVER_SIDE = 500 };
+enum class ErrorCode : std::uint16_t { CLIENT_SIDE = 400, SERVER_SIDE = 500 };
 
 // Client side errors listed here.
 inline constexpr char kMissingGenerationId[] =

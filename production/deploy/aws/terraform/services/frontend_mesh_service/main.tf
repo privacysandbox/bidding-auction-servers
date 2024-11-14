@@ -149,6 +149,27 @@ resource "aws_route53_record" "mesh_node_record" {
   // In seconds
   ttl     = 300
   zone_id = var.root_domain_zone_id
+
+  # Set-identifier is used to ensure that our services can reference the same
+  # DNS record name across different regions, while still allowing the name to
+  # point to a different record in each region. This is necessary because
+  # without set-identifier, the 'name' attriubute is used as the identifier, and
+  # causes an error when trying to create the same Route53 record in
+  # multiple regions. To temporarily address this issue, we used the
+  # latency_routing_policy with the set identifier tag that has no direct use,
+  # but will be resolved at a later date with b/376858399.
+
+  # See the Route53 Record documentation for more details:
+  # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_record
+
+  # One quirk with set_identifier is that it doesn't work with simple routing
+  # policies.
+  set_identifier = "${aws_appmesh_virtual_service.appmesh_virtual_service.name}-${var.region}-mesh-node-record"
+
+  latency_routing_policy {
+    region = var.region
+  }
+
   // Any non-loopback IP will do, this record just needs to exist, not go anywhere (should be overrifed by appmesh).
   records = ["10.10.10.10"]
 }
@@ -165,7 +186,7 @@ data "aws_iam_policy_document" "virtual_node_policy_document" {
 }
 
 resource "aws_iam_policy" "app_mesh_node_policy" {
-  name   = format("%s-%s-%s-virtualNodePolicy", var.service, var.operator, var.environment)
+  name   = format("%s-%s-%s-%s-virtualNodePolicy", var.service, var.operator, var.environment, var.region)
   policy = data.aws_iam_policy_document.virtual_node_policy_document.json
 }
 

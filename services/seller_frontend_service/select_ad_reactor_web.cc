@@ -62,11 +62,12 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 SelectAdReactorForWeb::SelectAdReactorForWeb(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    const TrustedServersConfigClient& config_client,
+    const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool fail_fast, int max_buyers_solicited)
     : SelectAdReactor(context, request, response, clients, config_client,
-                      enable_cancellation, enable_kanon, fail_fast,
-                      max_buyers_solicited) {}
+                      report_win_map, enable_cancellation, enable_kanon,
+                      fail_fast, max_buyers_solicited) {}
 
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -78,7 +79,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     auto result = CborDecodeAuctionResultToProto(encoded_data);
     if (result.ok()) {
       log_context_.SetEventMessageField(*result);
-      return std::string("exported in EventMessage");
+      return std::string("exported in EventMessage if consented");
     } else {
       return result.status().ToString();
     }
@@ -112,8 +113,11 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     // Serialized the data to bytes array.
     encoded_data = auction_result.SerializeAsString();
 
-    PS_VLOG(kPlain, log_context_) << "AuctionResult exported in EventMessage";
-    log_context_.SetEventMessageField(auction_result);
+    if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+      PS_VLOG(kPlain, log_context_)
+          << "AuctionResult exported in EventMessage if consented";
+      log_context_.SetEventMessageField(auction_result);
+    }
   } else {
     // SINGLE_SELLER or SERVER_TOP_LEVEL Auction
     PS_ASSIGN_OR_RETURN(

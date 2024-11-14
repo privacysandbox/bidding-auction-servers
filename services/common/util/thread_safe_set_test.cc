@@ -22,7 +22,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr int kNumMaxThreads = 5;
+constexpr size_t kNumMaxThreads = 5;
 
 TEST(ThreadSafeSetInsertTest, InsertsMultipleItemsConcurrently) {
   auto thread_safe_set = ThreadSafeSet<int>();

@@ -113,3 +113,8 @@ variable "use_tls_with_mesh" {
   type        = bool
   description = "Whether to use TLS-encrypted communication between service mesh envoy sidecars."
 }
+
+variable "region" {
+  description = "AWS region in which services have been created"
+  type        = string
+}

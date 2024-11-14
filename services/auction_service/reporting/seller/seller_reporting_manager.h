@@ -15,6 +15,7 @@
 #ifndef SERVICES_AUCTION_SERVICE_REPORTING_SELLER_AND_BUYER_REPORTING_MANAGER_H_
 #define SERVICES_AUCTION_SERVICE_REPORTING_SELLER_AND_BUYER_REPORTING_MANAGER_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,7 +30,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 inline constexpr int kReportResultArgSize = 4;
 
-enum class ReportResultArgs : int {
+enum class ReportResultArgs : std::uint8_t {
   kAuctionConfig,
   kSellerReportingSignals,
   kDirectFromSellerSignals,

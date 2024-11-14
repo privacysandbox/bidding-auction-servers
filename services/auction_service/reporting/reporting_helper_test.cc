@@ -26,6 +26,7 @@
 #include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -185,7 +186,9 @@ BuyerReportingMetadata GetTestBuyerReportingMetadata() {
 ReportingDispatchRequestData GetTestDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const std::string& handler_name, std::string seller_currency) {
+    // NOLINTNEXTLINE
+    const std::string& handler_name, std::string seller_currency,
+    const uint32_t seller_data_version) {
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
   std::shared_ptr<std::string> auction_config =
@@ -194,7 +197,7 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
       .handler_name = handler_name,
       .auction_config = auction_config,
       .post_auction_signals = GeneratePostAuctionSignals(
-          winning_ad_score, std::move(seller_currency)),
+          winning_ad_score, std::move(seller_currency), seller_data_version),
       .publisher_hostname = kTestPublisherHostName,
       .log_context = log_context};
   if (dispatch_request_config.enable_report_win_url_generation) {
@@ -207,10 +210,13 @@ ReportingDispatchRequestData GetTestDispatchRequestData(
 ReportingDispatchRequestData GetTestComponentDispatchRequestData(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    const std::string& handler_name, std::string seller_currency) {
+    // NOLINTNEXTLINE
+    const std::string& handler_name, std::string seller_currency,
+    const uint32_t seller_data_version) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
-                                 handler_name, std::move(seller_currency));
+                                 handler_name, std::move(seller_currency),
+                                 seller_data_version);
   reporting_dispatch_request_data.component_reporting_metadata = {
       .top_level_seller = kTestTopLevelSeller,
       .component_seller = kTestSeller,
@@ -222,11 +228,13 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestData(
 ReportingDispatchRequestData GetTestComponentDispatchRequestDataForPAS(
     const ScoreAdsResponse::AdScore& winning_ad_score,
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    std::string seller_currency) {
+    // NOLINTNEXTLINE
+    std::string seller_currency, const uint32_t seller_data_version) {
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingProtectedAppSignalsFunctionName,
-                                 std::move(seller_currency));
+                                 std::move(seller_currency),
+                                 seller_data_version);
   reporting_dispatch_request_data.egress_payload = kTestEgressPayload;
   return reporting_dispatch_request_data;
 }
@@ -308,59 +316,66 @@ absl::StatusOr<BuyerReportingMetadata> ParseBuyerReportingMetadata(
   PS_ASSIGN_IF_PRESENT(reporting_metadata.recency, document, kRecency, Int64);
   PS_ASSIGN_IF_PRESENT(reporting_metadata.modeling_signals, document,
                        kModelingSignalsTag, Int);
-  PS_ASSIGN_IF_PRESENT(reporting_metadata.data_version, document,
-                       kDataVersionTag, Uint);
+  PS_ASSIGN_IF_PRESENT(reporting_metadata.data_version, document, kDataVersion,
+                       Uint);
   return reporting_metadata;
 }
 
 void VerifyBuyerReportingMetadata(
     const std::string& buyer_reporting_metadata_json,
     const BuyerReportingMetadata& expected_buyer_reporting_metadata) {
-  absl::StatusOr<BuyerReportingMetadata> buyer_reporting_metadata =
+  absl::StatusOr<BuyerReportingMetadata> parsed_buyer_reporting_metadata =
       ParseBuyerReportingMetadata(buyer_reporting_metadata_json);
-  ASSERT_TRUE(buyer_reporting_metadata.ok());
-  EXPECT_EQ(buyer_reporting_metadata.value().buyer_signals,
+  ASSERT_TRUE(parsed_buyer_reporting_metadata.ok())
+      << parsed_buyer_reporting_metadata.status();
+  BuyerReportingMetadata buyer_reporting_metadata =
+      *std::move(parsed_buyer_reporting_metadata);
+  EXPECT_EQ(buyer_reporting_metadata.buyer_signals,
             expected_buyer_reporting_metadata.buyer_signals);
-  EXPECT_EQ(buyer_reporting_metadata.value().interest_group_name,
+  EXPECT_EQ(buyer_reporting_metadata.interest_group_name,
             expected_buyer_reporting_metadata.interest_group_name);
-  EXPECT_EQ(buyer_reporting_metadata.value().seller,
+  EXPECT_EQ(buyer_reporting_metadata.seller,
             expected_buyer_reporting_metadata.seller);
-  EXPECT_EQ(buyer_reporting_metadata.value().ad_cost,
+  EXPECT_EQ(buyer_reporting_metadata.ad_cost,
             expected_buyer_reporting_metadata.ad_cost);
-  EXPECT_EQ(buyer_reporting_metadata.value().data_version,
+  EXPECT_EQ(buyer_reporting_metadata.data_version,
             expected_buyer_reporting_metadata.data_version);
   if (expected_buyer_reporting_metadata.join_count.has_value() &&
-      buyer_reporting_metadata.value().join_count.value() !=
-          expected_buyer_reporting_metadata.join_count.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().join_count.value(),
-              kMinNoisedJoinCount);
-    EXPECT_LT(buyer_reporting_metadata.value().join_count.value(),
-              kMaxNoisedJoinCount);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().join_count.value(),
-              expected_buyer_reporting_metadata.join_count.value());
+      buyer_reporting_metadata.join_count.has_value()) {
+    if (buyer_reporting_metadata.join_count.value() !=
+        expected_buyer_reporting_metadata.join_count.value()) {
+      EXPECT_GT(buyer_reporting_metadata.join_count.value(),
+                kMinNoisedJoinCount);
+      EXPECT_LT(buyer_reporting_metadata.join_count.value(),
+                kMaxNoisedJoinCount);
+    } else {
+      EXPECT_EQ(buyer_reporting_metadata.join_count.value(),
+                expected_buyer_reporting_metadata.join_count.value());
+    }
   }
   if (expected_buyer_reporting_metadata.recency.has_value() &&
-      buyer_reporting_metadata.value().recency.value() !=
-          expected_buyer_reporting_metadata.recency.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().recency.value(),
-              kMinNoisedRecency);
-    EXPECT_LT(buyer_reporting_metadata.value().recency.value(),
-              kMaxNoisedRecency);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().recency.value(),
-              expected_buyer_reporting_metadata.recency.value());
+      buyer_reporting_metadata.recency.has_value()) {
+    if (buyer_reporting_metadata.recency.value() !=
+        expected_buyer_reporting_metadata.recency.value()) {
+      EXPECT_GT(buyer_reporting_metadata.recency.value(), kMinNoisedRecency);
+      EXPECT_LT(buyer_reporting_metadata.recency.value(), kMaxNoisedRecency);
+    } else {
+      EXPECT_EQ(buyer_reporting_metadata.recency.value(),
+                expected_buyer_reporting_metadata.recency.value());
+    }
   }
   if (expected_buyer_reporting_metadata.modeling_signals.has_value() &&
-      buyer_reporting_metadata.value().modeling_signals.value() !=
-          expected_buyer_reporting_metadata.join_count.value()) {
-    EXPECT_GT(buyer_reporting_metadata.value().modeling_signals.value(),
-              kMinNoisedModelingSignals);
-    EXPECT_LT(buyer_reporting_metadata.value().modeling_signals.value(),
-              kMaxNoisedModelingSignals);
-  } else {
-    EXPECT_EQ(buyer_reporting_metadata.value().modeling_signals.value(),
-              expected_buyer_reporting_metadata.modeling_signals.value());
+      buyer_reporting_metadata.modeling_signals.has_value()) {
+    if (buyer_reporting_metadata.modeling_signals.value() !=
+        expected_buyer_reporting_metadata.modeling_signals.value()) {
+      EXPECT_GT(buyer_reporting_metadata.modeling_signals.value(),
+                kMinNoisedModelingSignals);
+      EXPECT_LT(buyer_reporting_metadata.modeling_signals.value(),
+                kMaxNoisedModelingSignals);
+    } else {
+      EXPECT_EQ(buyer_reporting_metadata.modeling_signals.value(),
+                expected_buyer_reporting_metadata.modeling_signals.value());
+    }
   }
 }
 
@@ -444,7 +459,8 @@ TEST(GetReportingInput, ReturnsTheInputArgsForReportResultForComponentAuction) {
   ReportingDispatchRequestData dispatch_request_data =
       GetTestComponentDispatchRequestData(
           winning_ad_score, dispatch_request_config,
-          kReportingDispatchHandlerFunctionName, "");
+          kReportingDispatchHandlerFunctionName, /*seller_currency=*/"",
+          kSellerDataVersion);
   std::vector<std::shared_ptr<std::string>> response_vector =
       GetReportingInput(dispatch_request_config, dispatch_request_data);
   TestArgs(response_vector, dispatch_request_config,
@@ -470,7 +486,8 @@ TEST(GetReportingDispatchRequest, ReturnsTheDispatchRequestForReportResult) {
   ReportingDispatchRequestData dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingDispatchHandlerFunctionName,
-                                 /*seller_currency=*/kUsdIsoCode);
+                                 /*seller_currency=*/kUsdIsoCode,
+                                 kSellerDataVersion);
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config,
@@ -500,7 +517,7 @@ TEST(GetReportingDispatchRequest, ReturnsDispatchRequestWithReportWin) {
   ReportingDispatchRequestData dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingDispatchHandlerFunctionName,
-                                 /*seller_currency=*/"");
+                                 /*seller_currency=*/"", kSellerDataVersion);
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals);
@@ -534,7 +551,7 @@ TEST(GetReportingDispatchRequest,
   ReportingDispatchRequestData reporting_dispatch_request_data =
       GetTestDispatchRequestData(winning_ad_score, dispatch_request_config,
                                  kReportingDispatchHandlerFunctionName,
-                                 /*seller_currency=*/"");
+                                 /*seller_currency=*/"", kSellerDataVersion);
   DispatchRequest request = GetReportingDispatchRequest(
       dispatch_request_config, reporting_dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,
@@ -567,8 +584,9 @@ TEST(GetReportingDispatchRequest,
       .enable_protected_app_signals = true,
       .enable_report_win_input_noising = true};
   ReportingDispatchRequestData dispatch_request_data =
-      GetTestComponentDispatchRequestDataForPAS(winning_ad_score,
-                                                dispatch_request_config, "");
+      GetTestComponentDispatchRequestDataForPAS(
+          winning_ad_score, dispatch_request_config, /*seller_currency=*/"",
+          kSellerDataVersion);
   DispatchRequest request = GetReportingDispatchRequest(dispatch_request_config,
                                                         dispatch_request_data);
   TestArgs(request.input, dispatch_request_config, kTestSellerReportingSignals,

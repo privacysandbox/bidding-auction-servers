@@ -41,6 +41,7 @@ cc_test(
     data = ["//:version_data"],
     deps = [
         ":configure_telemetry",
+        "//services/common/test/utils:test_init",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -88,6 +88,11 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
 
   RequestLogContext log_context_;
 
+  std::optional<std::mt19937> generator_;
+
+  // if SFE sampled an eligible request to debug
+  bool is_sampled_for_debug_;
+
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::SfeContext> metric_context_;
 

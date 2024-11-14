@@ -60,6 +60,8 @@ ABSL_FLAG(std::optional<std::string>, grpc_arg_default_authority, std::nullopt,
           "Domain for bidding server, or other domain for TLS Authority");
 ABSL_FLAG(std::optional<std::string>, buyer_kv_server_addr, std::nullopt,
           "Buyer KV Server Address");
+ABSL_FLAG(std::optional<std::string>, buyer_tkv_v2_server_addr, std::nullopt,
+          "Buyer Trusted KV Server Address");
 // Added for performance/benchmark testing of both types of http clients.
 ABSL_FLAG(std::optional<int>, generate_bid_timeout_ms, std::nullopt,
           "Max time to wait for generate bid request to finish.");
@@ -109,11 +111,15 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
+  config_client.SetFlag(FLAGS_https_fetch_skips_tls_verification,
+                        HTTPS_FETCH_SKIPS_TLS_VERIFICATION);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_bidding_server_addr, BIDDING_SERVER_ADDR);
   config_client.SetFlag(FLAGS_grpc_arg_default_authority,
                         GRPC_ARG_DEFAULT_AUTHORITY_VAL);
   config_client.SetFlag(FLAGS_buyer_kv_server_addr, BUYER_KV_SERVER_ADDR);
+  config_client.SetFlag(FLAGS_buyer_tkv_v2_server_addr,
+                        BUYER_TKV_V2_SERVER_ADDR);
   config_client.SetFlag(FLAGS_generate_bid_timeout_ms, GENERATE_BID_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_protected_app_signals_generate_bid_timeout_ms,
                         PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS);
@@ -170,8 +176,10 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
   config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
   config_client.SetFlag(FLAGS_debug_sample_rate_micro, DEBUG_SAMPLE_RATE_MICRO);
-  config_client.SetFlag(FLAGS_enable_tkv_v2, ENABLE_TKV_V2);
+  config_client.SetFlag(FLAGS_enable_tkv_v2_browser, ENABLE_TKV_V2_BROWSER);
   config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
+  config_client.SetFlag(FLAGS_consent_all_requests, CONSENT_ALL_REQUESTS);
+  config_client.SetFlag(FLAGS_enable_priority_vector, ENABLE_PRIORITY_VECTOR);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -194,11 +202,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                << enable_protected_audience;
   PS_LOG(INFO) << "Successfully constructed the config client.\n";
 
-// For security reasons, chaffing must always be enabled in a prod build.
-#if (PS_IS_PROD_BUILD)
-  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
-#endif
-
   return config_client;
 }
 
@@ -212,6 +215,16 @@ absl::Status RunServer() {
   PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
                                    << config_client.DebugString();
 
+  // SetOverride after InitTelemetry, so it can log with SystemLogContext()
+  // For security reasons, chaffing must always be enabled in a prod build.
+#if (PS_IS_PROD_BUILD)
+  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
+#endif
+
+  int rate_micro = config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO);
+  if (rate_micro < 0 || rate_micro > 1'000'000) {
+    config_client.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+  }
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
   MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
@@ -224,16 +237,34 @@ absl::Status RunServer() {
       config_client.GetStringParameter(GRPC_ARG_DEFAULT_AUTHORITY_VAL));
   std::string buyer_kv_server_addr =
       std::string(config_client.GetStringParameter(BUYER_KV_SERVER_ADDR));
+  std::string buyer_tkv_v2_server_addr =
+      std::string(config_client.GetStringParameter(BUYER_TKV_V2_SERVER_ADDR));
+  bool use_tkv_v2_browser =
+      config_client.GetBooleanParameter(ENABLE_TKV_V2_BROWSER);
   bool enable_buyer_frontend_benchmarking =
       config_client.GetBooleanParameter(ENABLE_BUYER_FRONTEND_BENCHMARKING);
   bool enable_bidding_compression =
       config_client.GetBooleanParameter(ENABLE_BIDDING_COMPRESSION);
 
+  if (buyer_tkv_v2_server_addr == kIgnoredPlaceholderValue) {
+    if (use_tkv_v2_browser) {
+      return absl::InvalidArgumentError(
+          "Missing: Buyer Trusted KV server address");
+    }
+    PS_LOG(WARNING, SystemLogContext())
+        << "BUYER_TKV_V2_SERVER_ADDR is set to " << kIgnoredPlaceholderValue
+        << ", this can affect Android auctions";
+  }
+
   if (bidding_server_addr.empty()) {
     return absl::InvalidArgumentError("Missing: Bidding server address");
   }
-  if (buyer_kv_server_addr.empty()) {
-    return absl::InvalidArgumentError("Missing: Buyer KV server address");
+  if (!use_tkv_v2_browser && buyer_kv_server_addr.empty()) {
+    return absl::InvalidArgumentError("Missing: Buyer KV BYOS server address");
+  }
+  if (use_tkv_v2_browser && buyer_tkv_v2_server_addr.empty()) {
+    return absl::InvalidArgumentError(
+        "Missing: Buyer Trusted KV server address");
   }
 
   server_common::GrpcInit gprc_init;
@@ -261,7 +292,7 @@ absl::Status RunServer() {
     bidding_signals_async_providers =
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
             std::move(buyer_kv_async_http_client));
-  } else if (!config_client.GetBooleanParameter(ENABLE_TKV_V2)) {
+  } else if (!use_tkv_v2_browser) {
     buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
         buyer_kv_server_addr,
         std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
@@ -269,14 +300,22 @@ absl::Status RunServer() {
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
             std::move(buyer_kv_async_http_client));
   } else {
-    auto ad_retrieval_stub =
-        kv_server::v2::KeyValueService::NewStub(CreateChannel(
-            buyer_kv_server_addr,
-            /*compression=*/true,
-            /*secure=*/config_client.GetBooleanParameter(TKV_EGRESS_TLS),
-            /*grpc_arg_default_authority=*/grpc_arg_default_authority));
+    PS_LOG(INFO) << "Using TKV V2 for browser traffic";
+  }
+
+  if (!buyer_tkv_v2_server_addr.empty()) {
+    auto kv_v2_stub = kv_server::v2::KeyValueService::NewStub(CreateChannel(
+        buyer_tkv_v2_server_addr,
+        /*compression=*/true,
+        /*secure=*/config_client.GetBooleanParameter(TKV_EGRESS_TLS),
+        /*grpc_arg_default_authority=*/grpc_arg_default_authority));
     kv_async_client = std::make_unique<KVAsyncGrpcClient>(
-        key_fetcher_manager.get(), std::move(ad_retrieval_stub));
+        key_fetcher_manager.get(), std::move(kv_v2_stub));
+  } else {
+    PS_LOG(WARNING)
+        << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID requests will "
+           "fail. Additionally, if ENABLE_TKV_V2_BROWSER is true, "
+           "CLIENT_TYPE_BROWSER requests will fail too.";
   }
 
   BuyerFrontEndService buyer_frontend_service(
@@ -299,10 +338,12 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS),
           config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE),
           config_client.GetBooleanParameter(ENABLE_CHAFFING),
-          config_client.GetBooleanParameter(ENABLE_TKV_V2),
+          config_client.GetBooleanParameter(ENABLE_TKV_V2_BROWSER),
           absl::GetFlag(FLAGS_enable_cancellation),
           absl::GetFlag(FLAGS_enable_kanon),
           config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+          config_client.GetBooleanParameter(CONSENT_ALL_REQUESTS),
+          config_client.GetBooleanParameter(ENABLE_PRIORITY_VECTOR),
       },
       enable_buyer_frontend_benchmarking);
 

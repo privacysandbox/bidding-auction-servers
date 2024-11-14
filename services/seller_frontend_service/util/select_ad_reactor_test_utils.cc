@@ -48,6 +48,7 @@ using ScoringSignalsDoneCallback =
                             GetByteSize) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
+using ::testing::An;
 using ::testing::AnyNumber;
 using ::testing::Cardinality;
 
@@ -95,12 +96,12 @@ GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
     const absl::optional<std::string>& bid_currency,
     absl::string_view buyer_reporting_id,
     absl::string_view buyer_and_seller_reporting_id,
-    absl::string_view selectable_buyer_and_seller_reporting_id) {
+    absl::string_view selected_buyer_and_seller_reporting_id) {
   AdWithBid bid = BuildNewAdWithBid(
       ad_url, std::move(interest_group_name), bid_value,
       enable_event_level_debug_reporting, number_ad_component_render_urls,
       bid_currency, buyer_reporting_id, buyer_and_seller_reporting_id,
-      selectable_buyer_and_seller_reporting_id);
+      selected_buyer_and_seller_reporting_id);
   GetBidsResponse::GetBidsRawResponse response;
   response.mutable_bids()->Add(std::move(bid));
   return response;
@@ -155,7 +156,7 @@ void BuildAdWithBidFromAdWithBidMetadata(
     const AdWithBidMetadata& input, AdWithBid* result,
     absl::string_view buyer_reporting_id,
     absl::string_view buyer_and_seller_reporting_id,
-    absl::string_view selectable_buyer_and_seller_reporting_id) {
+    absl::string_view selected_buyer_and_seller_reporting_id) {
   if (input.has_ad()) {
     *result->mutable_ad() = input.ad();
   }
@@ -174,9 +175,9 @@ void BuildAdWithBidFromAdWithBidMetadata(
   if (!buyer_and_seller_reporting_id.empty()) {
     result->set_buyer_and_seller_reporting_id(buyer_and_seller_reporting_id);
   }
-  if (!selectable_buyer_and_seller_reporting_id.empty()) {
-    result->set_selectable_buyer_and_seller_reporting_id(
-        selectable_buyer_and_seller_reporting_id);
+  if (!selected_buyer_and_seller_reporting_id.empty()) {
+    result->set_selected_buyer_and_seller_reporting_id(
+        selected_buyer_and_seller_reporting_id);
   }
 }
 
@@ -189,7 +190,7 @@ AdWithBid BuildNewAdWithBid(
     const absl::optional<absl::string_view>& bid_currency,
     absl::string_view buyer_reporting_id,
     absl::string_view buyer_and_seller_reporting_id,
-    absl::string_view selectable_buyer_and_seller_reporting_id,
+    absl::string_view selected_buyer_and_seller_reporting_id,
     uint32_t data_version) {
   AdWithBid bid;
   bid.set_render(ad_url);
@@ -223,9 +224,9 @@ AdWithBid BuildNewAdWithBid(
   if (!buyer_and_seller_reporting_id.empty()) {
     bid.set_buyer_and_seller_reporting_id(buyer_and_seller_reporting_id);
   }
-  if (!selectable_buyer_and_seller_reporting_id.empty()) {
-    bid.set_selectable_buyer_and_seller_reporting_id(
-        selectable_buyer_and_seller_reporting_id);
+  if (!selected_buyer_and_seller_reporting_id.empty()) {
+    bid.set_selected_buyer_and_seller_reporting_id(
+        selected_buyer_and_seller_reporting_id);
   }
   bid.set_data_version(data_version);
   return bid;
@@ -268,19 +269,18 @@ server_common::PrivateKey GetPrivateKey() {
 void SetupScoringProviderMock(
     const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>& provider,
     const BuyerBidsResponseMap& expected_buyer_bids,
-    const std::optional<std::string>& scoring_signals_value,
-    bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return,
-    int expected_num_bids, const std::string& seller_egid) {
+    const ScoringProviderMockOptions& options) {
+  // options is passed as a copy and not a reference as otherwise we would need
+  // to make sure options always outlives when the lambda is called, which would
+  // cost a hundred lines of boilerplate and be prone to mistakes.
   auto MockScoringSignalsProvider =
-      [&expected_buyer_bids, scoring_signals_value, server_error_to_return,
-       expected_num_bids,
-       seller_egid](const ScoringSignalsRequest& scoring_signals_request,
-                    ScoringSignalsDoneCallback on_done, absl::Duration timeout,
-                    RequestContext context) {
-        if (expected_num_bids > -1) {
+      [&expected_buyer_bids, options](
+          const ScoringSignalsRequest& scoring_signals_request,
+          ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+          RequestContext context) {
+        if (options.expected_num_bids > -1) {
           EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
-                    expected_num_bids);
+                    options.expected_num_bids);
         } else {
           EXPECT_EQ(scoring_signals_request.buyer_bids_map_.size(),
                     expected_buyer_bids.size());
@@ -304,24 +304,68 @@ void SetupScoringProviderMock(
         }
 
         EXPECT_EQ(scoring_signals_request.seller_kv_experiment_group_id_,
-                  seller_egid);
+                  options.seller_egid);
 
         GetByteSize get_byte_size;
-        if (server_error_to_return) {
-          std::move(on_done)(*server_error_to_return, get_byte_size);
-        } else {
+        if (options.server_status_to_return.ok()) {
           auto scoring_signals = std::make_unique<ScoringSignals>();
-          if (scoring_signals_value) {
-            scoring_signals->scoring_signals =
-                std::make_unique<std::string>(scoring_signals_value.value());
-            std::move(on_done)(std::move(scoring_signals), get_byte_size);
-          }
+          scoring_signals->scoring_signals =
+              std::make_unique<std::string>(options.scoring_signals_value);
+          scoring_signals->data_version = options.data_version;
+          std::move(on_done)(std::move(scoring_signals), get_byte_size);
+        } else {
+          std::move(on_done)(options.server_status_to_return, get_byte_size);
         }
       };
-  if (repeated_get_allowed) {
+  if (options.repeated_get_allowed) {
     EXPECT_CALL(provider, Get).WillRepeatedly(MockScoringSignalsProvider);
   } else {
     EXPECT_CALL(provider, Get).WillOnce(MockScoringSignalsProvider);
+  }
+}
+
+void SetupKvAsyncClientMock(KVAsyncClientMock& kv_async_client,
+                            const kv_server::v2::GetValuesResponse& response,
+                            const BuyerBidsResponseMap& expected_buyer_bids,
+                            const KvAsyncMockOptions& options) {
+  auto kv_mock_response =
+      [&expected_buyer_bids, response, options](
+          std::unique_ptr<GetValuesRequest> get_values_raw_request,
+          grpc::ClientContext* context, auto on_done, absl::Duration timeout,
+          RequestConfig request_config) {
+        if (options.expected_num_ads > -1) {
+          EXPECT_EQ(get_values_raw_request->partitions().size(),
+                    options.expected_num_ads);
+        } else {
+          int num_ads = 0;
+          for (const auto& [unused_buyer, get_bids_response] :
+               expected_buyer_bids) {
+            num_ads += get_bids_response->bids().size();
+            num_ads += get_bids_response->protected_app_signals_bids().size();
+          }
+          EXPECT_EQ(get_values_raw_request->partitions().size(), num_ads);
+        }
+
+        EXPECT_EQ(get_values_raw_request->metadata()
+                      .fields()
+                      .at(kKvExperimentGroupId)
+                      .string_value(),
+                  options.seller_egid);
+
+        if (options.server_status_to_return.ok()) {
+          std::move(on_done)(std::make_unique<GetValuesResponse>(response),
+                             /* response_metadata= */ {});
+        } else {
+          std::move(on_done)(options.server_status_to_return,
+                             /* response_metadata= */ {});
+        }
+        return options.server_status_to_return;
+      };
+  if (options.repeated_get_allowed) {
+    EXPECT_CALL(kv_async_client, ExecuteInternal)
+        .WillRepeatedly(kv_mock_response);
+  } else {
+    EXPECT_CALL(kv_async_client, ExecuteInternal).WillOnce(kv_mock_response);
   }
 }
 

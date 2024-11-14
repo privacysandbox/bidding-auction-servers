@@ -22,7 +22,6 @@
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
-#include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

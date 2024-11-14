@@ -15,6 +15,7 @@
 #ifndef SERVICES_BIDDING_SERVICE_GENERATE_BIDS_REACTOR_H_
 #define SERVICES_BIDDING_SERVICE_GENERATE_BIDS_REACTOR_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -34,7 +35,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 // See GenerateBidInput for more detail on each field.
-enum class GenerateBidArgs : int {
+enum class GenerateBidArgs : std::uint8_t {
   kInterestGroup = 0,
   kAuctionSignals,
   kBuyerSignals,
@@ -100,7 +101,7 @@ class GenerateBidsReactor
   AuctionScope auction_scope_;
 
   // UDF version to use for this request.
-  const std::string& protected_auction_generate_bid_version_;
+  absl::string_view protected_audience_generate_bid_version_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -26,6 +26,7 @@
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/feature_flags.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/post_auction_signals.h"
@@ -193,6 +194,12 @@ absl::StatusOr<std::string> GetSellerReportingSignals(
         document.GetAllocator());
     document.AddMember(kWinningBidCurrencyTag, winning_bid_currency_value,
                        document.GetAllocator());
+  }
+  if (dispatch_request_data.post_auction_signals.seller_data_version > 0) {
+    document.AddMember(
+        kSellerDataVersionTag,
+        dispatch_request_data.post_auction_signals.seller_data_version,
+        document.GetAllocator());
   }
   if (!dispatch_request_data.post_auction_signals
            .highest_scoring_other_bid_currency.empty()) {
@@ -381,7 +388,7 @@ std::string GetBuyerMetadataJson(
   }
   if (dispatch_request_data.buyer_reporting_metadata.data_version > 0) {
     buyer_reporting_signals_obj.AddMember(
-        kDataVersionTag,
+        kDataVersion,
         dispatch_request_data.buyer_reporting_metadata.data_version,
         buyer_reporting_signals_obj.GetAllocator());
   }

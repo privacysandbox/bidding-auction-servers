@@ -31,6 +31,8 @@ inline constexpr absl::string_view GRPC_ARG_DEFAULT_AUTHORITY_VAL =
     "GRPC_ARG_DEFAULT_AUTHORITY";
 inline constexpr absl::string_view BUYER_KV_SERVER_ADDR =
     "BUYER_KV_SERVER_ADDR";
+inline constexpr absl::string_view BUYER_TKV_V2_SERVER_ADDR =
+    "BUYER_TKV_V2_SERVER_ADDR";
 inline constexpr absl::string_view GENERATE_BID_TIMEOUT_MS =
     "GENERATE_BID_TIMEOUT_MS";
 inline constexpr absl::string_view
@@ -54,13 +56,14 @@ inline constexpr absl::string_view
 inline constexpr absl::string_view BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
     "BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 
-inline constexpr int kNumRuntimeFlags = 17;
+inline constexpr int kNumRuntimeFlags = 18;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
     BIDDING_SERVER_ADDR,
     GRPC_ARG_DEFAULT_AUTHORITY_VAL,
     BUYER_KV_SERVER_ADDR,
+    BUYER_TKV_V2_SERVER_ADDR,
     GENERATE_BID_TIMEOUT_MS,
     PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS,
     BIDDING_SIGNALS_LOAD_TIMEOUT_MS,

@@ -29,6 +29,7 @@ using BuyerBidsResponseMap =
 
 struct ScoringSignals {
   std::unique_ptr<std::string> scoring_signals;
+  uint32_t data_version;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

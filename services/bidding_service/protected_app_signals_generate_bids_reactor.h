@@ -110,14 +110,14 @@ class ProtectedAppSignalsGenerateBidsReactor
   // there are no errors during serialization. Upon an error, the payload is
   // set to an empty string.
   void PopulateSerializedEgressPayload(
-      uint32_t schema_version, std::string& egress_payload_in_proto,
+      absl::string_view schema_id, std::string& egress_payload_in_proto,
       EgressSchemaCache& egress_schema_cache,
       int egress_bit_limit = std::numeric_limits<int>::max());
 
   // Converts the JSON string egress payload received from the response of
   // generateBid to wire format.
   absl::StatusOr<std::string> GetSerializedEgressPayload(
-      uint32_t schema_version, absl::string_view egress_payload,
+      absl::string_view schema_id, absl::string_view egress_payload,
       EgressSchemaCache& egress_schema_cache,
       int egress_bit_limit = std::numeric_limits<int>::max());
 
@@ -205,8 +205,8 @@ class ProtectedAppSignalsGenerateBidsReactor
   absl::optional<bool> is_contextual_retrieval_request_;
 
   // UDF versions to use for this request.
-  const std::string& protected_app_signals_generate_bid_version_;
-  const std::string& ad_retrieval_version_;
+  absl::string_view protected_app_signals_generate_bid_version_;
+  absl::string_view prepare_data_for_ad_retrieval_version_;
 
   // Keeps track of the client contexts used for RPC calls
   ClientContexts client_contexts_;
@@ -215,6 +215,10 @@ class ProtectedAppSignalsGenerateBidsReactor
   // given version.
   EgressSchemaCache* egress_schema_cache_;
   EgressSchemaCache* limited_egress_schema_cache_;
+
+  // Schema versions to use for this request.
+  absl::string_view egress_schema_version_;
+  absl::string_view temporary_unlimited_egress_schema_version_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::BiddingContext> metric_context_;

@@ -50,13 +50,13 @@ constexpr char kTopLevelSeller[] = "https://www.example-top-ssp.com";
 constexpr char kUserBiddingSignals[] =
     R"JSON({"userBiddingSignalKey": 123})JSON";
 constexpr char bar_browser_signals[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":1684134093000,"prevWins":[[1,"1868"],[1,"1954"]],"dataVersion":1787})json";
 constexpr char kExpectedBrowserSignalsWithRecencyMs[] =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]]})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]],"dataVersion":1787})json";
 absl::string_view kComponentBrowserSignals =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787})json";
 absl::string_view kComponentBrowserSignalsWithRecencyMs =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]]})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787})json";
 
 using ::google::protobuf::TextFormat;
 using ::google::protobuf::util::MessageToJsonString;
@@ -239,18 +239,22 @@ class GenerateBidsReactorTest : public testing::Test {
 
   void CheckGenerateBids(const RawRequest& raw_request,
                          const Response& expected_response,
-                         bool enable_buyer_debug_url_generation = false) {
+                         std::optional<BiddingServiceRuntimeConfig>
+                             runtime_config = std::nullopt) {
     Response response;
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
         std::make_unique<BiddingNoOpLogger>();
-    BiddingServiceRuntimeConfig runtime_config = {
-        .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation};
+    if (!runtime_config) {
+      runtime_config = {
+          .enable_buyer_debug_url_generation = false,
+      };
+    }
     request_.set_request_ciphertext(raw_request.SerializeAsString());
     grpc::CallbackServerContext context;
     GenerateBidsReactor reactor(&context, dispatcher_, &request_, &response,
                                 std::move(benchmarkingLogger),
                                 key_fetcher_manager_.get(),
-                                crypto_client_.get(), runtime_config);
+                                crypto_client_.get(), *runtime_config);
     reactor.Execute();
     google::protobuf::util::MessageDifferencer diff;
     std::string diff_output;
@@ -403,6 +407,8 @@ RawRequest BuildRawRequest(const RawRequestOptions& options) {
         options.interest_groups_to_add[i];
   }
   raw_request.set_auction_signals(options.auction_signals);
+  raw_request.mutable_blob_versions()->set_protected_audience_generate_bid_udf(
+      "pa/generateBid");
   raw_request.set_buyer_signals(options.buyer_signals);
   raw_request.set_enable_debug_reporting(options.enable_debug_reporting);
   raw_request.set_seller(options.seller);
@@ -425,7 +431,6 @@ RawRequest BuildRawRequestForComponentAuction(
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
-  bool enable_buyer_debug_url_generation = false;
   bool enable_adtech_code_logging = true;
   const std::string response_json =
       GetTestResponse(kTestRenderUrl, 1, enable_adtech_code_logging);
@@ -446,11 +451,10 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
       .interest_groups_to_add = std::move(igs),
       .enable_adtech_code_logging = enable_adtech_code_logging,
   });
-  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
+  CheckGenerateBids(raw_request, ads);
 }
 
 TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
-  bool enable_buyer_debug_url_generation = false;
   bool enable_adtech_code_logging = true;
   PrivateAggregateContribution pAggContribution =
       CreateTestPAggContribution(EVENT_TYPE_WIN,
@@ -475,11 +479,10 @@ TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
   CheckGenerateBids(BuildRawRequest({.interest_groups_to_add = std::move(igs),
                                      .enable_adtech_code_logging =
                                          enable_adtech_code_logging}),
-                    ads, enable_buyer_debug_url_generation);
+                    ads);
 }
 
 TEST_F(GenerateBidsReactorTest, BuyerReportingIdSetInResponse) {
-  bool enable_buyer_debug_url_generation = false;
   bool enable_adtech_code_logging = true;
   std::string response_json = GetTestResponseWithBuyerReportingId(
       kTestRenderUrl, 1, kTestBuyerReportingId, enable_adtech_code_logging);
@@ -501,11 +504,10 @@ TEST_F(GenerateBidsReactorTest, BuyerReportingIdSetInResponse) {
       .interest_groups_to_add = std::move(igs),
       .enable_adtech_code_logging = enable_adtech_code_logging,
   });
-  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
+  CheckGenerateBids(raw_request, ads);
 }
 
 TEST_F(GenerateBidsReactorTest, UnknownFieldInResponseParsedSuccessfully) {
-  bool enable_buyer_debug_url_generation = false;
   bool enable_adtech_code_logging = true;
   std::string response_json = GetTestResponseWithUnknownField(
       kTestRenderUrl, 1, enable_adtech_code_logging);
@@ -526,7 +528,7 @@ TEST_F(GenerateBidsReactorTest, UnknownFieldInResponseParsedSuccessfully) {
       .interest_groups_to_add = std::move(igs),
       .enable_adtech_code_logging = enable_adtech_code_logging,
   });
-  CheckGenerateBids(raw_request, ads, enable_buyer_debug_url_generation);
+  CheckGenerateBids(raw_request, ads);
 }
 
 TEST_F(GenerateBidsReactorTest, DoesNotValidateBiddingSignalsStructure) {
@@ -682,6 +684,33 @@ TEST_F(GenerateBidsReactorTest, CreatesGenerateBidInputsInCorrectOrder) {
       });
   CheckGenerateBids(BuildRawRequest({.interest_groups_to_add = std::move(igs)}),
                     expected_response);
+}
+
+TEST_F(GenerateBidsReactorTest, RespectsPerRequestBlobVersioning) {
+  const std::string response_json = GetTestResponse(kTestRenderUrl, 1);
+  Response expected_response;
+  GenerateBidsResponse::GenerateBidsRawResponse expected_raw_response;
+  *expected_raw_response.add_bids() = GetAdWithBidFromIgBar(kTestRenderUrl, 1);
+  *expected_response.mutable_response_ciphertext() =
+      expected_raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs;
+  igs.push_back(GetIGForBiddingBar());
+
+  auto raw_request =
+      BuildRawRequest({.interest_groups_to_add = std::move(igs)});
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([&response_json, &raw_request](
+                    std::vector<DispatchRequest>& batch,
+                    BatchDispatchDoneCallback batch_callback) {
+        EXPECT_EQ(
+            batch[0].version_string,
+            raw_request.blob_versions().protected_audience_generate_bid_udf());
+        return FakeExecute(batch, std::move(batch_callback), response_json);
+      });
+  CheckGenerateBids(
+      raw_request, expected_response,
+      BiddingServiceRuntimeConfig({.use_per_request_udf_versioning = true}));
 }
 
 TEST_F(GenerateBidsReactorTest,
@@ -862,11 +891,10 @@ TEST_F(GenerateBidsReactorTest, GeneratesBidDespiteNoBrowserSignals) {
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
   CheckGenerateBids(BuildRawRequest({.interest_groups_to_add = std::move(igs)}),
-                    ads, false);
+                    ads);
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
-  bool enable_buyer_debug_url_generation = true;
   const std::string response_json = R"JSON(
     [{
       "render": "https://adTech.com/ad?id=123",
@@ -896,15 +924,16 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithDebugUrls) {
                                  BatchDispatchDoneCallback batch_callback) {
         return FakeExecute(batch, std::move(batch_callback), response_json);
       });
-  CheckGenerateBids(BuildRawRequest({
-                        .interest_groups_to_add = std::move(igs),
-                        .enable_debug_reporting = true,
-                    }),
-                    ads, enable_buyer_debug_url_generation);
+  CheckGenerateBids(
+      BuildRawRequest({
+          .interest_groups_to_add = std::move(igs),
+          .enable_debug_reporting = true,
+      }),
+      ads,
+      BiddingServiceRuntimeConfig({.enable_buyer_debug_url_generation = true}));
 }
 
 TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithoutDebugUrls) {
-  bool enable_buyer_debug_url_generation = false;
   const std::string response_json = GetTestResponse(kTestRenderUrl, 1);
 
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
@@ -923,7 +952,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidResponseWithoutDebugUrls) {
                         .interest_groups_to_add = std::move(igs),
                         .enable_debug_reporting = true,
                     }),
-                    ads, enable_buyer_debug_url_generation);
+                    ads);
 }
 
 TEST_F(GenerateBidsReactorTest, AddsTrustedBiddingSignalsKeysToScriptInput) {

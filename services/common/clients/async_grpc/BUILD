@@ -113,6 +113,7 @@ cc_test(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:random",
+        "//services/common/test/utils:test_init",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/synchronization",
         "@com_google_googletest//:gtest",

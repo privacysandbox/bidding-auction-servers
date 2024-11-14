@@ -32,6 +32,9 @@ using ::testing::An;
 
 // Seller Experiment Group ID.
 constexpr char kSellerEgId[] = "1787";
+// This value cannot be stored in 8 bits, so is not a valid value for android
+// dv hdr
+constexpr uint32_t kTooBigForAndroidDataVersion = 1215;
 
 TEST(HttpScoringSignalsAsyncProviderTest, IncludesClientTypeInRequest) {
   auto mock_client = std::make_unique<
@@ -194,12 +197,13 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsAsyncClientError) {
   notification.WaitForNotification();
 }
 
-TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
+TEST(HttpScoringSignalsAsyncProviderTest,
+     MapsResponseToScoringSignalsForBrowser) {
   auto mock_client = std::make_unique<
       AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
   BuyerBidsResponseMap buyer_bids_map;
   absl::Notification notification;
-  std::string expected_output = MakeARandomString();
+  std::string expected_scoring_signals = MakeARandomString();
 
   EXPECT_CALL(
       *mock_client,
@@ -209,7 +213,7 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
                                              GetSellerValuesOutput>>) &&>>(),
               An<absl::Duration>(), _))
       .WillOnce(
-          [&expected_output](
+          [&expected_scoring_signals](
               std::unique_ptr<GetSellerValuesInput> input,
               const RequestMetadata& metadata,
               absl::AnyInvocable<void(
@@ -217,7 +221,8 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
                   callback,
               absl::Duration timeout, RequestContext context) {
             auto output = std::make_unique<GetSellerValuesOutput>();
-            output->result = expected_output;
+            output->result = expected_scoring_signals;
+            output->data_version = kTooBigForAndroidDataVersion;
             (std::move(callback))(std::move(output));
             return absl::OkStatus();
           });
@@ -225,14 +230,73 @@ TEST(HttpScoringSignalsAsyncProviderTest, MapsResponseToScoringSignals) {
   HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
 
   ScoringSignalsRequest scoring_signals_request = ScoringSignalsRequest(
-      buyer_bids_map, {}, ClientType::CLIENT_TYPE_UNKNOWN);
+      buyer_bids_map, {}, ClientType::CLIENT_TYPE_BROWSER);
 
   class_under_test.Get(
       scoring_signals_request,
-      [&expected_output, &notification](
+      [&expected_scoring_signals, &notification](
           absl::StatusOr<std::unique_ptr<ScoringSignals>> signals,
           GetByteSize get_byte_size) {
-        EXPECT_EQ(*(signals.value()->scoring_signals), expected_output);
+        EXPECT_TRUE(signals.ok());
+        if (signals.ok()) {
+          EXPECT_EQ(*((*signals)->scoring_signals), expected_scoring_signals);
+          EXPECT_EQ((*signals)->data_version, kTooBigForAndroidDataVersion);
+        }
+        notification.Notify();
+      },
+      absl::Milliseconds(100));
+  notification.WaitForNotification();
+}
+
+TEST(HttpScoringSignalsAsyncProviderTest,
+     MapsResponseToScoringSignalsForAndroid) {
+  auto mock_client = std::make_unique<
+      AsyncClientMock<GetSellerValuesInput, GetSellerValuesOutput>>();
+  BuyerBidsResponseMap buyer_bids_map;
+  absl::Notification notification;
+  std::string expected_scoring_signals = MakeARandomString();
+
+  EXPECT_CALL(
+      *mock_client,
+      Execute(An<std::unique_ptr<GetSellerValuesInput>>(),
+              An<const RequestMetadata&>(),
+              An<absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<
+                                             GetSellerValuesOutput>>) &&>>(),
+              An<absl::Duration>(), _))
+      .WillOnce(
+          [&expected_scoring_signals](
+              std::unique_ptr<GetSellerValuesInput> input,
+              const RequestMetadata& metadata,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>)&&>
+                  callback,
+              absl::Duration timeout, RequestContext context) {
+            auto output = std::make_unique<GetSellerValuesOutput>();
+            output->result = expected_scoring_signals;
+            output->data_version = kTooBigForAndroidDataVersion;
+            (std::move(callback))(std::move(output));
+            return absl::OkStatus();
+          });
+
+  HttpScoringSignalsAsyncProvider class_under_test(std::move(mock_client));
+
+  // Specifying the client type as android triggers the size checking for the dv
+  // hdr response.
+  ScoringSignalsRequest scoring_signals_request = ScoringSignalsRequest(
+      buyer_bids_map, {}, ClientType::CLIENT_TYPE_ANDROID);
+
+  class_under_test.Get(
+      scoring_signals_request,
+      [&expected_scoring_signals, &notification](
+          absl::StatusOr<std::unique_ptr<ScoringSignals>> signals,
+          GetByteSize get_byte_size) {
+        EXPECT_EQ(*(signals.value()->scoring_signals),
+                  expected_scoring_signals);
+        EXPECT_EQ(signals.value()->data_version, 0)
+            << "data version value is supposed to exceed the 8-bit limit for "
+               "dv on android, so "
+               "0 is expected value. Did you change to a value that fits in 8 "
+               "bits, or break the size-checking?";
         notification.Notify();
       },
       absl::Milliseconds(100));

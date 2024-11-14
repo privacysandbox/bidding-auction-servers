@@ -46,6 +46,7 @@ cc_library(
     deps = [
         ":bidding_code_fetch_config_cc_proto",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
+        "//services/bidding_service/data:runtime_config",
         "//services/common/blob_fetch:fetch_mode_cc_proto",
         "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/data_fetch:periodic_bucket_code_fetcher",
@@ -99,6 +100,7 @@ cc_library(
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/clients/kv_server:kv_async_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
+        "//services/common/constants:common_constants",
         "//services/common/loggers:request_log_context",
         "//services/common/metric:server_definition",
         "//services/common/util:cancellation_wrapper",
@@ -304,6 +306,7 @@ proto_library(
 
 cc_proto_library(
     name = "egress_schema_fetch_config_cc_proto",
+    visibility = ["//visibility:public"],
     deps = [":egress_schema_fetch_config_proto"],
 )
 
@@ -331,7 +334,7 @@ cc_binary(
         "//services/bidding_service/byob:generate_bid_byob_dispatch_client",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
         "//services/bidding_service/data:runtime_config",
-        "//services/bidding_service/egress_features:adtech_schema_fetcher",
+        "//services/bidding_service/egress_features:egress_schema_fetch_manager",
         "//services/bidding_service/inference:inference_utils",
         "//services/bidding_service/inference:model_fetcher_metric",
         "//services/bidding_service/inference:periodic_model_fetcher",
@@ -340,6 +343,7 @@ cc_binary(
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
         "//services/common/data_fetch:periodic_code_fetcher",
+        "//services/common/data_fetch:version_util",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/metric:udf_metric",
@@ -476,6 +480,7 @@ cc_library(
     hdrs = ["egress_schema_cache.h"],
     visibility = ["//visibility:public"],
     deps = [
+        "//services/bidding_service:bidding_constants",
         "//services/bidding_service:cddl_spec_cache",
         "//services/bidding_service/egress_features:egress_feature",
         "//services/bidding_service/egress_features:feature_factory",

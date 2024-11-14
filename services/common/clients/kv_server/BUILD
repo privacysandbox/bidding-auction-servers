@@ -78,3 +78,30 @@ cc_test(
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
     ],
 )
+
+cc_library(
+    name = "kv_v2",
+    srcs = ["kv_v2.cc"],
+    hdrs = ["kv_v2.h"],
+    deps = [
+        "//services/common/util:json_util",
+        "@com_google_absl//absl/status",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+        "@service_value_key_fledge_privacysandbox//public/query/v2:get_values_v2_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "kv_v2_test",
+    size = "small",
+    srcs = [
+        "kv_v2_test.cc",
+    ],
+    deps = [
+        ":kv_v2",
+        "//services/common/test/utils:test_utils",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

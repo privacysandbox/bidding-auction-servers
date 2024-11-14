@@ -22,11 +22,13 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "services/common/constants/common_service_flags.h"
+#include "services/common/test/utils/test_init.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 TEST(InitTelemetry, _) {
+  CommonTestInit();
   TrustedServersConfigClient config_client({});
 
   config_client.SetOverride("mode: OFF", TELEMETRY_CONFIG);
