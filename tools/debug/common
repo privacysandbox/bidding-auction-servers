@@ -12,9 +12,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-declare -a -r COMMON_DOCKER_RUN_ARGS=(
-  "--env=GLOG_v=2"
-  "--env=GLOG_logtostderr=1"
-  "--env=GLOG_stderrthreshold=0"
-  "--env=GRPC_DNS_RESOLVER=native"
+# This file sets default values for various environment variables used
+# by one or more start_* scripts. Override the default by setting the
+# corresponding environment variable before running the start_* script.
+BIDDING_PORT="${BIDDING_PORT:-50057}"
+AUCTION_PORT="${AUCTION_PORT:-50061}"
+BFE_PORT="${BFE_PORT:-50051}"
+SFE_PORT="${SFE_PORT:-50053}"
+SKIP_TLS_VERIFICATION="${SKIP_TLS_VERIFICATION:-false}"
+BUYER_REPORT_WIN_URL="${BUYER_REPORT_WIN_URL:-}"
+BUYER_REPORT_WIN_SCRIPT="${BUYER_REPORT_WIN_SCRIPT:-}"
+BUYER_PAS_REPORT_WIN_SCRIPT="${BUYER_PAS_REPORT_WIN_SCRIPT:-}"
+AUCTION_JS_URL="${AUCTION_JS_URL:-}"
+PS_VERBOSITY="${PS_VERBOSITY:-10}"
+
+# Pass in custom docker arguments as a string such as:
+# DOCKER_RUN_ARGS_STRING="--network host -p 172.16.117.19:80:50051"
+if [[ -z "$DOCKER_RUN_ARGS_STRING" ]]; then
+    DOCKER_RUN_ARGS=(
+        "--network=host"
+        "--security-opt=seccomp=unconfined"
+        "--security-opt=apparmor=unconfined"
+    )
+else
+    # Convert DOCKER_RUN_ARGS_STRING to an array DOCKER_RUN_ARGS
+    read -r -a DOCKER_RUN_ARGS <<< "${DOCKER_RUN_ARGS_STRING}"
+fi
+
+# copybara:strip_begin(internal_data)
+AUCTION_JS_URL="${AUCTION_JS_URL:-https://pubads.g.doubleclick.net/td/sjs}"
+BUYER_REPORT_WIN_URL="${BUYER_REPORT_WIN_URL:-https://td.doubleclick.net}"
+BUYER_REPORT_WIN_SCRIPT="${BUYER_REPORT_WIN_SCRIPT:-https://td.doubleclick.net/td/bjs}"
+BUYER_PAS_REPORT_WIN_SCRIPT="${BUYER_PAS_REPORT_WIN_SCRIPT:-https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js}"
+# copybara:strip_end
+
+SELLER_CODE_FETCH_CONFIG=$(cat << END
+--seller_code_fetch_config={
+      "fetchMode": 0,
+      "auctionJsPath": \"\",
+      "auctionJsUrl": \"${AUCTION_JS_URL}\",
+      "urlFetchPeriodMs": 13000000,
+      "urlFetchTimeoutMs": 30000,
+      "enableSellerDebugUrlGeneration": true,
+      "enableReportResultUrlGeneration": true,
+      "enableReportWinUrlGeneration": true,
+      "enablePrivateAggregateReporting": false,
+      "buyerReportWinJsUrls": {\"${BUYER_REPORT_WIN_URL}\":\"${BUYER_REPORT_WIN_SCRIPT}\"},
+      "protectedAppSignalsBuyerReportWinJsUrls": {\"${BUYER_REPORT_WIN_URL}\":\"${BUYER_PAS_REPORT_WIN_SCRIPT}\"}
+    }
+END
 )

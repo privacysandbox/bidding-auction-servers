@@ -17,6 +17,7 @@
 #ifndef SERVICES_COMMON_UTIL_ASYNC_TASK_TRACKER_H_
 #define SERVICES_COMMON_UTIL_ASYNC_TASK_TRACKER_H_
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -27,7 +28,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-enum class TaskStatus {
+enum class TaskStatus : std::uint8_t {
   UNKNOWN,
   SKIPPED,         // Task skipped.
   EMPTY_RESPONSE,  // Task received an empty response.

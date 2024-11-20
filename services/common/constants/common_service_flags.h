@@ -25,6 +25,7 @@
 #include "src/telemetry/flag/telemetry_flag.h"
 
 ABSL_DECLARE_FLAG(std::optional<bool>, test_mode);
+ABSL_DECLARE_FLAG(std::optional<bool>, https_fetch_skips_tls_verification);
 ABSL_DECLARE_FLAG(std::optional<std::string>, public_key_endpoint);
 ABSL_DECLARE_FLAG(std::optional<std::string>,
                   primary_coordinator_private_key_endpoint);
@@ -60,9 +61,11 @@ ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_chaffing);
 ABSL_DECLARE_FLAG(std::optional<int>, debug_sample_rate_micro);
-ABSL_DECLARE_FLAG(std::optional<bool>, enable_tkv_v2);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_tkv_v2_browser);
 ABSL_DECLARE_FLAG(std::optional<bool>, tkv_egress_tls);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_priority_vector);
+ABSL_DECLARE_FLAG(std::optional<bool>, consent_all_requests);
+ABSL_DECLARE_FLAG(std::optional<std::string>, seller_code_fetch_config);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -93,6 +96,8 @@ inline constexpr char KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS[] =
     "KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS";
 inline constexpr char TELEMETRY_CONFIG[] = "TELEMETRY_CONFIG";
 inline constexpr char TEST_MODE[] = "TEST_MODE";
+inline constexpr char HTTPS_FETCH_SKIPS_TLS_VERIFICATION[] =
+    "HTTPS_FETCH_SKIPS_TLS_VERIFICATION";
 inline constexpr char ROMA_TIMEOUT_MS[] = "ROMA_TIMEOUT_MS";
 inline constexpr char COLLECTOR_ENDPOINT[] = "COLLECTOR_ENDPOINT";
 inline constexpr char CONSENTED_DEBUG_TOKEN[] = "CONSENTED_DEBUG_TOKEN";
@@ -107,9 +112,12 @@ inline constexpr char MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB[] =
     "MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB";
 inline constexpr char ENABLE_CHAFFING[] = "ENABLE_CHAFFING";
 inline constexpr char DEBUG_SAMPLE_RATE_MICRO[] = "DEBUG_SAMPLE_RATE_MICRO";
-inline constexpr char ENABLE_TKV_V2[] = "ENABLE_TKV_V2";
+inline constexpr char ENABLE_TKV_V2_BROWSER[] = "ENABLE_TKV_V2_BROWSER";
 inline constexpr char TKV_EGRESS_TLS[] = "TKV_EGRESS_TLS";
 inline constexpr char ENABLE_PRIORITY_VECTOR[] = "ENABLE_PRIORITY_VECTOR";
+inline constexpr char CONSENT_ALL_REQUESTS[] = "CONSENT_ALL_REQUESTS";
+inline constexpr absl::string_view SELLER_CODE_FETCH_CONFIG =
+    "SELLER_CODE_FETCH_CONFIG";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     PUBLIC_KEY_ENDPOINT,
@@ -126,6 +134,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     PRIVATE_KEY_CACHE_TTL_SECONDS,
     KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS,
     TEST_MODE,
+    HTTPS_FETCH_SKIPS_TLS_VERIFICATION,
     TELEMETRY_CONFIG,
     ROMA_TIMEOUT_MS,
     COLLECTOR_ENDPOINT,
@@ -138,9 +147,10 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB,
     ENABLE_CHAFFING,
     DEBUG_SAMPLE_RATE_MICRO,
-    ENABLE_TKV_V2,
+    ENABLE_TKV_V2_BROWSER,
     TKV_EGRESS_TLS,
     ENABLE_PRIORITY_VECTOR,
+    CONSENT_ALL_REQUESTS,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

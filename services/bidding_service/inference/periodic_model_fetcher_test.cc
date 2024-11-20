@@ -46,6 +46,7 @@ constexpr char kModelWarmUpRequestJson[] = "model_warm_up_request_json";
 using ::google::scp::core::test::EqualsProto;
 using ::testing::_;
 using ::testing::ElementsAre;
+using ::testing::ElementsAreArray;
 using ::testing::Field;
 using ::testing::InSequence;
 using ::testing::Return;
@@ -60,14 +61,57 @@ class PeriodicModelFetcherTest : public ::testing::Test {
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto));
   }
+
+  void SetUpCloudFetchExpectation(
+      const std::vector<absl::string_view>& paths,
+      const std::vector<BlobFetcherBase::Blob>& fetch_result,
+      BlobFetcherMock& blob_fetcher) {
+    EXPECT_CALL(
+        blob_fetcher,
+        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
+                        ElementsAreArray(paths))))
+        .WillOnce(Return(absl::OkStatus()));
+    EXPECT_CALL(blob_fetcher, snapshot()).WillOnce(ReturnRef(fetch_result));
+  }
+
+  void SetUpRegisterModelExpectation(absl::string_view model_path,
+                                     absl::string_view model_content,
+                                     MockInferenceServiceStub& inference_stub) {
+    SetUpRegisterModelExpectation(model_path, model_content, "",
+                                  inference_stub);
+  }
+
+  void SetUpRegisterModelExpectation(absl::string_view model_path,
+                                     absl::string_view model_content,
+                                     absl::string_view warm_up_request_json,
+                                     MockInferenceServiceStub& inference_stub) {
+    RegisterModelRequest request;
+    request.mutable_model_spec()->set_model_path(model_path);
+    (*request.mutable_model_files())[model_path] = model_content;
+    if (!warm_up_request_json.empty()) {
+      request.set_warm_up_batch_request_json(warm_up_request_json);
+    }
+
+    EXPECT_CALL(inference_stub, RegisterModel(_, EqualsProto(request), _))
+        .WillOnce(Return(grpc::Status::OK));
+  }
+
+  void SetupDeleteModelExpectation(absl::string_view model_path,
+                                   MockInferenceServiceStub& inference_stub) {
+    DeleteModelRequest delete_model_request;
+    delete_model_request.mutable_model_spec()->set_model_path(model_path);
+    EXPECT_CALL(inference_stub,
+                DeleteModel(_, EqualsProto(delete_model_request), _))
+        .WillOnce(Return(grpc::Status::OK));
+  }
 };
 
 TEST_F(PeriodicModelFetcherTest, FetchesAndRegistersAllModels) {
   const std::string model_metadata_config = R"({
-        "model_metadata": [
-            {"model_path": "model1"},
-            {"model_path": "model2"}
-        ]
+    "model_metadata": [
+        {"model_path": "model1"},
+        {"model_path": "model2"}
+    ]
   })";
 
   const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
@@ -84,44 +128,15 @@ TEST_F(PeriodicModelFetcherTest, FetchesAndRegistersAllModels) {
   absl::BlockingCounter done(1);
   {
     InSequence s;
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kTestModelName1, kTestModelName2))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1, kTestModelName2},
+                               mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+    SetUpRegisterModelExpectation(kTestModelName2, kTestModelContent2,
+                                  *mock_inference_stub);
   }
-
-  RegisterModelRequest register_model_request_1;
-  register_model_request_1.mutable_model_spec()->set_model_path(
-      kTestModelName1);
-  (*register_model_request_1.mutable_model_files())[kTestModelName1] =
-      kTestModelContent1;
-
-  RegisterModelRequest register_model_request_2;
-  register_model_request_2.mutable_model_spec()->set_model_path(
-      kTestModelName2);
-  (*register_model_request_2.mutable_model_files())[kTestModelName2] =
-      kTestModelContent2;
-
-  EXPECT_CALL(*mock_inference_stub,
-              RegisterModel(_, EqualsProto(register_model_request_1), _))
-      .WillOnce(Return(grpc::Status::OK));
-
-  EXPECT_CALL(*mock_inference_stub,
-              RegisterModel(_, EqualsProto(register_model_request_2), _))
-      .WillOnce(Return(grpc::Status::OK));
 
   EXPECT_CALL(*executor, RunAfter)
       .WillOnce(
@@ -162,37 +177,16 @@ TEST_F(PeriodicModelFetcherTest, ShouldNotRegisterSameModelTwice) {
 
   {
     InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
 
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kTestModelName1))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
-
-    // Second fetch gets the same model config.
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
+    // Second fetch gets the same model config but doesn't register any model.
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
   }
-
-  EXPECT_CALL(*mock_inference_stub, RegisterModel)
-      .WillOnce(Return(grpc::Status::OK));
 
   EXPECT_CALL(*executor, RunAfter)
       .Times(2)
@@ -265,16 +259,8 @@ TEST_F(PeriodicModelFetcherTest, CloudFetchFailureShouldNotRegisterModel) {
 
   {
     InSequence s;
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
     EXPECT_CALL(
         *blob_fetcher,
         FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
@@ -323,23 +309,9 @@ TEST_F(PeriodicModelFetcherTest, IncorrectChecksumShouldNotRegisterModel) {
 
   {
     InSequence s;
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        testing::ElementsAre(kTestModelName1))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
   }
 
   EXPECT_CALL(*mock_inference_stub, RegisterModel).Times(0);
@@ -382,39 +354,221 @@ TEST_F(PeriodicModelFetcherTest, CorrectChecksumShouldRegisterModel) {
   absl::BlockingCounter done(1);
   {
     InSequence s;
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kTestModelName1))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
   }
-
-  RegisterModelRequest register_model_request;
-  register_model_request.mutable_model_spec()->set_model_path(kTestModelName1);
-  (*register_model_request.mutable_model_files())[kTestModelName1] =
-      kTestModelContent1;
-
-  EXPECT_CALL(*mock_inference_stub,
-              RegisterModel(_, EqualsProto(register_model_request), _))
-      .WillOnce(Return(grpc::Status::OK));
 
   EXPECT_CALL(*executor, RunAfter)
       .WillOnce(
           [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
             EXPECT_EQ(duration, kFetchPeriod);
             done.DecrementCount();
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, UpdatedChecksumShouldTriggerModelFetch) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1"},
+        ]
+  })";
+
+  const std::string model_metadata_config_updated_checksum = R"({
+        "model_metadata": [
+            {"model_path": "model1",
+             "checksum": "59390c4fa97b2cbfe5bd300e254e6eddb7b4b45c2dbc0c1cfc6e93793a143d04"}
+        ]
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  const std::vector<BlobFetcherBase::Blob>
+      config_fetch_result_updated_checksum = {BlobFetcherBase::Blob(
+          kModelConfigPath, model_metadata_config_updated_checksum)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching twice.
+  absl::BlockingCounter done(2);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second fetch gets the model at the same path but different checksums.
+    // In this case, it's the same model but initially the model's checksum is
+    // an empty string.
+    SetUpCloudFetchExpectation({kModelConfigPath},
+                               config_fetch_result_updated_checksum,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .Times(2)
+      .WillRepeatedly(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            if (!done.DecrementCount()) {
+              closure();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, DeleteModelSuccess) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1"},
+        ]
+  })";
+
+  const std::string empty_model_metadata_config = R"({
+        "model_metadata": []
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> empty_config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, empty_model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching twice.
+  absl::BlockingCounter done(2);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second poll gets an empty config.
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .Times(2)
+      .WillRepeatedly(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            if (!done.DecrementCount()) {
+              closure();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, UpdateModelVersionSuccess) {
+  const std::string model_metadata_config_v1 = R"({
+        "model_metadata": [
+            {"model_path": "model1"},
+        ]
+  })";
+
+  const std::string model_metadata_config_v2 = R"({
+        "model_metadata": [
+            {"model_path": "model2"},
+        ]
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_v1_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config_v1)};
+
+  const std::vector<BlobFetcherBase::Blob> config_v2_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config_v2)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot_v1 = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot_v2 = {
+      BlobFetcherBase::Blob(kTestModelName2, kTestModelContent2)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching twice.
+  absl::BlockingCounter done(2);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_v1_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot_v1,
+                               *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second polling of the model configuration file.
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_v2_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+    SetUpCloudFetchExpectation({kTestModelName2}, mock_snapshot_v2,
+                               *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName2, kTestModelContent2,
+                                  *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .Times(2)
+      .WillRepeatedly(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            if (!done.DecrementCount()) {
+              closure();
+            }
             return server_common::TaskId();
           });
 
@@ -449,46 +603,124 @@ TEST_F(PeriodicModelFetcherTest, RegisterModelWithWarmUpRequestIfProvided) {
   absl::BlockingCounter done(1);
   {
     InSequence s;
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kModelConfigPath))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot())
-        .WillOnce(ReturnRef(config_fetch_result));
-
-    EXPECT_CALL(
-        *blob_fetcher,
-        FetchSync(Field(&BlobFetcherBase::FilterOptions::included_prefixes,
-                        ElementsAre(kTestModelName1, kTestModelName2))))
-        .WillOnce(Return(absl::OkStatus()));
-
-    EXPECT_CALL(*blob_fetcher, snapshot()).WillOnce(ReturnRef(mock_snapshot));
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1, kTestModelName2},
+                               mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+    SetUpRegisterModelExpectation(kTestModelName2, kTestModelContent2,
+                                  kModelWarmUpRequestJson,
+                                  *mock_inference_stub);
   }
 
-  RegisterModelRequest register_model_request_1;
-  register_model_request_1.mutable_model_spec()->set_model_path(
-      kTestModelName1);
-  (*register_model_request_1.mutable_model_files())[kTestModelName1] =
-      kTestModelContent1;
+  EXPECT_CALL(*executor, RunAfter)
+      .WillOnce(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            done.DecrementCount();
+            return server_common::TaskId();
+          });
 
-  RegisterModelRequest register_model_request_2;
-  register_model_request_2.mutable_model_spec()->set_model_path(
-      kTestModelName2);
-  (*register_model_request_2.mutable_model_files())[kTestModelName2] =
-      kTestModelContent2;
-  register_model_request_2.set_warm_up_batch_request_json(
-      kModelWarmUpRequestJson);
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
 
-  EXPECT_CALL(*mock_inference_stub,
-              RegisterModel(_, EqualsProto(register_model_request_1), _))
-      .WillOnce(Return(grpc::Status::OK));
+TEST_F(PeriodicModelFetcherTest,
+       ModelDirectoryPathShouldRegisterEntireDirectory) {
+  const std::string model_metadata_config = R"({
+    "model_metadata": [
+        {"model_path": "model1/"}
+    ]
+  })";
 
-  EXPECT_CALL(*mock_inference_stub,
-              RegisterModel(_, EqualsProto(register_model_request_2), _))
-      .WillOnce(Return(grpc::Status::OK));
+  const std::string model_blob_path_1 = "model1/blob1";
+  const std::string model_blob_path_2 = "model1/blob2";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(model_blob_path_1, kTestModelContent1),
+      BlobFetcherBase::Blob(model_blob_path_2, kTestModelContent2)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  absl::BlockingCounter done(1);
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({"model1/"}, mock_snapshot, *blob_fetcher);
+
+    RegisterModelRequest request;
+    request.mutable_model_spec()->set_model_path("model1/");
+    (*request.mutable_model_files())[model_blob_path_1] = kTestModelContent1;
+    (*request.mutable_model_files())[model_blob_path_2] = kTestModelContent2;
+    EXPECT_CALL(*mock_inference_stub, RegisterModel(_, EqualsProto(request), _))
+        .WillOnce(Return(grpc::Status::OK));
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .WillOnce(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            done.DecrementCount();
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, DirectModelPathShouldRegisterSingleModelFile) {
+  const std::string model_metadata_config = R"({
+    "model_metadata": [
+        {"model_path": "model1"}
+    ]
+  })";
+
+  const std::string model_blob_path_1 = "model1";
+  const std::string model_blob_path_2 = "model12";
+  const std::string model_blob_path_3 = "model12/v2";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(model_blob_path_1, kTestModelContent1),
+      BlobFetcherBase::Blob(model_blob_path_2, kTestModelContent1),
+      BlobFetcherBase::Blob(model_blob_path_3, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  absl::BlockingCounter done(1);
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+
+    RegisterModelRequest request;
+    request.mutable_model_spec()->set_model_path("model1");
+    (*request.mutable_model_files())[model_blob_path_1] = kTestModelContent1;
+    EXPECT_CALL(*mock_inference_stub, RegisterModel(_, EqualsProto(request), _))
+        .WillOnce(Return(grpc::Status::OK));
+  }
 
   EXPECT_CALL(*executor, RunAfter)
       .WillOnce(

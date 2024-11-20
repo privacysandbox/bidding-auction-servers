@@ -30,6 +30,7 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status:statusor",
         "@rapidjson",
     ],

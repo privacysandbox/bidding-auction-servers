@@ -24,6 +24,7 @@
 #include "rapidjson/document.h"
 #include "services/buyer_frontend_service/data/bidding_signals.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/priority_vector/priority_vector_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -31,26 +32,29 @@ namespace {
 // If incorrect types are found, simply skip over them -- this function
 // tries to return any result as flexibly as possible.
 // Adtechs may be informed of errors in the KV response via metrics.
-void ParsePerInterestGroupData(const rapidjson::Value& per_interest_group_data,
+void ParsePerInterestGroupData(rapidjson::Value& per_interest_group_data,
                                const BuyerInput& buyer_input,
                                BiddingSignalJsonComponents& result) {
   if (!per_interest_group_data.IsObject()) {
     return;
   }
+
   for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
     const BuyerInput::InterestGroup& interest_group =
         buyer_input.interest_groups(i);
     if (interest_group.name().empty()) {
       continue;
     }
-    rapidjson::Value::ConstMemberIterator ig_itr =
+
+    auto ig_itr =
         per_interest_group_data.FindMember(interest_group.name().c_str());
     if (ig_itr == per_interest_group_data.MemberEnd()) {
       continue;
     }
-    const rapidjson::Value& interest_group_doc = ig_itr->value;
-    rapidjson::Value::ConstMemberIterator update_itr =
-        interest_group_doc.FindMember("updateIfOlderThanMs");
+
+    rapidjson::Value& interest_group_doc = ig_itr->value;
+    auto update_itr =
+        interest_group_doc.FindMember(kUpdateIfOlderThanMsStr.data());
     if (update_itr != interest_group_doc.MemberEnd()) {
       const rapidjson::Value& update = update_itr->value;
       if (update.IsUint()) {
@@ -59,10 +63,17 @@ void ParsePerInterestGroupData(const rapidjson::Value& per_interest_group_data,
         update_ig.set_update_if_older_than_ms(update.GetUint());
         *result.update_igs.mutable_interest_groups()->Add() =
             std::move(update_ig);
-      }
-      // TODO(b/308793587): Publish a metric if !update.IsUint.
+      }  // TODO(b/308793587): Publish a metric if !update.IsUint.
     }
-    // TODO: implement priority vector parsing.
+
+    auto pv_itr = interest_group_doc.FindMember(kPriorityVector.data());
+    rapidjson::Value& priority_vector = pv_itr->value;
+    if (pv_itr != interest_group_doc.MemberEnd() &&
+        priority_vector.IsObject()) {
+      SanitizePriorityVector(priority_vector);
+      result.per_ig_priority_vectors[interest_group.name()] =
+          std::move(priority_vector);
+    }  // TODO(b/308793587): Publish a metric if !pv.IsObject.
   }
 }
 }  // namespace
@@ -88,14 +99,13 @@ absl::StatusOr<BiddingSignalJsonComponents> ParseTrustedBiddingSignals(
     return absl::InternalError(kBiddingSignalsJsonNotParseable);
   }
 
-  rapidjson::Value::ConstMemberIterator per_ig_itr =
-      trusted_signals.FindMember("perInterestGroupData");
+  auto per_ig_itr = trusted_signals.FindMember(kPerInterestGroupData.data());
   if (per_ig_itr != trusted_signals.MemberEnd()) {
     ParsePerInterestGroupData(per_ig_itr->value, buyer_input, result);
   }
 
   rapidjson::Value::MemberIterator keys_itr =
-      trusted_signals.FindMember("keys");
+      trusted_signals.FindMember(kKeys.data());
   if (keys_itr != trusted_signals.MemberEnd() && keys_itr->value.IsObject()) {
     result.bidding_signals =
         std::make_unique<rapidjson::Value>(std::move(keys_itr->value));

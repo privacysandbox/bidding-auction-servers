@@ -298,6 +298,8 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // Interval time between keep-alive probes in case of no response.
   int64_t keepalive_interval_sec_;
 
+  bool skip_tls_verification_;
+
   // All events in the loop are associated with this event base. Note: There can
   // be a single event base for a single thread.
   // Documentation: https://libevent.org/libevent-book/Ref2_eventbase.html

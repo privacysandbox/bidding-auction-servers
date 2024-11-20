@@ -15,33 +15,45 @@
 
 source $(dirname "$0")/common
 
-export BUYER_SERVER_HOST=""
-export KEY_VALUE_SIGNALS_HOST=""
-export SELLER_ORIGIN_DOMAIN=""
+AUCTION_SERVER_ADDR="${AUCTION_SERVER_ADDR:-127.0.0.1:${AUCTION_PORT}}"
+KEY_VALUE_SIGNALS_ADDR="${KEY_VALUE_SIGNALS_ADDR:-}"
+TRUSTED_KEY_VALUE_V2_SIGNALS_ADDR="${TRUSTED_KEY_VALUE_V2_SIGNALS_ADDR:-}"
+SELLER_ORIGIN_DOMAIN="${SELLER_ORIGIN_DOMAIN:-}"
 
-export SERVER_START_CMD=$(cat << END
-/server/bin/server \
---init_config_client="false" --port=50053 \
---auction_server_host="127.0.0.1:50061" \
---key_value_signals_host="${KEY_VALUE_SIGNALS_HOST}" \
---seller_origin_domain="${SELLER_ORIGIN_DOMAIN}" \
---seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
---buyer_server_hosts='{
-  "${BUYER_SERVER_HOST}": {
-    "url": "127.0.0.1:50051",
+BUYER_SERVER_ADDRS_JSON="${BUYER_SERVER_ADDRS_JSON:-$(cat << EOF
+{
+  "https://example-buyer-origin.com": {
+    "url": "127.0.0.1:${BFE_PORT}",
     "cloudPlatform": "LOCAL"
   }
-}' \
+}
+EOF
+)}"
+
+SERVER_START_CMD=$(cat << END
+/server/bin/server \
+--init_config_client="false" \
+--port=${SFE_PORT} \
+--https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
+--auction_server_host="${AUCTION_SERVER_ADDR}" \
+--key_value_signals_host="${KEY_VALUE_SIGNALS_ADDR}" \
+--trusted_key_value_v2_signals_host="${TRUSTED_KEY_VALUE_V2_SIGNALS_ADDR}" \
+--seller_origin_domain="${SELLER_ORIGIN_DOMAIN}" \
+"${SELLER_CODE_FETCH_CONFIG}" \
+--seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
+--buyer_server_hosts='${BUYER_SERVER_ADDRS_JSON}' \
 --enable_seller_frontend_benchmarking="true" \
 --score_ads_rpc_timeout_ms=60000 \
 --get_bid_rpc_timeout_ms=60000 --key_value_signals_fetch_rpc_timeout_ms 60000 \
 --create_new_event_engine="false" \
 --test_mode="true" \
 --enable_chaffing="false" \
---telemetry_config="mode: EXPERIMENT" \
+--enable_kanon="false" \
+--k_anon_api_key="PLACEHOLDER" \
+--telemetry_config="mode: OFF" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
---ps_verbosity=2 \
+--ps_verbosity=${PS_VERBOSITY} \
 --enable_protected_audience="true" \
 --sfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --sfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
@@ -51,20 +63,14 @@ END
 
 if [[ $1 == "--gdb" ]]; then
   export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-  declare -a -r DOCKER_RUN_ARGS=(
+  export EXTRA_DOCKER_RUN_ARGS=(
     "--volume=${PROJECT_ROOT}/bazel-bin/services/seller_frontend_service/server:/server/bin/server"
     "--name=sfe"
   )
-  export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
   docker_image_uri="$(docker load -i dist/debian/seller_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  declare -a DOCKER_RUN_ARGS=(
-      "--network=host"
-      "--security-opt=seccomp=unconfined"
-      "--security-opt=apparmor=unconfined"
-  )
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

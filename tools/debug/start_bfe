@@ -14,15 +14,20 @@
 # limitations under the License.
 
 source $(dirname "$0")/common
-export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
 
-export BUYER_KV_SERVER_ADDR=""
+BUYER_KV_SERVER_ADDR="${BUYER_KV_SERVER_ADDR:-}"
+BUYER_TKV_V2_SERVER_ADDR="${BUYER_TKV_V2_SERVER_ADDR:-}"
+BIDDING_SERVER_ADDR="${BIDDING_SERVER_ADDR:-127.0.0.1:${BIDDING_PORT}}"
 
-export SERVER_START_CMD=$(cat << END
+SERVER_START_CMD=$(cat << END
 /server/bin/server \
---init_config_client="false" --port=50051 \
---bidding_server_addr="127.0.0.1:50057" \
+--init_config_client="false" \
+--port=${BFE_PORT} \
+--https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
+"${SELLER_CODE_FETCH_CONFIG}" \
+--bidding_server_addr="${BIDDING_SERVER_ADDR}" \
 --buyer_kv_server_addr="${BUYER_KV_SERVER_ADDR}" \
+--buyer_tkv_v2_server_addr="${BUYER_TKV_V2_SERVER_ADDR}" \
 --enable_buyer_frontend_benchmarking="true" \
 --generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
 --protected_app_signals_generate_bid_timeout_ms=60000 \
@@ -31,8 +36,9 @@ export SERVER_START_CMD=$(cat << END
 --telemetry_config="mode: OFF" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
---ps_verbosity=2 \
+--ps_verbosity=${PS_VERBOSITY} \
 --enable_chaffing="false" \
+--enable_kanon="false" \
 --enable_protected_audience="true" \
 --bfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
@@ -42,7 +48,7 @@ END
 
 if [[ $1 == "--gdb" ]]; then
   export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-  declare -a -r DOCKER_RUN_ARGS=(
+  export EXTRA_DOCKER_RUN_ARGS=(
     "--volume=${PROJECT_ROOT}/bazel-bin/services/buyer_frontend_service/server:/server/bin/server"
     "--name=bfe"
   )
@@ -51,10 +57,5 @@ if [[ $1 == "--gdb" ]]; then
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
   docker_image_uri="$(docker load -i dist/debian/buyer_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  declare -a DOCKER_RUN_ARGS=(
-      "--network=host"
-      "--security-opt=seccomp=unconfined"
-      "--security-opt=apparmor=unconfined"
-  )
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

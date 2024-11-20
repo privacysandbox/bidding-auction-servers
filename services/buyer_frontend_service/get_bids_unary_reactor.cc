@@ -24,6 +24,7 @@
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
 #include "services/common/util/json_util.h"
+#include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 
@@ -147,7 +148,6 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                                                       kBiddingMetadata)),
       bidding_signals_async_provider_(&bidding_signals_async_provider),
       kv_async_client_(kv_async_client),
-      ad_bids_retrieval_timeout_ms_(config.generate_bid_timeout_ms),
       bidding_async_client_(&bidding_async_client),
       protected_app_signals_bidding_async_client_(pas_bidding_async_client),
       config_(config),
@@ -156,19 +156,16 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       chaffing_enabled_(config_.is_chaffing_enabled),
       is_sampled_for_debug_([this]() {
         decrypt_status_ = DecryptRequest();
-        bool is_debug_eligible = raw_request_.is_debug_eligible() &&
-                                 config_.debug_sample_rate_micro > 0;
-        if ((chaffing_enabled_ && raw_request_.is_chaff()) ||
-            is_debug_eligible) {
-          generator_ = std::mt19937(std::hash<std::string>{}(
-              raw_request_.log_context().generation_id()));
-        } else {
-          generator_ = std::nullopt;
-        }
-        return is_debug_eligible &&
-               RandomSample(config_.debug_sample_rate_micro, *generator_);
+        return SetGeneratorAndSample(
+            config_.debug_sample_rate_micro,
+            chaffing_enabled_ && raw_request_.is_chaff(),
+            raw_request_.is_debug_eligible(),
+            raw_request_.log_context().generation_id(), generator_);
       }()),
       log_context_([this]() {
+        if (config_.consent_all_requests) {
+          ModifyConsent(*raw_request_.mutable_consented_debug_config());
+        }
         return RequestLogContext(
             GetLoggingContext(), raw_request_.consented_debug_config(),
             [this]() { return get_bids_raw_response_->mutable_debug_info(); },
@@ -235,9 +232,11 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     return;
   }
 
-  PS_VLOG(kPlain, log_context_)
-      << "GetBidsRawResponse exported in EventMessage";
-  log_context_.SetEventMessageField(*get_bids_raw_response_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context_)
+        << "GetBidsRawResponse exported in EventMessage if consented";
+    log_context_.SetEventMessageField(*get_bids_raw_response_);
+  }
   // ExportEventMessage before encrypt response
   log_context_.ExportEventMessage(/*if_export_consented=*/true);
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
@@ -368,9 +367,11 @@ int GetBidsUnaryReactor::GetNumberOfMaximumBiddingCalls() {
 
 void GetBidsUnaryReactor::CancellableExecute() {
   benchmarking_logger_->Begin();
-  PS_VLOG(kEncrypted, log_context_)
-      << "Encrypted GetBidsRequest exported in EventMessage";
-  log_context_.SetEventMessageField(*request_);
+  if (server_common::log::PS_VLOG_IS_ON(kEncrypted)) {
+    PS_VLOG(kEncrypted, log_context_)
+        << "Encrypted GetBidsRequest exported in EventMessage if consented";
+    log_context_.SetEventMessageField(*request_);
+  }
   PS_VLOG(kPlain, log_context_)
       << "Headers:\n"
       << absl::StrJoin(context_->client_metadata(), "\n",
@@ -384,8 +385,11 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
   PS_VLOG(5, log_context_) << "Successfully decrypted the request";
-  PS_VLOG(kPlain, log_context_) << "GetBidsRawRequest exported in EventMessage";
-  log_context_.SetEventMessageField(raw_request_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context_)
+        << "GetBidsRawRequest exported in EventMessage if consented";
+    log_context_.SetEventMessageField(raw_request_);
+  }
 
   LogIgMetric(raw_request_, *metric_context_);
 
@@ -405,6 +409,18 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
 
+  if (config_.priority_vector_enabled &&
+      !raw_request_.priority_signals().empty()) {
+    absl::StatusOr<rapidjson::Document> priority_signals =
+        ParsePriorityVector(raw_request_.priority_signals());
+    if (!priority_signals.ok()) {
+      FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT, kMissingInputs));
+      return;
+    }
+
+    priority_signals_vector_ = *std::move(priority_signals);
+  }
+
   async_task_tracker_.SetNumTasksToTrack(num_bidding_calls);
   MayGetProtectedAudienceBids();
   MayGetProtectedSignalsBids();
@@ -416,14 +432,18 @@ void GetBidsUnaryReactor::CancellableExecuteChaffRequest() {
   size_t chaff_request_duration = 0;
   std::uniform_int_distribution<size_t> request_duration_dist(
       kMinChaffRequestDurationMs, kMaxChaffRequestDurationMs);
-  chaff_request_duration = request_duration_dist(*generator_);
+  if (generator_.has_value()) {
+    chaff_request_duration = request_duration_dist(*generator_);
+  }
   absl::SleepFor(absl::Milliseconds((int)chaff_request_duration));
 
   // Produce chaff response.
   size_t chaff_response_size = 0;
   std::uniform_int_distribution<size_t> chaff_response_size_dist(
       kMinChaffResponseSizeBytes, kMaxChaffResponseSizeBytes);
-  chaff_response_size = chaff_response_size_dist(*generator_);
+  if (generator_.has_value()) {
+    chaff_response_size = chaff_response_size_dist(*generator_);
+  }
   absl::StatusOr<std::string> encoded_payload = EncodeAndCompressGetBidsPayload(
       *get_bids_raw_response_, compression_type_, chaff_response_size);
   if (!encoded_payload.ok()) {
@@ -667,7 +687,7 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
             delete kv_request;
             async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
           }),
-      absl::Milliseconds(ad_bids_retrieval_timeout_ms_));
+      absl::Milliseconds(config_.bidding_signals_load_timeout_ms));
   if (!status.ok()) {
     PS_VLOG(kNoisyWarn, log_context_)
         << "Failed to execute ads metadata KV lookup request: " << status;
@@ -729,11 +749,17 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
 
   bidding_signal_json_components_ = std::move(*parsed_bidding_signals);
 
+  PriorityVectorConfig pv_config = {
+      .priority_vector_enabled = config_.priority_vector_enabled,
+      .priority_signals = priority_signals_vector_,
+      .per_ig_priority_vectors =
+          bidding_signal_json_components_.per_ig_priority_vectors};
+
   std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
       raw_bidding_input = CreateGenerateBidsRawRequest(
           raw_request_,
           std::move(bidding_signal_json_components_.bidding_signals),
-          bidding_signal_json_components_.raw_size, data_version,
+          bidding_signal_json_components_.raw_size, data_version, pv_config,
           enable_enforce_kanon_);
   raw_bidding_input->set_is_sampled_for_debug(is_sampled_for_debug_);
   PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"

@@ -63,9 +63,7 @@ variable "server_port" {
 variable "grpc_api_paths" {
   type = set(string)
   default = [
-    "/privacy_sandbox.bidding_auction_servers.*",
-    "/grpc.health.v1.Health/*",
-    "/grpc.reflection.v1alpha.ServerReflection/*"
+    "*"
   ]
 }
 
@@ -97,5 +95,10 @@ variable "healthcheck_unhealthy_threshold" {
 
 variable "service" {
   description = "One of: bidding, auction, bfe, sfe"
+  type        = string
+}
+
+variable "region" {
+  description = "AWS region in which services have been created"
   type        = string
 }

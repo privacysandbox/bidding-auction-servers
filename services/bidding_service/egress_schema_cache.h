@@ -25,9 +25,17 @@
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "services/bidding_service/cddl_spec_cache.h"
+#include "services/bidding_service/constants.h"
 #include "services/bidding_service/egress_features/egress_feature.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+struct EgressSchemaData {
+  // The numeric version of a given schema.
+  uint32_t version;
+  // A list of feature objects in a given schema.
+  std::vector<std::unique_ptr<EgressFeature>> features;
+};
 
 // Cache to store the validation status of adtech provided schema.
 //
@@ -45,23 +53,28 @@ class EgressSchemaCache {
   virtual ~EgressSchemaCache() = default;
 
   // Updates the cache with the provided schema.
-  virtual absl::Status Update(absl::string_view egress_schema)
+  virtual absl::Status Update(
+      absl::string_view egress_schema,
+      absl::string_view schema_id = kDefaultEgressSchemaId)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Gets the list of features corresponding to the egress schema matching the
-  // specified egress schema version (ranging from 0-7, inclusive). Method
-  // throws a non-ok Status if the schema version passed in was not loaded
+  // specified egress schema id. Method
+  // throws a non-ok Status if the schema id passed in was not loaded
   // previously OR if it was malformed OR didn't conform to its CDDL spec.
-  virtual absl::StatusOr<std::vector<std::unique_ptr<EgressFeature>>> Get(
-      int schema_version) ABSL_LOCKS_EXCLUDED(mu_);
+  virtual absl::StatusOr<EgressSchemaData> Get(absl::string_view schema_id)
+      ABSL_LOCKS_EXCLUDED(mu_);
 
  private:
   absl::Mutex mu_;
 
-  // Mapping from adtech egress schema version to list of feature objects in
-  // that schema.
-  absl::flat_hash_map<int, std::vector<std::unique_ptr<EgressFeature>>>
-      version_features_ ABSL_GUARDED_BY(mu_);
+  // Mapping from adtech egress schema 'id' to its respective EgressSchemaData.
+  // The 'id' is the same as that passed into the Get and Update methods.
+  // This allows the cache to maintain multiple schema that have the same
+  // EgressSchemaData.version. When fetching schema from buckets, the id will
+  // be represented by the schema's absolute path in the bucket.
+  absl::flat_hash_map<std::string, EgressSchemaData> version_features_
+      ABSL_GUARDED_BY(mu_);
 
   // Read only cache to find the CDDL spec against which the adtech provided
   // schema is to be validated against.

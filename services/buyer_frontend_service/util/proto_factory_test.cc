@@ -140,11 +140,16 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForAndroid) {
   // 11. Set Multi Bid Limit.
   input.set_enforce_kanon(expected_raw_output.enforce_kanon());
   input.set_multi_bid_limit(expected_raw_output.multi_bid_limit());
+  input.mutable_blob_versions()->CopyFrom(expected_raw_output.blob_versions());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
       (*parsed_bidding_signals).raw_size, expected_raw_output.data_version(),
-      /*enable_kanon=*/true);
+      pv_config, /*enable_kanon=*/true);
   std::string difference;
   MessageDifferencer differencer;
   differencer.ReportDifferencesToString(&difference);
@@ -224,10 +229,16 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForBrowser) {
   // 11. Set Multi Bid Limit.
   input.set_enforce_kanon(expected_raw_output.enforce_kanon());
   input.set_multi_bid_limit(expected_raw_output.multi_bid_limit());
+  input.mutable_blob_versions()->CopyFrom(expected_raw_output.blob_versions());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version());
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version(),
+      pv_config);
   EXPECT_TRUE(MessageDifferencer::Equals(expected_raw_output, *raw_output));
 
   std::string difference;
@@ -307,10 +318,16 @@ TEST(CreateGenerateBidsRequestTest, SetsAllFieldsFromInputParamsForTestIG) {
   // 11. Set Multi Bid Limit.
   input.set_enforce_kanon(expected_raw_output.enforce_kanon());
   input.set_multi_bid_limit(expected_raw_output.multi_bid_limit());
+  input.mutable_blob_versions()->CopyFrom(expected_raw_output.blob_versions());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version());
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version(),
+      pv_config);
   ASSERT_GT(expected_raw_output.interest_group_for_bidding().size(), 0);
   ASSERT_GT(raw_output->interest_group_for_bidding().size(), 0);
 
@@ -349,9 +366,13 @@ TEST(CreateGenerateBidsRequestTest, SkipsIGWithEmptyBiddingSignalsKeys) {
       input_ig.release());
   ASSERT_EQ(input.buyer_input().interest_groups().size(), 1);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_EQ(raw_output->interest_group_for_bidding().size(), 0);
 }
 
@@ -379,9 +400,13 @@ TEST(CreateGenerateBidsRequestTest, HandlesIGWithDuplicateBiddingSignalsKeys) {
       std::move(bidding_signals), /*buyer_input*/ {});
   EXPECT_TRUE(parsed_bidding_signals.ok());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_EQ(raw_output->interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
             1);
@@ -409,9 +434,13 @@ TEST(CreateGenerateBidsRequestTest,
       std::move(bidding_signals), /*buyer_input*/ {});
   EXPECT_TRUE(parsed_bidding_signals.ok());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_EQ(raw_output->interest_group_for_bidding(0)
                 .trusted_bidding_signals_keys_size(),
             1);
@@ -431,9 +460,13 @@ TEST(CreateGenerateBidsRequestTest, SetsEnableEventLevelDebugReporting) {
   GetBidsRequest::GetBidsRawRequest input;
   input.set_enable_debug_reporting(true);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_TRUE(raw_output->enable_debug_reporting());
 }
 
@@ -450,9 +483,13 @@ TEST(CreateGenerateBidsRequestTest, SetsLogContext) {
   input.mutable_log_context()->set_generation_id(kSampleGenerationId);
   input.mutable_log_context()->set_adtech_debug_id(kSampleAdtechDebugId);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
 
   EXPECT_EQ(raw_output->log_context().generation_id(),
             input.log_context().generation_id());
@@ -474,9 +511,13 @@ TEST(CreateGenerateBidsRequestTest, SetsConsentedDebugConfig) {
   consented_debug_config->set_is_consented(kIsConsentedDebug);
   consented_debug_config->set_token(kConsentedDebugToken);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_EQ(raw_output->consented_debug_config().is_consented(),
             kIsConsentedDebug);
   EXPECT_EQ(raw_output->consented_debug_config().token(), kConsentedDebugToken);
@@ -494,9 +535,13 @@ TEST(CreateGenerateBidsRequestTest, SetsTopLevelSellerForComponentAuction) {
   GetBidsRequest::GetBidsRawRequest input;
   input.set_top_level_seller(MakeARandomString());
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion);
+      (*parsed_bidding_signals).raw_size, kTestDefaultDataVersion, pv_config);
   EXPECT_EQ(input.top_level_seller(), raw_output->top_level_seller());
 }
 
@@ -513,9 +558,13 @@ TEST(CreateGenerateBidsRequestTest, SetsMultiBidLimit) {
   input.set_enforce_kanon(true);
   input.set_multi_bid_limit(5);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      parsed_bidding_signals->raw_size, /*data_version=*/0,
+      parsed_bidding_signals->raw_size, /*data_version=*/0, pv_config,
       /*enable_kanon=*/true);
   ASSERT_EQ(raw_output->enforce_kanon(), expected_raw_output.enforce_kanon());
   EXPECT_EQ(raw_output->multi_bid_limit(),
@@ -534,12 +583,81 @@ TEST(CreateGenerateBidsRequestTest, MultiBidLimitDefaultsWithFalseFlags) {
   GetBidsRequest::GetBidsRawRequest input;
   input.set_enforce_kanon(false);
 
+  rapidjson::Document priority_signals;
+  PriorityVectorConfig pv_config = {.priority_vector_enabled = false,
+                                    .priority_signals = priority_signals,
+                                    .per_ig_priority_vectors = {}};
   auto raw_output = CreateGenerateBidsRawRequest(
       input, std::move(parsed_bidding_signals->bidding_signals),
-      parsed_bidding_signals->raw_size, /*data_version=*/0,
+      parsed_bidding_signals->raw_size, /*data_version=*/0, pv_config,
       /*enable_kanon=*/false);
   ASSERT_FALSE(raw_output->enforce_kanon());
   EXPECT_EQ(raw_output->multi_bid_limit(), kDefaultMultiBidLimit);
+}
+
+TEST(CreateGenerateBidsRequestTest, VerifyPriorityVectorFiltering) {
+  GenBidsRawReq expected_raw_output = privacy_sandbox::bidding_auction_servers::
+      MakeARandomGenerateBidsRawRequestForAndroid(false, kDefaultMultiBidLimit,
+                                                  2);
+  auto bidding_signals = std::make_unique<BiddingSignals>(
+      GetBiddingSignalsFromGenerateBidsRequest(expected_raw_output));
+  auto parsed_bidding_signals = ParseTrustedBiddingSignals(
+      std::move(bidding_signals), /*buyer_input*/ {});
+  EXPECT_TRUE(parsed_bidding_signals.ok());
+
+  GetBidsRequest::GetBidsRawRequest input;
+  for (const auto& bidding_ig :
+       expected_raw_output.interest_group_for_bidding()) {
+    auto input_ig = std::make_unique<BuyerInput::InterestGroup>();
+    input_ig->set_name(bidding_ig.name());
+    input_ig->set_user_bidding_signals(bidding_ig.user_bidding_signals());
+    input_ig->mutable_ad_render_ids()->CopyFrom(bidding_ig.ad_render_ids());
+    input_ig->mutable_component_ads()->CopyFrom(
+        bidding_ig.ad_component_render_ids());
+    input_ig->mutable_bidding_signals_keys()->MergeFrom(
+        bidding_ig.trusted_bidding_signals_keys());
+    input_ig->mutable_android_signals()->CopyFrom(bidding_ig.android_signals());
+    input.mutable_buyer_input()->mutable_interest_groups()->AddAllocated(
+        input_ig.release());
+  }
+
+  input.set_auction_signals(expected_raw_output.auction_signals());
+  input.set_buyer_signals(expected_raw_output.buyer_signals());
+  input.set_enforce_kanon(expected_raw_output.enforce_kanon());
+  input.set_multi_bid_limit(expected_raw_output.multi_bid_limit());
+
+  rapidjson::Document priority_signals(rapidjson::kObjectType);
+  priority_signals.AddMember("a", 1, priority_signals.GetAllocator());
+
+  absl::flat_hash_map<std::string, rapidjson::Value> per_ig_priority_vectors;
+
+  // IG 1 - will have a priority less than zero and get filtered out.
+  rapidjson::Document ig_1_priority_vector_doc;
+  rapidjson::Value ig_1_priority_vector(rapidjson::kObjectType);
+  ig_1_priority_vector.AddMember("a", -1,
+                                 ig_1_priority_vector_doc.GetAllocator());
+  per_ig_priority_vectors[expected_raw_output.interest_group_for_bidding()[0]
+                              .name()] = ig_1_priority_vector;
+
+  // IG 2 - will have a priority greater than zero and won't be filtered out.
+  rapidjson::Document ig_2_priority_vector_doc;
+  rapidjson::Value ig_2_priority_vector(rapidjson::kObjectType);
+  ig_2_priority_vector.AddMember("a", 1,
+                                 ig_2_priority_vector_doc.GetAllocator());
+  per_ig_priority_vectors[expected_raw_output.interest_group_for_bidding()[1]
+                              .name()] = ig_2_priority_vector;
+
+  PriorityVectorConfig pv_config = {
+      .priority_vector_enabled = true,
+      .priority_signals = priority_signals,
+      .per_ig_priority_vectors = per_ig_priority_vectors};
+  auto raw_output = CreateGenerateBidsRawRequest(
+      input, std::move(parsed_bidding_signals->bidding_signals),
+      (*parsed_bidding_signals).raw_size, expected_raw_output.data_version(),
+      pv_config, /*enable_kanon=*/true);
+  EXPECT_EQ(raw_output->interest_group_for_bidding().size(), 1);
+  EXPECT_EQ(raw_output->interest_group_for_bidding()[0].name(),
+            expected_raw_output.interest_group_for_bidding()[1].name());
 }
 
 TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,

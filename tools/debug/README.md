@@ -1,9 +1,10 @@
 # Running servers locally
 
 The scripts in this folder can be used to run B&A servers in a local system. This can be used for
-sanity testing B&A locally or for debugging B&A code in test_mode. The scripts use the local
-binaries to start the servers on local ports without HTTPS. The logs will be output to
-stderr/stdout.
+sanity testing B&A locally or for debugging B&A code in test_mode. The scripts use docker to start
+the servers. The logs will be output to stderr/stdout. Please review the environment variables and
+usage commands in each script (including `tools/debug/common`) to understand all of the
+customization options.
 
 ## Start Buyer stack with generateBid binary
 
@@ -22,10 +23,8 @@ Docker daemon should be up and running.
 #### Start stack
 
 ```bash
-# Edit the run time flags in the scripts:
-# Eg. change the biddingExecutableUrl in tools/debug/start_bidding_byob for custom generateBid script.
-# Eg. change the buyer_kv_server_addr in tools/debug/start_bfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
+# Review the scripts to learn about which environment variables you can set
+# to change behavior. Start with tools/debug/common.
 
 # Open two new terminals at B&A project root.
 # Start the Bidding server in terminal 1:
@@ -58,10 +57,8 @@ Docker daemon should be up and running.
 #### Start stack
 
 ```bash
-# Edit the run time flags in the scripts:
-# Eg. change the biddingJsUrl in tools/debug/start_bidding for custom generateBid script.
-# Eg. change the buyer_kv_server_addr in tools/debug/start_bfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
+# Review the scripts to learn about which environment variables you can set
+# to change behavior. Start with tools/debug/common.
 
 # Open two new terminals at B&A project root.
 # Start the Bidding server in terminal 1:
@@ -93,10 +90,8 @@ builders/tools/bazel-debian build //services/buyer_frontend_service:server
 #### Start stack
 
 ```bash
-# Edit the run time flags in the scripts:
-# Eg. change the biddingJsUrl in tools/debug/start_bidding for custom generateBid script.
-# Eg. change the buyer_kv_server_addr in tools/debug/start_bfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
+# Review the scripts to learn about which environment variables you can set
+# to change behavior. Start with tools/debug/common.
 
 # Open two new terminals at B&A project root.
 # Start the Bidding server in terminal 1 with bazel build folder:
@@ -125,10 +120,8 @@ Docker daemon should be up and running.
 #### Start stack
 
 ```bash
-# Edit the run time flags in the scripts:
-# Eg. change the auctionJsUrl in tools/debug/start_auction for custom scoreAd script.
-# Eg. change the key_value_signals_host in tools/debug/start_sfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
+# Review the scripts to learn about which environment variables you can set
+# to change behavior. Start with tools/debug/common.
 
 # Open two new terminals at B&A project root.
 
@@ -161,10 +154,8 @@ builders/tools/bazel-debian build //services/seller_frontend_service:server
 #### Start stack
 
 ```bash
-# Edit the run time flags in the scripts:
-# Eg. change the auctionJsUrl in tools/debug/start_auction for custom scoreAd script.
-# Eg. change the key_value_signals_host in tools/debug/start_sfe for custom KV server.
-# Eg. change the GLOG_v value to increase/decrease log level.
+# Review the scripts to learn about which environment variables you can set
+# to change behavior. Start with tools/debug/common.
 
 # Open two new terminals at B&A project root.
 # Start the Auction server in terminal 1 with bazel build folder:
@@ -273,8 +264,8 @@ grpcurl --plaintext -d '{"protected_auction_ciphertext":"", "component_sellers":
 
 Notes:
 
--   Change log level with the GLOG_v environment variable before starting the servers. To display
-    all logs, set the level to 10.
+-   Change log level with the PS_VERBOSITY environment variable before starting the servers. To
+    display all logs, set the level to 10.
 -   You can only connect single instances of each server locally without a load balancer.
 -   If you need to change the default port numbers for any servers, make sure and update the scripts
     for the server connecting to this updated server as well. For example, if the port for BFE

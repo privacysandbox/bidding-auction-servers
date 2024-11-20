@@ -57,7 +57,6 @@ class MultiCurlHttpFetcherAsyncTest : public ::testing::Test {
 };
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, FetchesUrlSuccessfully) {
-  std::string msg;
   absl::BlockingCounter done(1);
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
     done.DecrementCount();
@@ -70,7 +69,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, FetchesUrlSuccessfully) {
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, FetchesUrlWithHeaders) {
-  std::string msg;
   absl::BlockingCounter done(1);
   std::vector<std::string> headers = {"X-Random: 2"};
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
@@ -110,7 +108,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest,
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesTimeoutByReturningError) {
-  std::string msg;
   absl::BlockingCounter done(1);
   // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
@@ -124,7 +121,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesTimeoutByReturningError) {
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, HandlesMalformattedUrlByReturningError) {
-  std::string msg;
   absl::BlockingCounter done(1);
   // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
@@ -193,7 +189,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, InvokesCallbackForEmptyRequestVector) {
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
-  std::string msg;
   absl::Notification notification;
   auto done_cb = [&notification](absl::StatusOr<std::string> result) {
     EXPECT_TRUE(result.ok()) << result.status();
@@ -207,7 +202,6 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlSuccessfully) {
 }
 
 TEST_F(MultiCurlHttpFetcherAsyncTest, PutsUrlFails) {
-  std::string msg;
   absl::Notification notification;
   // NOLINTNEXTLINE
   auto done_cb = [&notification](absl::StatusOr<std::string> result) {

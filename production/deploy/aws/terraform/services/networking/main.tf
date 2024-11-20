@@ -121,8 +121,6 @@ resource "aws_route_table_association" "private_rt_assoc" {
   subnet_id      = aws_subnet.private_subnet[count.index].id
 }
 
-
-
 resource "aws_eip" "nat_gateway" {
   count = length(aws_subnet.private_subnet)
   vpc   = true

@@ -73,12 +73,13 @@ inline constexpr char kTestReportWinUrl[] = "http://reportWin.com";
 inline constexpr char kConsentedDebugToken[] = "xyz";
 inline constexpr char kUsdIso[] = "USD";
 inline constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
-inline constexpr char kSampleAdRenderUrlHash[] = "adRenderUrlHash";
+inline constexpr std::array<uint8_t, 5> kSampleAdRenderUrlHash = {1, 2, 3, 4,
+                                                                  5};
 inline constexpr char kSampleAdRenderUrl[] = "adRenderUrl";
-inline constexpr char kSampleAdComponentRenderUrlsHash[] =
-    "adComponentRenderUrlHash";
+inline constexpr std::array<uint8_t, 5> kSampleAdComponentRenderUrlsHash = {
+    5, 4, 3, 2, 1};
 inline constexpr char kSampleAdComponentRenderUrl[] = "adComponentRenderUrl";
-inline constexpr char kReportingIdHash[] = "reportingIdHash";
+inline constexpr std::array<uint8_t, 5> kReportingIdHash = {2, 4, 6, 8, 9};
 inline constexpr char kSampleBucket[] = "bucket";
 inline constexpr int kSampleValue = 21;
 inline constexpr float kSampleModifiedBid = 1.23;
@@ -1059,11 +1060,15 @@ TEST(ChromeResponseUtils, VerifyCBOREncodedError) {
 
 AuctionResult::KAnonJoinCandidate SampleKAnonJoinCandidate() {
   AuctionResult::KAnonJoinCandidate kanon_winner_join_candidates;
-  kanon_winner_join_candidates.set_ad_render_url_hash(kSampleAdRenderUrlHash);
+  kanon_winner_join_candidates.set_ad_render_url_hash(std::string(
+      kSampleAdRenderUrlHash.begin(), kSampleAdRenderUrlHash.end()));
   auto* ad_component_render_urls_hash =
       kanon_winner_join_candidates.mutable_ad_component_render_urls_hash();
-  *ad_component_render_urls_hash->Add() = kSampleAdComponentRenderUrlsHash;
-  kanon_winner_join_candidates.set_reporting_id_hash(kReportingIdHash);
+  *ad_component_render_urls_hash->Add() =
+      std::string(kSampleAdComponentRenderUrlsHash.begin(),
+                  kSampleAdComponentRenderUrlsHash.end());
+  kanon_winner_join_candidates.set_reporting_id_hash(
+      std::string(kReportingIdHash.begin(), kReportingIdHash.end()));
   return kanon_winner_join_candidates;
 }
 
@@ -1094,12 +1099,26 @@ KAnonAuctionResultData SampleKAnonAuctionResultData() {
   ghost_winner_for_top_level_auction->set_buyer_reporting_id(
       kSampleBuyerReportingId);
   ghost_winner_for_top_level_auction
-      ->set_selectable_buyer_and_seller_reporting_id(
+      ->set_selected_buyer_and_seller_reporting_id(
           kSampleSelectableBuyerAndSellerReportingId);
 
   return {.kanon_ghost_winners = {std::move(kanon_ghost_winner)},
           .kanon_winner_join_candidates = SampleKAnonJoinCandidate(),
           .kanon_winner_positional_index = kSampleWinnerPositionalIndex};
+}
+
+MATCHER_P(ByteStringEq, value, "") {
+  if (value.size() != arg.size()) {
+    return false;
+  }
+
+  for (int i = 0; i < value.size(); ++i) {
+    if (value[i] != arg[i]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 TEST(ChromeResponseUtils, EncodesKAnonData) {
@@ -1122,14 +1141,15 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   ASSERT_TRUE(decoded_result->has_k_anon_winner_join_candidates());
   const auto& k_anon_winner_join_candidates =
       decoded_result->k_anon_winner_join_candidates();
-  EXPECT_EQ(k_anon_winner_join_candidates.ad_render_url_hash(),
-            kSampleAdRenderUrlHash);
-  EXPECT_EQ(k_anon_winner_join_candidates.reporting_id_hash(),
-            kReportingIdHash);
+  EXPECT_THAT(k_anon_winner_join_candidates.ad_render_url_hash(),
+              ByteStringEq(kSampleAdRenderUrlHash));
+  EXPECT_THAT(k_anon_winner_join_candidates.reporting_id_hash(),
+              ByteStringEq(kReportingIdHash));
   const auto& ad_component_render_urls_hash =
       k_anon_winner_join_candidates.ad_component_render_urls_hash();
   ASSERT_EQ(ad_component_render_urls_hash.size(), 1);
-  EXPECT_EQ(ad_component_render_urls_hash[0], kSampleAdComponentRenderUrlsHash);
+  EXPECT_THAT(ad_component_render_urls_hash[0],
+              ByteStringEq(kSampleAdComponentRenderUrlsHash));
 
   // Validate ghost winner candidates.
   ASSERT_EQ(decoded_result->k_anon_ghost_winners_size(), 1);
@@ -1137,11 +1157,13 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   EXPECT_EQ(ghost_winner.interest_group_index(), kSampleIgIndex);
   EXPECT_EQ(ghost_winner.owner(), kSampleIgOwner);
   const auto& ghost_join_candidate = ghost_winner.k_anon_join_candidates();
-  EXPECT_EQ(ghost_join_candidate.ad_render_url_hash(), kSampleAdRenderUrlHash);
+  EXPECT_THAT(ghost_join_candidate.ad_render_url_hash(),
+              ByteStringEq(kSampleAdRenderUrlHash));
   ASSERT_EQ(ghost_join_candidate.ad_component_render_urls_hash_size(), 1);
-  EXPECT_EQ(ghost_join_candidate.ad_component_render_urls_hash(0),
-            kSampleAdComponentRenderUrlsHash);
-  EXPECT_EQ(ghost_join_candidate.reporting_id_hash(), kReportingIdHash);
+  EXPECT_THAT(ghost_join_candidate.ad_component_render_urls_hash(0),
+              ByteStringEq(kSampleAdComponentRenderUrlsHash));
+  EXPECT_THAT(ghost_join_candidate.reporting_id_hash(),
+              ByteStringEq(kReportingIdHash));
   // Validate private aggregation signals.
   const auto& observed_ghost_winner_private_aggregation_signals =
       ghost_winner.ghost_winner_private_aggregation_signals();
@@ -1172,7 +1194,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   EXPECT_EQ(observed_ghost_winner_for_top_level_auction.buyer_reporting_id(),
             kSampleBuyerReportingId);
   EXPECT_EQ(observed_ghost_winner_for_top_level_auction
-                .selectable_buyer_and_seller_reporting_id(),
+                .selected_buyer_and_seller_reporting_id(),
             kSampleSelectableBuyerAndSellerReportingId);
 }
 
@@ -1459,28 +1481,26 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
           "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
           "696731716b416e6f6e47686f737457696e6e65727381a5656f776e657269666f6f5f"
           "6f776e657272696e74657265737447726f7570496e6465780a736b416e6f6e4a6f69"
-          "6e43616e64696461746573a36f616452656e64657255524c486173686f616452656e"
-          "64657255726c486173686f7265706f7274696e674964486173686f7265706f727469"
-          "6e6749644861736878196164436f6d706f6e656e7452656e64657255524c73486173"
-          "688178186164436f6d706f6e656e7452656e64657255726c48617368781d67686f73"
-          "7457696e6e6572466f72546f704c6576656c41756374696f6ea86a61644d65746164"
-          "6174616a61644d657461646174616b616452656e64657255524c6b616452656e6465"
-          "7255726c6b62696443757272656e63796b62696443757272656e63796b6d6f646966"
-          "696564426964fa3f9d70a47062757965725265706f7274696e674964706275796572"
-          "5265706f7274696e674964756164436f6d706f6e656e7452656e64657255524c7381"
-          "746164436f6d706f6e656e7452656e64657255726c78196275796572416e6453656c"
-          "6c65725265706f7274696e67496478196275796572416e6453656c6c65725265706f"
-          "7274696e674964782373656c65637461626c654275796572416e6453656c6c657252"
-          "65706f7274696e674964782373656c65637461626c654275796572416e6453656c6c"
-          "65725265706f7274696e674964782467686f737457696e6e65725072697661746541"
-          "67677265676174696f6e5369676e616c73a26576616c756515666275636b65746662"
-          "75636b657472696e74657265737447726f75704f776e65727268747470733a2f2f61"
-          "64746563682e636f6d78196b416e6f6e57696e6e65724a6f696e43616e6469646174"
-          "6573a36f616452656e64657255524c486173686f616452656e64657255726c486173"
-          "686f7265706f7274696e674964486173686f7265706f7274696e6749644861736878"
-          "196164436f6d706f6e656e7452656e64657255524c73486173688178186164436f6d"
-          "706f6e656e7452656e64657255726c48617368781a6b416e6f6e57696e6e6572506f"
-          "736974696f6e616c496e64657805"));
+          "6e43616e64696461746573a36f616452656e64657255524c48617368450102030405"
+          "6f7265706f7274696e6749644861736845020406080978196164436f6d706f6e656e"
+          "7452656e64657255524c734861736881650504030201781d67686f737457696e6e65"
+          "72466f72546f704c6576656c41756374696f6ea86a61644d657461646174616a6164"
+          "4d657461646174616b616452656e64657255524c6b616452656e64657255726c6b62"
+          "696443757272656e63796b62696443757272656e63796b6d6f646966696564426964"
+          "fa3f9d70a47062757965725265706f7274696e6749647062757965725265706f7274"
+          "696e674964756164436f6d706f6e656e7452656e64657255524c7381546164436f6d"
+          "706f6e656e7452656e64657255726c78196275796572416e6453656c6c6572526570"
+          "6f7274696e67496478196275796572416e6453656c6c65725265706f7274696e6749"
+          "64782373656c65637461626c654275796572416e6453656c6c65725265706f727469"
+          "6e674964782373656c65637461626c654275796572416e6453656c6c65725265706f"
+          "7274696e674964782467686f737457696e6e65725072697661746541676772656761"
+          "74696f6e5369676e616c73a26576616c756515666275636b6574666275636b657472"
+          "696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
+          "636f6d78196b416e6f6e57696e6e65724a6f696e43616e64696461746573a36f6164"
+          "52656e64657255524c486173684501020304056f7265706f7274696e674964486173"
+          "6845020406080978196164436f6d706f6e656e7452656e64657255524c7348617368"
+          "81650504030201781a6b416e6f6e57696e6e6572506f736974696f6e616c496e6465"
+          "7805"));
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {

@@ -26,6 +26,28 @@ cc_library(
 )
 
 cc_library(
+    name = "version_util",
+    hdrs = ["version_util.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "version_util_test",
+    size = "small",
+    srcs = ["version_util_test.cc"],
+    deps = [
+        ":version_util",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "periodic_url_fetcher",
     srcs = ["periodic_url_fetcher.cc"],
     hdrs = ["periodic_url_fetcher.h"],
@@ -94,6 +116,7 @@ cc_library(
     hdrs = ["periodic_bucket_code_fetcher.h"],
     deps = [
         ":periodic_bucket_fetcher",
+        ":version_util",
         "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
@@ -138,6 +161,7 @@ cc_test(
     deps = [
         ":fetcher_interface",
         ":periodic_bucket_code_fetcher",
+        ":version_util",
         "//services/common/clients/code_dispatcher:udf_code_loader_interface",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",

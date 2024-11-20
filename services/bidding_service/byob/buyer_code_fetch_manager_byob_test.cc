@@ -21,6 +21,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/file_util.h"
@@ -142,9 +143,10 @@ TEST_F(BuyerCodeFetchManagerByobTest, BucketModeFetchesExecForPA) {
             return absl::OkStatus();
           });
   EXPECT_CALL(*loader_, LoadSync)
-      .WillOnce([&pa_exec_object, &pa_exec_data](std::string_view version,
-                                                 absl::string_view blob_data) {
-        EXPECT_EQ(version, pa_exec_object);
+      .WillOnce([&pa_exec_bucket, &pa_exec_object, &pa_exec_data](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version,
+                  *GetBucketBlobVersion(pa_exec_bucket, pa_exec_object));
         EXPECT_EQ(blob_data, pa_exec_data);
         return absl::OkStatus();
       });

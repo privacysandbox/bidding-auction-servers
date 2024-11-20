@@ -178,7 +178,7 @@ inline absl::StatusOr<std::string> GetStringMember(
                         rapidjson::kStringType, it->value.GetType()));
   }
 
-  const auto result = std::string(it->value.GetString());
+  auto result = std::string(it->value.GetString());
   if (!is_empty_ok && result.empty()) {
     return absl::InvalidArgumentError(
         absl::StrFormat(kEmptyStringMember, member_name));

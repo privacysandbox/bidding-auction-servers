@@ -288,7 +288,6 @@ TEST(SerializeJsonDoc, WorksForValidArrayDoc) {
 TEST(SerializeJsonArrayDocToVector, ComplainsOnNonArrayType) {
   std::string key = MakeARandomString();
   std::string value = MakeARandomString();
-  std::string expected_output = "{\"" + key + "\":\"" + value + "\"}";
 
   rapidjson::Document document;
   document.SetObject();

@@ -162,8 +162,8 @@ void ExportLogsByType(
 void HandleLogMessages(absl::string_view ig_name,
                        const roma_service::LogMessages& log_messages,
                        RequestLogContext& log_context) {
-  PS_VLOG(kUdfLog, log_context)
-      << "UDF log messages for " << ig_name << " exported in EventMessage";
+  PS_VLOG(kUdfLog, log_context) << "UDF log messages for " << ig_name
+                                << " exported in EventMessage if consented";
   ExportLogsByType(ig_name, log_messages.logs(), "log", log_context);
   ExportLogsByType(ig_name, log_messages.warnings(), "warning", log_context);
   ExportLogsByType(ig_name, log_messages.errors(), "error", log_context);
@@ -224,12 +224,17 @@ void GenerateBidsBinaryReactor::Execute() {
     return;
   }
 
-  PS_VLOG(kEncrypted, log_context_)
-      << "Encrypted GenerateBidsRequest exported in EventMessage";
-  log_context_.SetEventMessageField(*request_);
-  PS_VLOG(kPlain, log_context_)
-      << "GenerateBidsRawRequest exported in EventMessage";
-  log_context_.SetEventMessageField(raw_request_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    if (server_common::log::PS_VLOG_IS_ON(kEncrypted)) {
+      PS_VLOG(kEncrypted, log_context_)
+          << "Encrypted GenerateBidsRequest exported in EventMessage if "
+             "consented";
+      log_context_.SetEventMessageField(*request_);
+    }
+    PS_VLOG(kPlain, log_context_)
+        << "GenerateBidsRawRequest exported in EventMessage if consented";
+    log_context_.SetEventMessageField(raw_request_);
+  }
 
   // Number of tasks to track equals the number of interest groups.
   int ig_count = raw_request_.interest_group_for_bidding_size();
@@ -362,9 +367,11 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
 }
 
 void GenerateBidsBinaryReactor::EncryptResponseAndFinish(grpc::Status status) {
-  PS_VLOG(kPlain, log_context_)
-      << "GenerateBidsRawResponse exported in EventMessage";
-  log_context_.SetEventMessageField(raw_response_);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context_)
+        << "GenerateBidsRawResponse exported in EventMessage if consented";
+    log_context_.SetEventMessageField(raw_response_);
+  }
   // ExportEventMessage before encrypt response
   log_context_.ExportEventMessage(/*if_export_consented=*/true);
 

@@ -15,6 +15,7 @@
 #ifndef SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_H_
 #define SERVICES_AUCTION_SERVICE_REPORTING_REPORTING_HELPER_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -60,6 +61,7 @@ inline constexpr char kReportingProtectedAppSignalsFunctionName[] =
     "reportingEntryFunctionProtectedAppSignals";
 inline constexpr char kTopLevelSellerTag[] = "topLevelSeller";
 inline constexpr char kWinningBidCurrencyTag[] = "bidCurrency";
+inline constexpr char kSellerDataVersionTag[] = "dataVersion";
 inline constexpr char kHighestScoringOtherBidCurrencyTag[] =
     "highestScoringOtherBidCurrency";
 inline constexpr char kModifiedBidCurrencyTag[] = "modifiedBidCurrency";
@@ -87,13 +89,12 @@ inline constexpr char kInterestGroupOwnerTag[] = "interestGroupOwner";
 inline constexpr char kInterestGroupNameTag[] = "interestGroupName";
 inline constexpr char kJoinCountTag[] = "joinCount";
 inline constexpr char kRecencyTag[] = "recency";
-inline constexpr char kDataVersionTag[] = "dataVersion";
 constexpr int kStochasticalRoundingBits = 8;
 
 // [[deprecated("DEPRECATED. Please use
 // SellerReportingDispatchRequestData or BuyerReportingDispatchRequestData
 // instead")]]
-enum class ReportingArgs : int {
+enum class ReportingArgs : std::uint8_t {
   kAuctionConfig = 0,
   kSellerReportingSignals,
   kDirectFromSellerSignals,
@@ -137,6 +138,7 @@ struct ReportingDispatchRequestConfig {
   bool enable_report_win_input_noising = false;
   bool enable_adtech_code_logging = false;
   std::string roma_timeout_ms;
+  absl::string_view report_result_udf_version;
 };
 
 // [[deprecated("DEPRECATED. Please use

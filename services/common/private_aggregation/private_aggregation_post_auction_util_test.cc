@@ -28,6 +28,11 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+template <typename T>
+inline constexpr int EnumValue(T arg) {
+  return static_cast<std::underlying_type_t<T>>(arg);
+}
+
 void TestGetPrivateAggregationBucketPostAuction(
     const BaseValues& base_values, BaseValue base_value, float scale,
     const std::vector<uint64_t>& offset, bool is_negative_offset,
@@ -202,7 +207,8 @@ TEST(GetPrivateAggregationValuePostAuctionTest,
       static_cast<int>(base_values.highest_scoring_other_bid * scale + offset));
   TestGetPrivateAggregationValuePostAuction(
       base_values, BaseValue::BASE_VALUE_BID_REJECTION_REASON, scale, offset,
-      static_cast<int>(base_values.reject_reason.value() * scale + offset));
+      static_cast<int>(EnumValue(base_values.reject_reason.value()) * scale +
+                       offset));
 }
 
 TEST(GetPrivateAggregationValuePostAuctionTest,
@@ -217,7 +223,8 @@ TEST(GetPrivateAggregationValuePostAuctionTest,
 
   TestGetPrivateAggregationValuePostAuction(
       base_values, BaseValue::BASE_VALUE_BID_REJECTION_REASON, scale, offset,
-      static_cast<int>(base_values.reject_reason.value() * scale + offset));
+      static_cast<int>(EnumValue(base_values.reject_reason.value()) * scale +
+                       offset));
 }
 
 TEST(GetPrivateAggregationValuePostAuctionTest, UnsupportedBaseValue) {

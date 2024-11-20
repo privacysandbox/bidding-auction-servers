@@ -20,6 +20,7 @@
 #include <stddef.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 
 #include "absl/strings/string_view.h"
@@ -231,7 +232,10 @@ inline constexpr std::array<absl::string_view,
         kAdMetadata,       kBuyerAndSellerReportingId,
         kBuyerReportingId, kSelectableBuyerAndSellerReportingId};
 
-enum class AuctionType : int { kProtectedAudience, kProtectedAppSignals };
+enum class AuctionType : std::uint8_t {
+  kProtectedAudience,
+  kProtectedAppSignals
+};
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

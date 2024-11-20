@@ -32,24 +32,26 @@ data "aws_iam_policy_document" "ec2_assume_role_policy" {
 }
 
 resource "aws_iam_role" "instance_role" {
-  name               = format("%s-%s-InstanceRole", var.operator, var.environment)
+  name               = format("%s-%s-%s-InstanceRole", var.operator, var.environment, var.region)
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role_policy.json
 
   tags = {
-    Name        = format("%s-%s-InstanceRole", var.operator, var.environment)
+    Name        = format("%s-%s-%s-InstanceRole", var.operator, var.environment, var.region)
     operator    = var.operator
     environment = var.environment
+    region      = var.region
   }
 }
 
 resource "aws_iam_instance_profile" "instance_profile" {
-  name = format("%s-%s-InstanceProfile", var.operator, var.environment)
+  name = format("%s-%s-%s-InstanceProfile", var.operator, var.environment, var.region)
   role = aws_iam_role.instance_role.name
 
   tags = {
-    Name        = format("%s-%s-InstanceProfile", var.operator, var.environment)
+    Name        = format("%s-%s-%s-InstanceProfile", var.operator, var.environment, var.region)
     operator    = var.operator
     environment = var.environment
+    region      = var.region
   }
 }
 
@@ -57,23 +59,25 @@ resource "aws_iam_instance_profile" "instance_profile" {
 # Create SSH role for using EC2 instance connect.
 ####################################################
 resource "aws_iam_role" "ssh_instance_role" {
-  name               = format("%s-%s-sshInstanceRole", var.operator, var.environment)
+  name               = format("%s-%s-%s-sshInstanceRole", var.operator, var.environment, var.region)
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role_policy.json
 
   tags = {
-    Name        = format("%s-%s-sshInstanceRole", var.operator, var.environment)
+    Name        = format("%s-%s-%s-sshInstanceRole", var.operator, var.environment, var.region)
     operator    = var.operator
     environment = var.environment
+    region      = var.region
   }
 }
 
 resource "aws_iam_instance_profile" "ssh_instance_profile" {
-  name = format("%s-%s-sshInstanceProfile", var.operator, var.environment)
+  name = format("%s-%s-%s-sshInstanceProfile", var.operator, var.environment, var.region)
   role = aws_iam_role.ssh_instance_role.name
 
   tags = {
-    Name        = format("%s-%s-sshInstanceProfile", var.operator, var.environment)
+    Name        = format("%s-%s-%s-sshInstanceProfile", var.operator, var.environment, var.region)
     operator    = var.operator
     environment = var.environment
+    region      = var.region
   }
 }

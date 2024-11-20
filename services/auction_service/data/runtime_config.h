@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include "absl/container/flat_hash_set.h"
 #include "services/auction_service/auction_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -54,7 +55,9 @@ struct AuctionServiceRuntimeConfig {
   int max_allowed_size_all_debug_urls_kb = 3000;
 
   // Default code version to pass to Roma.
-  std::string default_code_version = kScoreAdBlobVersion;
+  std::string default_score_ad_version = kScoreAdBlobVersion;
+  // Flag for whether or not to allow default version override.
+  bool use_per_request_udf_versioning = false;
   // Temporary flag to enable seller and buyer udf isolation.
   bool enable_seller_and_buyer_udf_isolation = false;
   // Enables private aggregate reporting.
@@ -62,6 +65,13 @@ struct AuctionServiceRuntimeConfig {
 
   bool enable_cancellation = false;
   bool enable_kanon = false;
+  // Set of buyers with reportWin js url configured.
+  absl::flat_hash_set<std::string> buyers_with_report_win_enabled = {};
+
+  // Set of buyers with reportWin js url configured for protected
+  // app signals.
+  absl::flat_hash_set<std::string>
+      protected_app_signals_buyers_with_report_win_enabled = {};
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

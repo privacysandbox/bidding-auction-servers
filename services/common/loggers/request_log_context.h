@@ -17,7 +17,9 @@
 #ifndef SERVICES_COMMON_LOGGERS_REQUEST_LOG_CONTEXT_H_
 #define SERVICES_COMMON_LOGGERS_REQUEST_LOG_CONTEXT_H_
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/base/no_destructor.h"
 #include "absl/random/bit_gen_ref.h"
@@ -46,12 +48,27 @@ inline server_common::log::SystemLogContext& SystemLogContext() {
 
 class EventMessageProvider {
  public:
-  const EventMessage& Get() { return event_message_; }
+  const EventMessage& Get() {
+    if (!event_message_.meta_data().is_consented()) {
+      if (event_message_.has_protected_auction()) {
+        event_message_.mutable_protected_auction()->clear_buyer_input();
+      }
+      if (event_message_.has_protected_audience()) {
+        event_message_.mutable_protected_audience()->clear_buyer_input();
+      }
+    }
+    return event_message_;
+  }
 
   EVENT_MESSAGE_PROVIDER_SET(SelectAdRequest, select_ad_request);
   EVENT_MESSAGE_PROVIDER_SET(ProtectedAuctionInput, protected_auction);
   EVENT_MESSAGE_PROVIDER_SET(ProtectedAudienceInput, protected_audience);
   EVENT_MESSAGE_PROVIDER_SET(AuctionResult, auction_result);
+
+  void Set(const std::vector<AuctionResult>& component_auction_result) {
+    event_message_.mutable_component_auction_result()->Assign(
+        component_auction_result.begin(), component_auction_result.end());
+  }
 
   EVENT_MESSAGE_PROVIDER_SET(GetBidsRequest, get_bid_request);
   EVENT_MESSAGE_PROVIDER_SET(GetBidsRequest::GetBidsRawRequest,
@@ -80,6 +97,8 @@ class EventMessageProvider {
                              score_ad_raw_request);
   EVENT_MESSAGE_PROVIDER_SET_RESPONSE(ScoreAdsResponse::ScoreAdsRawResponse,
                                       score_ad_raw_response);
+
+  EVENT_MESSAGE_PROVIDER_SET(EventMessage::MetaData, meta_data);
 
   void Set(absl::string_view udf_log) { event_message_.add_udf_log(udf_log); }
 
@@ -111,11 +130,11 @@ inline constexpr int kNoisyWarn =
     2;  // non-critical error, use PS_LOG(ERROR, *) for critical error
 inline constexpr int kUdfLog = 3;
 inline constexpr int kSuccess = 3;
-inline constexpr int kNoisyInfo = 4;
-inline constexpr int kDispatch = 4;  // UDF dispatch request and response
+inline constexpr int kNoisyInfo = 5;
+inline constexpr int kDispatch = 5;  // UDF dispatch request and response
 inline constexpr int kOriginated =
-    5;  // plaintext B&A request and response originated from server
-inline constexpr int kKVLog = 5;  // KV request response
+    6;  // plaintext B&A request and response originated from server
+inline constexpr int kKVLog = 4;  // KV request response
 inline constexpr int kStats = 5;  // Stats log e.g. time, byte size, etc.
 inline constexpr int kEncrypted = 6;
 
@@ -136,6 +155,22 @@ inline bool RandomSample(int sample_rate_micro, absl::BitGenRef bitgen) {
       {1e6 - sample_rate_micro, (double)sample_rate_micro});
   return dist(bitgen);
 }
+
+inline bool SetGeneratorAndSample(int debug_sample_rate_micro,
+                                  bool chaffing_enabled, bool request_eligible,
+                                  absl::string_view gen_id,
+                                  std::optional<std::mt19937>& generator) {
+  bool is_debug_eligible = request_eligible && debug_sample_rate_micro > 0;
+  if (chaffing_enabled || is_debug_eligible) {
+    generator = std::mt19937(std::hash<std::string>{}(gen_id.data()));
+  } else {
+    generator = std::nullopt;
+  }
+  return is_debug_eligible && RandomSample(debug_sample_rate_micro, *generator);
+}
+
+// in non_prod, modify config to consent
+void ModifyConsent(server_common::ConsentedDebugConfiguration& original);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

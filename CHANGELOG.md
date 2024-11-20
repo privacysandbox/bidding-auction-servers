@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.4.0 (2024-11-14)
+
+
+### Features
+
+* Add consented debug logs to seller KV V2
+* Add Data Version for buyer to generateBid() browser signals
+* add egress schema bucket fetcher
+* add egress schema fetch manager
+* add flag https_fetch_skips_tls_verification for local testing
+* Add priority fields to B&A API
+* Add PV support on BFE
+* Add PV support on SFE
+* Add Seller Data Version to ReportResult
+* Add Seller DV to Bid Metadata for ScoreAd()
+* Add support for DNS routing by regional LB latency in AWS
+* Add support for DNS routing by regional LB latency in AWS
+* add top level seller debugging data
+* Data Version in BuyerReporting
+* enable seller debugging for eligible request
+* Implement delete model rpc for inference sidecar
+* Implement KV V2 Adapter for Scoring Signals
+* Implement KV V2 flag for seller
+* Implement v2 bidding support - config flags propagation
+* improve SFE response debug logging
+* Launch the B&A inference for both PA and PAS
+* Pass Data Version to AuctionService
+* Pass DV Hdr to Auction Service
+* Runtime flag to make all non-prod requests as always consented
+* Set Data Version on AdWithBid
+* Support Data Version for Seller BYOS KV
+* Support inference model deletion in the model fetcher
+* support per-request spec of egress schema
+* support per-request specification of seller and buyer udf versions using bucket blobs
+* update proto definition for multi blob support
+* Use separate tf parameter/endpoint for buyer TKV
+* Use separate tf parameter/endpoint for seller TKV
+* Validate DV Hdr val size based on clientType
+* Validate DV Header values for size based on client type
+
+
+### Bug Fixes
+
+* Check for key in perBuyerSignal before looking up buyer_signals for reporting
+* Fix failing e2e test
+* Fix Terraform apply when extra args are empty
+* Load reportWin code when fetch_mode is local
+* load the wrapper with code isolation for local fetch mode
+* Log inference model registration failure reason
+* Replace prefix-based matching with exact matching for model paths
+* Revert saving and deleting Tensorflow models in place to fix memory leak
+* Set the correct version_string for reportResult when udf loaded from bucket
+* Support a wildcar SSL certificate in e2e benchmark
+* update GCP cloudbuild with correct git tag name
+* Use correct timeout for Kv V2 bidding signals call
+
 ## 4.3.0 (2024-10-25)
 
 

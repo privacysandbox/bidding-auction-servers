@@ -85,7 +85,16 @@ message Tensor {
   // should be equal to the product of tensor_shape elements, for example
   // a tensor of shape [1,4] will expect a flat array or 4 elements
   // (e.g. [1, 2, 7, 4]) and one with a shape [2,3] will expect a 6 element one.
-  repeated string tensor_content = 4;
+  TensorContent tensor_content = 4;
+}
+
+// Supported tensor content data types. Protobuf doesn't support int8 or int16.
+// Using int32 to store these smaller integer types.
+message TensorContent {
+  repeated float tensor_content_float = 1;
+  repeated double tensor_content_double = 2;
+  repeated int32 tensor_content_int32 = 3;
+  repeated int64 tensor_content_int64 = 4;
 }
 
 // Supported tensor data types.

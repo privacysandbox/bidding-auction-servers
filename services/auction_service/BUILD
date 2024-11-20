@@ -277,6 +277,7 @@ cc_binary(
         "//services/common:feature_flags",
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
+        "//services/common/data_fetch:version_util",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",

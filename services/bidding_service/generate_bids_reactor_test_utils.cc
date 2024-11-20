@@ -93,6 +93,14 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data,
     bool enable_unlimited_egress) {
   GenerateProtectedAppSignalsBidsRawRequest raw_request;
+  raw_request.mutable_blob_versions()
+      ->set_protected_app_signals_generate_bid_udf("pas/generateBid");
+  raw_request.mutable_blob_versions()->set_prepare_data_for_ad_retrieval_udf(
+      "pas/ads_retrieval");
+  raw_request.mutable_blob_versions()->set_egress_schema(
+      "egress_schema/example");
+  raw_request.mutable_blob_versions()->set_temporary_unlimited_egress_schema(
+      "temporary_unlimited_egress_schema/example");
   raw_request.set_auction_signals(auction_signals);
   raw_request.set_buyer_signals(buyer_signals);
   *raw_request.mutable_protected_app_signals() = protected_app_signals;
@@ -160,7 +168,6 @@ std::string CreateGenerateBidsUdfResponse(
     absl::string_view egress_payload_string,
     absl::string_view debug_reporting_urls,
     absl::string_view temporary_egress_payload_string) {
-  std::string base64_encoded_features_bytes;
   return absl::Substitute(R"JSON(
     [{
       "render": "$0",

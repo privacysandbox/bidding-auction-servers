@@ -502,3 +502,50 @@ cc_library(
         "@com_google_absl//absl/time",
     ],
 )
+
+cc_library(
+    name = "hash_util_interface",
+    srcs = ["hash_util_interface.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "hash_util_mock",
+    srcs = ["hash_util_mock.h"],
+    deps = [
+        ":hash_util_interface",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "hash_util",
+    srcs = ["hash_util.cc"],
+    hdrs = [
+        "hash_util.h",
+        "hash_util_interface.h",
+    ],
+    deps = [
+        ":hash_util_interface",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleurl//url",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+    ],
+)
+
+cc_test(
+    name = "hash_util_test",
+    size = "small",
+    srcs = [
+        "hash_util_test.cc",
+    ],
+    deps = [
+        ":hash_util",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

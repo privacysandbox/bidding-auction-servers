@@ -50,7 +50,7 @@ inline void SignalHandler(int sig) {
       fprintf(stderr, "%-3d %0*p\n", i, 2 + sizeof(void*) * 2, callstack[i]);
     }
   }
-  free(symbols);
+  free(reinterpret_cast<void*>(symbols));
   if (nFrames == kMaxStack) fprintf(stderr, "[truncated]\n");
   exit(1);
 }

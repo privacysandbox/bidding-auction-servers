@@ -19,14 +19,13 @@
 #include <memory>
 #include <utility>
 
-#include <openssl/sha.h>
-
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
 #include "absl/synchronization/notification.h"
 #include "services/common/loggers/request_log_context.h"
+#include "services/common/util/hash_util.h"
 #include "src/core/interface/async_context.h"
 #include "src/core/interface/errors.h"
 #include "src/public/core/interface/execution_result.h"
@@ -62,25 +61,6 @@ bool ShouldIncludePath(absl::string_view path,
   }
 
   return false;
-}
-
-// Wrapper around OpenSSL to compute the SHA256 hash of a given input string.
-// It converts the resulting binary hash into a hexadecimal string.
-std::string ComputeSHA256(absl::string_view data) {
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, data.data(), data.size());
-  SHA256_Final(hash, &sha256);
-
-  char output_buf[2 * SHA256_DIGEST_LENGTH + 1];
-  output_buf[2 * SHA256_DIGEST_LENGTH] = 0;
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
-    snprintf(output_buf + (i * 2), sizeof(output_buf) - (i * 2), "%02x",
-             hash[i]);
-  }
-
-  return std::string(output_buf);
 }
 
 }  // namespace

@@ -69,10 +69,12 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 SelectAdReactorForApp::SelectAdReactorForApp(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    const TrustedServersConfigClient& config_client,
+    const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool fail_fast)
     : SelectAdReactor(context, request, response, clients, config_client,
-                      enable_cancellation, enable_kanon, fail_fast) {}
+                      report_win_map, enable_cancellation, enable_kanon,
+                      fail_fast) {}
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -91,8 +93,11 @@ absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
         request_->auction_config().seller(), protected_auction_input_,
         request_->auction_config().top_level_seller());
   }
-  PS_VLOG(kPlain, log_context_) << "AuctionResult exported in EventMessage";
-  log_context_.SetEventMessageField(auction_result);
+  if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
+    PS_VLOG(kPlain, log_context_)
+        << "AuctionResult exported in EventMessage if consented";
+    log_context_.SetEventMessageField(auction_result);
+  }
 
   // Serialized the data to bytes array.
   std::string serialized_result = auction_result.SerializeAsString();

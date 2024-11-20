@@ -108,10 +108,13 @@ ScoreAdsRequest BuildScoreAdsRequest(
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
   for (const auto& ad : ads) {
-    raw_request.mutable_per_buyer_signals()->try_emplace(
-        ad.interest_group_owner(),
-        test_score_ads_request_config.test_buyer_reporting_signals
-            .buyer_signals);
+    if (!test_score_ads_request_config.test_buyer_reporting_signals
+             .buyer_signals.empty()) {
+      raw_request.mutable_per_buyer_signals()->try_emplace(
+          ad.interest_group_owner(),
+          test_score_ads_request_config.test_buyer_reporting_signals
+              .buyer_signals);
+    }
     std::string ad_signal = absl::StrFormat(
         "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
     absl::StrAppend(&trusted_scoring_signals,
@@ -138,6 +141,8 @@ ScoreAdsRequest BuildScoreAdsRequest(
     raw_request.set_top_level_seller(
         test_score_ads_request_config.top_level_seller);
   }
+  raw_request.set_seller_data_version(
+      test_score_ads_request_config.seller_data_version);
   const auto& component_auction_data =
       test_score_ads_request_config.component_auction_data;
   // component_seller is expected to be set only for top level auctions.
@@ -211,6 +216,8 @@ ScoreAdsRequest BuildScoreAdsRequestForPAS(
     raw_request.set_top_level_seller(
         test_score_ads_request_config.top_level_seller);
   }
+  raw_request.set_seller_data_version(
+      test_score_ads_request_config.seller_data_version);
   ScoreAdsRequest request;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
   request.set_key_id(kKeyId);
@@ -260,7 +267,9 @@ void LoadWrapperWithMockSellerUdf(
       auction_service_runtime_config.enable_report_result_url_generation,
       auction_service_runtime_config.enable_private_aggregate_reporting);
   ASSERT_TRUE(
-      dispatcher.LoadSync(kScoreAdBlobVersion, std::move(wrapper_js_blob))
+      dispatcher
+          .LoadSync(auction_service_runtime_config.default_score_ad_version,
+                    std::move(wrapper_js_blob))
           .ok());
 }
 

@@ -443,14 +443,17 @@ InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser() {
 
 GenerateBidsRequest::GenerateBidsRawRequest
 MakeARandomGenerateBidsRawRequestForAndroid(bool enforce_kanon,
-                                            int multi_bid_limit) {
+                                            int multi_bid_limit, int num_igs) {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GenerateBidsRequest::GenerateBidsRawRequest raw_request;
-  *raw_request.mutable_interest_group_for_bidding()->Add() =
-      MakeARandomInterestGroupForBiddingFromAndroid();
-  *raw_request.mutable_interest_group_for_bidding()->Add() =
-      MakeARandomInterestGroupForBiddingFromAndroid();
+  for (int i = 0; i < num_igs; i++) {
+    *raw_request.mutable_interest_group_for_bidding()->Add() =
+        MakeARandomInterestGroupForBiddingFromAndroid();
+  }
+
+  raw_request.mutable_blob_versions()
+      ->set_protected_app_signals_generate_bid_udf("android/test");
   raw_request.set_allocated_auction_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(
@@ -474,6 +477,8 @@ MakeARandomGenerateBidsRequestForBrowser(bool enforce_kanon,
       MakeARandomInterestGroupForBiddingFromBrowser();
   *raw_request.mutable_interest_group_for_bidding()->Add() =
       MakeARandomInterestGroupForBiddingFromBrowser();
+  raw_request.mutable_blob_versions()->set_protected_audience_generate_bid_udf(
+      "browser/test");
   raw_request.set_allocated_auction_signals(
       std::move(MakeARandomStructJsonString(MakeARandomInt(0, 100))).release());
   raw_request.set_allocated_buyer_signals(

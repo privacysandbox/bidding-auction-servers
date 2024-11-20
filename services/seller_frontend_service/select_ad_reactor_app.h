@@ -25,6 +25,7 @@
 
 #include "absl/status/statusor.h"
 #include "include/grpcpp/impl/codegen/server_callback.h"
+#include "services/seller_frontend_service/report_win_map.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -34,8 +35,8 @@ class SelectAdReactorForApp : public SelectAdReactor {
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
-      bool enable_cancellation = false, bool enable_kanon = false,
-      bool fail_fast = true);
+      const ReportWinMap& report_win_map, bool enable_cancellation = false,
+      bool enable_kanon = false, bool fail_fast = true);
   virtual ~SelectAdReactorForApp() = default;
 
   // SelectAdReactorForApp is neither copyable nor movable.

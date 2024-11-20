@@ -20,6 +20,7 @@
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "gtest/gtest.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
@@ -43,10 +44,14 @@ template <typename T>
 class SelectAuctionResultReactorTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    privacy_sandbox::bidding_auction_servers::CommonTestInit();
     SetupRequest();
+    config_ = CreateConfig();
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
     config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
+    config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+    config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
 
     // Return hard coded key for decryption.
     EXPECT_CALL(key_fetcher_manager_, GetPrivateKey)
@@ -103,11 +108,12 @@ class SelectAuctionResultReactorTest : public ::testing::Test {
   std::vector<AuctionResult> component_auction_results_;
   SelectAdRequest request_;
   std::unique_ptr<quiche::ObliviousHttpRequest::Context> context_;
-  TrustedServersConfigClient config_ = CreateConfig();
+  TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   server_common::MockKeyFetcherManager key_fetcher_manager_;
   MockCryptoClientWrapper crypto_client_;
   // Scoring Client
   ScoringAsyncClientMock scoring_client_;
+  KVAsyncClientMock kv_async_client_;
 };
 
 using ProtectedAuctionInputTypes =
@@ -158,6 +164,7 @@ TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -182,6 +189,7 @@ TYPED_TEST(SelectAuctionResultReactorTest, AbortsAuctionWithDuplicateResults) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -198,6 +206,8 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
+
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -239,6 +249,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -274,6 +285,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -293,6 +305,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -332,6 +345,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(
@@ -368,6 +382,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>(),
       this->scoring_client_,
       BuyerFrontEndAsyncClientFactoryMock(),
+      this->kv_async_client_,
       this->key_fetcher_manager_,
       &this->crypto_client_,
       std::make_unique<MockAsyncReporter>(

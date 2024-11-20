@@ -89,6 +89,7 @@ constexpr absl::string_view kTestComponentSeller = "http://componentSeller.com";
 constexpr char kTestGenerationId[] = "testGenerationId";
 constexpr char kTestComponentIgOwner[] = "http://componentIgOwner.com";
 constexpr uint32_t kTestDataVersion = 1689;
+constexpr uint32_t kTestSellerDataVersion = 1989;
 
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
@@ -306,25 +307,24 @@ struct TestBuyerReportingSignals {
   uint32_t data_version = kTestDataVersion;
 };
 
+// TODO: Unify this with the other one of the same name.
 struct TestScoreAdsRequestConfig {
-  const TestBuyerReportingSignals& test_buyer_reporting_signals;
-  bool enable_debug_reporting = false;
-  int desired_ad_count = 90;
+  const bool enable_debug_reporting = false;
+  const int desired_ad_count = 90;
   absl::string_view top_level_seller = "";
   absl::string_view component_level_seller = "";
-  bool is_consented = false;
-  std::optional<std::string> buyer_reporting_id;
+  const bool is_consented = false;
+  std::optional<std::string> buyer_reporting_id = "";
+  const uint32_t seller_data_version = kTestSellerDataVersion;
+  absl::string_view seller = kTestSeller;
 };
 
-void BuildScoreAdsRequest(
-    ScoreAdsRequest* request,
-    absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
-    bool enable_debug_reporting = false, int desired_ad_count = 90,
-    absl::string_view seller = kTestSeller, bool component_auction = false) {
+ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest(
+    const TestScoreAdsRequestConfig& config = TestScoreAdsRequestConfig{}) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
-  for (int i = 0; i < desired_ad_count; i++) {
+  for (int i = 0; i < config.desired_ad_count; i++) {
     auto ad = MakeARandomAdWithBidMetadata(/*min_bid=*/1, /*max_bid=*/1);
     ad.set_bid_currency(kEurosIsoCode);
     ad.set_interest_group_owner(kDefaultBarInterestGroupOwner);
@@ -333,7 +333,6 @@ void BuildScoreAdsRequest(
     *raw_request.mutable_ad_bids()->Add() = ad;
     raw_request.mutable_per_buyer_signals()->try_emplace(
         ad.interest_group_owner(), MakeARandomString());
-    interest_group_to_ad->try_emplace(ad.interest_group_name(), ad);
 
     std::string ad_signal = absl::StrFormat(
         "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
@@ -343,50 +342,47 @@ void BuildScoreAdsRequest(
   absl::StrAppend(&trusted_scoring_signals,
                   R"json(},"adComponentRenderUrls":{}})json");
   raw_request.set_scoring_signals(trusted_scoring_signals);
-  if (enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(enable_debug_reporting);
-  }
-  raw_request.set_seller(seller);
+  raw_request.set_enable_debug_reporting(config.enable_debug_reporting);
+  raw_request.set_seller(config.seller);
   raw_request.set_publisher_hostname(kPublisherHostname);
-  if (component_auction) {
-    raw_request.set_top_level_seller(kTestTopLevelSeller);
-  }
-  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request->set_key_id(kKeyId);
+  raw_request.set_top_level_seller(config.top_level_seller);
+  raw_request.set_seller_data_version(config.seller_data_version);
+  return raw_request;
 }
 
-void BuildTopLevelAuctionScoreAdsRequest(
+ScoreAdsRequest BuildScoreAdsRequest(
+    const TestScoreAdsRequestConfig& config = TestScoreAdsRequestConfig{}) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request =
+      BuildScoreAdsRawRequest(config);
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
+}
+
+ScoreAdsRequest BuildTopLevelAuctionScoreAdsRequest(
     const TestComponentAuctionResultData& component_auction_result_data,
-    ScoreAdsRequest* request, bool enable_debug_reporting = false,
-    int desired_ad_count = 20, absl::string_view seller = kTestSeller) {
+    bool enable_debug_reporting = false, int desired_ad_count = 20,
+    absl::string_view seller = kTestSeller) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
-  std::string generation_id = MakeARandomString();
   for (int i = 0; i < desired_ad_count; i++) {
     auto auction_result = MakeARandomComponentAuctionResultWithReportingUrls(
         component_auction_result_data);
     *raw_request.mutable_component_auction_results()->Add() = auction_result;
   }
-  if (enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(enable_debug_reporting);
-  }
+  raw_request.set_enable_debug_reporting(enable_debug_reporting);
   raw_request.set_seller(seller);
-  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request->set_key_id(kKeyId);
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
 }
 
-void BuildComponentScoreAdsRequest(
-    ScoreAdsRequest* request,
-    absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
-    bool enable_debug_reporting = false, int desired_ad_count = 90,
-    absl::string_view seller = kTestSeller) {
-  BuildScoreAdsRequest(request, interest_group_to_ad, enable_debug_reporting,
-                       desired_ad_count, seller, /*component_auction=*/true);
-}
-
-void BuildScoreAdsRequestForReporting(
-    ScoreAdsRequest* request,
-    absl::flat_hash_map<std::string, AdWithBidMetadata>* interest_group_to_ad,
-    const TestScoreAdsRequestConfig& test_score_ads_request_config) {
+ScoreAdsRequest BuildScoreAdsRequestForReporting(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config =
+        TestScoreAdsRequestConfig{},
+    const TestBuyerReportingSignals& test_buyer_reporting_signals =
+        TestBuyerReportingSignals{}) {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   std::string trusted_scoring_signals =
       R"json({"renderUrls":{"placeholder_url":[123])json";
@@ -397,28 +393,19 @@ void BuildScoreAdsRequestForReporting(
           test_score_ads_request_config.buyer_reporting_id.value());
     }
     ad.set_bid_currency(kEurosIsoCode);
-    ad.set_ad_cost(
-        test_score_ads_request_config.test_buyer_reporting_signals.ad_cost);
-    ad.set_modeling_signals(test_score_ads_request_config
-                                .test_buyer_reporting_signals.modeling_signals);
-    ad.set_join_count(
-        test_score_ads_request_config.test_buyer_reporting_signals.join_count);
+    ad.set_ad_cost(test_buyer_reporting_signals.ad_cost);
+    ad.set_modeling_signals(test_buyer_reporting_signals.modeling_signals);
+    ad.set_join_count(test_buyer_reporting_signals.join_count);
     ad.set_interest_group_name(
-        test_score_ads_request_config.test_buyer_reporting_signals
-            .interest_group_name);
+        test_buyer_reporting_signals.interest_group_name);
     ad.set_interest_group_owner(kDefaultBarInterestGroupOwner);
     ad.set_render(
         absl::StrFormat("%s/ads?id=%d", kDefaultBarInterestGroupOwner, i));
-    ad.set_recency(
-        test_score_ads_request_config.test_buyer_reporting_signals.recency);
-    ad.set_data_version(test_score_ads_request_config
-                            .test_buyer_reporting_signals.data_version);
+    ad.set_recency(test_buyer_reporting_signals.recency);
+    ad.set_data_version(test_buyer_reporting_signals.data_version);
     *raw_request.mutable_ad_bids()->Add() = ad;
     raw_request.mutable_per_buyer_signals()->try_emplace(
-        ad.interest_group_owner(),
-        test_score_ads_request_config.test_buyer_reporting_signals
-            .buyer_signals);
-    interest_group_to_ad->try_emplace(ad.interest_group_name(), ad);
+        ad.interest_group_owner(), test_buyer_reporting_signals.buyer_signals);
 
     std::string ad_signal = absl::StrFormat(
         "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
@@ -428,24 +415,35 @@ void BuildScoreAdsRequestForReporting(
   absl::StrAppend(&trusted_scoring_signals,
                   R"json(},"adComponentRenderUrls":{}})json");
   raw_request.set_scoring_signals(trusted_scoring_signals);
-  if (test_score_ads_request_config.enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(
-        test_score_ads_request_config.enable_debug_reporting);
-  }
+  raw_request.set_enable_debug_reporting(
+      test_score_ads_request_config.enable_debug_reporting);
   raw_request.set_seller("http://seller.com");
   raw_request.set_publisher_hostname(kPublisherHostname);
-  raw_request.set_auction_signals(
-      test_score_ads_request_config.test_buyer_reporting_signals
-          .auction_signals);
+  raw_request.set_auction_signals(test_buyer_reporting_signals.auction_signals);
   raw_request.mutable_consented_debug_config()->set_is_consented(
       test_score_ads_request_config.is_consented);
   raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
-  if (!test_score_ads_request_config.top_level_seller.empty()) {
-    raw_request.set_top_level_seller(
-        test_score_ads_request_config.top_level_seller);
+  raw_request.set_top_level_seller(
+      test_score_ads_request_config.top_level_seller);
+  raw_request.set_seller_data_version(
+      test_score_ads_request_config.seller_data_version);
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
+}
+
+// Build a lookup map for AdWithBidMetadatas by IG Name.
+absl::flat_hash_map<std::string, AdWithBidMetadata> GetIGNameToAdMap(
+    const ScoreAdsRequest& request) {
+  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  raw_request.ParseFromString(request.request_ciphertext());
+  for (const AdWithBidMetadata& ad_with_bid_metadata : raw_request.ad_bids()) {
+    interest_group_to_ad.try_emplace(ad_with_bid_metadata.interest_group_name(),
+                                     ad_with_bid_metadata);
   }
-  *request->mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request->set_key_id(kKeyId);
+  return interest_group_to_ad;
 }
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
@@ -534,17 +532,17 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
   auto key_fetcher_manager =
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
   AuctionServiceRuntimeConfig auction_service_runtime_config;
-  auction_service_runtime_config.default_code_version = kScoreAdBlobVersion;
+  auction_service_runtime_config.default_score_ad_version = kScoreAdBlobVersion;
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
 
   int requests_to_test = 10;
   for (int i = 0; i < requests_to_test; i++) {
-    ScoreAdsRequest request;
     ScoreAdsResponse response;
-    absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-    BuildScoreAdsRequest(&request, &interest_group_to_ad);
+    ScoreAdsRequest request = BuildScoreAdsRequest();
+    absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad =
+        GetIGNameToAdMap(request);
     service.ScoreAds(&context, &request, &response);
 
     std::this_thread::sleep_for(absl::ToChronoSeconds(absl::Seconds(2)));
@@ -636,7 +634,7 @@ void SellerCodeWrappingTestHelper(
       .enable_report_win_url_generation = enable_report_win_url_generation,
       .enable_protected_app_signals = enable_protected_app_signals,
       .enable_report_win_input_noising = enable_report_win_input_noising,
-      .default_code_version = kScoreAdBlobVersion};
+      .default_score_ad_version = kScoreAdBlobVersion};
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -649,9 +647,8 @@ void SellerCodeWrappingTestHelper(
 TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.enable_debug_reporting = enable_debug_reporting});
 
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, js_code_with_debug_urls,
@@ -673,10 +670,9 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsReturnsDebugUrlsForWinningAd) {
 TEST_F(AuctionServiceIntegrationTest, ScoresAdsDoesNotReturnsLargeDebugUrls) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting,
-                       1);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.enable_debug_reporting = enable_debug_reporting,
+                            .desired_ad_count = 1});
 
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
@@ -696,9 +692,8 @@ TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsReturnsDebugUrlsForWinningAdFromGlobalThisMethodCalls) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.enable_debug_reporting = enable_debug_reporting});
 
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
@@ -721,9 +716,7 @@ TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsWillNotReturnDebugUrlsForWinningAd) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = false;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request = BuildScoreAdsRequest();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, js_code_with_debug_urls,
                                enable_seller_debug_url_generation,
@@ -740,9 +733,8 @@ TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsWillReturnDebugUrlsWithScriptCrash) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.enable_debug_reporting = enable_debug_reporting});
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, js_code_throws_exception_with_debug_urls,
@@ -759,9 +751,8 @@ TEST_F(AuctionServiceIntegrationTest,
        ScoresAdsWillNotReturnDebugUrlsWithScriptCrash) {
   bool enable_seller_debug_url_generation = true;
   bool enable_debug_reporting = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.enable_debug_reporting = enable_debug_reporting});
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, js_code_throws_exception,
                                enable_seller_debug_url_generation,
@@ -778,9 +769,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_seller_debug_url_generation = false;
   bool enable_debug_reporting = false;
   bool enable_adtech_code_logging = true;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request = BuildScoreAdsRequest();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -796,9 +785,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_seller_debug_url_generation = false;
   bool enable_debug_reporting = false;
   bool enable_adtech_code_logging = false;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request = BuildScoreAdsRequest();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -819,14 +806,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
   bool enable_report_win_input_noising = false;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
-      .buyer_reporting_id = ""};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request = BuildScoreAdsRequestForReporting();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -866,14 +846,10 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
   bool enable_report_win_input_noising = false;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kTestBuyerReportingId};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequestForReporting(test_score_ads_request_config);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -914,12 +890,7 @@ TEST_F(AuctionServiceIntegrationTest, ReportingSuccessfulWithNoising) {
   bool enable_report_win_url_generation = true;
   bool enable_report_win_input_noising = true;
   bool enable_protected_app_signals = false;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = {}};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request = BuildScoreAdsRequestForReporting();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -959,14 +930,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
   bool enable_protected_app_signals = true;
-
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request = BuildScoreAdsRequestForReporting();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -1005,15 +969,10 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .top_level_seller = kTestTopLevelSeller};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequestForReporting(test_score_ads_request_config);
   ScoreAdsResponse response;
   ScoreAdsRequest::ScoreAdsRawRequest score_ads_raw_request;
   score_ads_raw_request.ParseFromString(request.request_ciphertext());
@@ -1065,8 +1024,6 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_report_win_url_generation = true;
   TestBuyerReportingSignals test_buyer_reporting_signals;
 
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
   TestComponentAuctionResultData component_auction_result_data = {
       .test_component_seller = kTestComponentSeller,
       .generation_id = kTestGenerationId,
@@ -1076,7 +1033,8 @@ TEST_F(AuctionServiceIntegrationTest,
       .test_component_event = kTestComponentEvent,
       .test_component_interaction_reporting_url =
           kTestComponentInteractionReportingUrl};
-  BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data, &request);
+  ScoreAdsRequest request =
+      BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kTopLevelSellerCode,
@@ -1125,15 +1083,10 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
-  TestBuyerReportingSignals test_buyer_reporting_signals;
-
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .top_level_seller = kTestTopLevelSeller};
-  BuildScoreAdsRequestForReporting(&request, &interest_group_to_ad,
-                                   test_score_ads_request_config);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequestForReporting(test_score_ads_request_config);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kComponentAuctionCodeWithNoModifiedBid,
@@ -1172,11 +1125,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = true;
-  int desired_ad_count = 90;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting,
-                       desired_ad_count, "");
+  ScoreAdsRequest request = BuildScoreAdsRequest({.seller = ""});
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -1214,9 +1163,7 @@ TEST_F(AuctionServiceIntegrationTest,
   bool enable_adtech_code_logging = true;
   bool enable_report_result_url_generation = true;
   bool enable_report_win_url_generation = false;
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildScoreAdsRequest(&request, &interest_group_to_ad, enable_debug_reporting);
+  ScoreAdsRequest request = BuildScoreAdsRequest();
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(
       &request, &response, kSellerBaseCode, enable_seller_debug_url_generation,
@@ -1296,9 +1243,8 @@ TEST_F(AuctionServiceIntegrationTest, CapturesRejectionReasonForRejectedAds) {
 }
 
 TEST_F(AuctionServiceIntegrationTest, PopulatesOutputForComponentAuction) {
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildComponentScoreAdsRequest(&request, &interest_group_to_ad);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.top_level_seller = kTestTopLevelSeller});
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, kComponentAuctionCode,
                                /*enable_seller_debug_url_generation=*/false,
@@ -1316,9 +1262,8 @@ TEST_F(AuctionServiceIntegrationTest, PopulatesOutputForComponentAuction) {
 }
 
 TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
-  ScoreAdsRequest request;
-  absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad;
-  BuildComponentScoreAdsRequest(&request, &interest_group_to_ad);
+  ScoreAdsRequest request =
+      BuildScoreAdsRequest({.top_level_seller = kTestTopLevelSeller});
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, kSkipAdComponentAuctionCode,
                                /*enable_seller_debug_url_generation=*/false,
@@ -1330,7 +1275,6 @@ TEST_F(AuctionServiceIntegrationTest, FiltersUnallowedAdsForComponentAuction) {
 
 TEST_F(AuctionServiceIntegrationTest,
        ProcessTopLevelAuctionInputAndReturnWinner) {
-  ScoreAdsRequest request;
   TestComponentAuctionResultData component_auction_result_data = {
       .test_component_seller = kTestComponentSeller,
       .generation_id = kTestGenerationId,
@@ -1340,7 +1284,8 @@ TEST_F(AuctionServiceIntegrationTest,
       .test_component_event = kTestComponentEvent,
       .test_component_interaction_reporting_url =
           kTestComponentInteractionReportingUrl};
-  BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data, &request);
+  ScoreAdsRequest request =
+      BuildTopLevelAuctionScoreAdsRequest(component_auction_result_data);
   ScoreAdsResponse response;
   SellerCodeWrappingTestHelper(&request, &response, kTopLevelAuctionCode,
                                /*enable_seller_debug_url_generation=*/false,

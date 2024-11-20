@@ -44,7 +44,7 @@ class EgressSchemaCacheTest : public ::testing::Test {
 };
 
 TEST_F(EgressSchemaCacheTest, FailsOnAbsentVersion) {
-  auto egress_features = egress_schema_cache_->Get(1);
+  auto egress_features = egress_schema_cache_->Get("fake");
   ASSERT_FALSE(egress_features.ok());
   EXPECT_THAT(egress_features.status().message(), HasSubstr("not found"));
 }
@@ -91,9 +91,10 @@ TEST_F(EgressSchemaCacheTest, UpdatesCacheSuccessfully) {
       ]
     }
   )JSON"));
-  auto egress_features = egress_schema_cache_->Get(2);
+  auto egress_features = egress_schema_cache_->Get(kDefaultEgressSchemaId);
   CHECK_OK(egress_features);
-  EXPECT_EQ(egress_features->size(), 5);
+  EXPECT_EQ(egress_features->features.size(), 5);
+  EXPECT_EQ(egress_features->version, 2);
 
   CHECK_OK(egress_schema_cache_->Update(R"JSON(
     {
@@ -106,9 +107,10 @@ TEST_F(EgressSchemaCacheTest, UpdatesCacheSuccessfully) {
       ]
     }
   )JSON"));
-  auto egress_features_2 = egress_schema_cache_->Get(2);
+  auto egress_features_2 = egress_schema_cache_->Get(kDefaultEgressSchemaId);
   CHECK_OK(egress_features_2);
-  EXPECT_EQ(egress_features_2->size(), 1);
+  EXPECT_EQ(egress_features_2->features.size(), 1);
+  EXPECT_EQ(egress_features_2->version, 2);
 }
 
 TEST_F(EgressSchemaCacheTest, FailsOnGetOfNonConformantSchemaVersion) {

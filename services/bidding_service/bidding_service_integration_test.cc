@@ -1553,7 +1553,7 @@ TEST_F(GenerateBidsReactorIntegrationTest,
 
 TEST_F(GenerateBidsReactorIntegrationTest,
        GeneratesBidsReturnDebugReportingUrlsMaxSize) {
-  long debug_urls_max_size = 3000 * 1024;
+  long debug_urls_max_size = 3000L * 1024L;
   GenerateBidsResponse response;
   bool enable_debug_reporting = true;
   bool enable_buyer_debug_url_generation = true;

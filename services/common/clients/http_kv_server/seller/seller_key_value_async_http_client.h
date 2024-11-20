@@ -30,6 +30,8 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+inline constexpr char kDataVersionResponseHeaderName[] = "Data-Version";
+
 // The data used to build the Seller KV look url suffix
 struct GetSellerValuesInput {
   // [SSP] List of keys to query values for, under the namespace renderUrls.
@@ -55,6 +57,8 @@ struct GetSellerValuesOutput {
   // Used for instrumentation purposes in upper layers.
   size_t request_size;
   size_t response_size;
+  // Optional, indicates version of the KV data.
+  uint32_t data_version;
 };
 
 // This class fetches Key/Value pairs from a Seller Key/Value Server instance

@@ -26,13 +26,15 @@ namespace privacy_sandbox::bidding_auction_servers {
 class CddlSpecCache {
  public:
   explicit CddlSpecCache(absl::string_view dir_path);
+  virtual ~CddlSpecCache() = default;
 
   // Returns the contents of the spec matching the provided version number or
   // returns an error if there is no such version in the cache.
-  absl::StatusOr<absl::string_view> Get(absl::string_view version) const;
+  virtual absl::StatusOr<absl::string_view> Get(
+      absl::string_view version) const;
 
   // Initializes the cache with the available schema contents.
-  absl::Status Init();
+  virtual absl::Status Init();
 
  private:
   // Mapping from CDDL spec version => CDDL spec file contents.

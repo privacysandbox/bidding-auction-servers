@@ -70,7 +70,6 @@ absl::Status BuyerCodeFetchManagerByob::InitializeBucketCodeFetchForPAS() {
 
 absl::Status BuyerCodeFetchManagerByob::InitializeUrlCodeFetch() {
   return InitializeUrlCodeFetchForPA();
-  return absl::OkStatus();
 }
 
 absl::Status BuyerCodeFetchManagerByob::InitializeUrlCodeFetchForPA() {

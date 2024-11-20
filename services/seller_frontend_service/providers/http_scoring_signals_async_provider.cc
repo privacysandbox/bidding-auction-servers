@@ -51,17 +51,29 @@ void HttpScoringSignalsAsyncProvider::Get(
       scoring_signals_request.seller_kv_experiment_group_id_;
   auto status = http_seller_kv_async_client_->Execute(
       std::move(request), scoring_signals_request.filtering_metadata_,
-      [on_done = std::move(on_done)](
+      [on_done = std::move(on_done),
+       client_type = scoring_signals_request.client_type_](
           absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>
               kv_output) mutable {
         GetByteSize get_byte_size;
         absl::StatusOr<std::unique_ptr<ScoringSignals>> res;
         if (kv_output.ok()) {
           res = std::make_unique<ScoringSignals>();
-          res.value()->scoring_signals =
-              std::make_unique<std::string>(kv_output.value()->result);
-          get_byte_size.request = kv_output.value()->request_size;
-          get_byte_size.response = kv_output.value()->response_size;
+          (*res)->scoring_signals =
+              std::make_unique<std::string>((*kv_output)->result);
+          if (client_type == ClientType::CLIENT_TYPE_ANDROID) {
+            // Android enforces an 8-bit limit on DV Header
+            if ((*kv_output)->data_version <= UINT8_MAX) {
+              (*res)->data_version = (*kv_output)->data_version;
+            }
+            // If the header does not fit it is dropped entirely.
+          } else {
+            // Chrome enforces a 32-bit limit on DV Header. This value is
+            // already a uint32_t.
+            (*res)->data_version = (*kv_output)->data_version;
+          }
+          get_byte_size.request = (*kv_output)->request_size;
+          get_byte_size.response = (*kv_output)->response_size;
         } else {
           res = kv_output.status();
         }

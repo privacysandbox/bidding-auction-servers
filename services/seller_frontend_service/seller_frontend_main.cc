@@ -30,12 +30,15 @@
 #include "grpcpp/ext/proto_server_reflection_plugin.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
+#include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
+#include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/tcmalloc_utils.h"
+#include "services/seller_frontend_service/report_win_map.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
@@ -63,6 +66,9 @@ ABSL_FLAG(std::optional<std::string>, grpc_arg_default_authority, std::nullopt,
           "https://www.rfc-editor.org/rfc/rfc3986#section-3.2");
 ABSL_FLAG(std::optional<std::string>, key_value_signals_host, std::nullopt,
           "Domain address of the Key-Value server for the scoring signals.");
+ABSL_FLAG(
+    std::optional<std::string>, trusted_key_value_v2_signals_host, std::nullopt,
+    "Domain address of the Trusted Key-Value server for the scoring signals.");
 ABSL_FLAG(std::optional<std::string>, buyer_server_hosts, std::nullopt,
           "Comma seperated list of domain addresses of the BuyerFrontEnd "
           "services for getting bids.");
@@ -103,8 +109,32 @@ ABSL_FLAG(std::optional<int64_t>, sfe_tcmalloc_max_total_thread_cache_bytes,
           std::nullopt,
           "Maximum amount of cached memory in bytes across all threads (or "
           "logical CPUs)");
+ABSL_FLAG(std::optional<std::string>, k_anon_api_key, "",
+          "API key used to query hashes from k-anon service. Required when "
+          "k-anon is enabled.");
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+ReportWinMap GetReportWinMapFromSellerCodeFetchConfig(
+    const auction_service::SellerCodeFetchConfig& seller_code_fetch_config) {
+  const auto& proto_buyer_report_win_js_urls =
+      seller_code_fetch_config.buyer_report_win_js_urls();
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls(
+      proto_buyer_report_win_js_urls.begin(),
+      proto_buyer_report_win_js_urls.end());
+
+  const auto& proto_protected_app_signals_buyer_report_win_js_urls =
+      seller_code_fetch_config.protected_app_signals_buyer_report_win_js_urls();
+  absl::flat_hash_map<std::string, std::string>
+      protected_app_signals_buyer_report_win_js_urls(
+          proto_protected_app_signals_buyer_report_win_js_urls.begin(),
+          proto_protected_app_signals_buyer_report_win_js_urls.end());
+  return {
+      .buyer_report_win_js_urls = std::move(buyer_report_win_js_urls),
+      .protected_app_signals_buyer_report_win_js_urls =
+          std::move(protected_app_signals_buyer_report_win_js_urls),
+  };
+}
 
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
@@ -113,6 +143,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
+  config_client.SetFlag(FLAGS_https_fetch_skips_tls_verification,
+                        HTTPS_FETCH_SKIPS_TLS_VERIFICATION);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_get_bid_rpc_timeout_ms, GET_BID_RPC_TIMEOUT_MS);
   config_client.SetFlag(FLAGS_key_value_signals_fetch_rpc_timeout_ms,
@@ -167,6 +199,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_key_refresh_flow_run_frequency_seconds,
                         KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS);
   config_client.SetFlag(FLAGS_telemetry_config, TELEMETRY_CONFIG);
+  config_client.SetFlag(FLAGS_seller_code_fetch_config,
+                        SELLER_CODE_FETCH_CONFIG);
   config_client.SetFlag(FLAGS_consented_debug_token, CONSENTED_DEBUG_TOKEN);
   config_client.SetFlag(FLAGS_enable_otel_based_logging,
                         ENABLE_OTEL_BASED_LOGGING);
@@ -182,13 +216,21 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_sfe_tcmalloc_max_total_thread_cache_bytes,
                         SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+  config_client.SetFlag(FLAGS_k_anon_api_key, K_ANON_API_KEY);
   config_client.SetFlag(FLAGS_enable_chaffing, ENABLE_CHAFFING);
+  config_client.SetFlag(FLAGS_debug_sample_rate_micro, DEBUG_SAMPLE_RATE_MICRO);
   config_client.SetFlag(FLAGS_enable_priority_vector, ENABLE_PRIORITY_VECTOR);
+  config_client.SetFlag(FLAGS_consent_all_requests, CONSENT_ALL_REQUESTS);
+  config_client.SetFlag(FLAGS_trusted_key_value_v2_signals_host,
+                        TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
+  config_client.SetFlag(FLAGS_enable_tkv_v2_browser, ENABLE_TKV_V2_BROWSER);
+  config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
   }
+
   // Set verbosity
   server_common::log::SetGlobalPSVLogLevel(
       config_client.GetIntParameter(PS_VERBOSITY));
@@ -204,12 +246,22 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                << enable_protected_audience;
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
                << enable_protected_app_signals;
-  PS_LOG(INFO) << "Successfully constructed the config client.";
 
-// For security reasons, chaffing must always be enabled in a prod build.
-#if (PS_IS_PROD_BUILD)
-  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
-#endif
+  std::string trusted_key_value_v2_signals_host = std::string(
+      config_client.GetStringParameter(TRUSTED_KEY_VALUE_V2_SIGNALS_HOST));
+  const bool use_tkv_v2_browser =
+      config_client.GetBooleanParameter(ENABLE_TKV_V2_BROWSER);
+  if (trusted_key_value_v2_signals_host == kIgnoredPlaceholderValue) {
+    if (use_tkv_v2_browser) {
+      return absl::InvalidArgumentError(
+          "Missing: Seller Trusted KV server address");
+    }
+    PS_LOG(WARNING) << "TRUSTED_KEY_VALUE_V2_SIGNALS_HOST is set to "
+                    << kIgnoredPlaceholderValue
+                    << ", this can affect Android auctions";
+  }
+
+  PS_LOG(INFO) << "Successfully constructed the config client.";
 
   return config_client;
 }
@@ -220,6 +272,7 @@ absl::Status RunServer() {
   PS_ASSIGN_OR_RETURN(TrustedServersConfigClient config_client,
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
   // InitTelemetry right after config_client being initialized
+  // Do not log to SystemLogContext() before InitTelemetry
   InitTelemetry<SelectAdRequest>(
       config_util, config_client, metric::kSfe,
       FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
@@ -227,10 +280,26 @@ absl::Status RunServer() {
   PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
                                    << config_client.DebugString();
 
+  // SetOverride after InitTelemetry, so it can log with SystemLogContext()
+  // For security reasons, chaffing must always be enabled in a prod build.
+#if (PS_IS_PROD_BUILD)
+  config_client.SetOverride(kTrue, ENABLE_CHAFFING);
+#endif
+
+  int rate_micro = config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO);
+  if (rate_micro < 0 || rate_micro > 1'000'000) {
+    config_client.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
+  }
   MaySetBackgroundReleaseRate(config_client.GetInt64Parameter(
       SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND));
   MaySetMaxTotalThreadCacheBytes(config_client.GetInt64Parameter(
       SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES));
+
+  // Convert Json string into a AuctionCodeBlobFetcherConfig proto
+  auction_service::SellerCodeFetchConfig code_fetch_proto;
+  PS_RETURN_IF_ERROR(google::protobuf::util::JsonStringToMessage(
+      config_client.GetStringParameter(SELLER_CODE_FETCH_CONFIG).data(),
+      &code_fetch_proto));
 
   std::string server_address =
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
@@ -242,7 +311,8 @@ absl::Status RunServer() {
   SellerFrontEndService seller_frontend_service(
       &config_client,
       CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),
-      CreateCryptoClient());
+      CreateCryptoClient(),
+      GetReportWinMapFromSellerCodeFetchConfig(code_fetch_proto));
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;

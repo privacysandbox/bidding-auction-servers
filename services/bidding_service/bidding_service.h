@@ -96,9 +96,9 @@ class BiddingService final : public Bidding::CallbackService {
           kv_server::v2::KeyValueService::NewStub(CreateChannel(
               runtime_config_.tee_ad_retrieval_kv_server_addr,
               /*compression=*/true,
-              /*secure=*/runtime_config.ad_retrieval_kv_server_egress_tls,
+              /*secure=*/runtime_config_.ad_retrieval_kv_server_egress_tls,
               /*grpc_arg_default_authority=*/
-              runtime_config
+              runtime_config_
                   .tee_ad_retrieval_kv_server_grpc_arg_default_authority));
       ad_retrieval_async_client_ = std::make_unique<KVAsyncGrpcClient>(
           key_fetcher_manager_.get(), std::move(ad_retrieval_stub));
@@ -109,9 +109,9 @@ class BiddingService final : public Bidding::CallbackService {
           kv_server::v2::KeyValueService::NewStub(CreateChannel(
               runtime_config_.tee_kv_server_addr,
               /*compression=*/true,
-              /*secure=*/runtime_config.kv_server_egress_tls,
+              /*secure=*/runtime_config_.kv_server_egress_tls,
               /*grpc_arg_default_authority=*/
-              runtime_config.tee_kv_server_grpc_arg_default_authority));
+              runtime_config_.tee_kv_server_grpc_arg_default_authority));
       kv_async_client_ = std::make_unique<KVAsyncGrpcClient>(
           key_fetcher_manager_.get(), std::move(kv_async_client_stub));
     }

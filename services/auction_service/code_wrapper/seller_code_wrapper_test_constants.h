@@ -19,13 +19,14 @@
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
 constexpr char kTestReportResultUrl[] =
-    "http://test.com&bid=1&bidCurrency=EUR&"
+    "http://test.com&bid=1&bidCurrency=EUR&dataVersion=1989&"
     "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
     "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
     "barStandardAds.com";
 constexpr char kTestComponentReportResultUrlWithEverything[] =
     "http://"
-    "test.com&topLevelSeller=topLevelSeller&bid=1&bidCurrency=EUR&modifiedBid="
+    "test.com&topLevelSeller=topLevelSeller&bid=1&bidCurrency=EUR&dataVersion="
+    "1989&modifiedBid="
     "2&modifiedBidCurrency=USD&"
     "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
     "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
@@ -149,6 +150,8 @@ constexpr absl::string_view kProtectedAppSignalsBuyerBaseCode =
     }
 )JS_CODE";
 
+// &dataVersion="+sellerReportingSignals.dataVersion
+
 constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
     function scoreAd(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
       return {
@@ -163,9 +166,25 @@ constexpr absl::string_view kComponentAuctionCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          sendReportTo("http://test.com"+
+          "&bid="+sellerReportingSignals.bid+
+          "&bidCurrency="+sellerReportingSignals.bidCurrency+
+          "&dataVersion="+sellerReportingSignals.dataVersion+
+          "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
+          "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
+          "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
-          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&modifiedBid="+sellerReportingSignals.modifiedBid+"&modifiedBidCurrency="+sellerReportingSignals.modifiedBidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+
+          "&bid="+sellerReportingSignals.bid+
+          "&bidCurrency="+sellerReportingSignals.bidCurrency+
+          "&dataVersion="+sellerReportingSignals.dataVersion+
+          "&modifiedBid="+sellerReportingSignals.modifiedBid+
+          "&modifiedBidCurrency="+sellerReportingSignals.modifiedBidCurrency+
+          "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
+          "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
+          "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         }
         registerAdBeacon({"clickEvent":"http://click.com"})
         return {"testSignal":"testValue"}
@@ -485,7 +504,14 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          sendReportTo("http://test.com"+
+          "&bid="+sellerReportingSignals.bid+
+          "&bidCurrency="+sellerReportingSignals.bidCurrency+
+          "&dataVersion="+sellerReportingSignals.dataVersion+
+          "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
+          "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
+          "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
@@ -846,7 +872,14 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          sendReportTo("http://test.com"+
+          "&bid="+sellerReportingSignals.bid+
+          "&bidCurrency="+sellerReportingSignals.bidCurrency+
+          "&dataVersion="+sellerReportingSignals.dataVersion+
+          "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
+          "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
+          "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
@@ -1008,7 +1041,14 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
     function reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals){
         console.log("Logging from ReportResult");
         if(sellerReportingSignals.topLevelSeller === undefined || sellerReportingSignals.topLevelSeller.length === 0){
-          sendReportTo("http://test.com"+"&bid="+sellerReportingSignals.bid+"&bidCurrency="+sellerReportingSignals.bidCurrency+"&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+"&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+"&topWindowHostname="+sellerReportingSignals.topWindowHostname+"&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          sendReportTo("http://test.com"+
+          "&bid="+sellerReportingSignals.bid+
+          "&bidCurrency="+sellerReportingSignals.bidCurrency+
+          "&dataVersion="+sellerReportingSignals.dataVersion+
+          "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
+          "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
+          "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }

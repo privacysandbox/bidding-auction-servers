@@ -25,6 +25,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/auction_scope_util.h"
 #include "services/seller_frontend_service/get_component_auction_ciphertexts_reactor.h"
+#include "services/seller_frontend_service/report_win_map.h"
 #include "services/seller_frontend_service/select_ad_reactor.h"
 #include "services/seller_frontend_service/select_ad_reactor_app.h"
 #include "services/seller_frontend_service/select_ad_reactor_invalid.h"
@@ -39,36 +40,38 @@ namespace {
 std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    const TrustedServersConfigClient& config_client,
+    const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon) {
   switch (request->client_type()) {
     case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(
-          context, request, response, clients, config_client,
+          context, request, response, clients, config_client, report_win_map,
           enable_cancellation, enable_kanon);
     case CLIENT_TYPE_BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(
-          context, request, response, clients, config_client,
+          context, request, response, clients, config_client, report_win_map,
           enable_cancellation, enable_kanon);
     default:
       return std::make_unique<SelectAdReactorInvalid>(
-          context, request, response, clients, config_client);
+          context, request, response, clients, config_client, report_win_map);
   }
 }
 
 }  // namespace
 
 std::unique_ptr<AsyncClient<GetSellerValuesInput, GetSellerValuesOutput>>
-SellerFrontEndService::CreateKVClient() {
+SellerFrontEndService::CreateV1KVClient() {
   if (config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST) ==
       "E2E_TEST_MODE") {
     return std::make_unique<FakeSellerKeyValueAsyncHttpClient>(
         config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST));
-  } else {
-    return std::make_unique<SellerKeyValueAsyncHttpClient>(
-        config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
-        std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()), true);
+  } else if (config_client_.GetBooleanParameter(ENABLE_TKV_V2_BROWSER)) {
+    return nullptr;
   }
+  return std::make_unique<SellerKeyValueAsyncHttpClient>(
+      config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
+      std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()), true);
 }
 
 grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
@@ -77,7 +80,7 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   LogCommonMetric(request, response);
   if (request->ByteSizeLong() == 0) {
     auto reactor = std::make_unique<SelectAdReactorInvalid>(
-        context, request, response, clients_, config_client_);
+        context, request, response, clients_, config_client_, report_win_map_);
     reactor->Execute();
     return reactor.release();
   }
@@ -91,7 +94,7 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   }
   std::unique_ptr<SelectAdReactor> reactor =
       GetSelectAdReactor(context, request, response, clients_, config_client_,
-                         enable_cancellation_, enable_kanon_);
+                         report_win_map_, enable_cancellation_, enable_kanon_);
   reactor->Execute();
   return reactor.release();
 }

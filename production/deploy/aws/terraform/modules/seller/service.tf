@@ -20,12 +20,14 @@ module "iam_roles" {
   source      = "../../services/iam_roles"
   environment = var.environment
   operator    = var.operator
+  region      = var.region
 }
 
 module "iam_groups" {
   source      = "../../services/iam_groups"
   environment = var.environment
   operator    = var.operator
+  region      = var.region
 }
 
 module "networking" {
@@ -45,6 +47,7 @@ module "security_groups" {
 
 module "iam_group_policies" {
   source               = "../../services/iam_group_policies"
+  region               = var.region
   operator             = var.operator
   environment          = var.environment
   ssh_users_group_name = module.iam_groups.ssh_users_group_name
@@ -96,6 +99,7 @@ module "security_group_rules" {
 
 module "iam_role_policies" {
   source                    = "../../services/iam_role_policies"
+  region                    = var.region
   operator                  = var.operator
   environment               = var.environment
   server_instance_role_name = module.iam_roles.instance_role_name
@@ -136,7 +140,7 @@ resource "aws_lb_target_group" "alb_http2_target_group" {
   name                 = "sfe-${var.environment}-${var.operator}-alb-http2-tg"
   port                 = var.envoy_port
   protocol             = "HTTP"
-  protocol_version     = "HTTP2"
+  protocol_version     = var.use_http1 ? "HTTP1" : "HTTP2"
   vpc_id               = module.networking.vpc_id
   deregistration_delay = 30
 
@@ -200,6 +204,7 @@ module "auction_mesh_service" {
   count = var.use_service_mesh ? 1 : 0
 
   source                                      = "../../services/backend_mesh_service"
+  region                                      = var.region
   operator                                    = var.operator
   environment                                 = var.environment
   service                                     = "auction"
@@ -230,6 +235,7 @@ module "load_balancing_auction" {
   count = var.use_service_mesh ? 0 : 1
 
   source                          = "../../services/load_balancing"
+  region                          = var.region
   environment                     = var.environment
   operator                        = var.operator
   service                         = "auction"
@@ -286,6 +292,7 @@ module "sfe_mesh_service" {
   count = var.use_service_mesh ? 1 : 0
 
   source                                          = "../../services/frontend_mesh_service"
+  region                                          = var.region
   operator                                        = var.operator
   environment                                     = var.environment
   service                                         = "sfe"
@@ -310,6 +317,7 @@ module "sfe_mesh_service" {
 
 module "load_balancing_sfe" {
   source                          = "../../services/load_balancing"
+  region                          = var.region
   environment                     = var.environment
   operator                        = var.operator
   service                         = "sfe"
@@ -326,16 +334,17 @@ module "load_balancing_sfe" {
 }
 
 module "autoscaling_sfe" {
-  source                          = "../../services/autoscaling"
-  environment                     = var.environment
-  operator                        = var.operator
-  enclave_debug_mode              = var.enclave_debug_mode
-  service                         = "sfe"
-  autoscaling_subnet_ids          = module.networking.private_subnet_ids
-  instance_ami_id                 = var.sfe_instance_ami_id
-  instance_security_group_id      = module.security_groups.instance_security_group_id
-  instance_type                   = var.sfe_instance_type
-  target_group_arns               = concat(module.load_balancing_sfe.target_group_arns, [aws_lb_target_group.alb_http2_target_group.arn])
+  source                     = "../../services/autoscaling"
+  environment                = var.environment
+  operator                   = var.operator
+  enclave_debug_mode         = var.enclave_debug_mode
+  service                    = "sfe"
+  autoscaling_subnet_ids     = module.networking.private_subnet_ids
+  instance_ami_id            = var.sfe_instance_ami_id
+  instance_security_group_id = module.security_groups.instance_security_group_id
+  instance_type              = var.sfe_instance_type
+  target_group_arns          = concat(module.load_balancing_sfe.target_group_arns, [aws_lb_target_group.alb_http2_target_group.arn])
+
   autoscaling_desired_capacity    = var.sfe_autoscaling_desired_capacity
   autoscaling_max_size            = var.sfe_autoscaling_max_size
   autoscaling_min_size            = var.sfe_autoscaling_min_size

@@ -28,8 +28,6 @@ inline constexpr absl::string_view HEALTHCHECK_PORT =
     "AUCTION_HEALTHCHECK_PORT";
 inline constexpr absl::string_view ENABLE_AUCTION_SERVICE_BENCHMARK =
     "ENABLE_AUCTION_SERVICE_BENCHMARK";
-inline constexpr absl::string_view SELLER_CODE_FETCH_CONFIG =
-    "SELLER_CODE_FETCH_CONFIG";
 inline constexpr absl::string_view UDF_NUM_WORKERS = "UDF_NUM_WORKERS";
 inline constexpr absl::string_view JS_WORKER_QUEUE_LEN = "JS_WORKER_QUEUE_LEN";
 inline constexpr absl::string_view ENABLE_REPORT_WIN_INPUT_NOISING =

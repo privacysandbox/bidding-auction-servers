@@ -30,6 +30,7 @@ struct TestSellerDeviceSignals {
   std::string render_url = kTestRender;
   std::string render_URL = kTestRender;
   float bid = kTestBuyerBid;
+  uint32_t seller_data_version = kSellerDataVersion;
   std::string bid_currency = "EUR";
   std::string highest_scoring_other_bid_currency = "USD";
   float desirability = -1;

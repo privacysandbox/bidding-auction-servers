@@ -259,3 +259,9 @@ variable "tee_kv_servers_port" {
   description = "Port on which the TEE KV server accepts connections."
   type        = number
 }
+
+variable "use_http1" {
+  description = "protocol_version used by front end load balancer, default false: HTTP2"
+  type        = bool
+  default     = false
+}

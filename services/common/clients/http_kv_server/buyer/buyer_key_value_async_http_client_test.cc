@@ -101,7 +101,7 @@ class KeyValueAsyncHttpClientTest : public testing::Test {
 TEST_F(KeyValueAsyncHttpClientTest,
        MakesDSPUrlCorrectlyBasicInputsAndHasCorrectOutput) {
   // Our client will be given this input object.
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"1j1043317685", "1j112014758"},
       {"ig_name_likes_boots"},
       "www.usatoday.com",
@@ -109,7 +109,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       kEgId};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls;
   expected_urls.emplace(absl::StrCat(
@@ -143,7 +143,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
             }
           })json";
 
-  std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
+  std::unique_ptr<GetBuyerValuesOutput> expected_output_struct =
       std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
           {expected_response_body_json_string, kRequestSizeDontCheck,
            kResponseSizeDontCheck, kDataVersionHeaderValue}));
@@ -157,7 +157,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
-       expectedOutputStructUPtr = std::move(expectedOutputStructUPtr)](
+       expected_output_struct = std::move(expected_output_struct)](
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
@@ -166,15 +166,15 @@ TEST_F(KeyValueAsyncHttpClientTest,
         EXPECT_TRUE(actualOutputStruct.ok());
         if (actualOutputStruct.ok()) {
           EXPECT_EQ(actualOutputStruct.value()->result,
-                    expectedOutputStructUPtr->result);
+                    expected_output_struct->result);
           EXPECT_EQ(actualOutputStruct.value()->data_version,
-                    expectedOutputStructUPtr->data_version);
+                    expected_output_struct->data_version);
         }
         callback_invoked.Notify();
       };
 
   // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
-  // called on it, with the URL being expectedUrl.
+  // called on it, with the URL being expected_url.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       // If and when that happens: DEFINE that the FetchUrlWithMetadata function
       // SHALL do the following:
@@ -207,7 +207,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
 
 TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
   // Our client will be given this input object.
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"1j1043317685", "1j112014758"},
       {"ig_name_likes_boots"},
       "www.usatoday.com",
@@ -215,7 +215,7 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
       kEgId};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls;
   expected_urls.emplace(absl::StrCat(
@@ -250,7 +250,7 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
           })json";
 
   // Negative DV Header Value is invalid so expect a zero value.
-  std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
+  std::unique_ptr<GetBuyerValuesOutput> expected_output_struct =
       std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
           {expected_response_body_json_string, kRequestSizeDontCheck,
            kResponseSizeDontCheck, /*dv_hdr=*/0}));
@@ -264,7 +264,7 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
-       expectedOutputStructUPtr = std::move(expectedOutputStructUPtr)](
+       expected_output_struct = std::move(expected_output_struct)](
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
@@ -273,15 +273,15 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
         EXPECT_TRUE(actualOutputStruct.ok());
         if (actualOutputStruct.ok()) {
           EXPECT_EQ(actualOutputStruct.value()->result,
-                    expectedOutputStructUPtr->result);
+                    expected_output_struct->result);
           EXPECT_EQ(actualOutputStruct.value()->data_version,
-                    expectedOutputStructUPtr->data_version);
+                    expected_output_struct->data_version);
         }
         callback_invoked.Notify();
       };
 
   // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
-  // called on it, with the URL being expectedUrl.
+  // called on it, with the URL being expected_url.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       // If and when that happens: DEFINE that the FetchUrlWithMetadata function
       // SHALL do the following:
@@ -315,7 +315,7 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
 TEST_F(KeyValueAsyncHttpClientTest,
        MakesDSPUrlCorrectlyBasicInputsAndFailsForWrongOutput) {
   // Our client will be given this input object.
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"1j386134098", "1s8yAqUg!2sZQakmQ!3sAFmfCp-n8sq_"},
       {"ig_name_likes_boots", "ig_name_ohio_state_fan"},
       "www.usatoday.com",
@@ -323,7 +323,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
       kEgId};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   // This is the URL we expect to see built from the input object.
   absl::flat_hash_set<std::string> expected_urls = {
       absl::StrCat(
@@ -400,7 +400,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
               }
             }
           })json";
-  std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
+  std::unique_ptr<GetBuyerValuesOutput> expected_output_struct =
       std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
           {expected_response_body_json_string, kRequestSizeDontCheck,
            kResponseSizeDontCheck, /*dv_hdr=*/0}));
@@ -414,21 +414,21 @@ TEST_F(KeyValueAsyncHttpClientTest,
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
-       expectedOutputStructUPtr = std::move(expectedOutputStructUPtr)](
+       expected_output_struct = std::move(expected_output_struct)](
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
         EXPECT_TRUE(actualOutputStruct.ok());
         if (actualOutputStruct.ok()) {
           EXPECT_NE(actualOutputStruct.value()->result,
-                    expectedOutputStructUPtr->result);
+                    expected_output_struct->result);
           EXPECT_EQ(actualOutputStruct.value()->data_version, 0);
         }
         callback_invoked.Notify();
       };
 
   // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
-  // called on it, with the URL being expectedUrl.
+  // called on it, with the URL being expected_url.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       // If and when that happens: DEFINE that the FetchUrlWithMetadata function
       // SHALL do the following:
@@ -460,10 +460,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"url1", "url1", "url1"}, {}, "www.usatoday.com"};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   const std::string expected_url =
       absl::StrCat(hostname_, "?hostname=www.usatoday.com&keys=url1");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
@@ -476,9 +476,10 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
-  const GetBuyerValuesInput getValuesClientInput = {{}, {}, "www.usatoday.com"};
+  const GetBuyerValuesInput get_values_client_input = {
+      {}, {}, "www.usatoday.com"};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   const std::string expected_url =
       absl::StrCat(hostname_, "?hostname=www.usatoday.com");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
@@ -492,10 +493,10 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithNoKeys) {
 
 TEST_F(KeyValueAsyncHttpClientTest,
        MakesDSPUrlCorrectlyWithNoHostnameAndClientTypeNone) {
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"lloyd_george", "clementine", "birkenhead"}, {}, ""};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       .WillOnce([expected_urls_1 = &(expected_urls_1)](
                     const HTTPRequest& request, int timeout_ms,
@@ -508,13 +509,13 @@ TEST_F(KeyValueAsyncHttpClientTest,
 
 TEST_F(KeyValueAsyncHttpClientTest,
        MakesDSPUrlCorrectlyWithNoHostnameAndClientTypeBrowser) {
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"lloyd_george", "clementine", "birkenhead"},
       {},
       "",
       ClientType::CLIENT_TYPE_BROWSER};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   // Note: if the client type is not CLIENT_TYPE_ANDROID, no client_type
   // param is attached to the url. This behavior will change after beta
   // testing to always include a client_type.
@@ -566,13 +567,13 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
       std::make_unique<GetBuyerValuesInput>(client_input);
 
   // These are Key-Value pairs to be inserted into the headers.
-  RequestMetadata expectedMetadata = MakeARandomMap();
+  RequestMetadata expected_metadata = MakeARandomMap();
   for (const auto& mandatory_header : kMandatoryHeaders) {
-    expectedMetadata.insert({mandatory_header.data(), MakeARandomString()});
+    expected_metadata.insert({mandatory_header.data(), MakeARandomString()});
   }
   // Headers are just single strings
   std::vector<std::string> expectedHeaders;
-  for (const auto& expected_metadatum : expectedMetadata) {
+  for (const auto& expected_metadatum : expected_metadata) {
     expectedHeaders.emplace_back(
         absl::StrCat(expected_metadatum.first, ":", expected_metadatum.second));
   }
@@ -592,15 +593,15 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
       void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
       no_check_callback;
   // Finally, actually call the function to perform the test
-  CheckGetValuesFromKeysViaHttpClient(std::move(input), expectedMetadata,
+  CheckGetValuesFromKeysViaHttpClient(std::move(input), expected_metadata,
                                       std::move(no_check_callback));
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"lloyd_george", "clementine", "birkenhead"}, {}, ""};
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
 
   std::vector<std::string> expected_headers;
   expected_headers.reserve(kMandatoryHeaders.size());
@@ -628,23 +629,28 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMandatoryHeaders) {
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, PrewarmsHTTPClient) {
-  const std::string expectedUrl = absl::StrCat(hostname_, "?");
-  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata).Times(1);
+  const std::string expected_url = absl::StrCat(hostname_, "?");
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      .WillOnce(
+          [&expected_url](
+              const HTTPRequest& request, int timeout_ms,
+              absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                  done_callback) { EXPECT_EQ(request.url, expected_url); });
   // Create the client.
-  BuyerKeyValueAsyncHttpClient kvHttpClient(
+  BuyerKeyValueAsyncHttpClient kv_http_client(
       hostname_, std::move(mock_http_fetcher_async_), true);
   absl::SleepFor(absl::Milliseconds(500));
 }
 
 TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Our client will be given this input object.
-  const GetBuyerValuesInput getValuesClientInput = {
+  const GetBuyerValuesInput get_values_client_input = {
       {"breaking news"}, {}, "www.usatoday.com"};
   // We must transform it to a unique ptr to match the function signature.
   std::unique_ptr<GetBuyerValuesInput> input =
-      std::make_unique<GetBuyerValuesInput>(getValuesClientInput);
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
   // This is the URL we expect to see built from the input object.
-  const std::string expectedUrl =
+  const std::string expected_url =
       absl::StrCat(hostname_,
                    "?hostname=www.usatoday.com&keys="
                    "breaking%20news");
@@ -666,7 +672,7 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
   // Expect output data version header value of 0 because
   // kTooBigDataVersionHeaderValue cannot be represented in 32 bits
   // and should fail conversion.
-  std::unique_ptr<GetBuyerValuesOutput> expectedOutputStructUPtr =
+  std::unique_ptr<GetBuyerValuesOutput> expected_output_struct =
       std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
           {expected_response_body_json_string, kRequestSizeDontCheck,
            kResponseSizeDontCheck, /*dv_hdr=*/0}));
@@ -680,22 +686,22 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       done_callback_to_check_val =
           // Capture the expected output struct for comparison
       [&callback_invoked,
-       expectedOutputStructUPtr = std::move(expectedOutputStructUPtr)](
+       expected_output_struct = std::move(expected_output_struct)](
           // This is what the client actually passes back
           absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
               actualOutputStruct) {
         EXPECT_TRUE(actualOutputStruct.ok());
         if (actualOutputStruct.ok()) {
           EXPECT_EQ(actualOutputStruct.value()->result,
-                    expectedOutputStructUPtr->result);
+                    expected_output_struct->result);
           EXPECT_EQ(actualOutputStruct.value()->data_version,
-                    expectedOutputStructUPtr->data_version);
+                    expected_output_struct->data_version);
         }
         callback_invoked.Notify();
       };
 
   // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
-  // called on it, with the URL being expectedUrl.
+  // called on it, with the URL being expected_url.
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
       // If and when that happens: DEFINE that the FetchUrlWithMetadata function
       // SHALL do the following:
@@ -703,11 +709,11 @@ TEST_F(KeyValueAsyncHttpClientTest, SpacesInKeysGetEncoded) {
       //  defining what it shall be)
       .WillOnce([actual_response_body_json_string =
                      expected_response_body_json_string,
-                 &expectedUrl](
+                 &expected_url](
                     const HTTPRequest& request, int timeout_ms,
                     absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
-        EXPECT_EQ(request.url, expectedUrl);
+        EXPECT_EQ(request.url, expected_url);
         HTTPResponse actual_http_response;
         actual_http_response.body = actual_response_body_json_string;
         absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;

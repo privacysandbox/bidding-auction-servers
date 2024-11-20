@@ -34,7 +34,7 @@ data "aws_iam_policy_document" "ssh_users_group_policy_doc" {
 }
 
 resource "aws_iam_policy" "ssh_users_group_policy" {
-  name   = format("%s-%s-sshUsersGroupPolicy", var.operator, var.environment)
+  name   = format("%s-%s-%s-sshUsersGroupPolicy", var.operator, var.environment, var.region)
   policy = data.aws_iam_policy_document.ssh_users_group_policy_doc.json
 }
 

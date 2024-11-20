@@ -43,6 +43,7 @@
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
+#include "services/seller_frontend_service/report_win_map.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/encryption_util.h"
 #include "services/seller_frontend_service/util/validation_utils.h"
@@ -89,8 +90,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
-      bool enable_cancellation = false, bool enable_kanon = false,
-      bool fail_fast = true,
+      const ReportWinMap& report_win_map, bool enable_cancellation = false,
+      bool enable_kanon = false, bool fail_fast = true,
       int max_buyers_solicited = metric::kMaxBuyersSolicited);
 
   // Initiate the asynchronous execution of the SelectAdRequest.
@@ -267,6 +268,12 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // each Buyer is used as a key for the Seller Key-Value lookup.
   void CancellableFetchScoringSignals();
 
+  [[deprecated]] void CancellableFetchScoringSignalsV1(
+      const ScoringSignalsRequest& scoring_signals_request);
+
+  void CancellableFetchScoringSignalsV2(
+      const ScoringSignalsRequest& scoring_signals_request);
+
   // Handles recording the fetched scoring signals to state.
   // If the code blob is already fetched, this function initiates scoring the
   // auction.
@@ -334,6 +341,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   AuctionResult::Error error_;
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
+  const ReportWinMap& report_win_map_;
   // Scope for current auction (single seller, top level or component)
   const AuctionScope auction_scope_;
 
@@ -394,6 +402,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Indicates whether or not the protected audience support is enabled.
   const bool is_protected_audience_enabled_;
 
+  // Indicates whether or not KV V2 support is enabled.
+  const bool is_tkv_v2_browser_enabled_;
+
   // Is chaffing enabled on the server.
   const bool chaffing_enabled_;
 
@@ -407,11 +418,19 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;
 
+  bool is_sampled_for_debug_;
+
+  // JSON map of the priority signals supplied by SSP in AuctionConfig.
+  rapidjson::Document priority_signals_vector_;
+
  private:
   // Keeps track of how many buyer bids were expected initially and how many
   // were erroneous. If all bids ended up in an error state then that should be
   // flagged as an error eventually.
   AsyncTaskTracker async_task_tracker_;
+
+  // API key to use to talk to k-anon service.
+  std::string k_anon_api_key_;
 
   // Keeps track of the client contexts used for RPC calls
   ClientContexts client_contexts_;

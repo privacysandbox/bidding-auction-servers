@@ -34,7 +34,7 @@ constexpr absl::string_view kTestIgNameLoss = "testIgNameLoss";
 constexpr absl::string_view kTestIgOwner = "testIgOwner";
 
 TEST(HandlePrivateAggregationContributionsTest,
-     DISABLED_FiltersAndPostProcessesContributions) {
+     FiltersAndPostProcessesContributions) {
   ScoreAdsResponse::AdScore high_score;
   high_score.set_interest_group_name(kTestIgNameWin);
   high_score.set_buyer_bid(1.0);
@@ -66,8 +66,7 @@ TEST(HandlePrivateAggregationContributionsTest,
   const auto& other_bids = ig_owner_it->second;
   float base_value_numerical_value = other_bids.values().Get(0).number_value();
   absl::uint128 offset_value =
-      absl::MakeUint128(static_cast<uint64_t>(112233445566778899ULL),
-                        static_cast<uint64_t>(12345678901234567890ULL));
+      absl::MakeUint128(static_cast<uint64_t>(0), static_cast<uint64_t>(1));
   absl::uint128 final_value = absl::MakeUint128(
       0, static_cast<uint64_t>(base_value_numerical_value * 2.0));
   final_value -= offset_value;

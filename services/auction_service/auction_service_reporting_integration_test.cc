@@ -14,6 +14,7 @@
 
 #include <thread>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/random/random.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
@@ -39,7 +40,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 constexpr absl::string_view kExpectedReportResultUrl =
     "http://"
-    "test.com&bid=1&bidCurrency=EUR&highestScoringOtherBid=0&"
+    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=0&"
     "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
     "com&interestGroupOwner=barStandardAds.com";
 constexpr absl::string_view kExpectedReportWinUrl =
@@ -65,12 +66,21 @@ constexpr absl::string_view kExpectedReportWinUrlWithBuyerAndSellerReportingId =
     "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
     "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
     "modifiedBid=undefined&dataVersion=1689";
+constexpr absl::string_view kExpectedReportWinWithEmptyPerBuyerConfig =
+    "http://test.com?seller=http://"
+    "seller.com&interestGroupName=undefined&buyerReportingId=undefined&"
+    "buyerAndSellerReportingId=buyerAndSellerReportingId&adCost=2&"
+    "highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
+    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=undefined&"
+    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
+    "modifiedBid=undefined&dataVersion=1689";
 constexpr absl::string_view kTestTopLevelReportResultUrl =
     "http://"
     "test.com&bid=1&bidCurrency=undefined&highestScoringOtherBid=undefined&"
     "highestScoringOtherBidCurrency=undefined&topWindowHostname="
     "fenceStreetJournal.com&interestGroupOwner=barStandardAds.com";
 constexpr absl::string_view kTestInteractionReportingUrl = "http://click.com";
+constexpr absl::string_view kTestSellerCodeVersion = "test_bucket";
 
 class AuctionServiceReportingIntegrationTest : public ::testing::Test {
  protected:
@@ -91,6 +101,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
@@ -131,6 +142,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestComponentAuctionResultData component_data =
       GenerateTestComponentAuctionResultData();
@@ -178,6 +190,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
@@ -271,6 +284,7 @@ TEST_F(
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
@@ -310,6 +324,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
@@ -352,7 +367,9 @@ TEST_F(AuctionServiceReportingIntegrationTest,
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
+      .default_score_ad_version = kTestSellerCodeVersion.data(),
       .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
       .test_buyer_reporting_signals = test_buyer_reporting_signals,
@@ -386,6 +403,126 @@ TEST_F(AuctionServiceReportingIntegrationTest,
   EXPECT_EQ(component_buyer_reporting_urls.interaction_reporting_urls().at(
                 kTestInteractionEvent),
             kTestInteractionReportingUrl);
+}
+
+TEST_F(AuctionServiceReportingIntegrationTest,
+       ReportingSuccessWhenPerBuyerSignalsAreEmpty) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  test_buyer_reporting_signals.buyer_signals = "";
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
+                          kTestReportWinUdfWithValidation, kSellerBaseCode,
+                          response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& component_buyer_reporting_urls =
+      score_ad.win_reporting_urls().buyer_reporting_urls();
+  EXPECT_EQ(component_buyer_reporting_urls.reporting_url(),
+            kExpectedReportWinWithEmptyPerBuyerConfig);
+}
+
+TEST_F(AuctionServiceReportingIntegrationTest,
+       ResultResponseParsingFailsButReportWinSuccess) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
+  LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
+                          kTestReportWinUdfWithValidation,
+                          kSellerBaseCodeWithBadReportResult, response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& top_level_seller_reporting_urls =
+      score_ad.win_reporting_urls().top_level_seller_reporting_urls();
+  const auto& component_buyer_reporting_urls =
+      score_ad.win_reporting_urls().buyer_reporting_urls();
+  ASSERT_TRUE(top_level_seller_reporting_urls.reporting_url().empty())
+      << "reportResult url is expected to be empty";
+  EXPECT_EQ(top_level_seller_reporting_urls.interaction_reporting_urls().size(),
+            0);
+  ASSERT_FALSE(component_buyer_reporting_urls.reporting_url().empty())
+      << "reporting_url for buyer is expected not to be empty";
+  EXPECT_EQ(component_buyer_reporting_urls.interaction_reporting_urls().size(),
+            1);
+}
+
+TEST_F(AuctionServiceReportingIntegrationTest,
+       NoReportingDoneWhenBuyerIsNotLoaded) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config, "",
+                          kSellerBaseCode, response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& component_buyer_reporting_urls =
+      score_ad.win_reporting_urls().buyer_reporting_urls();
+  ASSERT_TRUE(component_buyer_reporting_urls.reporting_url().empty());
+  EXPECT_EQ(component_buyer_reporting_urls.interaction_reporting_urls().size(),
+            0);
+}
+
+// runtime_config.buyers_with_report_win_enabled set is populated with the
+// buyer_origin only if the reportWin endpoint was configured(not empty) for
+// that buyer. This test ensures that if the set doesn't contain the
+// buyer_origin of the winning buyer, reportWin is not executed.
+TEST_F(AuctionServiceReportingIntegrationTest,
+       NoReportWinDoneWhenBuyerDoesntHaveReportWinEnabledInRunTimeConfig) {
+  ScoreAdsResponse response;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  TestBuyerReportingSignals test_buyer_reporting_signals;
+  TestScoreAdsRequestConfig test_score_ads_request_config = {
+      .test_buyer_reporting_signals = test_buyer_reporting_signals,
+      .buyer_reporting_id = kBuyerReportingId,
+      .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
+      .interest_group_owner = kTestIgOwner};
+  LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config, "",
+                          kSellerBaseCode, response);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(runtime_config.buyers_with_report_win_enabled.empty());
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& score_ad = raw_response.ad_score();
+  EXPECT_GT(score_ad.desirability(), 0);
+  const auto& component_buyer_reporting_urls =
+      score_ad.win_reporting_urls().buyer_reporting_urls();
+  ASSERT_TRUE(component_buyer_reporting_urls.reporting_url().empty());
+  EXPECT_EQ(component_buyer_reporting_urls.interaction_reporting_urls().size(),
+            0);
 }
 
 }  // namespace

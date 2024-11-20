@@ -147,7 +147,7 @@ data "aws_iam_policy_document" "instance_policy_doc" {
 }
 
 resource "aws_iam_policy" "instance_policy" {
-  name   = format("%s-%s-InstancePolicy", var.operator, var.environment)
+  name   = format("%s-%s-%s-InstancePolicy", var.operator, var.environment, var.region)
   policy = data.aws_iam_policy_document.instance_policy_doc.json
 }
 
@@ -191,7 +191,7 @@ data "aws_iam_policy_document" "ssh_instance_policy_doc" {
 }
 
 resource "aws_iam_policy" "ssh_instance_policy" {
-  name   = format("%s-%s-sshInstancePolicy", var.operator, var.environment)
+  name   = format("%s-%s-%s-sshInstancePolicy", var.operator, var.environment, var.region)
   policy = data.aws_iam_policy_document.ssh_instance_policy_doc.json
 }
 

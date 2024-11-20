@@ -15,5 +15,5 @@
  */
 
 resource "aws_iam_group" "ssh_users_group" {
-  name = format("%s-%s-ssh-users", var.operator, var.environment)
+  name = format("%s-%s-%s-ssh-users", var.operator, var.environment, var.region)
 }

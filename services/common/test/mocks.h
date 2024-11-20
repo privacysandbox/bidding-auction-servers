@@ -115,13 +115,27 @@ class MockEventEngine : public grpc_event_engine::experimental::EventEngine {
 
 class EgressSchemaCacheMock : public EgressSchemaCache {
  public:
+  EgressSchemaCacheMock() : EgressSchemaCache(nullptr) {}
   explicit EgressSchemaCacheMock(
       std::unique_ptr<const CddlSpecCache> cddl_spec_cache)
       : EgressSchemaCache(std::move(cddl_spec_cache)) {}
-  MOCK_METHOD(absl::Status, Update, (absl::string_view), (override));
 
-  MOCK_METHOD(absl::StatusOr<std::vector<std::unique_ptr<EgressFeature>>>, Get,
-              (int), (override));
+  MOCK_METHOD(absl::Status, Update, (absl::string_view, absl::string_view),
+              (override));
+
+  MOCK_METHOD(absl::StatusOr<EgressSchemaData>, Get, (absl::string_view),
+              (override));
+};
+
+class CddlSpecCacheMock : public CddlSpecCache {
+ public:
+  explicit CddlSpecCacheMock(absl::string_view dir_path)
+      : CddlSpecCache(dir_path) {}
+
+  MOCK_METHOD(absl::StatusOr<absl::string_view>, Get, (absl::string_view),
+              (const, override));
+
+  MOCK_METHOD(absl::Status, Init, (), (override));
 };
 
 class MockExecutor : public server_common::Executor {

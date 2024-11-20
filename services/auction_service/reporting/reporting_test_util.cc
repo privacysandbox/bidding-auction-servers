@@ -28,6 +28,7 @@
 #include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/seller/seller_reporting_manager.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
@@ -156,12 +157,15 @@ rapidjson::Document GenerateTestSellerDeviceSignals(
 void VerifyBuyerReportingSignals(
     BuyerReportingDispatchRequestData& observed_buyer_device_signals,
     const BuyerReportingDispatchRequestData& expected_buyer_device_signals) {
-  if (expected_buyer_device_signals.buyer_and_seller_reporting_id) {
-    EXPECT_EQ(*observed_buyer_device_signals.buyer_and_seller_reporting_id,
-              *expected_buyer_device_signals.buyer_and_seller_reporting_id);
-  } else if (expected_buyer_device_signals.buyer_reporting_id) {
-    EXPECT_EQ(*observed_buyer_device_signals.buyer_reporting_id,
-              *expected_buyer_device_signals.buyer_reporting_id);
+  if (expected_buyer_device_signals.buyer_and_seller_reporting_id.has_value()) {
+    EXPECT_TRUE(observed_buyer_device_signals.buyer_and_seller_reporting_id
+                    .has_value());
+    EXPECT_EQ(observed_buyer_device_signals.buyer_and_seller_reporting_id,
+              expected_buyer_device_signals.buyer_and_seller_reporting_id);
+  } else if (expected_buyer_device_signals.buyer_reporting_id.has_value()) {
+    EXPECT_TRUE(observed_buyer_device_signals.buyer_reporting_id.has_value());
+    EXPECT_EQ(observed_buyer_device_signals.buyer_reporting_id,
+              expected_buyer_device_signals.buyer_reporting_id);
   } else {
     EXPECT_EQ(observed_buyer_device_signals.interest_group_name,
               expected_buyer_device_signals.interest_group_name);
@@ -173,44 +177,51 @@ void VerifyBuyerReportingSignals(
   EXPECT_EQ(observed_buyer_device_signals.data_version,
             expected_buyer_device_signals.data_version);
   if (expected_buyer_device_signals.join_count.has_value() &&
-      *observed_buyer_device_signals.join_count !=
-          *expected_buyer_device_signals.join_count) {
-    EXPECT_GT(*observed_buyer_device_signals.join_count,
-              kJoinCountLowerBound - 1);
-    EXPECT_LT(*observed_buyer_device_signals.join_count,
-              kJoinCountUpperBound + 1);
-  } else {
-    EXPECT_EQ(*observed_buyer_device_signals.join_count,
-              *expected_buyer_device_signals.join_count);
+      observed_buyer_device_signals.join_count.has_value()) {
+    if (*observed_buyer_device_signals.join_count !=
+        *expected_buyer_device_signals.join_count) {
+      EXPECT_GT(*observed_buyer_device_signals.join_count,
+                kJoinCountLowerBound - 1);
+      EXPECT_LT(*observed_buyer_device_signals.join_count,
+                kJoinCountUpperBound + 1);
+    } else {
+      EXPECT_EQ(*observed_buyer_device_signals.join_count,
+                *expected_buyer_device_signals.join_count);
+    }
   }
   if (expected_buyer_device_signals.recency.has_value() &&
-      *observed_buyer_device_signals.recency !=
-          *expected_buyer_device_signals.recency) {
-    EXPECT_GT(*observed_buyer_device_signals.recency, kRecencyLowerBound - 1);
-    EXPECT_LT(*observed_buyer_device_signals.recency, kRecencyUpperBound + 1);
-  } else {
-    EXPECT_EQ(*observed_buyer_device_signals.recency,
-              *expected_buyer_device_signals.recency);
+      observed_buyer_device_signals.recency.has_value()) {
+    if (*observed_buyer_device_signals.recency !=
+        *expected_buyer_device_signals.recency) {
+      EXPECT_GT(*observed_buyer_device_signals.recency, kRecencyLowerBound - 1);
+      EXPECT_LT(*observed_buyer_device_signals.recency, kRecencyUpperBound + 1);
+    } else {
+      EXPECT_EQ(*observed_buyer_device_signals.recency,
+                *expected_buyer_device_signals.recency);
+    }
   }
   if (expected_buyer_device_signals.modeling_signals.has_value() &&
-      *observed_buyer_device_signals.modeling_signals !=
-          *expected_buyer_device_signals.join_count) {
-    EXPECT_GT(*observed_buyer_device_signals.modeling_signals,
-              kModelingSignalsLowerBound - 1);
-    EXPECT_LT(*observed_buyer_device_signals.modeling_signals,
-              kModelingSignalsUpperBound + 1);
-  } else {
-    EXPECT_EQ(*observed_buyer_device_signals.modeling_signals,
-              *expected_buyer_device_signals.modeling_signals);
+      observed_buyer_device_signals.modeling_signals.has_value()) {
+    if (*observed_buyer_device_signals.modeling_signals !=
+        *expected_buyer_device_signals.modeling_signals) {
+      EXPECT_GT(*observed_buyer_device_signals.modeling_signals,
+                kModelingSignalsLowerBound - 1);
+      EXPECT_LT(*observed_buyer_device_signals.modeling_signals,
+                kModelingSignalsUpperBound + 1);
+    } else {
+      EXPECT_EQ(*observed_buyer_device_signals.modeling_signals,
+                *expected_buyer_device_signals.modeling_signals);
+    }
   }
   EXPECT_EQ(observed_buyer_device_signals.made_highest_scoring_other_bid,
             expected_buyer_device_signals.made_highest_scoring_other_bid);
-  if (observed_buyer_device_signals.egress_payload) {
+  if (observed_buyer_device_signals.egress_payload &&
+      expected_buyer_device_signals.egress_payload) {
     EXPECT_EQ(*observed_buyer_device_signals.egress_payload,
               *expected_buyer_device_signals.egress_payload);
   }
-  if (observed_buyer_device_signals.temporary_unlimited_egress_payload
-          .has_value()) {
+  if (observed_buyer_device_signals.temporary_unlimited_egress_payload &&
+      expected_buyer_device_signals.temporary_unlimited_egress_payload) {
     EXPECT_EQ(
         *observed_buyer_device_signals.temporary_unlimited_egress_payload,
         *expected_buyer_device_signals.temporary_unlimited_egress_payload);
@@ -239,7 +250,7 @@ void ParseBuyerReportingSignals(
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.made_highest_scoring_other_bid,
                        document, kMadeHighestScoringOtherBid, Bool);
   PS_ASSIGN_IF_PRESENT(reporting_dispatch_data.data_version, document,
-                       kDataVersionTag, Uint);
+                       kDataVersion, Uint);
   ASSERT_FALSE(document.HasMember(kModifiedBid));
 }
 
@@ -261,6 +272,9 @@ void VerifySellerDeviceSignals(
   EXPECT_EQ(observed_seller_device_signals.bid,
             seller_dispatch_request_data.post_auction_signals.winning_bid);
   EXPECT_EQ(
+      observed_seller_device_signals.seller_data_version,
+      seller_dispatch_request_data.post_auction_signals.seller_data_version);
+  EXPECT_EQ(
       observed_seller_device_signals.render_URL,
       seller_dispatch_request_data.post_auction_signals.winning_ad_render_url);
   EXPECT_EQ(
@@ -276,10 +290,10 @@ void VerifyBuyerDeviceSignalsForComponentAuction(
   // component buyer
   EXPECT_FALSE(observed_seller_device_signals_in_buyer_device_signals
                    .modified_bid.has_value());
-  EXPECT_EQ(
-      *observed_seller_device_signals_in_buyer_device_signals.top_level_seller,
-      seller_dispatch_request_data.component_reporting_metadata
-          .top_level_seller);
+  EXPECT_EQ(observed_seller_device_signals_in_buyer_device_signals
+                .top_level_seller.value_or(""),
+            seller_dispatch_request_data.component_reporting_metadata
+                .top_level_seller);
   VerifySellerDeviceSignals(
       observed_seller_device_signals_in_buyer_device_signals,
       seller_dispatch_request_data);
@@ -346,7 +360,6 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
           .interest_group_name = kTestInterestGroupName,
           .ad_cost = kTestAdCost,
           .buyer_reporting_id = kTestBuyerReportingId,
-          .buyer_and_seller_reporting_id = "",
           .data_version = kTestDataVersion,
           .made_highest_scoring_other_bid = true,
           .log_context = log_context,

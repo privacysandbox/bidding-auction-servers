@@ -28,6 +28,7 @@
 #include <google/protobuf/text_format.h>
 #include <rapidjson/stringbuffer.h>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
@@ -395,6 +396,9 @@ class ScoreAdsReactor
     return empty_ad_component_render_urls;
   }
   const bool enable_enforce_kanon_;
+  absl::flat_hash_set<std::string> buyers_with_report_win_enabled_;
+  absl::flat_hash_set<std::string>
+      protected_app_signals_buyers_with_report_win_enabled_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

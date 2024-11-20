@@ -23,6 +23,7 @@
 
 #include "absl/strings/string_view.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
+#include "services/bidding_service/data/runtime_config.h"
 #include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
@@ -89,6 +90,10 @@ class BuyerCodeFetchManager {
   // A successful Init means that Roma has succeeded in loading a UDF.
   absl::Status Init();
 
+  // Configures the runtime versioning defaults to be used by reactors.
+  absl::Status ConfigureRuntimeDefaults(
+      BiddingServiceRuntimeConfig& runtime_config);
+
  protected:
   virtual absl::Status InitializeLocalCodeFetch();
 
@@ -136,7 +141,6 @@ class BuyerCodeFetchManager {
   std::unique_ptr<FetcherInterface> pas_bidding_udf_fetcher_;
   std::unique_ptr<FetcherInterface> pas_ads_retrieval_udf_fetcher_;
 };
-
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_BIDDING_SERVICE_BUYER_CODE_FETCH_MANAGER_H_

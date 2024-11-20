@@ -75,4 +75,6 @@ message SellerCodeFetchConfig {
 
    // Enables private aggregate reporting.
    bool enable_private_aggregate_reporting = 15;
+
+   bool test_mode = 16;
 }

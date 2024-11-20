@@ -39,6 +39,8 @@ inline constexpr absl::string_view GRPC_ARG_DEFAULT_AUTHORITY_VAL =
     "GRPC_ARG_DEFAULT_AUTHORITY";
 inline constexpr absl::string_view KEY_VALUE_SIGNALS_HOST =
     "KEY_VALUE_SIGNALS_HOST";
+inline constexpr absl::string_view TRUSTED_KEY_VALUE_V2_SIGNALS_HOST =
+    "TRUSTED_KEY_VALUE_V2_SIGNALS_HOST";
 inline constexpr absl::string_view BUYER_SERVER_HOSTS = "BUYER_SERVER_HOSTS";
 inline constexpr absl::string_view ENABLE_BUYER_COMPRESSION =
     "ENABLE_BUYER_COMPRESSION";
@@ -62,8 +64,9 @@ inline constexpr absl::string_view
         "SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
 inline constexpr absl::string_view SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
     "SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
+inline constexpr absl::string_view K_ANON_API_KEY = "K_ANON_API_KEY";
 
-inline constexpr int kNumRuntimeFlags = 23;
+inline constexpr int kNumRuntimeFlags = 26;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -74,6 +77,7 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     AUCTION_SERVER_HOST,
     GRPC_ARG_DEFAULT_AUTHORITY_VAL,
     KEY_VALUE_SIGNALS_HOST,
+    TRUSTED_KEY_VALUE_V2_SIGNALS_HOST,
     BUYER_SERVER_HOSTS,
     ENABLE_BUYER_COMPRESSION,
     ENABLE_AUCTION_COMPRESSION,
@@ -88,6 +92,8 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     SELLER_CLOUD_PLATFORMS_MAP,
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
+    SELLER_CODE_FETCH_CONFIG,
+    K_ANON_API_KEY,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

@@ -13,20 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export BIDDING_EXECUTABLE_URL=""
-export BIDDING_EXECUTABLE_PATH=""
+source $(dirname "$0")/common
+
+KV_SERVER_ADDR="${KV_SERVER_ADDR:-localhost:50057}"
+BIDDING_EXECUTABLE_URL="${BIDDING_EXECUTABLE_URL:-}"
+BIDDING_EXECUTABLE_PATH="${BIDDING_EXECUTABLE_PATH:-}"
 
 if [[ -n "$BIDDING_EXECUTABLE_URL" ]]; then
-  export FETCH_MODE=0
+  FETCH_MODE=0
 else
-  export FETCH_MODE=2
+  FETCH_MODE=2
 fi
 
-export SERVER_START_CMD=$(cat << END
+SERVER_START_CMD=$(cat << END
 /server/bin/server \
 --enable_bidding_service_benchmark="true" \
+--https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --init_config_client="false" \
---port=50057 \
+--port=${BIDDING_PORT} \
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
@@ -52,7 +56,7 @@ export SERVER_START_CMD=$(cat << END
 --enable_protected_app_signals="false" \
 --enable_otel_based_logging="false" \
 --consented_debug_token="test_token" \
---tee_ad_retrieval_kv_server_addr="localhost:50057" \
+--tee_ad_retrieval_kv_server_addr="${KV_SERVER_ADDR}" \
 --ps_verbosity=3 \
 --bidding_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bidding_tcmalloc_max_total_thread_cache_bytes=10737418240 \

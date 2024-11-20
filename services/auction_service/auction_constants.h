@@ -17,6 +17,8 @@
 #ifndef SERVICES_AUCTION_SERVICE_AUCTION_CONSTANTS_H_
 #define SERVICES_AUCTION_SERVICE_AUCTION_CONSTANTS_H_
 
+#include <cstdint>
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 constexpr char DispatchHandlerFunctionWithSellerWrapper[] =
@@ -36,6 +38,7 @@ constexpr char kDesirabilityPropertyForScoreAd[] = "desirability";
 constexpr char kAllowComponentAuctionPropertyForScoreAd[] =
     "allowComponentAuction";
 constexpr char kBidCurrencyPropertyForScoreAd[] = "bidCurrency";
+constexpr char kSellerDataVersionPropertyForScoreAd[] = "dataVersion";
 constexpr char kAdMetadataForComponentAuction[] = "ad";
 constexpr char kModifiedBidForComponentAuction[] = "bid";
 constexpr char kIncomingBidInSellerCurrency[] = "incomingBidInSellerCurrency";
@@ -55,7 +58,7 @@ constexpr int kArgSizeWithWrapper = 7;
 constexpr float kCurrencyFloatComparisonEpsilon = 0.00001f;
 
 // See ScoreAdInput for more detail on each field.
-enum class ScoreAdArgs : int {
+enum class ScoreAdArgs : std::uint8_t {
   kAdMetadata = 0,
   kBid,
   kAuctionConfig,

@@ -44,8 +44,7 @@
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
 #include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
-#include "services/bidding_service/egress_features/adtech_schema_fetcher.h"
-#include "services/bidding_service/egress_schema_cache.h"
+#include "services/bidding_service/egress_features/egress_schema_fetch_manager.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
 #include "services/bidding_service/inference/inference_utils.h"
 #include "services/bidding_service/inference/model_fetcher_metric.h"
@@ -58,6 +57,7 @@
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
@@ -132,44 +132,12 @@ using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
 
-// Collection of objects required for egress to work
-struct EgressInfo {
-  // A cache of adtech provided schemas. This is updated once the adtech
-  // schema fetcher fetches a schema from adtech provided URL. This is later
-  // used to serialize the adtech provided features.
-  std::unique_ptr<EgressSchemaCache> egress_schema_cache;
-  // An HTTP fetcher object that is used to fetch egress schema from adtech
-  // provided URL.
-  std::unique_ptr<AdtechSchemaFetcher> adtech_schema_fetcher;
-};
-
-absl::StatusOr<EgressInfo> StartEgressSchemaFetch(
-    const TrustedServersConfigClient& config_client,
-    const std::string& egress_schema_url,
-    const bidding_service::EgressSchemaFetchConfig& egress_schema_fetch_config,
-    server_common::Executor* executor,
-    MultiCurlHttpFetcherAsync* http_fetcher_async) {
-  auto cddl_spec_cache = std::make_unique<CddlSpecCache>(
-      "services/bidding_service/egress_cddl_spec/");
-  cddl_spec_cache->Init();
-  auto egress_schema_cache =
-      std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
-  PS_LOG(INFO) << "Loading the adtech schema from: " << egress_schema_url;
-  auto adtech_schema_fetcher = std::make_unique<AdtechSchemaFetcher>(
-      std::vector<std::string>{egress_schema_url},
-      absl::Milliseconds(egress_schema_fetch_config.url_fetch_period_ms()),
-      absl::Milliseconds(egress_schema_fetch_config.url_fetch_timeout_ms()),
-      http_fetcher_async, executor, egress_schema_cache.get());
-  PS_RETURN_IF_ERROR(adtech_schema_fetcher->Start())
-      << "Unable to start fetching the adtech egress schema";
-  return EgressInfo{.egress_schema_cache = std::move(egress_schema_cache),
-                    .adtech_schema_fetcher = std::move(adtech_schema_fetcher)};
-}
-
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
   TrustedServersConfigClient config_client(GetServiceFlags());
   config_client.SetFlag(FLAGS_port, PORT);
+  config_client.SetFlag(FLAGS_https_fetch_skips_tls_verification,
+                        HTTPS_FETCH_SKIPS_TLS_VERIFICATION);
   config_client.SetFlag(FLAGS_healthcheck_port, HEALTHCHECK_PORT);
   config_client.SetFlag(FLAGS_enable_bidding_service_benchmark,
                         ENABLE_BIDDING_SERVICE_BENCHMARK);
@@ -574,18 +542,8 @@ absl::Status RunServer() {
       .enable_kanon = absl::GetFlag(FLAGS_enable_kanon),
       .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress};
 
-  if (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
-    if (enable_protected_audience) {
-      runtime_config.default_protected_auction_generate_bid_version =
-          udf_config.protected_auction_bidding_js_bucket_default_blob();
-    }
-    if (enable_protected_app_signals) {
-      runtime_config.default_protected_app_signals_generate_bid_version =
-          udf_config.protected_app_signals_bidding_js_bucket_default_blob();
-      runtime_config.default_ad_retrieval_version =
-          udf_config.ads_retrieval_bucket_default_blob();
-    }
-  }
+  PS_RETURN_IF_ERROR(udf_fetcher->ConfigureRuntimeDefaults(runtime_config))
+      << "Could not init runtime defaults for udf fetching.";
 
   PS_VLOG(5) << "Fetching egress schema fetch config";
   bidding_service::EgressSchemaFetchConfig egress_schema_fetch_config;
@@ -596,38 +554,31 @@ absl::Status RunServer() {
          " (Invalid JSON provided?)";
   PS_VLOG(5) << "Fetched egress schema fetch config: "
              << egress_schema_fetch_config.DebugString();
-  absl::StatusOr<EgressInfo> egress_info = absl::UnimplementedError("");
-  if (enable_temporary_unlimited_egress && enable_protected_app_signals) {
-    PS_LOG(INFO) << "Temporary egress feature is enabled in the binary";
-    if (egress_info = StartEgressSchemaFetch(
-            config_client,
-            egress_schema_fetch_config.temporary_unlimited_egress_schema_url(),
-            egress_schema_fetch_config, executor.get(),
-            http_fetcher_async.get());
-        !egress_info.ok()) {
-      PS_LOG(WARNING) << "Unable to load temporary unlimited egress schema: "
-                      << egress_info.status();
-    }
-  } else {
-    PS_LOG(INFO) << "Temporary egress feature is not enabled in the binary";
-  }
+
   const int limited_egress_bits = absl::GetFlag(FLAGS_limited_egress_bits);
   PS_LOG(INFO) << "Allowed limited egress bits: " << limited_egress_bits;
-  absl::StatusOr<EgressInfo> limited_egress_info = absl::UnimplementedError("");
-  const bool egress_enabled = limited_egress_bits > 0;
-  if (egress_enabled) {
-    PS_LOG(INFO) << "Limited egress feature is enabled in the binary";
-    if (limited_egress_info = StartEgressSchemaFetch(
-            config_client, egress_schema_fetch_config.egress_schema_url(),
-            egress_schema_fetch_config, executor.get(),
-            http_fetcher_async.get());
-        !limited_egress_info.ok()) {
-      PS_LOG(WARNING) << "Unable to load limited egress schema: "
-                      << limited_egress_info.status();
-    }
-  } else {
-    PS_LOG(INFO) << "Limited egress feature is not enabled in the binary";
-  }
+
+  EgressSchemaFetchManager egress_schema_fetch_manager({
+      .enable_protected_app_signals = enable_protected_app_signals,
+      .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress,
+      .limited_egress_bits = limited_egress_bits,
+      .fetch_config = egress_schema_fetch_config,
+      .executor = executor.get(),
+      .http_fetcher_async = http_fetcher_async.get(),
+      .blob_storage_client = BlobStorageClientFactory::Create(),
+      .temporary_unlimited_egress_cddl_cache = std::make_unique<CddlSpecCache>(
+          "services/bidding_service/egress_cddl_spec/"),
+      .egress_cddl_cache = std::make_unique<CddlSpecCache>(
+          "services/bidding_service/egress_cddl_spec/"),
+  });
+
+  PS_RETURN_IF_ERROR(
+      egress_schema_fetch_manager.ConfigureRuntimeDefaults(runtime_config))
+      << "Failed to init runtime defaults for egress schema fetching.";
+
+  PS_ASSIGN_OR_RETURN(EgressSchemaCaches egress_schema_caches,
+                      egress_schema_fetch_manager.Init(),
+                      _ << "Failed to init egress schema cache.");
 
   PS_VLOG(5) << "Creating bidding service instance";
   BiddingService bidding_service(
@@ -639,12 +590,8 @@ absl::Status RunServer() {
       CreateCryptoClient(), std::move(runtime_config),
       std::move(protected_app_signals_generate_bids_reactor_factory),
       /*ad_retrieval_async_client=*/nullptr, /*kv_async_client=*/nullptr,
-      enable_temporary_unlimited_egress && egress_info.ok()
-          ? std::move(egress_info->egress_schema_cache)
-          : nullptr,
-      egress_enabled && limited_egress_info.ok()
-          ? std::move(limited_egress_info->egress_schema_cache)
-          : nullptr);
+      std::move(egress_schema_caches.egress_schema_cache),
+      std::move(egress_schema_caches.unlimited_egress_schema_cache));
 
   PS_VLOG(5) << "Done creating bidding service instance";
   grpc::EnableDefaultHealthCheckService(true);

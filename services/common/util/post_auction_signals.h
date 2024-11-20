@@ -37,6 +37,8 @@ struct PostAuctionSignals {
   float winning_bid_in_seller_currency;
   // The seller's currency.
   std::string seller_currency;
+  // The seller's KV server data version.
+  uint32_t seller_data_version;
 
   // The bid which was scored second highest in the auction.
   float highest_scoring_other_bid;

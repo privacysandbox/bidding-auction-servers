@@ -80,19 +80,24 @@ module "seller" {
     AUCTION_SERVER_HOST                    = local.use_service_mesh ? "dns:///auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}:50051" : "dns:///auction-${local.environment}.${local.seller_root_domain}:443"
     GRPC_ARG_DEFAULT_AUTHORITY             = local.use_service_mesh ? "auction-${local.seller_operator}-${local.environment}-appmesh-virtual-service.${local.seller_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
     # Refers to BYOS Seller Key-Value Server only.
-    KEY_VALUE_SIGNALS_HOST              = "" # Example: "https://keyvaluesignals.com/trusted-signals"
-    BUYER_SERVER_HOSTS                  = "" # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
-    SELLER_CLOUD_PLATFORMS_MAP          = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
-    ENABLE_SELLER_FRONTEND_BENCHMARKING = "" # Example: "false"
-    ENABLE_AUCTION_COMPRESSION          = "" # Example: "false"
-    ENABLE_BUYER_COMPRESSION            = "" # Example: "false"
-    ENABLE_PROTECTED_APP_SIGNALS        = "" # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE           = "" # Example: "true"
-    PS_VERBOSITY                        = "" # Example: "10"
-    CREATE_NEW_EVENT_ENGINE             = "" # Example: "false"
-    TELEMETRY_CONFIG                    = "" # Example: "mode: EXPERIMENT"
-    ENABLE_OTEL_BASED_LOGGING           = "" # Example: "true"
-    CONSENTED_DEBUG_TOKEN               = "" # Example: "123456"
+    KEY_VALUE_SIGNALS_HOST              = ""            # Example: "https://keyvaluesignals.com/trusted-signals"
+    K_ANON_API_KEY                      = "PLACEHOLDER" # API Key used to query k-anon service.
+    ENABLE_TKV_V2_BROWSER               = ""            # Example: "false"
+    TKV_EGRESS_TLS                      = ""            # Example: "false"
+    TRUSTED_KEY_VALUE_V2_SIGNALS_HOST   = "PLACEHOLDER" # Example: "dns:///keyvaluesignals:443"
+    BUYER_SERVER_HOSTS                  = ""            # Example: "{ \"https://bid1.com\": { \"url\": \"dns:///bidding1.com:443\", \"cloudPlatform\": \"AWS\" } }"
+    SELLER_CLOUD_PLATFORMS_MAP          = ""            # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
+    ENABLE_SELLER_FRONTEND_BENCHMARKING = ""            # Example: "false"
+    ENABLE_AUCTION_COMPRESSION          = ""            # Example: "false"
+    ENABLE_BUYER_COMPRESSION            = ""            # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS        = ""            # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE           = ""            # Example: "true"
+    PS_VERBOSITY                        = ""            # Example: "10"
+    CREATE_NEW_EVENT_ENGINE             = ""            # Example: "false"
+    TELEMETRY_CONFIG                    = ""            # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING           = ""            # Example: "true"
+    CONSENTED_DEBUG_TOKEN               = ""            # Example: "123456"
+    DEBUG_SAMPLE_RATE_MICRO             = "0"
     TEST_MODE                           = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG            = "" # Example:
     # "{
@@ -150,6 +155,9 @@ module "seller" {
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
+
+    ENABLE_CHAFFING        = "false"
+    ENABLE_PRIORITY_VECTOR = "false"
   }
   consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
 }

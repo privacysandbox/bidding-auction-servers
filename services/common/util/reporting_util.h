@@ -98,7 +98,7 @@ struct DebugReportingPlaceholder {
 // If there is no winning ad, default values are returned.
 PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
-    std::string seller_currency);
+    std::string seller_currency, const uint32_t seller_data_version);
 
 // Returns post auction signals from winning ad score for the
 // top level seller.

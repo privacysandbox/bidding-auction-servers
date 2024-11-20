@@ -25,6 +25,7 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "gtest/gtest.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
 #include "src/core/interface/async_context.h"
@@ -200,12 +201,19 @@ TEST_F(PeriodicBucketCodeFetcherTest, LoadsAllBlobsInBucket) {
             return id;
           });
 
-  EXPECT_CALL(dispatcher, LoadSync(kSampleBlobName, kSampleData))
+  const absl::StatusOr<std::string> versionA =
+      GetBucketBlobVersion(kSampleBucketName, kSampleBlobName);
+  ASSERT_TRUE(versionA.ok()) << versionA.status();
+  const absl::StatusOr<std::string> versionB =
+      GetBucketBlobVersion(kSampleBucketName, kSampleBlobName2);
+  ASSERT_TRUE(versionB.ok()) << versionB.status();
+
+  EXPECT_CALL(dispatcher, LoadSync(*versionA, kSampleData))
       .WillOnce([](std::string_view version, absl::string_view blob_data) {
         return absl::OkStatus();
       });
 
-  EXPECT_CALL(dispatcher, LoadSync(kSampleBlobName2, kSampleData2))
+  EXPECT_CALL(dispatcher, LoadSync(*versionB, kSampleData2))
       .WillOnce([](std::string_view version, absl::string_view blob_data) {
         return absl::OkStatus();
       });
@@ -265,10 +273,12 @@ TEST_F(PeriodicBucketCodeFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
                   std::string(kSampleData2));
               async_context.result = SuccessExecutionResult();
             } else {
+              // Expect GetBlob to always call Finish, even on errors.
+              async_context.Finish();
               return absl::UnknownError("");
             }
-            async_context.Finish();
 
+            async_context.Finish();
             return absl::OkStatus();
           });
 
@@ -279,16 +289,22 @@ TEST_F(PeriodicBucketCodeFetcherTest, ReturnsSuccessIfAtLeastOneBlobLoads) {
             server_common::TaskId id;
             return id;
           });
+  absl::StatusOr<std::string> versionA =
+      GetBucketBlobVersion(kSampleBucketName, kSampleBlobName);
+  ASSERT_TRUE(versionA.ok()) << versionA.status();
+  absl::StatusOr<std::string> versionB =
+      GetBucketBlobVersion(kSampleBucketName, kSampleBlobName2);
+  ASSERT_TRUE(versionB.ok()) << versionB.status();
 
-  EXPECT_CALL(dispatcher, LoadSync(kSampleBlobName, kSampleData)).Times(0);
+  EXPECT_CALL(dispatcher, LoadSync(*versionA, kSampleData)).Times(0);
 
-  EXPECT_CALL(dispatcher, LoadSync(kSampleBlobName2, kSampleData2))
+  EXPECT_CALL(dispatcher, LoadSync(*versionB, kSampleData2))
       .Times(1)
       .WillOnce([](std::string_view version, absl::string_view blob_data) {
         return absl::OkStatus();
       });
 
-  EXPECT_CALL(dispatcher, LoadSync(kSampleBlobName, kSampleData3)).Times(0);
+  EXPECT_CALL(dispatcher, LoadSync(*versionA, kSampleData3)).Times(0);
 
   PeriodicBucketCodeFetcher bucket_fetcher(
       kSampleBucketName, kFetchPeriod, &dispatcher, executor.get(),

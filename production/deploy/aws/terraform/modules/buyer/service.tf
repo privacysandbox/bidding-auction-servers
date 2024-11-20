@@ -20,18 +20,19 @@ module "iam_roles" {
   source      = "../../services/iam_roles"
   environment = var.environment
   operator    = var.operator
+  region      = var.region
 }
 
 module "iam_groups" {
   source      = "../../services/iam_groups"
   environment = var.environment
   operator    = var.operator
+  region      = var.region
 }
 
 module "networking" {
-  source   = "../../services/networking"
-  operator = var.operator
-
+  source         = "../../services/networking"
+  operator       = var.operator
   environment    = var.environment
   vpc_cidr_block = var.vpc_cidr_block
 }
@@ -45,6 +46,7 @@ module "security_groups" {
 
 module "iam_group_policies" {
   source               = "../../services/iam_group_policies"
+  region               = var.region
   operator             = var.operator
   environment          = var.environment
   ssh_users_group_name = module.iam_groups.ssh_users_group_name
@@ -96,6 +98,7 @@ module "security_group_rules" {
 
 module "iam_role_policies" {
   source                    = "../../services/iam_role_policies"
+  region                    = var.region
   operator                  = var.operator
   environment               = var.environment
   server_instance_role_name = module.iam_roles.instance_role_name
@@ -155,6 +158,7 @@ module "bidding_mesh_service" {
   use_tls_with_mesh                           = var.use_tls_with_mesh
   kv_server_virtual_service_name              = var.kv_server_virtual_service_name
   ad_retrieval_kv_server_virtual_service_name = var.ad_retrieval_kv_server_virtual_service_name
+  region                                      = var.region
 }
 
 module "load_balancing_bidding" {
@@ -162,6 +166,7 @@ module "load_balancing_bidding" {
   count = var.use_service_mesh ? 0 : 1
 
   source                          = "../../services/load_balancing"
+  region                          = var.region
   environment                     = var.environment
   operator                        = var.operator
   service                         = "bidding"
@@ -215,6 +220,7 @@ module "bfe_mesh_service" {
   count = var.use_service_mesh ? 1 : 0
 
   source                                          = "../../services/frontend_mesh_service"
+  region                                          = var.region
   operator                                        = var.operator
   environment                                     = var.environment
   service                                         = "bfe"
@@ -239,6 +245,7 @@ module "bfe_mesh_service" {
 
 module "load_balancing_bfe" {
   source                          = "../../services/load_balancing"
+  region                          = var.region
   environment                     = var.environment
   operator                        = var.operator
   service                         = "bfe"

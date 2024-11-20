@@ -37,7 +37,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 constexpr absl::string_view kExpectedSellerDeviceSignals =
-    R"JSON({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5})JSON";
+    R"JSON({"topWindowHostname":"publisherName","interestGroupOwner":"testOwner","renderURL":"http://testurl.com","renderUrl":"http://testurl.com","bid":1.0,"bidCurrency":"EUR","dataVersion":1989,"highestScoringOtherBidCurrency":"USD","desirability":2.0,"highestScoringOtherBid":0.5})JSON";
+constexpr absl::string_view kTestReportResultVersion = "test_bucket";
 
 struct ReportResultArgIndices {
   int kAuctionConfigArgIdx =
@@ -56,14 +57,13 @@ struct TestData {
   absl::string_view expected_direct_from_seller_signals = "{}";
   bool enable_adtech_code_logging = false;
   absl::string_view id = kTestRender;
-  std::string expected_version = GetDefaultSellerUdfVersion();
+  std::string expected_version = kTestReportResultVersion.data();
   absl::string_view expected_handler_name = kReportResultEntryFunction;
   ReportResultArgIndices indexes;
 };
 void VerifyDispatchRequest(const TestData& test_data,
                            std::vector<DispatchRequest>& batch) {
   EXPECT_EQ(batch.size(), 1);
-  std::string expected_auction_config = kTestAuctionConfig;
   EXPECT_EQ(batch[0].id, test_data.id);
   EXPECT_EQ(batch[0].version_string, test_data.expected_version);
   EXPECT_EQ(batch[0].handler_name, test_data.expected_handler_name);
@@ -137,8 +137,8 @@ class SellerReportingManagerTest : public ::testing::Test {
 
 TEST_F(SellerReportingManagerTest, ReturnsRapidJsonDocOfSellerDeviceSignals) {
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
   SellerReportingDispatchRequestData dispatch_request_data =
@@ -156,15 +156,16 @@ TEST_F(SellerReportingManagerTest,
       [](const std::vector<absl::StatusOr<DispatchResponse>>& result) {};
   MockV8DispatchClient mock_dispatch_client;
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
   SellerReportingDispatchRequestData dispatch_request_data =
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
   rapidjson::Document document =
       GenerateTestSellerDeviceSignals(dispatch_request_data);
-  ReportingDispatchRequestConfig config;
+  ReportingDispatchRequestConfig config{.report_result_udf_version =
+                                            kTestReportResultVersion};
   absl::Notification notification;
   EXPECT_CALL(mock_dispatch_client, BatchExecute)
       .WillOnce([&notification](std::vector<DispatchRequest>& batch,
@@ -180,6 +181,7 @@ TEST_F(SellerReportingManagerTest,
   notification.WaitForNotification();
   ASSERT_TRUE(status.ok());
 }
+
 TEST_F(SellerReportingManagerTest,
        PerformReportResult_DispatchRequestFailsAndStatusNotOkReturned) {
   auto report_result_callback =
@@ -188,14 +190,15 @@ TEST_F(SellerReportingManagerTest,
       ParseJsonString(kExpectedSellerDeviceSignals);
   MockV8DispatchClient mock_dispatch_client;
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
   SellerReportingDispatchRequestData dispatch_request_data =
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
   ASSERT_TRUE(document.ok()) << document.status();
-  ReportingDispatchRequestConfig config;
+  ReportingDispatchRequestConfig config = {.report_result_udf_version =
+                                               kTestReportResultVersion};
   absl::Notification notification;
   EXPECT_CALL(mock_dispatch_client, BatchExecute)
       .WillOnce([&notification](std::vector<DispatchRequest>& batch,
@@ -211,6 +214,7 @@ TEST_F(SellerReportingManagerTest,
   notification.WaitForNotification();
   ASSERT_FALSE(status.ok());
 }
+
 TEST_F(SellerReportingManagerTest,
        ParseReportResultResponse_ParsesReportResultResponseSuccessfully) {
   server_common::log::SetGlobalPSVLogLevel(10);
@@ -221,7 +225,9 @@ TEST_F(SellerReportingManagerTest,
       .signals_for_winner = kTestSignalsForWinner};
   expected_response.interaction_reporting_urls.try_emplace(
       kTestInteractionEvent, kTestInteractionUrl);
-  ReportingDispatchRequestConfig config = {.enable_adtech_code_logging = true};
+  ReportingDispatchRequestConfig config = {
+      .enable_adtech_code_logging = true,
+      .report_result_udf_version = kTestReportResultVersion};
   ReportingResponseLogs console_logs;
   console_logs.logs.emplace_back(kTestLog);
   console_logs.warnings.emplace_back(kTestLog);

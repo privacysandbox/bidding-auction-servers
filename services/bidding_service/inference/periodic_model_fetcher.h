@@ -44,6 +44,10 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 // it has not successfully registered with the inference sidecar.
 class PeriodicModelFetcher : public FetcherInterface {
  public:
+  // Record of a loaded model inside the model fetcher.
+  struct ModelEntry {
+    std::string checksum;
+  };
   PeriodicModelFetcher(
       absl::string_view config_path,
       std::unique_ptr<
@@ -70,6 +74,9 @@ class PeriodicModelFetcher : public FetcherInterface {
   void InternalModelFetchAndRegistration();
   // Fetches the metadata of models to be downloaded from the cloud bucket.
   absl::StatusOr<ModelConfig> FetchModelConfig();
+  // Garbage collect models with the provided model paths.
+  void GarbageCollectModels(
+      const absl::flat_hash_set<std::string>& model_paths);
 
   const std::string config_path_;
   std::unique_ptr<privacy_sandbox::bidding_auction_servers::BlobFetcherBase>
@@ -80,9 +87,8 @@ class PeriodicModelFetcher : public FetcherInterface {
   // Keeps track of the next async task for the executor.
   absl::optional<server_common::TaskId> task_id_;
   const absl::Duration fetch_period_ms_;
-  // For defining the inference metric partiton and for avoid fetching the same
-  // model more than once.
-  absl::flat_hash_set<std::string> current_models_;
+  // Maintains a map from currently loaded models to their metadata.
+  absl::flat_hash_map<std::string, ModelEntry> model_entry_map_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

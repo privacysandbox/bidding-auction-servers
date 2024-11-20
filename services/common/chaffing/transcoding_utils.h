@@ -73,6 +73,7 @@ absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
   // Create backing array for QuicheDataWriter and initialize the writer with
   // it.
   const int kEncodedDataSize = payload_size;
+  // NOLINTNEXTLINE
   char encoded_payload[kEncodedDataSize];
   quiche::QuicheDataWriter writer(kEncodedDataSize, encoded_payload);
 

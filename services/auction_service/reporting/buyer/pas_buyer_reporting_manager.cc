@@ -50,11 +50,11 @@ inline std::vector<std::shared_ptr<std::string>> GetPASReportWinInput(
       std::make_shared<std::string>(
           dispatch_request_config.enable_adtech_code_logging ? "true"
                                                              : "false");
-  std::string egress_payload(*dispatch_request_data.egress_payload);
+  std::string egress_payload(dispatch_request_data.egress_payload.value_or(""));
   input[PASReportWinArgIndex(PASReportWinArgs::kEgressPayload)] =
       std::make_shared<std::string>(std::move(egress_payload));
   std::string temporary_unlimited_egress_payload(
-      *dispatch_request_data.temporary_unlimited_egress_payload);
+      dispatch_request_data.temporary_unlimited_egress_payload.value_or(""));
   input[PASReportWinArgIndex(
       PASReportWinArgs::kTemporaryUnlimitedEgressPayload)] =
       std::make_shared<std::string>(

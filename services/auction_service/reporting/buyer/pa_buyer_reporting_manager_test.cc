@@ -73,7 +73,6 @@ void VerifyDispatchRequest(
     const SellerReportingDispatchRequestData& seller_dispatch_request_data,
     std::vector<DispatchRequest>& batch) {
   EXPECT_EQ(batch.size(), 1);
-  std::string expected_auction_config = kTestAuctionConfig;
   EXPECT_EQ(batch[0].id, test_data.id);
   EXPECT_EQ(batch[0].version_string, test_data.expected_version);
   EXPECT_EQ(batch[0].handler_name, test_data.expected_handler_name);
@@ -107,8 +106,8 @@ TEST_F(PerformReportWin, DispatchesRequestToReportWin) {
   RequestLogContext log_context({},
                                 server_common::ConsentedDebugConfiguration());
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   SellerReportingDispatchRequestData seller_dispatch_request_data =
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
 
@@ -153,8 +152,8 @@ TEST_F(PerformReportWin, DispatchRequestFailsAndStatusNotOkReturned) {
   RequestLogContext log_context({},
                                 server_common::ConsentedDebugConfiguration());
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   SellerReportingDispatchRequestData seller_dispatch_request_data =
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
 
@@ -199,8 +198,8 @@ TEST_F(PerformReportWin, ReportWinNotExecutedWhenVersionLookupFails) {
   RequestLogContext log_context({},
                                 server_common::ConsentedDebugConfiguration());
   ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
-  PostAuctionSignals post_auction_signals =
-      GeneratePostAuctionSignals(winning_ad_score, kUsdIsoCode);
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kUsdIsoCode, kSellerDataVersion);
   SellerReportingDispatchRequestData seller_dispatch_request_data =
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
 

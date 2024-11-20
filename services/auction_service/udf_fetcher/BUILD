@@ -13,6 +13,11 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_proto_library", "cc_test")
+load(
+    "@rules_pkg//pkg:mappings.bzl",
+    "pkg_attributes",
+    "pkg_files",
+)
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(default_visibility = [
@@ -82,7 +87,10 @@ proto_library(
 
 cc_proto_library(
     name = "auction_code_fetch_config_cc_proto",
-    visibility = ["//services/auction_service:__subpackages__"],
+    visibility = [
+        "//services/auction_service:__subpackages__",
+        "//services/seller_frontend_service:__subpackages__",
+    ],
     deps = [":auction_code_fetch_config_proto"],
 )
 
@@ -133,9 +141,11 @@ cc_library(
         "//services/auction_service/code_wrapper:buyer_reporting_udf_wrapper",
         "//services/auction_service/code_wrapper:seller_code_wrapper",
         "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/data:runtime_config",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
         "//services/common/data_fetch:periodic_bucket_code_fetcher",
         "//services/common/data_fetch:periodic_code_fetcher",
+        "//services/common/data_fetch:version_util",
         "//services/common/loggers:request_log_context",
         "//services/common/util:file_util",
         "@com_google_absl//absl/status",
@@ -147,10 +157,23 @@ cc_library(
     ],
 )
 
+exports_files(["testScoreAds.js"])
+
+pkg_files(
+    name = "packaged_scoreAds",
+    srcs = [":testScoreAds.js"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/services/auction_service/udf_fetcher/",
+    visibility = ["//visibility:public"],
+)
+
 cc_test(
     name = "seller_udf_fetch_manager_test",
     size = "small",
     srcs = ["seller_udf_fetch_manager_test.cc"],
+    data = [
+        ":packaged_scoreAds",
+    ],
     deps = [
         ":seller_udf_fetch_manager",
         "//services/auction_service/code_wrapper:buyer_reporting_udf_wrapper",

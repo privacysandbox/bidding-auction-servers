@@ -40,6 +40,7 @@ function create_gcp_dist() {
 #   * the build flavor
 # Globals:
 #   WORKSPACE
+#   KOKORO_ENV_NAME (optional) name of Kokoro environment (dev or staging)
 #######################################
 function upload_image_to_repo() {
   local -r service="$1"
@@ -51,20 +52,24 @@ function upload_image_to_repo() {
   local -r local_image_uri=bazel/production/packaging/gcp/${service}:server_docker_image
   local -r repo_image_uri="${gcp_image_repo}/${service}"
   local -r env_tag="${repo_image_uri}:${gcp_image_tag}"
-  local -r git_tag="${repo_image_uri}:$(git -C ${WORKSPACE} describe --tags --always || echo no-git-version)-${build_flavor}"
+  local -r git_tag="${repo_image_uri}:$(git -C "${WORKSPACE}" describe --tags --always || echo no-git-version)-${build_flavor}"
 
-  printf "==== Uploading local image to Artifact Repository ${gcp_image_repo} =====\n"
+  printf "==== Uploading local image to Artifact Repository %s =====\n" "${gcp_image_repo}"
   # Note: if the following commands fail, double check that the local environment has
   # authenticated to the repo.
   docker load -i "${WORKSPACE}/${server_image}"
 
-  # Push with env tag.
-  docker tag "${local_image_uri}" "${env_tag}"
-  docker push "${env_tag}"
+  local -a image_tags=("${env_tag}" "${git_tag}")
+  if [[ "${KOKORO_ENV_NAME}" == "staging" ]]; then
+    local -r version="$(cat "${WORKSPACE}/version.txt")"
+    local -r release_tag="${repo_image_uri}:staging-release-${version}"
+    image_tags+=("${release_tag}")
+  fi
 
-  # Push with git tag.
-  docker tag "${local_image_uri}" "${git_tag}"
-  docker push "${git_tag}"
+  for tag in "${image_tags[@]}"; do
+    docker tag "${local_image_uri}" "${tag}"
+    docker push "${tag}"
+  done
 
   # Get the image digest.
   # Fetched format from docker inspect is: <repo url>@sha256:<64 char hash>

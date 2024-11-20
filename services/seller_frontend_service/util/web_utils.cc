@@ -241,6 +241,9 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
         }
         break;
       }
+      default:
+        PS_VLOG(5) << "Serialized CBOR browser signals has an unexpected key: "
+                   << signal.key;
     }
   }
 
@@ -253,6 +256,28 @@ absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = cbor_move(cbor_build_stringn(value.data(), value.size()))};
+  if (!cbor_map_add(&root, kv)) {
+    error_handler(grpc::Status(
+        grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
+    return absl::InternalError("");
+  }
+
+  return absl::OkStatus();
+}
+
+inline unsigned char* ReinterpretConstCharPtrAsUnsignedPtr(const char* ptr) {
+  return const_cast<unsigned char*>(
+      reinterpret_cast<const unsigned char*>(ptr));
+}
+
+absl::Status CborSerializeByteString(absl::string_view key,
+                                     const std::string& value,
+                                     ErrorHandler error_handler,
+                                     cbor_item_t& root) {
+  struct cbor_pair kv = {
+      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .value = cbor_move(cbor_build_bytestring(
+          ReinterpretConstCharPtrAsUnsignedPtr(value.data()), value.size()))};
   if (!cbor_map_add(&root, kv)) {
     error_handler(grpc::Status(
         grpc::INTERNAL, absl::StrCat("Failed to serialize ", key, " to CBOR")));
@@ -340,10 +365,10 @@ absl::Status CborSerializekAnonJoinCandidates(
     ErrorHandler error_handler, cbor_item_t& root) {
   ScopedCbor serialized_kanon_join_candidates(
       cbor_new_definite_map(kNumKAnonJoinCandidateKeys));
-  PS_RETURN_IF_ERROR(CborSerializeString(
+  PS_RETURN_IF_ERROR(CborSerializeByteString(
       kAdRenderUrlHash, kanon_join_candidate.ad_render_url_hash(),
       error_handler, **serialized_kanon_join_candidates));
-  PS_RETURN_IF_ERROR(CborSerializeString(
+  PS_RETURN_IF_ERROR(CborSerializeByteString(
       kReportingIdHash, kanon_join_candidate.reporting_id_hash(), error_handler,
       **serialized_kanon_join_candidates));
   const auto& input_ad_component_render_urls_hash =
@@ -408,12 +433,13 @@ absl::Status CborSerializekAnonGhostWinnerForTopLevelAuction(
 
   ScopedCbor serialized_ad_component_render_urls(cbor_new_definite_array(
       ghost_winner_for_top_level_auction.ad_component_render_urls_size()));
-  for (const auto& ad_component_render_url :
+  for (auto& ad_component_render_url :
        ghost_winner_for_top_level_auction.ad_component_render_urls()) {
-    if (!cbor_array_push(
-            *serialized_ad_component_render_urls,
-            cbor_move(cbor_build_stringn(ad_component_render_url.data(),
-                                         ad_component_render_url.size())))) {
+    if (!cbor_array_push(*serialized_ad_component_render_urls,
+                         cbor_move(cbor_build_bytestring(
+                             ReinterpretConstCharPtrAsUnsignedPtr(
+                                 ad_component_render_url.data()),
+                             ad_component_render_url.size())))) {
       error_handler(grpc::Status(grpc::INTERNAL,
                                  "Failed to serialize a ad component render "
                                  "url for ghost winner to CBOR"));
@@ -444,7 +470,7 @@ absl::Status CborSerializekAnonGhostWinnerForTopLevelAuction(
   PS_RETURN_IF_ERROR(
       CborSerializeString(kSelectableBuyerAndSellerReportingId,
                           ghost_winner_for_top_level_auction
-                              .selectable_buyer_and_seller_reporting_id(),
+                              .selected_buyer_and_seller_reporting_id(),
                           error_handler, **serialized_ghost_winner));
   return absl::OkStatus();
 }
@@ -861,6 +887,10 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
                 ->mutable_top_level_seller_reporting_urls()
                 ->set_reporting_url(reporting_url_value);
             break;
+          default:
+            PS_VLOG(5)
+                << "Serialized CBOR reporting URL has an unexpected key: "
+                << outer_key;
         }
       } break;
       // kInteractionReportingUrls
@@ -892,9 +922,16 @@ absl::Status CborDecodeReportingUrls(cbor_item_t* serialized_reporting_map,
                   ->mutable_interaction_reporting_urls()
                   ->try_emplace(event, url);
               break;
+            default:
+              PS_VLOG(5) << "Serialized CBOR interaction reporting URL has an "
+                            "unexpected key: "
+                         << outer_key;
           }
         }
       }
+      default:
+        PS_VLOG(5) << "Serialized CBOR reporting URLs have an unexpected key: "
+                   << reporting_url_key;
     }
   }
   return absl::OkStatus();
@@ -1007,7 +1044,7 @@ absl::Status CborDecodeGhostWinnerForTopLevelAuctionToProto(
         ghost_winner.set_buyer_reporting_id(CborDecodeString(kv.value));
         break;
       case 7:  // kSelectableBuyerAndSellerReportingId
-        ghost_winner.set_selectable_buyer_and_seller_reporting_id(
+        ghost_winner.set_selected_buyer_and_seller_reporting_id(
             CborDecodeString(kv.value));
         break;
       default:
@@ -1170,6 +1207,9 @@ server_common::ConsentedDebugConfiguration DecodeConsentedDebugConfig(
         }
         break;
       }
+      default:
+        PS_VLOG(5) << "Serialized CBOR consented debug have an unexpected key: "
+                   << DecodeCborString(entry.key);
     }
   }
   return consented_debug_config;
@@ -1678,6 +1718,9 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
                                    error_accumulator, fail_fast);
           RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
         }
+        default:
+          PS_VLOG(5) << "Serialized CBOR IG has an unexpected key: "
+                     << DecodeCborString(ig_entry.key);
       }
     }
   }

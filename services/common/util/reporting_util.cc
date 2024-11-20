@@ -75,6 +75,7 @@ PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
             /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
             /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
             kUnknownBidCurrencyCode,
+            /*seller_data_version=*/0,
             /*DefaultHighestScoringOtherBid=*/0.0,
             /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
             kDefaultHighestScoringOtherBidInterestGroupOwner,
@@ -92,6 +93,7 @@ PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
           /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
           /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
           kUnknownBidCurrencyCode,
+          /*seller_data_version=*/0,
           /*DefaultHighestScoringOtherBid=*/0.0,
           /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
           kDefaultHighestScoringOtherBidInterestGroupOwner,
@@ -103,7 +105,7 @@ PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
 
 PostAuctionSignals GeneratePostAuctionSignals(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score,
-    std::string seller_currency) {
+    std::string seller_currency, const uint32_t seller_data_version) {
   // If there is no winning ad, return with default signals values.
   if (!winning_ad_score) {
     return {kDefaultWinningInterestGroupName,
@@ -112,6 +114,7 @@ PostAuctionSignals GeneratePostAuctionSignals(
             /*DefaultWinningBidCurrency=*/kUnknownBidCurrencyCode,
             /*winning_bid_in_seller_currency=*/kDefaultWinningBid,
             std::move(seller_currency),
+            seller_data_version,
             /*DefaultHighestScoringOtherBid=*/0.0,
             /*DefaultHighestScoringOtherBidCurrency=*/kUnknownBidCurrencyCode,
             kDefaultHighestScoringOtherBidInterestGroupOwner,
@@ -180,6 +183,7 @@ PostAuctionSignals GeneratePostAuctionSignals(
           bid_currency,
           winning_bid_in_seller_currency,
           std::move(seller_currency),
+          seller_data_version,
           highest_scoring_other_bid,
           highest_scoring_other_bid_currency,
           std::move(highest_scoring_other_bid_ig_owner),

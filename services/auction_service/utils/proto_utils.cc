@@ -155,7 +155,7 @@ std::string MakeOpenBidMetadataJson(
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view bid_currency) {
+    absl::string_view bid_currency, const uint32_t seller_data_version) {
   std::string bid_metadata = "{";
   if (!interest_group_owner.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON", kIGOwnerPropertyForScoreAd,
@@ -185,6 +185,11 @@ std::string MakeOpenBidMetadataJson(
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                     kBidCurrencyPropertyForScoreAd, R"JSON(":")JSON",
                     kUnknownBidCurrencyCode, R"JSON(",)JSON");
+  }
+  if (seller_data_version > 0) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kSellerDataVersionPropertyForScoreAd, R"JSON(":)JSON",
+                    seller_data_version, R"JSON(,)JSON");
   }
   return bid_metadata;
 }
@@ -257,10 +262,11 @@ std::string MakeBidMetadata(
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view top_level_seller, absl::string_view bid_currency) {
+    absl::string_view top_level_seller, absl::string_view bid_currency,
+    const uint32_t seller_data_version) {
   std::string bid_metadata = MakeOpenBidMetadataJson(
       publisher_hostname, interest_group_owner, render_url,
-      ad_component_render_urls, bid_currency);
+      ad_component_render_urls, bid_currency, seller_data_version);
   // Only add top level seller to bid metadata if it's non empty.
   if (!top_level_seller.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
@@ -277,10 +283,11 @@ std::string MakeBidMetadataForTopLevelAuction(
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view component_seller, absl::string_view bid_currency) {
+    absl::string_view component_seller, absl::string_view bid_currency,
+    const uint32_t seller_data_version) {
   std::string bid_metadata = MakeOpenBidMetadataJson(
       publisher_hostname, interest_group_owner, render_url,
-      ad_component_render_urls, bid_currency);
+      ad_component_render_urls, bid_currency, seller_data_version);
   absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                   kComponentSellerFieldPropertyForScoreAd, R"JSON(":")JSON",
                   component_seller, R"JSON(",)JSON");

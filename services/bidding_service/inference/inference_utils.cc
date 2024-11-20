@@ -132,8 +132,8 @@ SandboxExecutor& Executor() {
 
   // TODO(b/317124648): Pass a SandboxExecutor object via Roma's `TMetadata`.
   static SandboxExecutor* executor = new SandboxExecutor(
-      *absl::GetFlag(FLAGS_inference_sidecar_binary_path),
-      {*absl::GetFlag(FLAGS_inference_sidecar_runtime_config)});
+      absl::GetFlag(FLAGS_inference_sidecar_binary_path).value_or(""),
+      {absl::GetFlag(FLAGS_inference_sidecar_runtime_config).value_or("")});
   return *executor;
 }
 

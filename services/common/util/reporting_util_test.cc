@@ -33,12 +33,13 @@ inline constexpr char kWinningIgName[] = "winning_ig_name";
 inline constexpr char kWinningIgOwner[] = "winning_ig_owner";
 inline constexpr char kSellerCurrency[] = "GBP";
 inline constexpr float kIncomingBidInSellerCurrency = 1.776f;
+inline constexpr uint32_t kSellerDataVersion = 1989;
 
 TEST(PostAuctionSignalsTest, HasAllSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(2, 2, 2));
   PostAuctionSignals signals =
-      GeneratePostAuctionSignals(ad_score, kSellerCurrency);
+      GeneratePostAuctionSignals(ad_score, kSellerCurrency, kSellerDataVersion);
   EXPECT_EQ(ad_score->interest_group_owner(), signals.winning_ig_owner);
   EXPECT_EQ(ad_score->interest_group_name(), signals.winning_ig_name);
   EXPECT_EQ(ad_score->buyer_bid(), signals.winning_bid);
@@ -54,7 +55,8 @@ TEST(PostAuctionSignalsTest, HasAllSignals) {
 TEST(PostAuctionSignalsTest, HasWinningBidSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(0));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score, "");
+  PostAuctionSignals signals = GeneratePostAuctionSignals(
+      ad_score, /*seller_currency=*/"", kSellerDataVersion);
   EXPECT_EQ(ad_score->interest_group_owner(), signals.winning_ig_owner);
   EXPECT_EQ(ad_score->interest_group_name(), signals.winning_ig_name);
   EXPECT_EQ(ad_score->buyer_bid(), signals.winning_bid);
@@ -68,7 +70,7 @@ TEST(PostAuctionSignalsTest, HasHighestOtherBidSignals) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(2));
   PostAuctionSignals signals =
-      GeneratePostAuctionSignals(ad_score, kSellerCurrency);
+      GeneratePostAuctionSignals(ad_score, kSellerCurrency, kSellerDataVersion);
   EXPECT_TRUE(signals.has_highest_scoring_other_bid);
   EXPECT_NE(signals.highest_scoring_other_bid_ig_owner, "");
   EXPECT_GT(signals.highest_scoring_other_bid, 0.0);
@@ -78,12 +80,14 @@ TEST(PostAuctionSignalsTest, HasHighestOtherBidSignals) {
 TEST(PostAuctionSignalsTest, HasRejectionReasons) {
   std::optional<ScoreAdsResponse::AdScore> ad_score =
       std::make_optional(MakeARandomAdScore(0, 2, 2));
-  PostAuctionSignals signals = GeneratePostAuctionSignals(ad_score, "");
+  PostAuctionSignals signals = GeneratePostAuctionSignals(
+      ad_score, /*seller_currency=*/"", kSellerDataVersion);
   EXPECT_GT(signals.rejection_reason_map.size(), 0);
 }
 
 TEST(PostAuctionSignalsTest, DoesNotHaveAnySignal) {
-  PostAuctionSignals signals = GeneratePostAuctionSignals(std::nullopt, "");
+  PostAuctionSignals signals = GeneratePostAuctionSignals(
+      std::nullopt, /*seller_currency=*/"", /*seller_data_version=*/0);
   EXPECT_EQ(signals.winning_ig_owner, "");
   EXPECT_EQ(signals.winning_ig_name, "");
   EXPECT_EQ(signals.winning_bid, 0.0);
@@ -305,6 +309,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsNone) {
       .winning_bid_currency = "YEN",
       .winning_bid_in_seller_currency = 0.0,
       .seller_currency = "",
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,
@@ -334,6 +339,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, SellerCurrencySet) {
       .winning_bid = 0.0,
       .winning_bid_in_seller_currency = kIncomingBidInSellerCurrency,
       .seller_currency = kSellerCurrency,
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = 0.1776,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,
@@ -360,6 +366,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsWinner) {
       .winning_bid = winning_bid,
       .winning_bid_in_seller_currency = 0.0,
       .seller_currency = "",
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,
@@ -382,6 +389,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerMadeHighestOtherBid) {
       .winning_bid = winning_bid,
       .winning_bid_in_seller_currency = 0.0,
       .seller_currency = "",
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = highest_scoring_other_bid,
       .highest_scoring_other_bid_ig_owner = kTestIgOwner,
       .has_highest_scoring_other_bid = true,
@@ -405,6 +413,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgOwnerIsBoth) {
       .winning_bid = winning_bid,
       .winning_bid_in_seller_currency = 0.0,
       .seller_currency = "",
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = highest_scoring_other_bid,
       .highest_scoring_other_bid_ig_owner = kWinningIgOwner,
       .has_highest_scoring_other_bid = true,
@@ -439,6 +448,7 @@ TEST(GetPlaceholderDataForInterestGroupOwnerTest, IgHasRejectionReason) {
       .winning_bid = winning_bid,
       .winning_bid_in_seller_currency = 0.0,
       .seller_currency = "",
+      .seller_data_version = kSellerDataVersion,
       .highest_scoring_other_bid = 0.0,
       .highest_scoring_other_bid_ig_owner = kEmptyString,
       .has_highest_scoring_other_bid = false,

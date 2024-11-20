@@ -42,14 +42,16 @@ std::string MakeBidMetadata(
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view top_level_seller, absl::string_view bid_currency);
+    absl::string_view top_level_seller, absl::string_view bid_currency,
+    const uint32_t seller_data_version);
 
 std::string MakeBidMetadataForTopLevelAuction(
     absl::string_view publisher_hostname,
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view component_seller, absl::string_view bid_currency);
+    absl::string_view component_seller, absl::string_view bid_currency,
+    const uint32_t seller_data_version);
 
 std::shared_ptr<std::string> BuildAuctionConfig(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request);

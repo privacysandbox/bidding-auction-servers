@@ -24,12 +24,14 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
+#include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/data_fetch/fetcher_interface.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/util/file_util.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/interface/errors.h"
@@ -43,21 +45,20 @@ constexpr int kJsBlobIndex = 0;
 }  // namespace
 
 absl::Status SellerUdfFetchManager::Init() {
-  if (udf_config_.fetch_mode() != blob_fetch::FETCH_MODE_LOCAL) {
-    if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
-      buyer_reporting_udf_fetch_manager_ =
-          std::make_unique<BuyerReportingUdfFetchManager>(
-              &udf_config_, &buyer_reporting_http_fetcher_, &executor_,
-              GetUdfWrapperForBuyer(), &dispatcher_);
-      PS_RETURN_IF_ERROR(buyer_reporting_udf_fetch_manager_->Start())
-          << kBuyerReportingFailedStartup;
-    } else {
-      buyer_reporting_fetcher_ = std::make_unique<BuyerReportingFetcher>(
-          udf_config_, &buyer_reporting_http_fetcher_, &executor_);
-      PS_RETURN_IF_ERROR(buyer_reporting_fetcher_->Start())
-          << kBuyerReportingFailedStartup;
-    }
+  if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+    buyer_reporting_udf_fetch_manager_ =
+        std::make_unique<BuyerReportingUdfFetchManager>(
+            &udf_config_, &buyer_reporting_http_fetcher_, &executor_,
+            GetUdfWrapperForBuyer(), &dispatcher_);
+    PS_RETURN_IF_ERROR(buyer_reporting_udf_fetch_manager_->Start())
+        << kBuyerReportingFailedStartup;
+  } else {
+    buyer_reporting_fetcher_ = std::make_unique<BuyerReportingFetcher>(
+        udf_config_, &buyer_reporting_http_fetcher_, &executor_);
+    PS_RETURN_IF_ERROR(buyer_reporting_fetcher_->Start())
+        << kBuyerReportingFailedStartup;
   }
+
   switch (udf_config_.fetch_mode()) {
     case blob_fetch::FETCH_MODE_LOCAL: {
       return InitializeLocalCodeFetch();
@@ -78,12 +79,28 @@ absl::Status SellerUdfFetchManager::Init() {
 
 absl::Status SellerUdfFetchManager::End() {
   if (udf_config_.fetch_mode() != blob_fetch::FETCH_MODE_LOCAL) {
-    if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
-      buyer_reporting_udf_fetch_manager_->End();
-    } else {
-      buyer_reporting_fetcher_->End();
-    }
     seller_code_fetcher_->End();
+  }
+  if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+    buyer_reporting_udf_fetch_manager_->End();
+  } else {
+    buyer_reporting_fetcher_->End();
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status SellerUdfFetchManager::ConfigureRuntimeDefaults(
+    AuctionServiceRuntimeConfig& output) {
+  if (udf_config_.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
+    output.use_per_request_udf_versioning = true;
+    PS_ASSIGN_OR_RETURN(
+        output.default_score_ad_version,
+        GetBucketBlobVersion(udf_config_.auction_js_bucket(),
+                             udf_config_.auction_js_bucket_default_blob()));
+  } else {
+    output.use_per_request_udf_versioning = false;
+    output.default_score_ad_version = kScoreAdBlobVersion;
   }
   return absl::OkStatus();
 }
@@ -127,7 +144,14 @@ absl::Status SellerUdfFetchManager::InitializeLocalCodeFetch() {
   PS_ASSIGN_OR_RETURN(auto adtech_code_blob,
                       GetFileContent(udf_config_.auction_js_path(),
                                      /*log_on_error=*/true));
-
+  if (udf_config_.enable_seller_and_buyer_udf_isolation()) {
+    std::string wrapped_seller_code =
+        GetSellerWrappedCode(std::move(adtech_code_blob),
+                             udf_config_.enable_report_result_url_generation(),
+                             udf_config_.enable_private_aggregate_reporting());
+    return dispatcher_.LoadSync(kScoreAdBlobVersion,
+                                std::move(wrapped_seller_code));
+  }
   adtech_code_blob = GetSellerWrappedCode(
       adtech_code_blob, udf_config_.enable_report_result_url_generation(),
       false, {});
@@ -139,7 +163,6 @@ absl::StatusOr<std::unique_ptr<PeriodicBucketCodeFetcher>>
 SellerUdfFetchManager::InitializeBucketCodeFetch() {
   PS_RETURN_IF_ERROR(InitBucketClient());
 
-  std::string bucket_name = udf_config_.auction_js_bucket();
   if (udf_config_.auction_js_bucket().empty()) {
     return absl::InvalidArgumentError(
         "Bucket fetch mode requires a non-empty bucket name.");

@@ -15,14 +15,11 @@
 
 source $(dirname "$0")/common
 
-export AUCTION_JS_URL=""
-export BUYER_REPORT_WIN_URL=""
-export BUYER_REPORT_WIN_SCRIPT=""
-
-export SERVER_START_CMD=$(cat << END
+SERVER_START_CMD=$(cat << END
 /server/bin/server \
+--https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --init_config_client="false" \
---port=50061 \
+--port=${AUCTION_PORT} \
 --enable_auction_service_benchmark="true" \
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
@@ -30,46 +27,28 @@ export SERVER_START_CMD=$(cat << END
 --telemetry_config="mode: OFF" \
 --roma_timeout_ms="120000" \
 --enable_report_win_input_noising="false" \
---seller_code_fetch_config='{
-      "fetchMode": 0,
-      "auctionJsPath": "",
-      "auctionJsUrl": "${AUCTION_JS_URL}",
-      "urlFetchPeriodMs": 13000000,
-      "urlFetchTimeoutMs": 30000,
-      "enableSellerDebugUrlGeneration": true,
-      "enableReportResultUrlGeneration": true,
-      "enableReportWinUrlGeneration": true,
-      "enablePrivateAggregateReporting": false,
-      "buyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"${BUYER_REPORT_WIN_SCRIPT}"},
-      "protectedAppSignalsBuyerReportWinJsUrls": {"${BUYER_REPORT_WIN_URL}":"https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js"}
-    }' \
+"${SELLER_CODE_FETCH_CONFIG}" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
---ps_verbosity=2 \
+--ps_verbosity=${PS_VERBOSITY} \
 --enable_protected_audience="true" \
+--enable_kanon="false" \
 --auction_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --auction_tcmalloc_max_total_thread_cache_bytes=10737418240 \
 --enable_protected_app_signals="false" && exit
 END
 )
 
-
 if [[ $1 == "--gdb" ]]; then
   export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-  declare -a -r DOCKER_RUN_ARGS=(
+  export EXTRA_DOCKER_RUN_ARGS=(
     "--volume=${PROJECT_ROOT}/bazel-bin/services/auction_service/server:/server/bin/server"
     "--name=auction"
   )
-  export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
   docker_image_uri="$(docker load -i dist/debian/auction_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  declare -a DOCKER_RUN_ARGS=(
-      "--network=host"
-      "--security-opt=seccomp=unconfined"
-      "--security-opt=apparmor=unconfined"
-  )
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

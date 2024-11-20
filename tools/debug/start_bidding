@@ -25,6 +25,12 @@ USAGE
     exit 0
 }
 
+source $(dirname "$0")/common
+
+BIDDING_JS_URL="${BIDDING_JS_URL:-}"
+EGRESS_SCHEMA_URL="${EGRESS_SCHEMA_URL:-}"
+INFERENCE_ARGS="${INFERENCE_ARGS:-}"
+
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
 declare GENERATE_BID_FILEPATH=""
@@ -69,11 +75,8 @@ function get_libcddl_path() {
   done
 }
 
-export BIDDING_JS_URL=""
-export EGRESS_SCHEMA_URL=""
-
 # Set default buyer code fetch config
-export BUYER_CODE_FETCH_CONFIG=$(cat << END
+BUYER_CODE_FETCH_CONFIG=$(cat << END
 {
   "fetchMode": ${FETCH_MODE},
   "biddingJsPath": "/generateBid.js",
@@ -90,8 +93,6 @@ export BUYER_CODE_FETCH_CONFIG=$(cat << END
 }
 END
 )
-
-export INFERENCE_ARGS=""
 
 # Update buyer code fetch config if using JS file
 if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
@@ -124,10 +125,12 @@ END
 )
 fi
 
-export SERVER_START_CMD=$(cat << END
+SERVER_START_CMD=$(cat << END
 /server/bin/server \
+--https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --enable_bidding_service_benchmark="true" \
---init_config_client="false" --port=50057 \
+--init_config_client="false" \
+--port=${BIDDING_PORT} \
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
@@ -142,11 +145,12 @@ export SERVER_START_CMD=$(cat << END
     }' \
 --buyer_code_fetch_config='${BUYER_CODE_FETCH_CONFIG}' \
 --enable_protected_app_signals="false" \
---enable_otel_based_logging="false" \
+--enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --enable_protected_audience="true" \
+--enable_kanon="false" \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \
---ps_verbosity=2 \
+--ps_verbosity=${PS_VERBOSITY} \
 --bidding_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bidding_tcmalloc_max_total_thread_cache_bytes=10737418240 \
 --ad_retrieval_timeout_ms="60000" \
@@ -158,8 +162,7 @@ if [[ ${USE_GDB} -eq 1 ]]; then
   cddl_path=$(get_libcddl_path)
   echo "Using libcddl path: ${cddl_path}"
 
-  source $(dirname "$0")/common
-  declare -a -r DOCKER_RUN_ARGS=(
+  export EXTRA_DOCKER_RUN_ARGS=(
     "--volume=${cddl_path}:/usr/lib/libcddl.so"
     "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server/bin/server"
     "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
@@ -168,22 +171,14 @@ if [[ ${USE_GDB} -eq 1 ]]; then
     "--name=bidding"
   )
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
-    DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
+    EXTRA_DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
   fi
 
-  export EXTRA_DOCKER_RUN_ARGS="${COMMON_DOCKER_RUN_ARGS[@]} ${DOCKER_RUN_ARGS[@]}"
-
-  echo $EXTRA_DOCKER_RUN_ARGS
   ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
   docker_image_uri="$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  declare -a DOCKER_RUN_ARGS=(
-      "--network=host"
-      "--security-opt=seccomp=unconfined"
-      "--security-opt=apparmor=unconfined"
-  )
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
     DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
   fi

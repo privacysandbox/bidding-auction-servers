@@ -42,6 +42,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/service_utils.h"
+#include "services/common/test/utils/test_init.h"
 #include "services/common/test/utils/test_utils.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
@@ -178,6 +179,7 @@ GetBidsConfig CreateGetBidsConfig(bool is_tkv_v2_enabled = false) {
 class BuyerFrontEndServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    CommonTestInit();
     server_common::telemetry::TelemetryConfig config_proto;
     config_proto.set_mode(server_common::telemetry::TelemetryConfig::PROD);
     metric::MetricContextMap<GetBidsRequest>(

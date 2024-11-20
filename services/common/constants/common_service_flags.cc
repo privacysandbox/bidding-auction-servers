@@ -64,6 +64,9 @@ ABSL_FLAG(std::optional<int>, key_refresh_flow_run_frequency_seconds,
 // Master flag for controlling all the features that needs to turned on for
 // testing.
 ABSL_FLAG(std::optional<bool>, test_mode, std::nullopt, "Enable test mode");
+ABSL_FLAG(std::optional<bool>, https_fetch_skips_tls_verification, std::nullopt,
+          "Whether we skip ALL tls verification on HTTPS fetch requests from "
+          "libcurl. Only recommended for local testing.");
 ABSL_FLAG(
     std::optional<privacy_sandbox::server_common::telemetry::TelemetryFlag>,
     telemetry_config, std::nullopt, "configure telemetry.");
@@ -99,14 +102,20 @@ ABSL_FLAG(std::optional<int>, debug_sample_rate_micro, 0,
           "determine the sampling rate of requests eligible for debugging. "
           "Chosen requests export"
           "privacy_sandbox.bidding_auction_servers.EventMessage");
-ABSL_FLAG(
-    std::optional<bool>, enable_tkv_v2, false,
-    "If true, TKV requests are sent in v2 format. Historically, they were "
-    "sent in a simpler v1 protocol B&A needs to support both for some "
-    "time. Eventually, only v2 should be supported and this flag "
-    "should go away");
+ABSL_FLAG(std::optional<bool>, enable_tkv_v2_browser, false,
+          "If true, TKV requests are sent in v2 format for "
+          "CLIENT_TYPE_BROWSER. Historically, they were "
+          "sent in a simpler v1 protocol. B&A needs to support both for some "
+          "time. Eventually, only v2 should be supported and this flag "
+          "will be removed");
 ABSL_FLAG(std::optional<bool>, tkv_egress_tls, false,
           "If true, TKV service gRPC client uses TLS.");
 ABSL_FLAG(std::optional<bool>, enable_priority_vector, false,
           "Enable priority vector to filter out lower priority interest groups "
           "on the buyer side");
+ABSL_FLAG(
+    std::optional<bool>, consent_all_requests, false,
+    "If true, all request will be treated as consented request in non_prod");
+ABSL_FLAG(
+    std::optional<std::string>, seller_code_fetch_config, std::nullopt,
+    "The JSON string for config fields necessary for AdTech code fetching.");

@@ -42,8 +42,10 @@ cc_library(
         "multi_curl_http_fetcher_async.h",
     ],
     deps = [
+        "//services/common/constants:common_service_flags",
         "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

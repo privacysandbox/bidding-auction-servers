@@ -38,6 +38,16 @@ resource "aws_route53_record" "alb_alias_record" {
   type    = "A"
   zone_id = var.root_domain_zone_id
 
+  # The identifier makes the policy specific to domain name and the region that it is in.
+  set_identifier = "${var.service}-${var.environment}-${var.root_domain}-${var.region}-alb-alias-record"
+
+  # When DNS query for record is performed, Route53 evaluates the lowest
+  # latency resource, and returns the correct region's IP address.
+  # AWS documentation: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-latency.html
+  latency_routing_policy {
+    region = var.region
+  }
+
   alias {
     evaluate_target_health = false
     name                   = aws_lb.alb.dns_name

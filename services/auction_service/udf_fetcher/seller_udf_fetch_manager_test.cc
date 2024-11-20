@@ -25,6 +25,7 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/file_util.h"
@@ -125,6 +126,100 @@ TEST_F(SellerUdfFetchManagerTest, FetchModeLocalTriesFileLoad) {
 }
 
 TEST_F(SellerUdfFetchManagerTest,
+       FetchModeLocalSuccessWithSellerAndBuyerCodeIsolation) {
+  std::string test_file =
+      "services/auction_service/udf_fetcher/testScoreAds.js";
+  std::string expected_buyer_udf = R"JS_CODE(
+reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+}
+)JS_CODE";
+
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>>
+      valid_response_headers;
+  valid_response_headers.try_emplace(kUdfRequiredResponseHeader,
+                                     absl::StatusOr<std::string>("true"));
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
+  bool enable_protected_app_signals = true;
+  TestSellerUdfConfig test_udf_config = {
+      .fetch_mode = blob_fetch::FETCH_MODE_LOCAL,
+      .enable_seller_and_buyer_udf_isolation = true};
+  SellerCodeFetchConfig udf_config = GetTestSellerUdfConfig(test_udf_config);
+  udf_config.set_auction_js_path(test_file);
+  udf_config.set_enable_seller_and_buyer_udf_isolation(true);
+  EXPECT_CALL(*blob_storage_client_, Init).Times(0);
+  EXPECT_CALL(*blob_storage_client_, Run).Times(0);
+  EXPECT_CALL(*executor_, RunAfter).Times(1);
+  EXPECT_CALL(*http_fetcher_, FetchUrlsWithMetadata)
+      .Times(1)
+      .WillOnce(
+          [&test_udf_config, &expected_buyer_udf, &valid_response_headers](
+              const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+              OnDoneFetchUrlsWithMetadata done_callback) {
+            EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
+            EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
+            std::move(done_callback)({absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PABuyerOrigin.com"}),
+                                      absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PASBuyerOrigin.com"})});
+          });
+
+  EXPECT_CALL(*dispatcher_, LoadSync)
+      .Times(3)
+      .WillOnce([&expected_buyer_udf, &expected_pa_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
+        EXPECT_EQ(version, expected_pa_version);
+
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
+        return absl::OkStatus();
+      })
+      .WillOnce([&expected_buyer_udf, &expected_pas_version,
+                 &enable_protected_app_signals](std::string_view version,
+                                                absl::string_view blob_data) {
+        EXPECT_EQ(version, expected_pas_version);
+
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(expected_buyer_udf,
+                                              enable_protected_app_signals)));
+        return absl::OkStatus();
+      })
+      .WillOnce([](std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, kScoreAdBlobVersion);
+        // Verify that scoreAd, reportResult along with corresponding wrapper
+        // functions are loaded
+        EXPECT_NE(
+            blob_data.find(
+                "scoreAd(ad_metadata, bid, auction_config, scoring_signals, "
+                "bid_metadata, directFromSellerSignals)"),
+            std::string::npos);
+        EXPECT_NE(
+            blob_data.find("reportResult(auctionConfig, "
+                           "sellerReportingSignals, directFromSellerSignals)"),
+            std::string::npos);
+        EXPECT_NE(blob_data.find("scoreAdEntryFunction"), std::string::npos);
+        EXPECT_NE(blob_data.find("reportResultEntryFunction"),
+                  std::string::npos);
+        return absl::OkStatus();
+      });
+
+  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
+                                    executor_.get(), http_fetcher_.get(),
+                                    http_fetcher_.get(), dispatcher_.get(),
+                                    udf_config, enable_protected_app_signals);
+
+  absl::Status load_status = udf_fetcher.Init();
+  EXPECT_TRUE(load_status.ok());
+}
+
+TEST_F(SellerUdfFetchManagerTest,
        FetchModeBucketSucceedsLoadingWrappedBucketBlobs) {
   std::string fake_udf = "udf_data";
   std::string pa_buyer_origin = "pa_origin";
@@ -205,7 +300,11 @@ TEST_F(SellerUdfFetchManagerTest,
       .WillOnce([&udf_config, &fake_udf, &pa_buyer_origin, &pas_buyer_origin,
                  &pa_reporting_udf_data, &pas_reporting_udf_data](
                     std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, udf_config.auction_js_bucket_default_blob());
+        absl::StatusOr<std::string> result =
+            GetBucketBlobVersion(udf_config.auction_js_bucket(),
+                                 udf_config.auction_js_bucket_default_blob());
+        EXPECT_TRUE(result.ok());
+        EXPECT_EQ(version, *result);
         absl::flat_hash_map<std::string, std::string> pa_reporting_udfs;
         pa_reporting_udfs.try_emplace(pa_buyer_origin, pa_reporting_udf_data);
         absl::flat_hash_map<std::string, std::string> pas_reporting_udfs;
@@ -340,7 +439,11 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
       })
       .WillOnce([&udf_config, &expected_seller_udf](
                     std::string_view version, absl::string_view blob_data) {
-        EXPECT_EQ(version, udf_config.auction_js_bucket_default_blob());
+        absl::StatusOr<std::string> result =
+            GetBucketBlobVersion(udf_config.auction_js_bucket(),
+                                 udf_config.auction_js_bucket_default_blob());
+        EXPECT_TRUE(result.ok());
+        EXPECT_EQ(version, *result);
         EXPECT_EQ(blob_data,
                   GetSellerWrappedCode(
                       expected_seller_udf,

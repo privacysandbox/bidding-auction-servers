@@ -33,7 +33,7 @@ constexpr char kInterestGroupName[] = "meat_lovers";
 constexpr char kEurIsoCode[] = "EUR";
 constexpr char kUsdIsoCode[] = "USD";
 
-enum class BuyerMockType { DEBUG_REPORTING, BID_CURRENCY };
+enum class BuyerMockType : std::uint8_t { DEBUG_REPORTING, BID_CURRENCY };
 
 class AsyncReporterStub : public AsyncReporter {
  public:
@@ -348,6 +348,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
   auto context = std::make_unique<quiche::ObliviousHttpRequest::Context>(
       std::move(encryption_context));
   ScoringClientStub scoring_client;
+  KVAsyncClient kv_async_client;
 
   // Scoring signal provider
   ScoringSignalsProviderStub scoring_provider(request);
@@ -360,10 +361,12 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
   TrustedServersConfigClient config_client = CreateConfig();
   config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
   config_client.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
   config_client.SetOverride(kFalse, ENABLE_CHAFFING);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -380,7 +383,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
             config_proto))
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, clients,
-                                  config_client);
+                                  config_client, /*report_win_map=*/{});
     reactor.Execute();
   }
 }
@@ -403,6 +406,7 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
   auto context = std::make_unique<quiche::ObliviousHttpRequest::Context>(
       std::move(encryption_context));
   ScoringClientStub scoring_client;
+  KVAsyncClient kv_async_client;
 
   // Scoring signal provider
   ScoringSignalsProviderStub scoring_provider(request);
@@ -415,10 +419,12 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
   TrustedServersConfigClient config_client = CreateConfig();
   config_client.SetOverride("", CONSENTED_DEBUG_TOKEN);
   config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
+  config_client.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
   config_client.SetOverride(kFalse, ENABLE_CHAFFING);
   ClientRegistry clients{scoring_provider,
                          scoring_client,
                          buyer_clients,
+                         kv_async_client,
                          key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -435,7 +441,7 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
             config_proto))
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, clients,
-                                  config_client);
+                                  config_client, /*report_win_map=*/{});
     reactor.Execute();
   }
 }

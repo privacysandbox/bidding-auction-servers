@@ -44,6 +44,7 @@ cc_library(
     deps = [
         ":blob_fetcher_base",
         "//services/common/loggers:request_log_context",
+        "//services/common/util:hash_util",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
