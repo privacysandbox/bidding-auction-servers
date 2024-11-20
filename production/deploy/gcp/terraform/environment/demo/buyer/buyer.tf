@@ -49,6 +49,7 @@ locals {
   # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
   frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/bfe-${local.environment}"
   frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
+  frontend_ssl_policy_id             = "" # Example: "projects/${local.gcp_project_id}/global/sslPolicies/bfe-ssl-policy
   buyer_domain_name                  = "" # Example: bfe-gcp.com
   frontend_dns_zone                  = "" # Example: "bfe-gcp-com"
 
@@ -246,6 +247,7 @@ module "buyer_frontend_load_balancing" {
 
   frontend_domain_ssl_certificate_id = local.frontend_domain_ssl_certificate_id
   frontend_certificate_map_id        = local.frontend_certificate_map_id
+  frontend_ssl_policy_id             = local.frontend_ssl_policy_id
   frontend_service_name              = "bfe"
   google_compute_backend_service_ids = {
     for buyer_key, buyer in module.buyer :
