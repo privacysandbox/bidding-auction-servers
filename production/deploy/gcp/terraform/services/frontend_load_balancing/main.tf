@@ -38,6 +38,7 @@ resource "google_compute_target_https_proxy" "default" {
   name             = "${var.operator}-${var.environment}-https-lb-proxy"
   url_map          = google_compute_url_map.default.id
   ssl_certificates = var.frontend_certificate_map_id == "" ? [var.frontend_domain_ssl_certificate_id] : null
+  ssl_policy       = var.frontend_ssl_policy_id == "" ? null : var.frontend_ssl_policy_id
   certificate_map  = var.frontend_certificate_map_id == "" ? null : var.frontend_certificate_map_id
 }
 
