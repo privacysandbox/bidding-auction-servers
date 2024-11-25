@@ -38,16 +38,13 @@ absl::StatusOr<std::string> GzipCompress(absl::string_view uncompressed) {
                         deflate_init_status));
   }
 
-  // Determine the upper bound on the size of the compressed data.
-  // TODO(b/279967613): Investigate if deflate() should be done in chunks like
-  //  inflate(). Would help avoid this cpplint warning.
   const int kPartitionSizeBound = deflateBound(&zs, uncompressed.size());
-  char partition_output_buffer[kPartitionSizeBound];
+  std::string partition_output_buffer(kPartitionSizeBound, '\0');
 
   zs.avail_out = (uInt)kPartitionSizeBound;
   // We'll manually write the size of the compressed data manually after
   // compressing the data.
-  zs.next_out = (Bytef*)&partition_output_buffer;
+  zs.next_out = (Bytef*)partition_output_buffer.data();
 
   const int deflate_status = deflate(&zs, Z_FINISH);
   if (deflate_status != Z_STREAM_END) {
@@ -65,7 +62,8 @@ absl::StatusOr<std::string> GzipCompress(absl::string_view uncompressed) {
         deflate_end_status));
   }
 
-  return std::string{partition_output_buffer, zs.total_out};
+  partition_output_buffer.resize(zs.total_out);
+  return partition_output_buffer;
 }
 
 absl::StatusOr<std::string> GzipDecompress(absl::string_view compressed) {

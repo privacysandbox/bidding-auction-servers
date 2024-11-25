@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.4.1 (2024-11-25)
+
+
+### Bug Fixes
+
+* Allocate compression output buffer on heap
+
 ## 4.4.0 (2024-11-14)
 
 

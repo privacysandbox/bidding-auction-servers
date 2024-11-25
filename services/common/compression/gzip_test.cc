@@ -58,15 +58,19 @@ std::string BoostDecompress(const std::string& compressed_string) {
   return decompressed_string.str();
 }
 
+std::string GeneratePayload(int size_in_mb) {
+  int size_in_bytes = size_in_mb * 1024 * 1024;
+  return std::string(size_in_bytes, 'Q');
+}
+
 TEST(GzipCompressionTests, CompressDecompress_EndToEnd) {
-  std::string payload = "hello";
+  std::string payload = GeneratePayload(100);
   absl::StatusOr<std::string> compressed = GzipCompress(payload);
-  ASSERT_TRUE(compressed.ok());
+  ASSERT_TRUE(compressed.ok()) << compressed.status();
 
   absl::StatusOr<std::string> decompressed = GzipDecompress(*compressed);
-  EXPECT_TRUE(decompressed.ok()) << decompressed.status().message();
+  ASSERT_TRUE(decompressed.ok()) << decompressed.status();
 
-  ASSERT_TRUE(decompressed.ok());
   ASSERT_EQ(payload, decompressed.value());
 }
 
