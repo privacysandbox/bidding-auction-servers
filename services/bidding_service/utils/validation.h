@@ -26,15 +26,19 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+struct DebugUrlsSize {
+  long win_url_chars;
+  long loss_url_chars;
+};
+
 // Clears debug URLs for ad_with_bid if they exceed the maximum allowed size per
 // debug URL, or if they cause the total size of all debug URLs to exceed the
-// maximum allowed size of all debug URLs. Returns updated size of debug URLs of
-// ad_with_bid.
-long TrimAndReturnDebugUrlsSize(AdWithBid& ad_with_bid,
-                                int max_allowed_size_debug_url_chars,
-                                long max_allowed_size_all_debug_urls_chars,
-                                long total_debug_urls_chars,
-                                RequestLogContext& log_context);
+// maximum allowed size of all debug URLs. Returns updated size of win and loss
+// debug URLs of ad_with_bid.
+DebugUrlsSize TrimAndReturnDebugUrlsSize(
+    AdWithBid& ad_with_bid, int max_allowed_size_debug_url_chars,
+    long max_allowed_size_all_debug_urls_chars, long total_debug_urls_chars,
+    RequestLogContext& log_context);
 
 // Converts protected audience bid to string for logging.
 inline std::string GetProtectedAudienceBidDebugInfo(const AdWithBid& bid) {

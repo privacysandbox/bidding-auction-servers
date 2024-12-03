@@ -21,6 +21,12 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "src/logger/logger.proto";
 
+// Supported compression algorithms.
+enum CompressionAlgorithm {
+  COMPRESSION_ALGORITHM_UNKNOWN = 0;
+  COMPRESSION_ALGORITHM_GZIP = 1;
+}
+
 // ProtectedAudienceInput is generated and encrypted by the client,
 // passed through the untrusted Seller service, and decrypted by the
 // SellerFrontEnd service.
@@ -414,7 +420,7 @@ message AuctionResult {
   // BuyerReportingId of the winning Ad.
   // This will be verified with the buyerReportingId in the Ad properties on
   // the browser.
-  string buyer_reporting_id = 19;
+  optional string buyer_reporting_id = 19;
 
   // BuyerAndSellerReportingId of the winning Ad.
   // This will be verified with the buyerAndSellerReportingId in the Ad
@@ -562,7 +568,7 @@ message AuctionResult {
       // BuyerReportingId of the ghost winning Ad.
       // This will be verified with the buyerAndSellerReportingId in the Ad
       // properties on the browser.
-      string buyer_reporting_id = 6;
+      optional string buyer_reporting_id = 6;
 
       // SelectableBuyerAndSellerReportingId of the ghost winning Ad.
       // This will be verified with the buyerAndSellerReportingId in the Ad
@@ -868,6 +874,7 @@ message SelectAdRequest {
     // 'PerBuyerConfig.priority_signals_overrides'.
     string priority_signals = 13;
   }
+
   message ComponentAuctionResult {
     //  AuctionResult from a server component auction.
     bytes auction_result_ciphertext = 1;
@@ -882,7 +889,7 @@ message SelectAdRequest {
   bytes protected_audience_ciphertext = 1 [deprecated = true];
 
   // Plaintext. Passed by the untrusted Seller service.
-  AuctionConfig auction_config = 2;
+  AuctionConfig auction_config = 2 [deprecated = true];
 
   // Type of end user's device / client, that would help in validating the
   // client integrity. Also passed to the key/value services.
@@ -895,6 +902,19 @@ message SelectAdRequest {
   // Encrypted Component Auction Results for conducting a top level auction.
   // This should be populated along with protected_auction_ciphertext.
   repeated ComponentAuctionResult component_auction_results = 5;
+
+  message CompressedAuctionConfig {
+    // Compression algorithm used to compress the AuctionConfig.
+    CompressionAlgorithm compression_algorithm = 1;
+
+    // Compressed AuctionConfig proto bytestring.
+    bytes auction_config = 2;
+  }
+
+  // The `compressed_auction_config` field provides a compressed version of the
+  // AuctionConfig proto that adtechs can provide in place of the 'auction_config'
+  // field to reduce network costs.
+  CompressedAuctionConfig compressed_auction_config = 6;
 }
 
 // SelectAdResponse is sent from the SellerFrontEndService to the Seller
@@ -1133,7 +1153,7 @@ message AdWithBid {
   string bid_currency = 10;
 
   // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
-  string buyer_reporting_id = 11;
+  optional string buyer_reporting_id = 11;
 
   // Private aggregation object.
   repeated PrivateAggregateContribution private_aggregation_contributions = 12;
@@ -1144,7 +1164,7 @@ message AdWithBid {
 
   // Optional. selectedBuyerAndSellerReportingId in buyerReportingMetadata of
   // reportWin(). If provided, this will be substituted for interestGroupName.
-  string selected_buyer_and_seller_reporting_id = 14;
+  optional string selected_buyer_and_seller_reporting_id = 14;
 
   // Optional. Value of the data version header from the buyer kv server.
   // This is passed through to the buyer reporting function.
@@ -1556,7 +1576,7 @@ message ScoreAdsRequest {
       string interest_group_origin = 13;
 
       // Optional. buyerReportingId set in buyerReportingMetadata of reportWin()
-      string buyer_reporting_id = 14;
+      optional string buyer_reporting_id = 14;
 
       // Optional. buyerAndSellerReportingId in buyerReportingMetadata
       // of reportWin(). If provided, and selectedBuyerAndSellerReportingId
@@ -1576,6 +1596,10 @@ message ScoreAdsRequest {
       // Optional. Value of the data version header from the buyer kv server.
       // This is passed through to the buyer reporting function.
       uint32 data_version = 19;
+
+      // Interest group index corresponding to this Ad.
+      // This is required to populate the PrivateAggregateContribution.
+      int32 interest_group_idx = 20;
     }
 
     // Ad with bid.
@@ -1861,7 +1885,7 @@ message ScoreAdsResponse {
     // BuyerReportingId of the winning Ad.
     // This will be verified with the buyerReportingId in the Ad properties on
     // the browser.
-    string buyer_reporting_id = 18;
+    optional string buyer_reporting_id = 18;
     // BuyerAnd SellerReportingId of the winning Ad.
     // This will be verified with the buyerAndSellerReportingId in the Ad
     // properties on the browser.

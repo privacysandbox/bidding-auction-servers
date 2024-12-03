@@ -628,6 +628,29 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.failed_to_bid_percent\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.seller_rejection_reason')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                ],
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                },
+                "title": "bidding.business_logic.failed_to_bid_percent [MEAN]"
+            }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 78,
+            "x": 10,
+            "type": "metric",
+            "properties": {
+                "metrics": [
                     [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.bids_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
@@ -646,8 +669,8 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
         {
             "height": 6,
             "width": 10,
-            "y": 78,
-            "x": 10,
+            "y": 84,
+            "x": 0,
             "type": "metric",
             "properties": {
                 "metrics": [
@@ -670,7 +693,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "height": 6,
             "width": 10,
             "y": 84,
-            "x": 0,
+            "x": 10,
             "type": "metric",
             "properties": {
                 "metrics": [
@@ -687,6 +710,52 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                     }
                 },
                 "title": "bidding.business_logic.zero_bid_percent [MEAN]"
+            }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 90,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.debug_url_count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                ],
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                },
+                "title": "bidding.business_logic.debug_url_count [MEAN]"
+            }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 90,
+            "x": 10,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH(' service.name=\"bidding\" deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"bidding.business_logic.debug_urls_size_bytes\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                ],
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                },
+                "title": "bidding.business_logic.debug_urls_size_bytes [MEAN]"
             }
         }
     ]

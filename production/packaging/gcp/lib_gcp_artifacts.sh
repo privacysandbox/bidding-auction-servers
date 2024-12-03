@@ -62,7 +62,7 @@ function upload_image_to_repo() {
   local -a image_tags=("${env_tag}" "${git_tag}")
   if [[ "${KOKORO_ENV_NAME}" == "staging" ]]; then
     local -r version="$(cat "${WORKSPACE}/version.txt")"
-    local -r release_tag="${repo_image_uri}:staging-release-${version}"
+    local -r release_tag="${repo_image_uri}:staging-release-${build_flavor}-${version}"
     image_tags+=("${release_tag}")
   fi
 

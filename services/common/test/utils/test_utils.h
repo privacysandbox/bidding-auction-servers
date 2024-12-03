@@ -58,11 +58,14 @@ constexpr int kTestMultiBidLimit = 3;
 // Creates a GetBidsRawRequest using hardcoded test data.
 GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
     bool add_protected_signals_input = true,
-    bool add_protected_audience_input = false);
+    bool add_protected_audience_input = false,
+    ClientType client_type = ClientType::CLIENT_TYPE_BROWSER);
 
 // Creates a GetBids Request using hardcoded test data.
-GetBidsRequest CreateGetBidsRequest(bool add_protected_signals_input = true,
-                                    bool add_protected_audience_input = false);
+GetBidsRequest CreateGetBidsRequest(
+    bool add_protected_signals_input = true,
+    bool add_protected_audience_input = false,
+    ClientType client_type = ClientType::CLIENT_TYPE_BROWSER);
 
 // Creates an AdWithBid for testing purposes.
 AdWithBid CreateAdWithBid();

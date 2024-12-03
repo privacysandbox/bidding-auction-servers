@@ -72,6 +72,7 @@ struct AuctionServiceRuntimeConfig {
   // app signals.
   absl::flat_hash_set<std::string>
       protected_app_signals_buyers_with_report_win_enabled = {};
+  bool require_scoring_signals_for_scoring = true;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

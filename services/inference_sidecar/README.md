@@ -62,7 +62,10 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
             "num_interop_threads": <integer_value>,
             "num_intraop_threads": <integer_value>,
             "module_name": <string_value>,
-            "cpuset": <an array of integer values>
+            "cpuset": <an array of integer values>,
+            "tcmalloc_release_bytes_per_sec": <integer_value>,
+            "tcmalloc_max_total_thread_cache_bytes": <integer_value>,
+            "tcmalloc_max_per_cpu_cache_bytes": <integer_value>
         }
         ```
 
@@ -108,7 +111,10 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
             "num_interop_threads": <integer_value>,
             "num_intraop_threads": <integer_value>,
             "module_name": <string_value>,
-            "cpuset": <an array of integer values>
+            "cpuset": <an array of integer values>,
+            "tcmalloc_release_bytes_per_sec": <integer_value>,
+            "tcmalloc_max_total_thread_cache_bytes": <integer_value>,
+            "tcmalloc_max_per_cpu_cache_bytes": <integer_value>
         }
         ```
 

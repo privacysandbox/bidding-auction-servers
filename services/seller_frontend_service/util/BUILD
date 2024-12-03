@@ -76,6 +76,7 @@ cc_library(
         "//services/common/util:error_accumulator",
         "//services/common/util:request_response_constants",
         "//services/common/util:scoped_cbor",
+        "//services/seller_frontend_service/data:seller_frontend_data",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",

@@ -205,6 +205,8 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
                         metric::BiddingContextMap()->Remove(request_));
     if (log_context_.is_consented()) {
       metric_context_->SetConsented(raw_request_.log_context().generation_id());
+    } else if (log_context_.is_prod_debug()) {
+      metric_context_->SetConsented(kProdDebug.data());
     }
     return absl::OkStatus();
   }()) << "BiddingContextMap()->Get(request) should have been called";
@@ -372,7 +374,7 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
       .input = std::move(input),
       .metadata = roma_request_context_factory_.Create(),
   };
-  request.tags[kTimeoutMs] = roma_timeout_ms_;
+  request.tags[kRomaTimeoutTag] = roma_timeout_ms_;
   return request;
 }
 
@@ -472,45 +474,56 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
         return ParseProtectedSignalsGenerateBidsResponse(response);
       },
       [this](const std::vector<ProtectedAppSignalsAdWithBid>& bids) {
+        int received_bid_count = static_cast<int>(bids.size());
+        int zero_bid_count = 0;
         for (auto& bid : bids) {
-          LogIfError(
-              metric_context_->AccumulateMetric<metric::kBiddingTotalBidsCount>(
-                  1));
           if (absl::Status validation_status =
                   IsValidProtectedAppSignalsBid(bid);
               !validation_status.ok()) {
-            LogIfError(
-                metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
-                    1.0));
+            zero_bid_count += 1;
             PS_VLOG(kNoisyWarn, log_context_) << validation_status.message();
-          } else {
-            PS_VLOG(kNoisyInfo, log_context_)
-                << "Successful non-zero protected app signals bid received";
-            auto* added_bid = raw_response_.add_bids();
-            *added_bid = bid;
-            const int limited_egress_bits =
-                absl::GetFlag(FLAGS_limited_egress_bits);
-            if (limited_egress_bits <= 0) {
-              PS_VLOG(5) << "Allowed limited egress bits: "
-                         << limited_egress_bits << ", skipping it";
-              added_bid->clear_egress_payload();
-            } else {
-              PopulateSerializedEgressPayload(
-                  egress_schema_version_, *added_bid->mutable_egress_payload(),
-                  *limited_egress_schema_cache_, limited_egress_bits);
-            }
-            if (!raw_request_.enable_unlimited_egress() ||
-                !enable_temporary_unlimited_egress_) {
-              PS_VLOG(5) << "Either request doesn't allow unlimited egress or "
-                         << "feature is disabled by the platform";
-              added_bid->clear_temporary_unlimited_egress_payload();
-            } else {
-              PopulateSerializedEgressPayload(
-                  temporary_unlimited_egress_schema_version_,
-                  *added_bid->mutable_temporary_unlimited_egress_payload(),
-                  *egress_schema_cache_);
-            }
+            continue;
           }
+          PS_VLOG(kNoisyInfo, log_context_)
+              << "Successful non-zero protected app signals bid received";
+          auto* added_bid = raw_response_.add_bids();
+          *added_bid = bid;
+          const int limited_egress_bits =
+              absl::GetFlag(FLAGS_limited_egress_bits);
+          if (limited_egress_bits <= 0) {
+            PS_VLOG(5) << "Allowed limited egress bits: " << limited_egress_bits
+                       << ", skipping it";
+            added_bid->clear_egress_payload();
+          } else {
+            PopulateSerializedEgressPayload(
+                egress_schema_version_, *added_bid->mutable_egress_payload(),
+                *limited_egress_schema_cache_, limited_egress_bits);
+          }
+          if (!raw_request_.enable_unlimited_egress() ||
+              !enable_temporary_unlimited_egress_) {
+            PS_VLOG(5) << "Either request doesn't allow unlimited egress or "
+                       << "feature is disabled by the platform";
+            added_bid->clear_temporary_unlimited_egress_payload();
+          } else {
+            PopulateSerializedEgressPayload(
+                temporary_unlimited_egress_schema_version_,
+                *added_bid->mutable_temporary_unlimited_egress_payload(),
+                *egress_schema_cache_);
+          }
+        }
+        LogIfError(
+            metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(
+                0.0));
+        LogIfError(
+            metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(
+                received_bid_count));
+        if (received_bid_count > 0) {
+          LogIfError(
+              metric_context_->LogUpDownCounter<metric::kBiddingZeroBidCount>(
+                  zero_bid_count));
+          LogIfError(
+              metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
+                  (static_cast<double>(zero_bid_count)) / received_bid_count));
         }
         EncryptResponseAndFinish(grpc::Status::OK);
       });
@@ -549,13 +562,13 @@ DispatchRequest ProtectedAppSignalsGenerateBidsReactor::
       .input = std::move(input),
       .metadata = roma_request_context_factory_.Create(),
   };
-  if (server_common::log::PS_VLOG_IS_ON(3)) {
+  if (server_common::log::PS_VLOG_IS_ON(kDispatch)) {
     for (const auto& i : request.input) {
       PS_VLOG(kDispatch, log_context_)
           << "Roma request input to prepared data for ads retrieval: " << *i;
     }
   }
-  request.tags[kTimeoutMs] = roma_timeout_ms_;
+  request.tags[kRomaTimeoutTag] = roma_timeout_ms_;
   return request;
 }
 

@@ -27,6 +27,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "proto/model_metadata.pb.h"
@@ -42,11 +43,19 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 // requires updates to a JSON config stored in the same cloud bucket as the
 // models to trigger fetching new models. It only fetches from model paths that
 // it has not successfully registered with the inference sidecar.
+// The user of this class needs to ensure that the lifetime of
+// PeriodicModelFetcher is longer than the lifetime than its tasks including
+// model fetch callback and model eviction callback.
 class PeriodicModelFetcher : public FetcherInterface {
  public:
+  enum class ModelState { ACTIVE, IN_GRACE_PERIOD, IN_DELETION };
+
   // Record of a loaded model inside the model fetcher.
   struct ModelEntry {
     std::string checksum;
+    int eviction_grace_period_in_ms;
+    // TODO(b/380455492): Consider moving model states to inference sidecar.
+    ModelState model_state;
   };
   PeriodicModelFetcher(
       absl::string_view config_path,
@@ -74,21 +83,32 @@ class PeriodicModelFetcher : public FetcherInterface {
   void InternalModelFetchAndRegistration();
   // Fetches the metadata of models to be downloaded from the cloud bucket.
   absl::StatusOr<ModelConfig> FetchModelConfig();
-  // Garbage collect models with the provided model paths.
-  void GarbageCollectModels(
-      const absl::flat_hash_set<std::string>& model_paths);
+  // Delete models with the provided model paths.
+  void DeleteModels(const absl::flat_hash_set<std::string>& model_paths)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_);
+  // Makes an RPC call to the inference sidecar to delete a single model.
+  void DeleteModel(absl::string_view model_path)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_);
+  // Update model partition for request level metrics and the model availability
+  // metric.
+  void UpdateMetricsForAvailableModels()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_);
 
   const std::string config_path_;
   std::unique_ptr<privacy_sandbox::bidding_auction_servers::BlobFetcherBase>
       blob_fetcher_;
-  std::unique_ptr<InferenceService::StubInterface> inference_stub_;
+  std::unique_ptr<InferenceService::StubInterface> inference_stub_
+      ABSL_GUARDED_BY(model_entry_mutex_);
   // Async executor for periodically execute a task. Not owning.
   server_common::Executor& executor_;
   // Keeps track of the next async task for the executor.
   absl::optional<server_common::TaskId> task_id_;
   const absl::Duration fetch_period_ms_;
+  // Addition or deletion of models reqiures locking on this mutex.
+  absl::Mutex model_entry_mutex_;
   // Maintains a map from currently loaded models to their metadata.
-  absl::flat_hash_map<std::string, ModelEntry> model_entry_map_;
+  absl::flat_hash_map<std::string, ModelEntry> model_entry_map_
+      ABSL_GUARDED_BY(model_entry_mutex_);
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

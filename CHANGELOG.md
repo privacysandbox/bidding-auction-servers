@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.5.0 (2024-12-03)
+
+
+### Features
+
+* [Private Aggregation] Make ig index available to populate interest_group_index in PrivateAggrgeteContribution
+* [Private Aggregation] Populate id_idx for PrivateAggregateContribution
+* Add allow_compressed_auction_config flag to Terraform
+* Add bidding.business_logic.debug_url_count metric
+* Add bidding.business_logic.debug_urls_size_bytes metric
+* Add bidding.business_logic.failed_to_bid_percent metric
+* Add compressed auction config field to API
+* Add dimension for GenerateBids timed out errors to bidding.errors_count
+* Add TCMalloc config for B&A inference
+* Allow model eviction grace period
+* Control whether scoring signals are required for scoring via flag
+* Enable TCMalloc for the TensorFlow sidecar
+* Read compressed AuctionConfig in SFE
+* remove metric noise for sampled debug request
+* Report model eviction via metrics
+* With Flag Allow Just Component Signals
+
+
+### Bug Fixes
+
+* Allocate compression output buffer on heap
+* Missing inference metric label in AWS dashboard
+* Set default value for PRESUBMIT_PERF to 0
+* Standardize business logic metrics for generateBids PA and PAS
+* Update tag to correctly pass roma_timeout_ms value to Roma
+
+
+### Documentation
+
+* [BYOB] Add guide and sample request for generateBid SDK
+
 ## 4.4.0 (2024-11-14)
 
 

@@ -156,8 +156,10 @@ module "seller" {
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
 
-    ENABLE_CHAFFING        = "false"
-    ENABLE_PRIORITY_VECTOR = "false"
+    ENABLE_CHAFFING                     = "false"
+    ENABLE_PRIORITY_VECTOR              = "false"
+    REQUIRE_SCORING_SIGNALS_FOR_SCORING = "true"
+    ALLOW_COMPRESSED_AUCTION_CONFIG     = "false"
   }
   consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
 }

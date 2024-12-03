@@ -173,7 +173,8 @@ class GetBidUnaryReactorTest : public ::testing::Test {
         ->Get(&request_);
     get_bids_config_.is_protected_app_signals_enabled = false;
     get_bids_config_.is_protected_audience_enabled = true;
-    get_bids_config_.is_tkv_v2_enabled = false;
+    get_bids_config_.is_tkv_v2_browser_enabled = false;
+    get_bids_config_.test_mode = true;
     TrustedServersConfigClient config_client({});
     config_client.SetOverride(kTrue, TEST_MODE);
     config_client.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
@@ -238,7 +239,7 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
 }
 
 TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServerV2) {
-  get_bids_config_.is_tkv_v2_enabled = true;
+  get_bids_config_.is_tkv_v2_browser_enabled = true;
   kv_server::v2::GetValuesResponse response;
   ASSERT_TRUE(TextFormat::ParseFromString(
       absl::StrFormat(compression_group_wrapper,
@@ -258,6 +259,49 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServerV2) {
         notification.Notify();
         return absl::OkStatus();
       });
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
+      crypto_client_.get(), kv_async_client_.get());
+  class_under_test.Execute();
+  // Wait for reactor to set response_.
+  notification.WaitForNotification();
+}
+
+TEST_F(GetBidUnaryReactorTest,
+       LoadsBiddingSignalsAndCallsBiddingServerClientTypeAndroidCallsKvV2) {
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client_.get(), response);
+  absl::Notification notification;
+  EXPECT_CALL(
+      bidding_client_mock_,
+      ExecuteInternal(
+          An<std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>>(),
+          An<grpc::ClientContext*>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<
+                       GenerateBidsResponse::GenerateBidsRawResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
+      .WillOnce([&notification](
+                    std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+                        get_values_raw_request,
+                    grpc::ClientContext* context, auto on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(
+            std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>(),
+            /* response_metadata= */ {});
+        notification.Notify();
+        return absl::OkStatus();
+      });
+  raw_request_.set_client_type(CLIENT_TYPE_ANDROID);
+  request_.set_request_ciphertext(raw_request_.SerializeAsString());
+  request_.set_key_id(MakeARandomString());
+
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
@@ -347,7 +391,7 @@ TEST_F(GetBidUnaryReactorTest,
 
 TEST_F(GetBidUnaryReactorTest,
        LoadsBiddingSignalsAndCallsBiddingServer_EncryptionEnabledV2) {
-  get_bids_config_.is_tkv_v2_enabled = true;
+  get_bids_config_.is_tkv_v2_browser_enabled = true;
   kv_server::v2::GetValuesResponse response;
   ASSERT_TRUE(TextFormat::ParseFromString(
       absl::StrFormat(compression_group_wrapper,
@@ -431,7 +475,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagatesV2) {
   log_context->set_generation_id(kSampleGenerationId);
   request_.set_request_ciphertext(raw_request_.SerializeAsString());
 
-  get_bids_config_.is_tkv_v2_enabled = true;
+  get_bids_config_.is_tkv_v2_browser_enabled = true;
   kv_server::v2::GetValuesResponse response;
   ASSERT_TRUE(TextFormat::ParseFromString(
       absl::StrFormat(compression_group_wrapper,
@@ -502,7 +546,7 @@ TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
 
 TEST_F(GetBidUnaryReactorTest, HandleChaffRequestV2) {
   get_bids_config_.is_chaffing_enabled = true;
-  get_bids_config_.is_tkv_v2_enabled = true;
+  get_bids_config_.is_tkv_v2_browser_enabled = true;
 
   EXPECT_CALL(bidding_client_mock_, ExecuteInternal).Times(0);
 
@@ -626,7 +670,7 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
 
     get_bids_config_.is_protected_app_signals_enabled = true;
     get_bids_config_.is_protected_audience_enabled = true;
-    get_bids_config_.is_tkv_v2_enabled = false;
+    get_bids_config_.is_tkv_v2_browser_enabled = false;
 
     TrustedServersConfigClient config_client({});
     config_client.SetOverride(kTrue, TEST_MODE);

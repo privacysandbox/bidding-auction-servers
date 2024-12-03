@@ -120,6 +120,34 @@ constexpr absl::string_view js_code = R"JS_CODE(
     }
   )JS_CODE";
 
+constexpr absl::string_view js_code_expects_null_scoring_signals = R"JS_CODE(
+    function fibonacci(num) {
+      if (num <= 1) return 1;
+      return fibonacci(num - 1) + fibonacci(num - 2);
+    }
+
+    function scoreAd( ad_metadata,
+                      bid,
+                      auction_config,
+                      scoring_signals,
+                      bid_metadata,
+                      direct_from_seller_signals
+    ) {
+      // Do a random amount of work to generate the score:
+      const score = fibonacci(Math.floor(Math.random() * 10 + 1));
+
+      if (scoring_signals === null) {
+        //Reshaped into AdScore
+        return {
+          "desirability": score,
+          "allowComponentAuction": false
+        };
+      } else {
+        throw new Error('Error: Scoring signals were not null!');
+      }
+    }
+  )JS_CODE";
+
 constexpr absl::string_view js_code_with_debug_urls = R"JS_CODE(
     function fibonacci(num) {
       if (num <= 1) return 1;
@@ -317,6 +345,7 @@ struct TestScoreAdsRequestConfig {
   std::optional<std::string> buyer_reporting_id = "";
   const uint32_t seller_data_version = kTestSellerDataVersion;
   absl::string_view seller = kTestSeller;
+  const bool gen_scoring_signals = true;
 };
 
 ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest(
@@ -341,7 +370,9 @@ ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest(
   }
   absl::StrAppend(&trusted_scoring_signals,
                   R"json(},"adComponentRenderUrls":{}})json");
-  raw_request.set_scoring_signals(trusted_scoring_signals);
+  if (config.gen_scoring_signals) {
+    raw_request.set_scoring_signals(trusted_scoring_signals);
+  }
   raw_request.set_enable_debug_reporting(config.enable_debug_reporting);
   raw_request.set_seller(config.seller);
   raw_request.set_publisher_hostname(kPublisherHostname);
@@ -554,6 +585,81 @@ TEST_F(AuctionServiceIntegrationTest, ScoresAdsWithCustomScoringLogic) {
     // If no object was returned, the following two lines SHOULD fail.
     EXPECT_GT(scoredAd.desirability(), 0);
     EXPECT_FALSE(scoredAd.interest_group_name().empty());
+    // If you see an error about a hash_map, it means invalid key, hence the
+    // check on interest_group name above.
+    EXPECT_EQ(scoredAd.render(),
+              interest_group_to_ad.at(scoredAd.interest_group_name()).render());
+  }
+}
+
+TEST_F(AuctionServiceIntegrationTest, ScoresAdsDespiteNoScoringSignals) {
+  grpc::CallbackServerContext context;
+  V8Dispatcher dispatcher;
+  V8DispatchClient client(dispatcher);
+  ASSERT_TRUE(dispatcher.Init().ok());
+  ASSERT_TRUE(
+      dispatcher
+          .LoadSync(kScoreAdBlobVersion,
+                    GetSellerWrappedCode(
+                        std::string(js_code_expects_null_scoring_signals),
+                        kEnableReportResultUrlGenerationFalse,
+                        kEnableReportResultWinGenerationFalse, {}))
+          .ok());
+  std::unique_ptr<MockAsyncReporter> async_reporter_ =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  auto score_ads_reactor_factory =
+      [&client, async_reporter_ = std::move(async_reporter_)](
+          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+          ScoreAdsResponse* response,
+          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+          CryptoClientWrapperInterface* crypto_client,
+          const AuctionServiceRuntimeConfig& runtime_config) {
+        // You can manually flip this flag to turn benchmarking logging on or
+        // off
+        bool enable_benchmarking = true;
+        std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger;
+        if (enable_benchmarking) {
+          benchmarking_logger = std::make_unique<ScoreAdsBenchmarkingLogger>(
+              FormatTime(absl::Now()));
+        } else {
+          benchmarking_logger = std::make_unique<ScoreAdsNoOpLogger>();
+        }
+        return std::make_unique<ScoreAdsReactor>(
+            context, client, request, response, std::move(benchmarking_logger),
+            key_fetcher_manager, crypto_client, async_reporter_.get(),
+            runtime_config);
+      };
+  auto crypto_client = std::make_unique<MockCryptoClientWrapper>();
+  SetupMockCryptoClientWrapper(*crypto_client);
+  TrustedServersConfigClient config_client({});
+  config_client.SetOverride(kTrue, TEST_MODE);
+  auto key_fetcher_manager =
+      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
+  AuctionServiceRuntimeConfig auction_service_runtime_config;
+  auction_service_runtime_config.require_scoring_signals_for_scoring = false;
+  AuctionService service(
+      std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
+      std::move(crypto_client), auction_service_runtime_config);
+
+  int requests_to_test = 10;
+  for (int i = 0; i < requests_to_test; i++) {
+    ScoreAdsResponse response;
+    ScoreAdsRequest request =
+        BuildScoreAdsRequest({.gen_scoring_signals = false});
+    absl::flat_hash_map<std::string, AdWithBidMetadata> interest_group_to_ad =
+        GetIGNameToAdMap(request);
+    service.ScoreAds(&context, &request, &response);
+
+    std::this_thread::sleep_for(absl::ToChronoSeconds(absl::Seconds(2)));
+
+    // This line may NOT break if the ad_score() object is empty.
+    ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+    ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+    const auto& scoredAd = raw_response.ad_score();
+    // If no object was returned, the following two lines SHOULD fail.
+    EXPECT_GT(scoredAd.desirability(), 0);
+    ASSERT_FALSE(scoredAd.interest_group_name().empty());
     // If you see an error about a hash_map, it means invalid key, hence the
     // check on interest_group name above.
     EXPECT_EQ(scoredAd.render(),

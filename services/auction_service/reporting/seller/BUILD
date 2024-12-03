@@ -26,6 +26,7 @@ cc_library(
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
+        "//services/common/constants:common_constants",
         "//services/common/util:json_util",
         "@com_google_absl//absl/status:statusor",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",

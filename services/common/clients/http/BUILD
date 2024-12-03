@@ -44,6 +44,8 @@ cc_library(
     deps = [
         "//services/common/constants:common_service_flags",
         "//services/common/loggers:request_log_context",
+        "//services/common/util:event",
+        "//services/common/util:event_base",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:check",

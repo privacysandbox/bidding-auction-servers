@@ -32,6 +32,21 @@ namespace {
 constexpr absl::string_view kTestIgNameWin = "testIgNameWin";
 constexpr absl::string_view kTestIgNameLoss = "testIgNameLoss";
 constexpr absl::string_view kTestIgOwner = "testIgOwner";
+constexpr int losing_ig_idx = 1;
+constexpr int winning_ig_idx = 2;
+
+absl::flat_hash_map<InterestGroupIdentity, int> GetInterestGroupIndexMap() {
+  absl::flat_hash_map<InterestGroupIdentity, int> ig_idx_map;
+  InterestGroupIdentity losing_ig = {
+      .interest_group_owner = kTestIgOwner.data(),
+      .interest_group_name = kTestIgNameLoss.data()};
+  InterestGroupIdentity winning_ig = {
+      .interest_group_owner = kTestIgOwner.data(),
+      .interest_group_name = kTestIgNameWin.data()};
+  ig_idx_map.try_emplace(losing_ig, losing_ig_idx);
+  ig_idx_map.try_emplace(winning_ig, winning_ig_idx);
+  return ig_idx_map;
+}
 
 TEST(HandlePrivateAggregationContributionsTest,
      FiltersAndPostProcessesContributions) {
@@ -57,7 +72,8 @@ TEST(HandlePrivateAggregationContributionsTest,
       static_cast<const std::basic_string<char>>(kTestIgOwner),
       std::move(buyer_bids_ptr));
 
-  HandlePrivateAggregationContributions(high_score, shared_buyer_bids_map);
+  HandlePrivateAggregationContributions(GetInterestGroupIndexMap(), high_score,
+                                        shared_buyer_bids_map);
 
   // Filling expected Bucket128Bit testFinalBucketFromSignal using values from
   // test util.
@@ -86,18 +102,22 @@ TEST(HandlePrivateAggregationContributionsTest,
   contribution0.mutable_value()->set_int_value(11);
   *contribution0.mutable_bucket()->mutable_bucket_128_bit() =
       testFinalBucketFromSignal;
+  contribution0.set_ig_idx(winning_ig_idx);
   PrivateAggregateContribution contribution1;
   contribution1.mutable_value()->set_int_value(10);
   *contribution1.mutable_bucket()->mutable_bucket_128_bit() =
       testFinalBucketFrom128Bit;
+  contribution1.set_ig_idx(winning_ig_idx);
   PrivateAggregateContribution contribution2;
   contribution2.mutable_value()->set_int_value(11);
   *contribution2.mutable_bucket()->mutable_bucket_128_bit() =
       testFinalBucketFromSignal;
+  contribution2.set_ig_idx(losing_ig_idx);
   PrivateAggregateContribution contribution3;
   contribution3.mutable_value()->set_int_value(10);
   *contribution3.mutable_bucket()->mutable_bucket_128_bit() =
       testFinalBucketFrom128Bit;
+  contribution3.set_ig_idx(losing_ig_idx);
   *expected_response.add_contributions() = std::move(contribution0);
   *expected_response.add_contributions() = std::move(contribution1);
   *expected_response.add_contributions() = std::move(contribution2);
@@ -114,6 +134,35 @@ TEST(HandlePrivateAggregationContributionsTest,
   std::string diff_output;
   diff.ReportDifferencesToString(&diff_output);
   EXPECT_TRUE(diff.Compare(high_score, expected_adscore)) << diff_output;
+}
+
+TEST(HandlePrivateAggregationContributionsTest,
+     NoContributionsProcessedWhenIgIdxNotFound) {
+  ScoreAdsResponse::AdScore high_score;
+  high_score.set_interest_group_name(kTestIgNameWin);
+  high_score.set_buyer_bid(1.0);
+  HighestScoringOtherBidsMap ig_owner_highest_scoring_other_bids_map =
+      GetHighestScoringOtherBidsMap(kTestIgOwner);
+  high_score.mutable_ig_owner_highest_scoring_other_bids_map()->insert(
+      ig_owner_highest_scoring_other_bids_map.begin(),
+      ig_owner_highest_scoring_other_bids_map.end());
+
+  BuyerBidsResponseMap shared_buyer_bids_map;
+  GetBidsResponse::GetBidsRawResponse buyer_bids_raw_response =
+      GetBidsRawResponseWithPrivateAggregationContributions(kTestIgNameWin,
+                                                            kTestIgNameLoss);
+  auto raw_response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+  std::unique_ptr<GetBidsResponse::GetBidsRawResponse> buyer_bids_ptr =
+      std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+          buyer_bids_raw_response);
+
+  shared_buyer_bids_map.try_emplace(
+      static_cast<const std::basic_string<char>>(kTestIgOwner),
+      std::move(buyer_bids_ptr));
+
+  HandlePrivateAggregationContributions({}, high_score, shared_buyer_bids_map);
+
+  EXPECT_EQ(high_score.top_level_contributions().size(), 0);
 }
 
 }  // namespace

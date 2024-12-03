@@ -74,7 +74,7 @@ constexpr char kTestReportWinResponseJson[] =
 constexpr char kTestAdRenderUrl[] =
     "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0";
 constexpr char kExpectedAuctionConfig[] =
-    R"({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})";
+    R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON";
 constexpr char kExpectedPerBuyerSignals[] = R"({"testkey":"testvalue"})";
 constexpr char kExpectedSignalsForWinner[] = "{testKey:testValue}";
 constexpr char kEnableAdtechCodeLoggingFalse[] = "false";
@@ -93,6 +93,7 @@ constexpr char kSterlingIsoCode[] = "GBP";
 constexpr uint32_t kSellerDataVersion = 1989;
 constexpr char kFooComponentsRenderUrl[] =
     "fooMeOnceAds.com/render_ad?id=hasFooComp";
+constexpr absl::string_view kEmptyScoringSignalsJson = "null";
 constexpr char kTestScoreAdResponseTemplate[] = R"(
                 {
                     "response": {
@@ -480,6 +481,18 @@ constexpr char kTestScoringSignals[] = R"json(
     }
   }
 )json";
+constexpr char kTestScoringSignalsForOnlyComponentUrls[] = R"json(
+  {
+    "adComponentRenderUrls": {
+      "adComponent.com/foo_components/id=0":["foo0"],
+      "adComponent.com/foo_components/id=1":["foo1"],
+      "adComponent.com/foo_components/id=2":["foo2"],
+      "adComponent.com/bar_components/id=0":["bar0"],
+      "adComponent.com/bar_components/id=1":["bar1"],
+      "adComponent.com/bar_components/id=2":["bar2"]
+    }
+  }
+)json";
 constexpr char kTestProtectedAppSignalsRenderUrl[] =
     "testAppAds.com/render_ad?id=bar";
 constexpr char kTestProtectedAppScoringSignals[] = R"json(
@@ -489,6 +502,12 @@ constexpr char kTestProtectedAppScoringSignals[] = R"json(
     }
   }
 )json";
+
+constexpr char kCorrectBarAdObjectJsonString[] = R"JSON(
+{
+  "metadata": ["140583167746", "627640802621", null, "18281019067"],
+  "renderUrl": "barStandardAds.com/render_ad?id=bar"
+})JSON";
 
 namespace {
 
@@ -545,9 +564,7 @@ void CheckInputCorrectForFoo(std::vector<std::shared_ptr<std::string>> input,
       << expected_ad.DebugString() << "\n\nDifference:\n"
       << difference;
   EXPECT_EQ(*input[1], R"JSON(2.100000)JSON");
-  EXPECT_EQ(
-      *input[2],
-      R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
+  EXPECT_EQ(*input[2], kExpectedAuctionConfig);
   EXPECT_EQ(
       *input[3],
       R"JSON({"adComponentRenderUrls":{"adComponent.com/foo_components/id=0":["foo0"],"adComponent.com/foo_components/id=1":["foo1"],"adComponent.com/foo_components/id=2":["foo2"]},"renderUrl":{"https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0":[123]}})JSON");
@@ -556,6 +573,10 @@ void CheckInputCorrectForFoo(std::vector<std::shared_ptr<std::string>> input,
       R"JSON({"interestGroupOwner":"https://fooAds.com","topWindowHostname":"publisherName","adComponents":["adComponent.com/foo_components/id=0","adComponent.com/foo_components/id=1","adComponent.com/foo_components/id=2"],"bidCurrency":"???","dataVersion":1989,"renderUrl":"https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"})JSON");
   EXPECT_EQ(*input[5], "{}");
 }
+
+const char kCorrectBidForBar[] = R"JSON(2.000000)JSON";
+const char kCorrectBidMetadataForBar[] =
+    R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisherName","adComponents":["adComponent.com/bar_components/id=0","adComponent.com/bar_components/id=1","adComponent.com/bar_components/id=2"],"bidCurrency":"USD","dataVersion":1989,"renderUrl":"barStandardAds.com/render_ad?id=bar"})JSON";
 
 void CheckInputCorrectForBar(std::vector<std::shared_ptr<std::string>> input,
                              const google::protobuf::Value& expected_ad) {
@@ -571,16 +592,12 @@ void CheckInputCorrectForBar(std::vector<std::shared_ptr<std::string>> input,
       << observed_ad->DebugString() << "\n\nExpected:\n"
       << expected_ad.DebugString() << "\n\nDifference:\n"
       << difference;
-  EXPECT_EQ(*input[1], R"JSON(2.000000)JSON");
-  EXPECT_EQ(
-      *input[2],
-      R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
+  EXPECT_EQ(*input[1], kCorrectBidForBar);
+  EXPECT_EQ(*input[2], kExpectedAuctionConfig);
   EXPECT_EQ(
       *input[3],
       R"JSON({"adComponentRenderUrls":{"adComponent.com/bar_components/id=0":["bar0"],"adComponent.com/bar_components/id=1":["bar1"],"adComponent.com/bar_components/id=2":["bar2"]},"renderUrl":{"barStandardAds.com/render_ad?id=bar":["barScoringSignalValue1","barScoringSignalValue2"]}})JSON");
-  EXPECT_EQ(
-      *input[4],
-      R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisherName","adComponents":["adComponent.com/bar_components/id=0","adComponent.com/bar_components/id=1","adComponent.com/bar_components/id=2"],"bidCurrency":"USD","dataVersion":1989,"renderUrl":"barStandardAds.com/render_ad?id=bar"})JSON");
+  EXPECT_EQ(*input[4], kCorrectBidMetadataForBar);
   EXPECT_EQ(*input[5], "{}");
 }
 
@@ -595,9 +612,7 @@ void CheckInputCorrectForAdWithFooComp(
   google::protobuf::util::MessageDifferencer differencer;
   differencer.ReportDifferencesToString(&difference);
   EXPECT_EQ(*input[1], R"JSON(2.100000)JSON");
-  EXPECT_EQ(
-      *input[2],
-      R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
+  EXPECT_EQ(*input[2], kExpectedAuctionConfig);
   EXPECT_EQ(
       *input[3],
       R"JSON({"adComponentRenderUrls":{"adComponent.com/foo_components/id=0":["foo0"],"adComponent.com/foo_components/id=1":["foo1"],"adComponent.com/foo_components/id=2":["foo2"]},"renderUrl":{"fooMeOnceAds.com/render_ad?id=hasFooComp":[1689,1868]}})JSON");
@@ -749,12 +764,8 @@ TEST_F(ScoreAdsReactorTest,
       "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_bar_ad_1) << "Malformed ad JSON";
-  auto expected_bar_ad_2 = JsonStringToValue(
-      R"JSON(
-    {
-      "metadata": ["140583167746", "627640802621", null, "18281019067"],
-      "renderUrl": "barStandardAds.com/render_ad?id=bar"
-    })JSON");
+  absl::StatusOr<google::protobuf::Value> expected_bar_ad_2 =
+      JsonStringToValue(kCorrectBarAdObjectJsonString);
   CHECK_OK(expected_bar_ad_2) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([expected_bar_ad_1, expected_bar_ad_2, expected_foo_ad_1,
@@ -829,12 +840,8 @@ TEST_F(ScoreAdsReactorTest,
       "renderUrl": "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0"
     })JSON");
   CHECK_OK(expected_bar_ad_1) << "Malformed ad JSON";
-  auto expected_bar_ad_2 = JsonStringToValue(
-      R"JSON(
-    {
-      "metadata": ["140583167746", "627640802621", null, "18281019067"],
-      "renderUrl": "barStandardAds.com/render_ad?id=bar"
-    })JSON");
+  absl::StatusOr<google::protobuf::Value> expected_bar_ad_2 =
+      JsonStringToValue(kCorrectBarAdObjectJsonString);
   CHECK_OK(expected_bar_ad_2) << "Malformed ad JSON";
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([expected_bar_ad_1, expected_bar_ad_2](
@@ -879,9 +886,7 @@ TEST_F(ScoreAdsReactorTest,
           EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_ad))
               << difference;
           EXPECT_EQ(*input[1], R"JSON(17.760000)JSON");
-          EXPECT_EQ(
-              *input[2],
-              R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
+          EXPECT_EQ(*input[2], kExpectedAuctionConfig);
           EXPECT_EQ(
               *input[3],
               R"JSON({"adComponentRenderUrls":{},"renderUrl":{"barStandardAds.com/render_ad?id=barbecue":[1689,1868]}})JSON");
@@ -893,6 +898,54 @@ TEST_F(ScoreAdsReactorTest,
       });
   RawRequest raw_request = BuildRawRequest({GetTestAdWithBidBarbecue()});
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+}
+
+TEST_F(ScoreAdsReactorTest,
+       CreatesCorrectScoreAdInputsWithParsedScoringSignalsOnlyForComponentAds) {
+  // This is important for the test; this is what allows the scoring signals to
+  // be parsed even though they are only for the component ads.
+  runtime_config_.require_scoring_signals_for_scoring = false;
+
+  MockV8DispatchClient dispatcher;
+  absl::StatusOr<google::protobuf::Value> expected_bar_ad =
+      JsonStringToValue(kCorrectBarAdObjectJsonString);
+  CHECK_OK(expected_bar_ad) << "Malformed ad JSON";
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([expected_bar_ad](std::vector<DispatchRequest>& batch,
+                                  BatchDispatchDoneCallback done_callback) {
+        for (const auto& request : batch) {
+          auto input = request.input;
+          absl::StatusOr<google::protobuf::Value> observed_ad =
+              JsonStringToValue(
+                  *input[static_cast<int>(ScoreAdArgs::kAdMetadata)]);
+          CHECK_OK(observed_ad)
+              << "Malformed observed ad JSON: "
+              << *input[static_cast<int>(ScoreAdArgs::kAdMetadata)];
+          std::string difference;
+          google::protobuf::util::MessageDifferencer differencer;
+          differencer.ReportDifferencesToString(&difference);
+          EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_bar_ad))
+              << difference;
+          EXPECT_EQ(*input[1], kCorrectBidForBar);
+          EXPECT_EQ(*input[2], kExpectedAuctionConfig);
+          // This is key: Note that the scoring signals contain signals for the
+          // AdComponentRenderUrls even though there are no scoring signals for
+          // the AdRenderUrl itself. When require_scoring_signals_for_scoring is
+          // false, this state is valid and this test checks that scoring
+          // signals are formed for this ad, and formed correctly.
+          EXPECT_EQ(
+              *input[3],
+              R"JSON({"adComponentRenderUrls":{"adComponent.com/bar_components/id=0":["bar0"],"adComponent.com/bar_components/id=1":["bar1"],"adComponent.com/bar_components/id=2":["bar2"]}})JSON");
+          EXPECT_EQ(*input[4], kCorrectBidMetadataForBar);
+        }
+        return absl::OkStatus();
+      });
+  // The scoring signals used here have records only for the
+  // AdComponentRenderUrls, none for the AdRenderUrls
+  RawRequest raw_request = BuildRawRequest(
+      {GetTestAdWithBidBar()},
+      {.scoring_signals = kTestScoringSignalsForOnlyComponentUrls});
+  ExecuteScoreAds(raw_request, dispatcher, runtime_config_);
 }
 
 TEST_F(ScoreAdsReactorTest,
@@ -922,9 +975,7 @@ TEST_F(ScoreAdsReactorTest,
           EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_ad))
               << difference;
           EXPECT_EQ(*input[1], R"JSON(17.760000)JSON");
-          EXPECT_EQ(
-              *input[2],
-              R"JSON({"auctionSignals": {"auction_signal": "test 2"}, "sellerSignals": {"seller_signal": "test 1"}})JSON");
+          EXPECT_EQ(*input[2], kExpectedAuctionConfig);
           EXPECT_EQ(
               *input[3],
               R"JSON({"adComponentRenderUrls":{},"renderUrl":{"barStandardAds.com/render_ad?id=barbecue2":[1689,1868]}})JSON");
@@ -1005,6 +1056,94 @@ TEST_F(ScoreAdsReactorTest, CreatesScoringSignalInputPerAdWithSignal) {
   RawRequest raw_request =
       BuildRawRequest(ads, {.scoring_signals = trusted_scoring_signals});
   ExecuteScoreAds(raw_request, dispatcher, AuctionServiceRuntimeConfig());
+}
+
+TEST_F(ScoreAdsReactorTest, ConfiggedSoScoringSignalNotRequired) {
+  runtime_config_.require_scoring_signals_for_scoring = false;
+  MockV8DispatchClient dispatcher;
+  std::vector<AdWithBidMetadata> ads;
+  AdWithBidMetadata no_signal_ad = MakeARandomAdWithBidMetadata(2, 2);
+  no_signal_ad.set_render("no_signal");
+  ads.push_back(no_signal_ad);
+  std::string trusted_scoring_signals =
+      R"json({"renderUrls":{"placeholder_url":[123])json";
+  absl::flat_hash_set<std::string> scoring_signal_per_ad;
+  for (int i = 0; i < 100; i++) {
+    const AdWithBidMetadata ad = MakeARandomAdWithBidMetadata(2, 2);
+    ads.push_back(ad);
+    std::string ad_signal =
+        absl::StrFormat("\"%s\":%s", ad.render(), R"JSON(123)JSON");
+
+    scoring_signal_per_ad.emplace(absl::StrFormat(
+        "{\"adComponentRenderUrls\":{},\"renderUrl\":{%s}}", ad_signal));
+    absl::StrAppend(&trusted_scoring_signals,
+                    absl::StrFormat(", %s", ad_signal));
+  }
+  absl::StrAppend(&trusted_scoring_signals,
+                  R"json(},"adComponentRenderUrls":{}})json");
+
+  EXPECT_EQ(ads[0].render(), no_signal_ad.render());
+  EXPECT_EQ(trusted_scoring_signals.find(no_signal_ad.render().c_str()),
+            std::string::npos);
+  bool no_sig_ad_found = false;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([scoring_signal_per_ad, no_signal_ad,
+                 no_sig_ad_found = &no_sig_ad_found](
+                    std::vector<DispatchRequest>& batch,
+                    BatchDispatchDoneCallback done_callback) {
+        for (int i = 0; i < batch.size(); i++) {
+          auto& request = batch.at(i);
+          auto input = request.input;
+          // An ad with no signal should never make it into the execution batch.
+          if (batch.at(i).id == no_signal_ad.render()) {
+            *no_sig_ad_found = true;
+            EXPECT_FALSE(scoring_signal_per_ad.contains(*input[3]));
+          }
+        }
+        return absl::OkStatus();
+      });
+
+  RawRequest raw_request =
+      BuildRawRequest(ads, {.scoring_signals = trusted_scoring_signals});
+  ExecuteScoreAds(raw_request, dispatcher, runtime_config_);
+  EXPECT_TRUE(no_sig_ad_found);
+}
+
+TEST_F(ScoreAdsReactorTest, ConfiggedSoScoringSignalNotRequiredAndHasNone) {
+  runtime_config_.require_scoring_signals_for_scoring = false;
+  MockV8DispatchClient dispatcher;
+  std::vector<AdWithBidMetadata> ads;
+  AdWithBidMetadata no_signal_ad = MakeARandomAdWithBidMetadata(2, 2);
+  no_signal_ad.set_render("no_signal");
+  ads.push_back(no_signal_ad);
+  absl::flat_hash_set<std::string> scoring_signal_per_ad;
+  for (int i = 0; i < 100; i++) {
+    const AdWithBidMetadata ad = MakeARandomAdWithBidMetadata(2, 2);
+    ads.push_back(ad);
+  }
+
+  EXPECT_EQ(ads[0].render(), no_signal_ad.render());
+  bool no_sig_ad_found = false;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([scoring_signal_per_ad, no_signal_ad,
+                 no_sig_ad_found = &no_sig_ad_found](
+                    std::vector<DispatchRequest>& batch,
+                    BatchDispatchDoneCallback done_callback) {
+        for (int i = 0; i < batch.size(); i++) {
+          auto& request = batch.at(i);
+          auto input = request.input;
+          // An ad with no signal should never make it into the execution batch.
+          if (batch.at(i).id == no_signal_ad.render()) {
+            *no_sig_ad_found = true;
+            EXPECT_FALSE(scoring_signal_per_ad.contains(*input[3]));
+          }
+        }
+        return absl::OkStatus();
+      });
+
+  RawRequest raw_request = BuildRawRequest(ads, {.scoring_signals = ""});
+  ExecuteScoreAds(raw_request, dispatcher, runtime_config_);
+  EXPECT_TRUE(no_sig_ad_found);
 }
 
 TEST_F(ScoreAdsReactorTest, EmptySignalsResultsInNoResponse) {
@@ -3015,6 +3154,116 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
                                               kTestBid);
   RawRequest raw_request = BuildProtectedAppSignalsRawRequest(
       {std::move(ad)}, {.scoring_signals = kTestProtectedAppScoringSignals});
+  ExecuteScoreAds(raw_request, dispatcher);
+}
+
+TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
+       AdDispatchedForScoringWhenNoSignalsForThisAdPresent) {
+  runtime_config_.require_scoring_signals_for_scoring = false;
+  MockV8DispatchClient dispatcher;
+  auto expected_ad = JsonStringToValue(
+      R"JSON(
+      {
+        "metadata": {"arbitraryMetadataKey":2},
+        "renderUrl": "testAppAds.com/render_ad?id=bar"
+      })JSON");
+  std::string scoring_signals_for_not_this_ad =
+      "{\"renderUrl\":{\"WRONG_AD_RENDER_URL.com/"
+      "render_ad?id=WRONG\":[\"test_signal\"]}}";
+  CHECK_OK(expected_ad) << "Malformed ad JSON";
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([expected_ad](std::vector<DispatchRequest>& batch,
+                              BatchDispatchDoneCallback done_callback) {
+        EXPECT_EQ(batch.size(), 1);
+        const auto& req = batch[0];
+        EXPECT_EQ(req.handler_name, "scoreAdEntryFunction");
+
+        EXPECT_EQ(req.input.size(), 7);
+        auto observed_ad = JsonStringToValue(
+            *req.input[static_cast<int>(ScoreAdArgs::kAdMetadata)]);
+        CHECK_OK(observed_ad);
+        std::string difference;
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.ReportDifferencesToString(&difference);
+        EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_ad))
+            << difference;
+        EXPECT_THAT(*req.input[static_cast<int>(ScoreAdArgs::kBid)],
+                    HasSubstr(absl::StrCat(kTestBid)));
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kAuctionConfig)],
+                  "{\"auctionSignals\": {\"auction_signal\": \"test 2\"}, "
+                  "\"sellerSignals\": {\"seller_signal\": \"test 1\"}}");
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kScoringSignals)],
+                  kEmptyScoringSignalsJson);
+        EXPECT_EQ(
+            *req.input[static_cast<int>(ScoreAdArgs::kBidMetadata)],
+            R"JSON({"interestGroupOwner":"https://PAS-Ad-Owner.com","topWindowHostname":"publisherName","bidCurrency":"USD","renderUrl":"testAppAds.com/render_ad?id=bar"})JSON");
+        EXPECT_EQ(
+            *req.input[static_cast<int>(ScoreAdArgs::kDirectFromSellerSignals)],
+            "{}");
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kFeatureFlags)],
+                  "{\"enable_logging\": false,\"enable_debug_url_generation\": "
+                  "false}");
+        return absl::OkStatus();
+      });
+  ProtectedAppSignalsAdWithBidMetadata ad =
+      GetProtectedAppSignalsAdWithBidMetadata(kTestProtectedAppSignalsRenderUrl,
+                                              kTestBid);
+  RawRequest raw_request = BuildProtectedAppSignalsRawRequest(
+      {std::move(ad)}, {.scoring_signals = scoring_signals_for_not_this_ad});
+  ExecuteScoreAds(raw_request, dispatcher);
+}
+
+TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
+       ConfiggedSoAdDispatchedEvenWhenScoringSignalsAbsent) {
+  runtime_config_.require_scoring_signals_for_scoring = false;
+  MockV8DispatchClient dispatcher;
+  auto expected_ad = JsonStringToValue(
+      R"JSON(
+      {
+        "metadata": {"arbitraryMetadataKey":2},
+        "renderUrl": "testAppAds.com/render_ad?id=bar"
+      })JSON");
+  CHECK_OK(expected_ad) << "Malformed ad JSON";
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce([expected_ad](std::vector<DispatchRequest>& batch,
+                              BatchDispatchDoneCallback done_callback) {
+        EXPECT_EQ(batch.size(), 1);
+        const auto& req = batch[0];
+        EXPECT_EQ(req.handler_name, "scoreAdEntryFunction");
+
+        EXPECT_EQ(req.input.size(), 7);
+        auto observed_ad = JsonStringToValue(
+            *req.input[static_cast<int>(ScoreAdArgs::kAdMetadata)]);
+        CHECK_OK(observed_ad);
+        std::string difference;
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.ReportDifferencesToString(&difference);
+        EXPECT_TRUE(differencer.Compare(*observed_ad, *expected_ad))
+            << difference;
+        EXPECT_THAT(*req.input[static_cast<int>(ScoreAdArgs::kBid)],
+                    HasSubstr(absl::StrCat(kTestBid)));
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kAuctionConfig)],
+                  "{\"auctionSignals\": {\"auction_signal\": \"test 2\"}, "
+                  "\"sellerSignals\": {\"seller_signal\": \"test 1\"}}");
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kScoringSignals)],
+                  kEmptyScoringSignalsJson);
+        EXPECT_EQ(
+            *req.input[static_cast<int>(ScoreAdArgs::kBidMetadata)],
+            R"JSON({"interestGroupOwner":"https://PAS-Ad-Owner.com","topWindowHostname":"publisherName","bidCurrency":"USD","renderUrl":"testAppAds.com/render_ad?id=bar"})JSON");
+        EXPECT_EQ(
+            *req.input[static_cast<int>(ScoreAdArgs::kDirectFromSellerSignals)],
+            "{}");
+        EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kFeatureFlags)],
+                  "{\"enable_logging\": false,\"enable_debug_url_generation\": "
+                  "false}");
+        return absl::OkStatus();
+      });
+  ProtectedAppSignalsAdWithBidMetadata ad =
+      GetProtectedAppSignalsAdWithBidMetadata(kTestProtectedAppSignalsRenderUrl,
+                                              kTestBid);
+  RawRequest raw_request = BuildProtectedAppSignalsRawRequest(
+      {std::move(ad)},
+      {.scoring_signals = std::string(kEmptyScoringSignalsJson)});
   ExecuteScoreAds(raw_request, dispatcher);
 }
 

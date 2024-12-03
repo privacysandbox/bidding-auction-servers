@@ -58,7 +58,7 @@ inline constexpr int kNumKAnonJoinCandidateKeys = 3;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // KAnonGhostWinner response.
-inline constexpr int kNumKAnonGhostWinnerKeys = 5;
+inline constexpr int kNumKAnonGhostWinnerKeys = 6;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // GhostWinnerForTopLevelAuction response.
@@ -134,8 +134,9 @@ inline constexpr char kAdComponentRenderUrlsHash[] =
 // Constants for subfields returned in kAnonGhostWinners response object in
 // AuctionResult.
 inline constexpr char kOwner[] = "owner";  // length: 5
+// kInterestGroupName is defined previously.
 inline constexpr char kInterestGroupIndex[] =
-    "interestGroupIndex";  // length: 19
+    "interestGroupIndex";  // length: 18
 inline constexpr char kKAnonJoinCandidates[] =
     "kAnonJoinCandidates";  // length: 19
 inline constexpr char kGhostWinnerForTopLevelAuction[] =
@@ -187,8 +188,6 @@ inline constexpr std::array<absl::string_view, kNumConsentedDebugConfigKeys>
         kIsDebugResponse,
 };
 
-inline constexpr char kTimeoutMs[] = "TimeoutMs";
-
 inline constexpr int kNumErrorKeys = 2;
 inline constexpr char kError[] = "error";
 inline constexpr char kMessage[] = "message";
@@ -218,7 +217,10 @@ inline constexpr std::array<absl::string_view, kNumKAnonJoinCandidateKeys>
     kKAnonJoinCandidateKeys = {kAdRenderUrlHash, kAdComponentRenderUrlsHash,
                                kReportingIdHash};
 inline constexpr std::array<absl::string_view, kNumKAnonGhostWinnerKeys>
-    kKAnonGhostWinnerKeys = {kKAnonJoinCandidates, kInterestGroupIndex, kOwner,
+    kKAnonGhostWinnerKeys = {kKAnonJoinCandidates,
+                             kInterestGroupIndex,
+                             kOwner,
+                             kInterestGroupName,
                              kGhostWinnerPrivateAggregationSignals,
                              kGhostWinnerForTopLevelAuction};
 inline constexpr std::array<absl::string_view,

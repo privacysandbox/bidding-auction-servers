@@ -121,6 +121,8 @@ std::vector<PrivateAggregateContribution> GetProcessedAndFilteredContributions(
 }  // namespace
 
 void HandlePrivateAggregationContributions(
+    const absl::flat_hash_map<InterestGroupIdentity, int>&
+        interest_group_index_map,
     ScoreAdsResponse::AdScore& high_score,
     BuyerBidsResponseMap& shared_buyer_bids_map) {
   for (auto& [ig_owner, get_bid_response] : shared_buyer_bids_map) {
@@ -132,7 +134,18 @@ void HandlePrivateAggregationContributions(
         continue;
       }
       const std::string& ig_name = ad_with_bid.interest_group_name();
-
+      int ig_idx = 0;
+      InterestGroupIdentity ig = {.interest_group_owner = ig_owner,
+                                  .interest_group_name = ig_name};
+      const auto& ig_itr = interest_group_index_map.find(ig);
+      if (ig_itr != interest_group_index_map.end()) {
+        ig_idx = ig_itr->second;
+      } else {
+        PS_LOG(ERROR) << "Skipping PrivateAggregateContributions."
+                      << "IG index not found for interest group owner:"
+                      << ig_owner << " and interest group name" << ig_name;
+        continue;
+      }
       BaseValues base_values = GetBaseValues(high_score);
 
       // Filtering.
@@ -162,10 +175,13 @@ void HandlePrivateAggregationContributions(
 
       for (PrivateAggregateContribution& contribution :
            processed_filtered_contributions) {
+        contribution.set_ig_idx(ig_idx);
         *reporting_response.add_contributions() = std::move(contribution);
       }
     }
-    *high_score.add_top_level_contributions() = std::move(reporting_response);
+    if (!reporting_response.contributions().empty()) {
+      *high_score.add_top_level_contributions() = std::move(reporting_response);
+    }
   }
 }
 

@@ -169,11 +169,11 @@ ClientRegistry CreateClientRegistry(
           .kv_async_client = std::move(kv_async_client)};
 }
 
-GetBidsConfig CreateGetBidsConfig(bool is_tkv_v2_enabled = false) {
+GetBidsConfig CreateGetBidsConfig(bool is_tkv_v2_browser_enabled = false) {
   return {.protected_app_signals_generate_bid_timeout_ms = 60000,
           .is_protected_app_signals_enabled = true,
           .is_protected_audience_enabled = true,
-          .is_tkv_v2_enabled = is_tkv_v2_enabled};
+          .is_tkv_v2_browser_enabled = is_tkv_v2_browser_enabled};
 }
 
 class BuyerFrontEndServiceTest : public ::testing::Test {
@@ -298,9 +298,45 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
+  auto start_bfe_result = StartLocalService(&buyer_frontend_service);
+  auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
+  grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
+
+  ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
+  GetBidsResponse::GetBidsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
+  EXPECT_EQ(raw_response.bids_size(), 1);
+  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+}
+
+TEST_F(BuyerFrontEndServiceTest,
+       ProtectedAudienceAndProtectedAppSignalsBidsFetchedAndroidV2) {
+  std::unique_ptr<KVAsyncClientMock> kv_async_client =
+      std::make_unique<KVAsyncClientMock>();
+  kv_server::v2::GetValuesResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      absl::StrFormat(compression_group_wrapper,
+                      absl::CEscape(RemoveWhiteSpaces(compression_group))),
+      &response));
+  SetupBiddingProviderMockV2(kv_async_client.get(), response);
+
+  auto bidding_async_client = GetValidBiddingAsyncClientMock();
+  auto protected_app_signals_bidding_async_client =
+      GetValidProtectedAppSignalsBiddingClientMock();
+
+  BuyerFrontEndService buyer_frontend_service(
+      CreateClientRegistry(
+          /*bidding_signals_async_provider=*/nullptr,
+          std::move(bidding_async_client),
+          std::move(protected_app_signals_bidding_async_client),
+          std::move(kv_async_client)),
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/false));
+  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
+                                  /*add_protected_audience_input=*/true,
+                                  ClientType::CLIENT_TYPE_ANDROID);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
@@ -365,7 +401,7 @@ TEST_F(
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -467,7 +503,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
 
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
@@ -554,7 +590,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -642,7 +678,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -727,7 +763,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -815,7 +851,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -878,7 +914,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -946,7 +982,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1022,7 +1058,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1080,7 +1116,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
   request_ = CreateGetBidsRequest(
       /*add_protectRPCErrorsWhenProtectedAppSign
       alsAndProtectedAudienceNotProvideded_signals_input=*/
@@ -1147,7 +1183,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateGetBidsConfig(/*is_tkv_v2_enabled=*/true));
+      CreateGetBidsConfig(/*is_tkv_v2_browser_enabled=*/true));
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);

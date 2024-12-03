@@ -30,9 +30,8 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline GenerateBidsReactorFactory GetProtectedAudienceByobReactorFactory(
-    GenerateBidByobDispatchClient& byob_client,
-    server_common::Executor* executor) {
-  return [&byob_client, executor](
+    GenerateBidByobDispatchClient& byob_client) {
+  return [&byob_client](
              grpc::CallbackServerContext* context,
              const GenerateBidsRequest* request, GenerateBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -42,7 +41,7 @@ inline GenerateBidsReactorFactory GetProtectedAudienceByobReactorFactory(
     auto generate_bids_binary_reactor =
         std::make_unique<GenerateBidsBinaryReactor>(
             context, byob_client, request, response, key_fetcher_manager,
-            crypto_client, executor, runtime_config);
+            crypto_client, runtime_config);
     return generate_bids_binary_reactor.release();
   };
 }

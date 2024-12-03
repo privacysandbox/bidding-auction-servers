@@ -41,6 +41,7 @@
 #include "src/util/status_macro/status_util.h"
 #include "utils/cpu.h"
 #include "utils/log.h"
+#include "utils/tcmalloc.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -148,6 +149,13 @@ absl::Status EnforceModelResetProbability(
         "model_reset_probability should not be set");
   }
   config.set_model_reset_probability(kMinResetProbability);
+  return absl::OkStatus();
+}
+
+absl::Status SetTcMallocConfig(const InferenceSidecarRuntimeConfig& config) {
+  SetTcMallocParams(config.tcmalloc_release_bytes_per_sec(),
+                    config.tcmalloc_max_total_thread_cache_bytes(),
+                    config.tcmalloc_max_per_cpu_cache_bytes());
   return absl::OkStatus();
 }
 

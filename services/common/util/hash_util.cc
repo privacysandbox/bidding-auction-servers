@@ -23,6 +23,7 @@
 #include <openssl/sha.h>
 
 #include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "src/logger/request_context_logger.h"
@@ -55,12 +56,15 @@ void AppendReportingIdForSelectedReportingKeyKAnonKey(
 }
 }  // namespace
 
-std::string ComputeSHA256(absl::string_view data) {
+std::string ComputeSHA256(absl::string_view data, bool return_hex) {
   unsigned char hash[SHA256_DIGEST_LENGTH];
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, data.data(), data.size());
   SHA256_Final(hash, &sha256);
+  if (!return_hex) {
+    return std::string(std::begin(hash), std::end(hash));
+  }
 
   constexpr ptrdiff_t kTwoDigestLength = SHA256_DIGEST_LENGTH * 2;
   char output_buf[kTwoDigestLength + 1];
@@ -75,9 +79,9 @@ std::string ComputeSHA256(absl::string_view data) {
 }
 
 inline std::string HashAndMayLogResult(absl::string_view plain_key) {
-  std::string result = ComputeSHA256(plain_key);
+  std::string result = ComputeSHA256(plain_key, /*return_hex=*/false);
   PS_VLOG(5) << " " << __func__ << " plain key: " << plain_key
-             << "\nhashed to: " << result;
+             << "\nhashed to: " << absl::BytesToHexString(result);
   return result;
 }
 

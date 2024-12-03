@@ -38,7 +38,7 @@ constexpr int kReportingIDSizeBytes = 4;
 
 // Wrapper around OpenSSL to compute the SHA256 hash of a given input string.
 // It converts the resulting binary hash into a hexadecimal string.
-std::string ComputeSHA256(absl::string_view data);
+std::string ComputeSHA256(absl::string_view data, bool return_hex = true);
 
 // Canonicalize valid URLs.
 inline std::string CanonicalizeURL(absl::string_view url) {

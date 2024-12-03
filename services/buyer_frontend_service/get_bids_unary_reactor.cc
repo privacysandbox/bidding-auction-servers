@@ -20,6 +20,7 @@
 #include "services/buyer_frontend_service/util/bidding_signals.h"
 #include "services/buyer_frontend_service/util/proto_factory.h"
 #include "services/common/chaffing/transcoding_utils.h"
+#include "services/common/clients/kv_server/kv_v2.h"
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
@@ -191,6 +192,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                         metric::BfeContextMap()->Remove(request_));
     if (log_context_.is_consented()) {
       metric_context_->SetConsented(raw_request_.log_context().generation_id());
+    } else if (log_context_.is_prod_debug()) {
+      metric_context_->SetConsented(kProdDebug.data());
     }
     return absl::OkStatus();
   }()) << "BfeContextMap()->Get(request) should have been called";
@@ -711,11 +714,10 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
   }
 
   BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
-  if (config_.is_tkv_v2_enabled) {
-    MayGetProtectedAudienceBidsV2(bidding_signals_request);
-  } else {
-    MayGetProtectedAudienceBidsV1(bidding_signals_request);
-  }
+  UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
+          config_.test_mode, config_.tkv_v2_address_empty)
+      ? MayGetProtectedAudienceBidsV2(bidding_signals_request)
+      : MayGetProtectedAudienceBidsV1(bidding_signals_request);
 }
 
 // Process Outputs from Actions to prepare bidding request.

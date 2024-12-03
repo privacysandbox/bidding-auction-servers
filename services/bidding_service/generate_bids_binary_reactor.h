@@ -29,7 +29,6 @@
 #include "services/common/clients/code_dispatcher/byob/byob_dispatch_client.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/async_task_tracker.h"
-#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -51,7 +50,6 @@ class GenerateBidsBinaryReactor
       const GenerateBidsRequest* request, GenerateBidsResponse* response,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      server_common::Executor* executor,
       const BiddingServiceRuntimeConfig& runtime_config);
 
   // Initiates parallel synchronous executions for each interest group in the
@@ -78,20 +76,15 @@ class GenerateBidsBinaryReactor
 
   // Dispatches execution requests to the ROMA BYOB library.
   ByobDispatchClient<roma_service::GenerateProtectedAudienceBidRequest,
-                     roma_service::GenerateProtectedAudienceBidResponse>&
+                     roma_service::GenerateProtectedAudienceBidResponse>*
       byob_client_;
 
   // Keeps track of the pending bid requests and executes the registered
   // callback once all the bids have been fetched.
   AsyncTaskTracker async_task_tracker_;
 
-  // The executor_ will receive execution tasks from Execute. It is not owned by
-  // this class instance but is required to outlive the lifetime of this class
-  // instance.
-  server_common::Executor* executor_;
-
   // The maximum time a single ROMA execution will block for.
-  absl::Duration roma_timeout_ms_duration_;
+  absl::Duration roma_timeout_duration_;
 
   // Stores the list of bids for an interest group, for each interest group.
   std::vector<std::vector<AdWithBid>> ads_with_bids_by_ig_;

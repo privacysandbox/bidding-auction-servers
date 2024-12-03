@@ -84,6 +84,7 @@ cc_library(
     srcs = ["kv_v2.cc"],
     hdrs = ["kv_v2.h"],
     deps = [
+        "//api:bidding_auction_servers_cc_proto",
         "//services/common/util:json_util",
         "@com_google_absl//absl/status",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",

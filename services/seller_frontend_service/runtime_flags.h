@@ -65,8 +65,10 @@ inline constexpr absl::string_view
 inline constexpr absl::string_view SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
     "SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
 inline constexpr absl::string_view K_ANON_API_KEY = "K_ANON_API_KEY";
+inline constexpr absl::string_view ALLOW_COMPRESSED_AUCTION_CONFIG =
+    "ALLOW_COMPRESSED_AUCTION_CONFIG";
 
-inline constexpr int kNumRuntimeFlags = 26;
+inline constexpr int kNumRuntimeFlags = 27;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -94,6 +96,7 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
     SELLER_CODE_FETCH_CONFIG,
     K_ANON_API_KEY,
+    ALLOW_COMPRESSED_AUCTION_CONFIG,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

@@ -294,6 +294,8 @@ message PrivateAggregateContribution {
       ' BFE. This is not expected to be sent to the client for single seller'
       ' and server orchestrated multi seller auctions.'
 }];
+
+  int32 ig_idx = 4 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Tells the browser which interest group was this contribution made for.'}];
 }
 
 message PrivateAggregationBucket {

@@ -46,7 +46,8 @@ class SelectAdReactorForApp : public SelectAdReactor {
  private:
   absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const std::optional<AuctionResult::Error>& error) override;
+      const std::optional<AuctionResult::Error>& error,
+      const AdScores* ghost_winning_scores = nullptr) override;
 
   [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
       absl::string_view encoded_data) override;
@@ -86,6 +87,13 @@ class SelectAdReactorForApp : public SelectAdReactor {
 
   std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> CreateScoreAdsRequest()
       override;
+
+  KAnonAuctionResultData GetKAnonAuctionResultData(
+      const std::optional<ScoreAdsResponse::AdScore>& high_score,
+      const AdScores* ghost_winning_scores = nullptr) override;
+
+  AuctionResult::KAnonJoinCandidate GetKAnonJoinCandidate(
+      const ScoreAdsResponse::AdScore& score) override;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

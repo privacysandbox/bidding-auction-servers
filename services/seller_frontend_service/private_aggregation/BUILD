@@ -44,6 +44,7 @@ cc_test(
         ":private_aggregation_helper",
         "//services/common/private_aggregation:private_aggregation_test_util",
         "//services/common/test/utils:test_init",
+        "//services/seller_frontend_service",
         "//services/seller_frontend_service/data:seller_frontend_data",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_googletest//:gtest",

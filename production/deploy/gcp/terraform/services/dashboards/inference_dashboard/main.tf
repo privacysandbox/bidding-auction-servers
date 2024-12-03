@@ -821,6 +821,7 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
+                        "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
                         "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
@@ -962,6 +963,89 @@ resource "google_monitoring_dashboard" "environment_dashboard" {
         "width": 24,
         "xPos": 24,
         "yPos": 190
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.model_deletion.success_count [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"label\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.model_deletion.success_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${var.environment}\")"
+                  }
+                }
+              }
+            ],
+
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 209
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "inference.model_deletion.failed_count_by_status [MEAN]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"label\"",
+                        "metric.label.\"Noise\"",
+                        "resource.label.\"task_id\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/inference.model_deletion.failed_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${var.environment}\")"
+                  }
+                }
+              }
+            ],
+
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 228
       }
     ]
     }

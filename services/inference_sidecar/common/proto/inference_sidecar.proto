@@ -131,6 +131,15 @@ message InferenceSidecarRuntimeConfig {
   // traffic.
   // TODO(b/348985774): Remove this field.
   double model_reset_probability = 5;
+
+  // TCMalloc Flags.
+  //
+  // The TCMalloc release rate from the page heap. Uses the default if the value is 0.
+  int64 tcmalloc_release_bytes_per_sec = 6;
+  // The TCMalloc maximum thread cache size. Uses the default if the value is 0.
+  int64 tcmalloc_max_total_thread_cache_bytes = 7;
+  // The TCMalloc maximum cache size per CPU cache. Uses the default if the value is 0.
+  int32 tcmalloc_max_per_cpu_cache_bytes = 8;
 }
 
 // Proto to store consented debugging logs. It's passed back with

@@ -24,30 +24,30 @@ cc_binary(
     name = "sample_generate_bid_udf",
     srcs = ["sample_generate_bid_udf.cc"],
     deps = [
-        "//api/udf:generate_bid_sdk_cc_proto",
+        "//api/udf:generate_bid_byob_sdk_cc_proto",
         "@com_google_protobuf//:protobuf",
     ],
 )
 
 filegroup(
-    name = "sample_udf_binaries",
+    name = "sample_generate_bid_execs",
     srcs = [
         ":sample_generate_bid_udf",
     ],
 )
 
 pkg_files(
-    name = "sample_udf_execs",
+    name = "sample_generate_bid_execs_pkg",
     srcs = [
-        ":sample_udf_binaries",
+        ":sample_generate_bid_execs",
     ],
     attributes = pkg_attributes(mode = "0555"),
     prefix = "/sample_udf/bin/",
 )
 
 pkg_tar(
-    name = "sample_udf_execs_tar",
+    name = "sample_generate_bid_execs_tar",
     srcs = [
-        ":sample_udf_execs",
+        ":sample_generate_bid_execs_pkg",
     ],
 )

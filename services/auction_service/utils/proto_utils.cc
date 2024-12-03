@@ -95,7 +95,8 @@ absl::flat_hash_set<std::string> FindSharedComponentUrls(
 absl::StatusOr<rapidjson::Document> AddComponentSignals(
     const AdWithBidMetadata& ad_with_bid,
     const absl::flat_hash_set<std::string>& multiple_occurrence_component_urls,
-    absl::flat_hash_map<std::string, rapidjson::Document>& component_signals) {
+    absl::flat_hash_map<std::string, rapidjson::Document>& component_signals,
+    int& total_signals_added) {
   // Create overall signals object.
   rapidjson::Document combined_signals_for_this_bid;
   combined_signals_for_this_bid.SetObject();
@@ -144,6 +145,7 @@ absl::StatusOr<rapidjson::Document> AddComponentSignals(
         comp_url_signals_to_move_from->name,
         comp_url_signals_to_move_from->value,
         combined_signals_for_this_bid.GetAllocator());
+    total_signals_added++;
   }
   return combined_signals_for_this_bid;
 }
@@ -299,98 +301,105 @@ std::string MakeBidMetadataForTopLevelAuction(
 absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
 BuildTrustedScoringSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-    RequestLogContext& log_context) {
+    RequestLogContext& log_context,
+    const bool require_scoring_signals_for_scoring) {
   rapidjson::Document trusted_scoring_signals_value;
-  // TODO (b/285214424): De-nest, use a guard.
-  if (!raw_request.scoring_signals().empty()) {
-    // Attempt to parse into an object.
-    auto start_parse_time = absl::Now();
-    rapidjson::ParseResult parse_result =
-        trusted_scoring_signals_value.Parse<rapidjson::kParseFullPrecisionFlag>(
-            raw_request.scoring_signals().data());
-    if (parse_result.IsError()) {
-      // TODO (b/285215004): Print offset to ease debugging.
-      PS_VLOG(kNoisyWarn, log_context)
-          << "Trusted scoring signals JSON parse error: "
-          << rapidjson::GetParseError_En(parse_result.Code())
-          << ", trusted signals were: " << raw_request.scoring_signals();
-      return absl::InvalidArgumentError("Malformed trusted scoring signals");
-    }
-    // Build a map of the signals for each render URL.
-    auto render_urls_itr = trusted_scoring_signals_value.FindMember(
-        kRenderUrlsPropertyForKVResponse);
-    if (render_urls_itr == trusted_scoring_signals_value.MemberEnd()) {
-      // If there are no scoring signals for any render urls, none can be
-      // scored. Abort now.
-      return absl::InvalidArgumentError(
-          "Trusted scoring signals include no render urls.");
-    }
-    absl::flat_hash_map<std::string, rapidjson::Document> render_url_signals =
-        BuildAdScoringSignalsMap(render_urls_itr->value);
-    // No scoring signals for ad component render urls are required,
-    // however if present we build a map to their scoring signals in the same
-    // way.
-    absl::flat_hash_map<std::string, rapidjson::Document> component_signals;
-    auto component_urls_itr = trusted_scoring_signals_value.FindMember(
-        kAdComponentRenderUrlsProperty);
-    if (component_urls_itr != trusted_scoring_signals_value.MemberEnd()) {
-      component_signals = BuildAdScoringSignalsMap(component_urls_itr->value);
-    }
+  if (raw_request.scoring_signals().empty()) {
+    return absl::InvalidArgumentError(kNoTrustedScoringSignals);
+  }
+  // Attempt to parse into an object.
+  auto start_parse_time = absl::Now();
+  rapidjson::ParseResult parse_result =
+      trusted_scoring_signals_value.Parse<rapidjson::kParseFullPrecisionFlag>(
+          raw_request.scoring_signals().data());
+  if (parse_result.IsError()) {
+    // TODO (b/285215004): Print offset to ease debugging.
+    PS_VLOG(kNoisyWarn, log_context)
+        << "Trusted scoring signals JSON parse error: "
+        << rapidjson::GetParseError_En(parse_result.Code())
+        << ", trusted signals were: " << raw_request.scoring_signals();
+    return absl::InvalidArgumentError("Malformed trusted scoring signals");
+  } else if (!trusted_scoring_signals_value.IsObject()) {
+    // TODO (b/285215004): Print offset to ease debugging.
+    PS_VLOG(kNoisyWarn, log_context)
+        << "Trusted scoring signals JSON did not parse to a JSON object, "
+           "trusted signals were: "
+        << raw_request.scoring_signals();
+    return absl::InvalidArgumentError("Malformed trusted scoring signals");
+  }
+  // Build a map of the signals for each render URL.
+  auto render_urls_itr = trusted_scoring_signals_value.FindMember(
+      kRenderUrlsPropertyForKVResponse);
+  if (require_scoring_signals_for_scoring &&
+      render_urls_itr == trusted_scoring_signals_value.MemberEnd()) {
+    return absl::InvalidArgumentError(
+        "Trusted scoring signals are required but include no render urls.");
+  }
+  absl::flat_hash_map<std::string, rapidjson::Document> render_url_signals;
+  if (render_urls_itr != trusted_scoring_signals_value.MemberEnd()) {
+    render_url_signals = BuildAdScoringSignalsMap(render_urls_itr->value);
+  }
+  // No scoring signals for ad component render urls are required,
+  // however if present we build a map to their scoring signals in the same
+  // way.
+  absl::flat_hash_map<std::string, rapidjson::Document> component_signals;
+  auto component_urls_itr =
+      trusted_scoring_signals_value.FindMember(kAdComponentRenderUrlsProperty);
+  if (component_urls_itr != trusted_scoring_signals_value.MemberEnd()) {
+    component_signals = BuildAdScoringSignalsMap(component_urls_itr->value);
+  }
 
-    // Find the ad component render urls used more than once so we know which
-    // signals we must copy rather than move.
-    absl::flat_hash_set<std::string> multiple_occurrence_component_urls =
-        FindSharedComponentUrls(raw_request.ad_bids());
-    // Each AdWithBid needs signals for both its render URL and its ad component
-    // render urls.
-    absl::flat_hash_map<std::string, rapidjson::Document> combined_signals;
-    for (const auto& ad_with_bid : raw_request.ad_bids()) {
-      // Now that we have a map of all component signals and all ad signals, we
-      // can build the object.
-      // Check for the render URL's signals; skip if none.
-      // (Ad with bid will not be scored anyways in that case.)
-      auto render_url_signals_itr =
-          render_url_signals.find(ad_with_bid.render());
-      if (render_url_signals_itr == render_url_signals.end()) {
-        continue;
-      }
-      absl::StatusOr<rapidjson::Document> combined_signals_for_this_bid;
-      PS_ASSIGN_OR_RETURN(
-          combined_signals_for_this_bid,
-          AddComponentSignals(ad_with_bid, multiple_occurrence_component_urls,
-                              component_signals));
+  // Find the ad component render urls used more than once so we know which
+  // signals we must copy rather than move.
+  absl::flat_hash_set<std::string> multiple_occurrence_component_urls =
+      FindSharedComponentUrls(raw_request.ad_bids());
+  // Each AdWithBid needs signals for both its render URL and its ad component
+  // render urls.
+  absl::flat_hash_map<std::string, rapidjson::Document> combined_signals;
+  for (const auto& ad_with_bid : raw_request.ad_bids()) {
+    // Now that we have a map of all component signals and all ad signals, we
+    // can build the object.
+    int total_signals_added = 0;
+    absl::StatusOr<rapidjson::Document> combined_signals_for_this_bid;
+    PS_ASSIGN_OR_RETURN(
+        combined_signals_for_this_bid,
+        AddComponentSignals(ad_with_bid, multiple_occurrence_component_urls,
+                            component_signals, total_signals_added));
+    // Check for the render URL's signals; skip if none.
+    auto render_url_signals_itr = render_url_signals.find(ad_with_bid.render());
+    if (render_url_signals_itr != render_url_signals.end()) {
       // Do not reference values after move.
       combined_signals_for_this_bid->AddMember(
           kRenderUrlsPropertyForScoreAd, render_url_signals_itr->second,
           combined_signals_for_this_bid->GetAllocator());
+      total_signals_added++;
+    }
+    if (total_signals_added > 0) {
       combined_signals.try_emplace(ad_with_bid.render(),
                                    *std::move(combined_signals_for_this_bid));
     }
-
-    MayPopulateScoringSignalsForProtectedAppSignals(
-        raw_request, render_url_signals, combined_signals, log_context);
-
-    // Now turn the editable JSON documents into string buffers before
-    // returning.
-    absl::flat_hash_map<std::string, rapidjson::StringBuffer>
-        combined_formatted_ad_signals;
-    for (const auto& [render_url, scoring_signals_json_obj] :
-         combined_signals) {
-      rapidjson::StringBuffer buffer;
-      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-      scoring_signals_json_obj.Accept(writer);
-      combined_formatted_ad_signals.try_emplace(render_url, std::move(buffer));
-    }
-
-    PS_VLOG(kStats, log_context)
-        << "\nTrusted Scoring Signals Deserialize Time: "
-        << ToInt64Microseconds((absl::Now() - start_parse_time))
-        << " microseconds for " << combined_formatted_ad_signals.size()
-        << " signals.";
-    return combined_formatted_ad_signals;
-  } else {
-    return absl::InvalidArgumentError(kNoTrustedScoringSignals);
   }
+
+  MayPopulateScoringSignalsForProtectedAppSignals(
+      raw_request, render_url_signals, combined_signals, log_context);
+
+  // Now turn the editable JSON documents into string buffers before
+  // returning.
+  absl::flat_hash_map<std::string, rapidjson::StringBuffer>
+      combined_formatted_ad_signals;
+  for (const auto& [render_url, scoring_signals_json_obj] : combined_signals) {
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    scoring_signals_json_obj.Accept(writer);
+    combined_formatted_ad_signals.try_emplace(render_url, std::move(buffer));
+  }
+
+  PS_VLOG(kStats, log_context)
+      << "\nTrusted Scoring Signals Deserialize Time: "
+      << ToInt64Microseconds((absl::Now() - start_parse_time))
+      << " microseconds for " << combined_formatted_ad_signals.size()
+      << " signals.";
+  return combined_formatted_ad_signals;
 }
 
 void MayPopulateScoringSignalsForProtectedAppSignals(

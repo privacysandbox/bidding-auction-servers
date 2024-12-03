@@ -97,12 +97,16 @@ class PeriodicModelFetcherTest : public ::testing::Test {
   }
 
   void SetupDeleteModelExpectation(absl::string_view model_path,
-                                   MockInferenceServiceStub& inference_stub) {
+                                   MockInferenceServiceStub& inference_stub,
+                                   bool succeeded = true) {
     DeleteModelRequest delete_model_request;
     delete_model_request.mutable_model_spec()->set_model_path(model_path);
+    grpc::Status grpc_status =
+        succeeded ? grpc::Status::OK
+                  : grpc::Status(grpc::StatusCode::INTERNAL, "sidecar error");
     EXPECT_CALL(inference_stub,
                 DeleteModel(_, EqualsProto(delete_model_request), _))
-        .WillOnce(Return(grpc::Status::OK));
+        .WillOnce(Return(grpc_status));
   }
 };
 
@@ -510,6 +514,73 @@ TEST_F(PeriodicModelFetcherTest, DeleteModelSuccess) {
   model_fetcher.End();
 }
 
+TEST_F(PeriodicModelFetcherTest, DeleteFailureShouldRetry) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1"},
+        ]
+  })";
+
+  const std::string empty_model_metadata_config = R"({
+        "model_metadata": []
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> empty_config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, empty_model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching three times.
+  absl::BlockingCounter done(3);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second and third polls get an empty config.
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub,
+                                /**succeeded=*/false);
+
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub,
+                                /**succeeded=*/true);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .Times(3)
+      .WillRepeatedly(
+          [&done](absl::Duration duration, absl::AnyInvocable<void()> closure) {
+            EXPECT_EQ(duration, kFetchPeriod);
+            if (!done.DecrementCount()) {
+              closure();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  model_fetcher.End();
+}
+
 TEST_F(PeriodicModelFetcherTest, UpdateModelVersionSuccess) {
   const std::string model_metadata_config_v1 = R"({
         "model_metadata": [
@@ -578,6 +649,228 @@ TEST_F(PeriodicModelFetcherTest, UpdateModelVersionSuccess) {
   auto status = model_fetcher.Start();
   ASSERT_TRUE(status.ok()) << status;
   done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, DeleteModelWithGracePeriodSuccess) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1", "eviction_grace_period_in_ms": 500},
+        ]
+  })";
+
+  const std::string empty_model_metadata_config = R"({
+        "model_metadata": []
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> empty_config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, empty_model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching twice.
+  absl::BlockingCounter done(2);
+  absl::BlockingCounter eviction_worker_done(1);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second poll gets an empty config.
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .WillRepeatedly(
+          [&done, &eviction_worker_done](absl::Duration duration,
+                                         absl::AnyInvocable<void()> closure) {
+            if (duration == kFetchPeriod) {
+              // Executor being invoked by the model fetching callback.
+              if (!done.DecrementCount()) {
+                closure();
+              }
+            } else {
+              // Executor being invoked by the eviction callback.
+              std::thread([&eviction_worker_done,
+                           closure = std::move(closure)]() mutable {
+                closure();
+                eviction_worker_done.DecrementCount();
+              }).detach();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  done.Wait();
+  eviction_worker_done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest, LongGracePeriodShouldOnlyDeleteOnce) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1", "eviction_grace_period_in_ms": 2000},
+        ]
+  })";
+
+  const std::string empty_model_metadata_config = R"({
+        "model_metadata": []
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> empty_config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, empty_model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  // Triggers periodic model fetching three times.
+  absl::BlockingCounter done(3);
+  absl::BlockingCounter eviction_worker_done(1);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Second and third polls get an empty config.
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kModelConfigPath}, empty_config_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .WillRepeatedly(
+          [&done, &eviction_worker_done](absl::Duration duration,
+                                         absl::AnyInvocable<void()> closure) {
+            if (duration == kFetchPeriod) {
+              // Executor being invoked by the model fetching callback.
+              if (!done.DecrementCount()) {
+                closure();
+              }
+            } else {
+              // Executor being invoked by the eviction callback.
+              std::thread([&done, &eviction_worker_done,
+                           closure = std::move(closure)]() mutable {
+                done.Wait();
+                closure();
+                eviction_worker_done.DecrementCount();
+              }).detach();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  eviction_worker_done.Wait();
+  model_fetcher.End();
+}
+
+TEST_F(PeriodicModelFetcherTest,
+       ModelOverwriteWithGracePeriodShouldDelayModelFetching) {
+  const std::string model_metadata_config = R"({
+        "model_metadata": [
+            {"model_path": "model1", "eviction_grace_period_in_ms": 500},
+        ]
+  })";
+
+  const std::string model_metadata_config_updated_checksum = R"({
+        "model_metadata": [
+            {"model_path": "model1",
+             "checksum": "59390c4fa97b2cbfe5bd300e254e6eddb7b4b45c2dbc0c1cfc6e93793a143d04"}
+        ]
+  })";
+
+  const std::vector<BlobFetcherBase::Blob> config_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath, model_metadata_config)};
+
+  const std::vector<BlobFetcherBase::Blob> updated_fetch_result = {
+      BlobFetcherBase::Blob(kModelConfigPath,
+                            model_metadata_config_updated_checksum)};
+
+  const std::vector<BlobFetcherBase::Blob> mock_snapshot = {
+      BlobFetcherBase::Blob(kTestModelName1, kTestModelContent1)};
+
+  auto blob_fetcher = std::make_unique<BlobFetcherMock>();
+  auto mock_inference_stub = std::make_unique<MockInferenceServiceStub>();
+  auto executor = std::make_unique<MockExecutor>();
+
+  absl::BlockingCounter done(2);
+  absl::BlockingCounter eviction_worker_done(1);
+
+  {
+    InSequence s;
+    SetUpCloudFetchExpectation({kModelConfigPath}, config_fetch_result,
+                               *blob_fetcher);
+    SetUpCloudFetchExpectation({kTestModelName1}, mock_snapshot, *blob_fetcher);
+    SetUpRegisterModelExpectation(kTestModelName1, kTestModelContent1,
+                                  *mock_inference_stub);
+
+    // Model fetching doesn't happen because of grace period.
+    SetUpCloudFetchExpectation({kModelConfigPath}, updated_fetch_result,
+                               *blob_fetcher);
+    SetupDeleteModelExpectation(kTestModelName1, *mock_inference_stub);
+  }
+
+  EXPECT_CALL(*executor, RunAfter)
+      .WillRepeatedly(
+          [&done, &eviction_worker_done](absl::Duration duration,
+                                         absl::AnyInvocable<void()> closure) {
+            if (duration == kFetchPeriod) {
+              // Executor being invoked by the model fetching callback.
+              if (!done.DecrementCount()) {
+                closure();
+              }
+            } else {
+              // Executor being invoked by the eviction callback.
+              std::thread([&done, &eviction_worker_done,
+                           closure = std::move(closure)]() mutable {
+                done.Wait();
+                closure();
+                eviction_worker_done.DecrementCount();
+              }).detach();
+            }
+            return server_common::TaskId();
+          });
+
+  PeriodicModelFetcher model_fetcher(kModelConfigPath, std::move(blob_fetcher),
+                                     std::move(mock_inference_stub),
+                                     executor.get(), kFetchPeriod);
+  auto status = model_fetcher.Start();
+  ASSERT_TRUE(status.ok()) << status;
+  eviction_worker_done.Wait();
   model_fetcher.End();
 }
 

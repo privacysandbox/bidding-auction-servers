@@ -37,6 +37,9 @@ build:tcmalloc --host_cxxopt=-fnew-alignment=8
 build:tcmalloc --per_file_copt=api/udf/.*@-fconstexpr-steps=1271242
 build:tcmalloc --//:tcmalloc_build=yes
 
+# Enables TCMalloc for the TensorFlow sidecar.
+build --config=tcmalloc
+
 build --copt=-I.
 build --per_file_copt='^external/tensorflow_v2_14_0*'/@-w
 # Ignores thread-safety warnings from the TensorFlow repo.

@@ -29,6 +29,9 @@ absl::Status SetCpuAffinity(const InferenceSidecarRuntimeConfig& config);
 absl::Status EnforceModelResetProbability(
     InferenceSidecarRuntimeConfig& config);
 
+// Sets the TCMalloc config.
+absl::Status SetTcMallocConfig(const InferenceSidecarRuntimeConfig& config);
+
 // Runs a simple gRPC server. It is thread safe.
 absl::Status Run(const InferenceSidecarRuntimeConfig& config);
 

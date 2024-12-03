@@ -157,13 +157,13 @@ container_layer(
 )
 
 container_layer(
-    name = "byob_server_container_layer",
+    name = "byob_runtime_container_layer",
     directory = "{roma_container_dir}/{root_dir}".format(
         roma_container_dir = roma_container_dir,
         root_dir = roma_container_root_dir,
     ),
     tars = [
-        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_server_container_{user}.tar".format(user = user.user),
+        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_runtime_container_{user}.tar".format(user = user.user),
     ],
 )
 
@@ -184,7 +184,7 @@ container_image(
         ":cddl_lib_layer",
         ":cddl_specs_layer",
         ":server_binary_layer",
-        ":byob_server_container_layer",
+        ":byob_runtime_container_layer",
         ":gvisor_config_layer",
     ] + select({
         "//:e2e_build": [
@@ -195,7 +195,7 @@ container_image(
     tars = [
         "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
         "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_tar_{user}".format(user = user.user),
-        "//tools/udf_samples:sample_udf_execs_tar",
+        "//tools/udf/generate_bid/samples:sample_generate_bid_execs_tar",
     ],
 )
 

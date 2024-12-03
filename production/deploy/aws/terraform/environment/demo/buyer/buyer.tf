@@ -169,10 +169,20 @@ module "buyer" {
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES   = "" # Example: "65536"
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "" # Example: "3000"
 
-    INFERENCE_SIDECAR_BINARY_PATH   = "" # Example: "/server/bin/inference_sidecar_<module_name>"
-    INFERENCE_MODEL_BUCKET_NAME     = "" # Example: "<bucket_name>"
-    INFERENCE_MODEL_CONFIG_PATH     = "" # Example: "model_config.json"
-    INFERENCE_MODEL_FETCH_PERIOD_MS = "" # Example: "60000"
+    INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar_<module_name>"
+    INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
+    INFERENCE_MODEL_CONFIG_PATH      = "" # Example: "model_config.json"
+    INFERENCE_MODEL_FETCH_PERIOD_MS  = "" # Example: "60000"
+    INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:
+    # "{
+    #    "num_interop_threads": 4,
+    #    "num_intraop_threads": 4,
+    #    "module_name": "tensorflow_v2_14_0",
+    #    "cpuset": [0, 1, 2, 3],
+    #    "tcmalloc_release_bytes_per_sec": 0,
+    #    "tcmalloc_max_total_thread_cache_bytes": 0,
+    #    "tcmalloc_max_per_cpu_cache_bytes": 0,
+    # }"
 
     # TCMalloc related config parameters.
     # See: https://github.com/google/tcmalloc/blob/master/docs/tuning.md
