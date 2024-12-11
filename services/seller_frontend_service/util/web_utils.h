@@ -31,6 +31,7 @@
 #include "services/common/util/error_accumulator.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
+#include "services/seller_frontend_service/data/k_anon.h"
 
 #include "cbor.h"
 
@@ -131,14 +132,6 @@ inline constexpr auto kComparator = [](absl::string_view a,
     return to_return;                                                         \
   }
 
-// Data related to k-anon winner/ghost winner that is to be populated in the
-// AuctionResult returned to the client.
-struct KAnonAuctionResultData {
-  std::vector<AuctionResult::KAnonGhostWinner> kanon_ghost_winners;
-  AuctionResult::KAnonJoinCandidate kanon_winner_join_candidates;
-  int kanon_winner_positional_index = -1;
-};
-
 // Encodes the data into a CBOR-serialized AuctionResult response for single
 // seller auction.
 absl::StatusOr<std::string> Encode(
@@ -148,7 +141,8 @@ absl::StatusOr<std::string> Encode(
     const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler,
-    const KAnonAuctionResultData* kanon_auction_result_data = nullptr);
+    const std::optional<KAnonAuctionResultData>& kanon_auction_result_data =
+        std::nullopt);
 
 // Encodes the data into a CBOR-serialized AuctionResult response for component
 // seller auction.
@@ -383,6 +377,12 @@ absl::Status CborSerializeWinReportingUrls(
 inline std::string CborDecodeString(cbor_item_t* input) {
   return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
                      cbor_string_length(input));
+}
+
+// Decodes cbor byte string input to std::string
+inline std::string CborDecodeByteString(cbor_item_t* input) {
+  return std::string(reinterpret_cast<char*>(cbor_bytestring_handle(input)),
+                     cbor_bytestring_length(input));
 }
 
 inline constexpr std::array<std::string_view, kNumAuctionResultKeys>

@@ -53,7 +53,6 @@ inline constexpr char kBuyerLogs[] = "buyerLogs";
 inline constexpr char kBuyerErrors[] = "buyerErrors";
 inline constexpr char kBuyerWarnings[] = "buyerWarnings";
 inline constexpr int kReportingArgSize = 5;
-static constexpr char kRomaTimeoutMs[] = "TimeoutMs";
 inline constexpr int kReportingArgSizeWithProtectedAppSignals = 7;
 inline constexpr char kReportingDispatchHandlerFunctionName[] =
     "reportingEntryFunction";

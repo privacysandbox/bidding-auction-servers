@@ -49,6 +49,7 @@ cc_library(
         "//sandbox:sandbox_worker",
         "//utils:cpu",
         "//utils:log",
+        "//utils:tcmalloc",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",

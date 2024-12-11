@@ -25,7 +25,7 @@ cc_library(
     ],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//api/udf:generate_bid_sdk_cc_proto",
+        "//api/udf:generate_bid_byob_sdk_cc_proto",
         "//services/auction_service:score_ads_reactor",
         "//services/bidding_service:cddl_spec_cache",
         "//services/bidding_service:egress_schema_cache",
@@ -57,7 +57,7 @@ cc_library(
     hdrs = ["random.h"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//api/udf:generate_bid_sdk_cc_proto",
+        "//api/udf:generate_bid_byob_sdk_cc_proto",
         "//services/buyer_frontend_service/data:buyer_frontend_data",
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/util:request_response_constants",

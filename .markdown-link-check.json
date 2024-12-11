@@ -5,6 +5,18 @@
     },
     {
       "pattern": "^http://go/"
+    },
+    {
+      "pattern": "^/tools/"
+    },
+    {
+      "pattern": "specs/udf_interface.proto"
+    },
+    {
+      "pattern": "udf/Communication%20Interface.md"
+    },
+    {
+      "pattern": "udf/Execution%20Environment%20and%20Interface.md"
     }
   ],
   "replacementPatterns": [

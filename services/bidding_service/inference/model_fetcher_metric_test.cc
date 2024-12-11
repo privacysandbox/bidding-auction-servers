@@ -25,7 +25,12 @@ namespace {
 using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
 
-TEST(ModelFetcherMetricTest, GetCloudFetchSuccessCount) {
+class ModelFetcherMetricTest : public ::testing::Test {
+ protected:
+  void SetUp() override { ModelFetcherMetric::ClearStates(); }
+};
+
+TEST_F(ModelFetcherMetricTest, GetCloudFetchSuccessCount) {
   EXPECT_THAT(ModelFetcherMetric::GetCloudFetchSuccessCount(),
               UnorderedElementsAre(Pair("cloud fetch", 0)));
 
@@ -34,7 +39,7 @@ TEST(ModelFetcherMetricTest, GetCloudFetchSuccessCount) {
               UnorderedElementsAre(Pair("cloud fetch", 1)));
 }
 
-TEST(ModelFetcherMetricTest, GetCloudFetchFailedCountByStatus) {
+TEST_F(ModelFetcherMetricTest, GetCloudFetchFailedCountByStatus) {
   EXPECT_THAT(ModelFetcherMetric::GetCloudFetchFailedCountByStatus(),
               UnorderedElementsAre());
 
@@ -55,7 +60,37 @@ TEST(ModelFetcherMetricTest, GetCloudFetchFailedCountByStatus) {
       UnorderedElementsAre(Pair("UNAVAILABLE", 2), Pair("INTERNAL", 1)));
 }
 
-TEST(ModelFetcherMetricTest, GetRecentModelRegistrationSuccess) {
+TEST_F(ModelFetcherMetricTest, GetModelDeletionSuccessCount) {
+  EXPECT_THAT(ModelFetcherMetric::GetModelDeletionSuccessCount(),
+              UnorderedElementsAre(Pair("model deletion", 0)));
+
+  ModelFetcherMetric::IncrementModelDeletionSuccessCount();
+  EXPECT_THAT(ModelFetcherMetric::GetModelDeletionSuccessCount(),
+              UnorderedElementsAre(Pair("model deletion", 1)));
+}
+
+TEST_F(ModelFetcherMetricTest, GetModelDeletionFailedCountByStatus) {
+  EXPECT_THAT(ModelFetcherMetric::GetModelDeletionFailedCountByStatus(),
+              UnorderedElementsAre());
+
+  ModelFetcherMetric::IncrementModelDeletionFailedCountByStatus(
+      absl::StatusCode::kUnavailable);
+  ModelFetcherMetric::IncrementModelDeletionFailedCountByStatus(
+      absl::StatusCode::kInternal);
+
+  EXPECT_THAT(
+      ModelFetcherMetric::GetModelDeletionFailedCountByStatus(),
+      UnorderedElementsAre(Pair("UNAVAILABLE", 1), Pair("INTERNAL", 1)));
+
+  ModelFetcherMetric::IncrementModelDeletionFailedCountByStatus(
+      absl::StatusCode::kUnavailable);
+
+  EXPECT_THAT(
+      ModelFetcherMetric::GetModelDeletionFailedCountByStatus(),
+      UnorderedElementsAre(Pair("UNAVAILABLE", 2), Pair("INTERNAL", 1)));
+}
+
+TEST_F(ModelFetcherMetricTest, GetRecentModelRegistrationSuccess) {
   EXPECT_THAT(ModelFetcherMetric::GetRecentModelRegistrationSuccess(),
               UnorderedElementsAre());
 
@@ -71,7 +106,7 @@ TEST(ModelFetcherMetricTest, GetRecentModelRegistrationSuccess) {
               UnorderedElementsAre(Pair("model1", 1)));
 }
 
-TEST(ModelFetcherMetricTest, GetRecentModelRegistrationFailure) {
+TEST_F(ModelFetcherMetricTest, GetRecentModelRegistrationFailure) {
   EXPECT_THAT(ModelFetcherMetric::GetRecentModelRegistrationFailure(),
               UnorderedElementsAre());
 
@@ -87,7 +122,7 @@ TEST(ModelFetcherMetricTest, GetRecentModelRegistrationFailure) {
               UnorderedElementsAre(Pair("model1", 1)));
 }
 
-TEST(ModelFetcherMetricTest, GetModelRegistrationFailedCountByErroCode) {
+TEST_F(ModelFetcherMetricTest, GetModelRegistrationFailedCountByErroCode) {
   EXPECT_THAT(ModelFetcherMetric::GetModelRegistrationFailedCountByStatus(),
               UnorderedElementsAre());
 
@@ -108,18 +143,26 @@ TEST(ModelFetcherMetricTest, GetModelRegistrationFailedCountByErroCode) {
       UnorderedElementsAre(Pair("UNAVAILABLE", 2), Pair("INTERNAL", 1)));
 }
 
-TEST(ModelFetcherMetricTest, GetAvailableModels) {
+TEST_F(ModelFetcherMetricTest, GetAvailableModels) {
   EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(), UnorderedElementsAre());
 
   ModelFetcherMetric::UpdateAvailableModels({"model1", "model2"});
 
   EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
               UnorderedElementsAre(Pair("model1", 1), Pair("model2", 1)));
+}
 
+TEST_F(ModelFetcherMetricTest, GetAvailableModelsShouldRemoveZeroValueEntries) {
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(), UnorderedElementsAre());
   ModelFetcherMetric::UpdateAvailableModels({"model1"});
-
   EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
               UnorderedElementsAre(Pair("model1", 1)));
+  ModelFetcherMetric::UpdateAvailableModels({});
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
+              UnorderedElementsAre(Pair("model1", 0)));
+  // No need to report the zero value entry twice since cloud monitoring will
+  // persist the last receieved zero value.
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(), UnorderedElementsAre());
 }
 
 }  // namespace

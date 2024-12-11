@@ -126,4 +126,26 @@ absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
   return SerializeJsonDoc(top_level_doc);
 }
 
+bool UseKvV2(ClientType client_type, bool is_tkv_v2_browser_enabled,
+             bool is_test_mode_enabled, bool is_tkv_v2_empty) {
+  if (client_type == ClientType::CLIENT_TYPE_BROWSER) {
+    return is_tkv_v2_browser_enabled;
+  }
+
+  if (client_type == ClientType::CLIENT_TYPE_ANDROID) {
+    // TODO(b/378676724): Remove test_mode conditions. All CLIENT_TYPE_ANDROID
+    // requests should go to TKV V2.
+    // TEST_MODE=false. Android requests MUST go to TKV V2
+    if (!is_test_mode_enabled) {
+      return true;
+    }
+    // TEST_MODE=true. Android requests go to TKV V2 only if TKV V2 address is
+    // not empty.
+    if (!is_tkv_v2_empty) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

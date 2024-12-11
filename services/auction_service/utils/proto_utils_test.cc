@@ -225,11 +225,13 @@ MakeScoringSignalsForAd() {
 
 TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesForAdWithBidMetadata) {
   float test_bid = MakeARandomNumber<float>(0.1, 10.1);
+  auto scoring_signals = MakeScoringSignalsForAd();
   auto output = BuildScoreAdRequest(
       MakeAnAdWithMetadata(test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
-      MakeScoringSignalsForAd(), /*enable_debug_reporting = */ false,
-      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      scoring_signals.find(kTestRenderUrl)->second.GetString(),
+      /*enable_debug_reporting = */ false, log_context,
+      /*enable_adtech_code_logging = */ false, kTestBidMetadata,
       kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
@@ -265,11 +267,13 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesForAdWithBidMetadata) {
 TEST(BuildScoreAdRequestTest,
      PopulatesExpectedValuesForForProtectedAppSignalsAd) {
   float test_bid = MakeARandomNumber<float>(0.1, 10.1);
+  auto scoring_signals = MakeScoringSignalsForAd();
   auto output = BuildScoreAdRequest(
       GetProtectedAppSignalsAdWithBidMetadata(kTestRenderUrl, test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
-      MakeScoringSignalsForAd(), /*enable_debug_reporting = */ false,
-      log_context, /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      scoring_signals.find(kTestRenderUrl)->second.GetString(),
+      /*enable_debug_reporting = */ false, log_context,
+      /*enable_adtech_code_logging = */ false, kTestBidMetadata,
       kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
@@ -332,12 +336,14 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForAdWithBidMetadata) {
   std::vector<bool> flag_values = {true, false};
   for (auto flag_1 : flag_values) {
     for (auto flag_2 : flag_values) {
+      auto scoring_signals = MakeScoringSignalsForAd();
       auto output = BuildScoreAdRequest(
           MakeAnAdWithMetadata(MakeARandomNumber<float>(0.1, 10.1)),
           std::make_shared<std::string>(kTestAuctionConfig),
-          MakeScoringSignalsForAd(), /*enable_debug_reporting = */ flag_2,
-          log_context, /*enable_adtech_code_logging = */ flag_1,
-          kTestBidMetadata, kScoreAdBlobVersion);
+          scoring_signals.find(kTestRenderUrl)->second.GetString(),
+          /*enable_debug_reporting = */ flag_2, log_context,
+          /*enable_adtech_code_logging = */ flag_1, kTestBidMetadata,
+          kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));
@@ -358,12 +364,14 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
   std::vector<bool> flag_values = {true, false};
   for (auto flag_1 : flag_values) {
     for (auto flag_2 : flag_values) {
+      auto scoring_signals = MakeScoringSignalsForAd();
       auto output = BuildScoreAdRequest(
           GetProtectedAppSignalsAdWithBidMetadata(kTestRenderUrl),
           std::make_shared<std::string>(kTestAuctionConfig),
-          MakeScoringSignalsForAd(), /*enable_debug_reporting = */ flag_2,
-          log_context, /*enable_adtech_code_logging = */ flag_1,
-          kTestBidMetadata, kScoreAdBlobVersion);
+          scoring_signals.find(kTestRenderUrl)->second.GetString(),
+          /*enable_debug_reporting = */ flag_2, log_context,
+          /*enable_adtech_code_logging = */ flag_1, kTestBidMetadata,
+          kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));

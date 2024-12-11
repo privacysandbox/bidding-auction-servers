@@ -36,7 +36,11 @@ int main(int argc, char** argv) {
   CHECK(privacy_sandbox::bidding_auction_servers::inference::
             EnforceModelResetProbability(config)
                 .ok())
-      << "Could not set the model reset probability";
+      << "Could not set the model reset probability.";
+  CHECK(privacy_sandbox::bidding_auction_servers::inference::SetTcMallocConfig(
+            config)
+            .ok())
+      << "Could not set TCMalloc config.";
 
   if (absl::Status run_status =
           privacy_sandbox::bidding_auction_servers::inference::Run(config);

@@ -103,6 +103,7 @@ module "seller" {
   gcp_project_id        = local.gcp_project_id
   auction_image         = "${local.image_repo}/auction_service:${each.value.image_tag}"
   seller_frontend_image = "${local.image_repo}/seller_frontend_service:${each.value.image_tag}"
+  fakekv_service_port   = 1900 # Ignore this.
 
   envoy_port = 51052 # Do not change. Must match production/packaging/gcp/seller_frontend_service/bin/envoy.yaml
   runtime_flags = merge({
@@ -196,6 +197,7 @@ module "seller" {
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
+    REQUIRE_SCORING_SIGNALS_FOR_SCORING                       = "true"
   }, each.value.runtime_flag_override)
 
   frontend_domain_name               = local.seller_domain_name

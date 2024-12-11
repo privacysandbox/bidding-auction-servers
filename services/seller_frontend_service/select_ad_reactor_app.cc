@@ -78,7 +78,8 @@ SelectAdReactorForApp::SelectAdReactorForApp(
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const std::optional<AuctionResult::Error>& error) {
+    const std::optional<AuctionResult::Error>& error,
+    const AdScores* ghost_winning_scores) {
   AuctionResult auction_result;
   if (high_score) {
     auction_result = AdScoreToAuctionResult(
@@ -292,6 +293,17 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
           std::move(ad_with_bid_metadata));
     }
   }
+}
+
+AuctionResult::KAnonJoinCandidate SelectAdReactorForApp::GetKAnonJoinCandidate(
+    const ScoreAdsResponse::AdScore& score) {
+  return {};
+}
+
+KAnonAuctionResultData SelectAdReactorForApp::GetKAnonAuctionResultData(
+    const std::optional<ScoreAdsResponse::AdScore>& high_score,
+    const AdScores* ghost_winning_scores) {
+  return {};
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -87,6 +87,14 @@ inline constexpr char kKvV2CompressionGroup[] =
            compression_group_id: 33
            content: "[{\"id\":0,\"keyGroupOutputs\":[{\"tags\":[\"renderUrls\"],\"keyValues\":{\"someKey\":{\"value\":\"someValue\"}}}]}]"
          })pb";
+constexpr absl::string_view kSampleBiddingUrl = "https://ad_tech_A.com/bid.js";
+constexpr absl::string_view kSampleBiddingUrl2 = "https://ad_tech_B.com/bid.js";
+constexpr absl::string_view kSampleBiddingUrl3 = "https://ad_tech_C.com/bid.js";
+inline constexpr char kSampleBuyerReportingId[] = "buyerReportingId";
+inline constexpr char kSampleBuyerAndSellerReportingId[] =
+    "buyerAndSellerReportingId";
+constexpr absl::string_view kTestRenderUrlSuffix = "/ad";
+constexpr absl::string_view kTestComponentUrlSuffix = "/ad-component-";
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -395,11 +403,14 @@ GetSelectAdRequestAndClientRegistryForTest(
     bool expect_all_buyers_solicited = true,
     absl::string_view top_level_seller = "", bool enable_reporting = false,
     bool force_set_modified_bid_to_zero = false,
-    ServerComponentAuctionParams server_component_auction_params = {}) {
+    ServerComponentAuctionParams server_component_auction_params = {},
+    bool enforce_kanon = false,
+    const std::vector<ScoreAdsResponse::AdScore>& kanon_ghost_winners = {}) {
   auto encrypted_request_with_context = GetSampleSelectAdRequest<T>(
       client_type, seller_origin_domain,
       /*is_consented_debug=*/false, top_level_seller,
-      server_component_auction_params.top_level_cloud_platform);
+      server_component_auction_params.top_level_cloud_platform,
+      /*enable_unlimited_egress=*/false, /*enforce_kanon=*/enforce_kanon);
 
   // Sets up buyer client while populating the expected buyer bids that can
   // then be used to setup the scoring signals provider.
@@ -431,7 +442,7 @@ GetSelectAdRequestAndClientRegistryForTest(
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .WillRepeatedly(
           [bid_value, client_type, top_level_seller, enable_reporting,
-           force_set_modified_bid_to_zero](
+           force_set_modified_bid_to_zero, kanon_ghost_winners](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
@@ -486,6 +497,12 @@ GetSelectAdRequestAndClientRegistryForTest(
               if (client_type == CLIENT_TYPE_ANDROID) {
                 score->set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
               }
+              if (!kanon_ghost_winners.empty()) {
+                for (const auto& ghost_score : kanon_ghost_winners) {
+                  *response->mutable_ghost_winning_ad_scores()->Add() =
+                      ghost_score;
+                }
+              }
               std::move(on_done)(std::move(response),
                                  /* response_metadata= */ {});
               // Expect only one bid.
@@ -515,12 +532,13 @@ template <typename T>
 SelectAdResponse RunReactorRequest(
     const TrustedServersConfigClient& config_client,
     const ClientRegistry& clients, const SelectAdRequest& request,
-    bool enable_kanon = false, bool fail_fast = false) {
+    bool enable_kanon = false, bool fail_fast = false,
+    const ReportWinMap& report_win_map = {}) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
-            /*report_win_map=*/{},
+            report_win_map,
             /*enable_cancellation=*/false, enable_kanon, fail_fast);
   reactor.Execute();
   return response;

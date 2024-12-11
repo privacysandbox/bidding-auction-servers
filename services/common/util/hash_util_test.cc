@@ -14,9 +14,12 @@
 
 #include "services/common/util/hash_util.h"
 
+#include <gmock/gmock-matchers.h>
+
 #include <optional>
 #include <string>
 
+#include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
 #include "gtest/gtest.h"
 
@@ -30,6 +33,20 @@ HashUtil hash_util_ = HashUtil();
 template <int N>
 std::string MakeNullSafeString(const char (&as_chars)[N]) {
   return std::string(as_chars, N - 1);
+}
+
+MATCHER_P(ByteStringEq, value, "") {
+  if (value.size() != arg.size()) {
+    return false;
+  }
+
+  for (int i = 0; i < value.size(); ++i) {
+    if (value[i] != arg[i]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // Copied from Chromium (crypto/sha2_unittest.cc).
@@ -49,6 +66,11 @@ TEST(HashUtilTest, ComputeSHA256) {
   std::string million_As(1000000, 'a');
   EXPECT_EQ(ComputeSHA256(million_As),
             "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+  EXPECT_THAT(
+      ComputeSHA256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+                    /*return_hex=*/false),
+      ByteStringEq(absl::HexStringToBytes(
+          "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")));
 }
 
 TEST(HashUtilTest, CanonicalizeURL) {

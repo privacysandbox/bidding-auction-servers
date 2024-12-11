@@ -112,6 +112,9 @@ ABSL_FLAG(std::optional<int64_t>, sfe_tcmalloc_max_total_thread_cache_bytes,
 ABSL_FLAG(std::optional<std::string>, k_anon_api_key, "",
           "API key used to query hashes from k-anon service. Required when "
           "k-anon is enabled.");
+ABSL_FLAG(
+    std::optional<bool>, allow_compressed_auction_config, false,
+    "Enable reading of the compressed auction config field in SelectAdRequest");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -225,6 +228,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
   config_client.SetFlag(FLAGS_enable_tkv_v2_browser, ENABLE_TKV_V2_BROWSER);
   config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
+  config_client.SetFlag(FLAGS_allow_compressed_auction_config,
+                        ALLOW_COMPRESSED_AUCTION_CONFIG);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()

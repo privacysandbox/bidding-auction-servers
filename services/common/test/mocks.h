@@ -200,8 +200,9 @@ class ByobDispatchClientMock
  public:
   MOCK_METHOD(absl::Status, LoadSync, (std::string version, std::string code),
               (override));
-  MOCK_METHOD(absl::StatusOr<std::unique_ptr<ServiceResponse>>, Execute,
-              (const ServiceRequest& request, absl::Duration timeout),
+  MOCK_METHOD(absl::Status, Execute,
+              (ServiceRequest request, absl::Duration timeout,
+               absl::AnyInvocable<void(absl::StatusOr<ServiceResponse>) &&>),
               (override));
 };
 

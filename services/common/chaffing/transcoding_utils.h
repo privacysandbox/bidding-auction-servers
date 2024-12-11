@@ -73,9 +73,8 @@ absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
   // Create backing array for QuicheDataWriter and initialize the writer with
   // it.
   const int kEncodedDataSize = payload_size;
-  // NOLINTNEXTLINE
-  char encoded_payload[kEncodedDataSize];
-  quiche::QuicheDataWriter writer(kEncodedDataSize, encoded_payload);
+  std::string encoded_payload(kEncodedDataSize, '\0');
+  quiche::QuicheDataWriter writer(kEncodedDataSize, encoded_payload.data());
 
   // Write 1 byte for version and compression algorithm.
   int8_t framing_and_compression_byte = compression_type;
@@ -88,7 +87,7 @@ absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
   writer.WritePadding();
 
   PS_VLOG(8) << "Payload successfully encoded...";
-  return std::string(encoded_payload, kEncodedDataSize);
+  return encoded_payload;
 }
 
 template <typename GetBidsProto>

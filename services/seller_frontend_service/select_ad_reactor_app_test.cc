@@ -97,6 +97,7 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
     config_.SetOverride(kFalse, TEST_MODE);
+    config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
@@ -486,6 +487,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
     config_.SetOverride(kFalse, TEST_MODE);
+    config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
 
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));

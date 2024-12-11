@@ -172,6 +172,8 @@ inline bool SetGeneratorAndSample(int debug_sample_rate_micro,
 // in non_prod, modify config to consent
 void ModifyConsent(server_common::ConsentedDebugConfiguration& original);
 
+inline constexpr absl::string_view kProdDebug = "sampled_debug";
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_LOGGERS_REQUEST_LOG_CONTEXT_H_

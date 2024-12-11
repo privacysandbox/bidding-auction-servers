@@ -554,5 +554,40 @@ TEST(ConvertKvV2ResponseToV1String, KeyTagsNotFoundReturnEmtpyString) {
   EXPECT_EQ("", *result);
 }
 
+TEST(UseKvV2, BrowserNoTkvEnabledReturnsFalse) {
+  EXPECT_FALSE(UseKvV2(ClientType::CLIENT_TYPE_BROWSER,
+                       /*is_tkv_v2_browser_enabled=*/false,
+                       /*is_test_mode_enabled=*/false,
+                       /*is_tkv_v2_empty=*/false));
+}
+
+TEST(UseKvV2, BrowserTkvEnabledReturnsTrue) {
+  EXPECT_TRUE(UseKvV2(ClientType::CLIENT_TYPE_BROWSER,
+                      /*is_tkv_v2_browser_enabled=*/true,
+                      /*is_test_mode_enabled=*/false,
+                      /*is_tkv_v2_empty=*/false));
+}
+
+TEST(UseKvV2, AndroidTestModeFalseReturnsTrue) {
+  EXPECT_TRUE(UseKvV2(ClientType::CLIENT_TYPE_ANDROID,
+                      /*is_tkv_v2_browser_enabled=*/false,
+                      /*is_test_mode_enabled=*/false,
+                      /*is_tkv_v2_empty=*/false));
+}
+
+TEST(UseKvV2, AndroidTestModeTrueAddressEmptyReturnsFalse) {
+  EXPECT_FALSE(UseKvV2(ClientType::CLIENT_TYPE_ANDROID,
+                       /*is_tkv_v2_browser_enabled=*/false,
+                       /*is_test_mode_enabled=*/true,
+                       /*is_tkv_v2_empty=*/true));
+}
+
+TEST(UseKvV2, AndroidTestModeTrueAddressNotEmptyReturnsTrue) {
+  EXPECT_TRUE(UseKvV2(ClientType::CLIENT_TYPE_ANDROID,
+                      /*is_tkv_v2_browser_enabled=*/false,
+                      /*is_test_mode_enabled=*/true,
+                      /*is_tkv_v2_empty=*/false));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

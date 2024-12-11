@@ -23,8 +23,8 @@
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/json_util.h"
-#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -120,7 +120,7 @@ absl::Status PerformPASReportWin(
       dispatch_request,
       GetPASReportWinDispatchRequest(dispatch_request_config, request_data,
                                      buyer_device_signals));
-  dispatch_request.tags[kRomaTimeoutMs] =
+  dispatch_request.tags[kRomaTimeoutTag] =
       dispatch_request_config.roma_timeout_ms;
   std::vector<DispatchRequest> dispatch_requests = {
       std::move(dispatch_request)};

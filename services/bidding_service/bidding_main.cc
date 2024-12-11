@@ -402,9 +402,10 @@ absl::Status RunServer() {
     CHECK(enable_protected_audience) << kProtectedAudienceMustBeEnabled;
     CHECK(!enable_protected_app_signals) << kProtectedAppSignalsMustBeDisabled;
 
-    PS_ASSIGN_OR_RETURN(auto temp_client,
-                        GenerateBidByobDispatchClient::Create(
-                            config_client.GetIntParameter(UDF_NUM_WORKERS)));
+    PS_ASSIGN_OR_RETURN(
+        auto temp_client,
+        GenerateBidByobDispatchClient::Create(
+            config_client.GetIntParameter(UDF_NUM_WORKERS), executor.get()));
     byob_client =
         std::make_unique<GenerateBidByobDispatchClient>(std::move(temp_client));
 
@@ -415,7 +416,7 @@ absl::Status RunServer() {
         << "Failed to initialize UDF fetch.";
 
     generate_bids_reactor_factory =
-        GetProtectedAudienceByobReactorFactory(*byob_client, executor.get());
+        GetProtectedAudienceByobReactorFactory(*byob_client);
     protected_app_signals_generate_bids_reactor_factory =
         GetProtectedAppSignalsByobReactorFactory();
   } else {
@@ -523,8 +524,8 @@ absl::Status RunServer() {
       .tee_kv_server_grpc_arg_default_authority =
           std::move(tee_kv_server_grpc_arg_default_authority),
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
+      .roma_timeout_ms = absl::StrCat(
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(), "ms"),
       .is_protected_app_signals_enabled = enable_protected_app_signals,
       .is_protected_audience_enabled = enable_protected_audience,
       .ad_retrieval_timeout_ms =

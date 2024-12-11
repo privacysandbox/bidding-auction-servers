@@ -96,6 +96,7 @@ cc_library(
         "//services/common/util:json_util",
         "//services/common/util:request_response_constants",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

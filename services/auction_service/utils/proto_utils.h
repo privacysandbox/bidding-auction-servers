@@ -23,6 +23,7 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include "absl/base/nullability.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -34,6 +35,8 @@
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/loggers/request_log_context.h"
 #include "src/util/status_macro/status_macros.h"
+
+constexpr absl::string_view kEmptyScoringSignalsJson = "null";
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -59,7 +62,8 @@ std::shared_ptr<std::string> BuildAuctionConfig(
 absl::StatusOr<absl::flat_hash_map<std::string, rapidjson::StringBuffer>>
 BuildTrustedScoringSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
-    RequestLogContext& log_context);
+    RequestLogContext& log_context,
+    const bool require_scoring_signals_for_scoring);
 
 void MayPopulateScoringSignalsForProtectedAppSignals(
     const ScoreAdsRequest::ScoreAdsRawRequest& raw_request,
@@ -133,11 +137,9 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
 template <typename T>
 absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
     const T& ad, const std::shared_ptr<std::string>& auction_config,
-    const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
-        scoring_signals,
-    const bool enable_debug_reporting, RequestLogContext& log_context,
-    const bool enable_adtech_code_logging, absl::string_view bid_metadata,
-    absl::string_view code_version) {
+    absl::string_view scoring_signals, const bool enable_debug_reporting,
+    RequestLogContext& log_context, const bool enable_adtech_code_logging,
+    absl::string_view bid_metadata, absl::string_view code_version) {
   std::string ad_object_json;
   if (ad.ad().has_struct_value()) {
     PS_RETURN_IF_ERROR(
@@ -145,10 +147,11 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
   } else {
     ad_object_json = ad.ad().string_value();
   }
-  return BuildScoreAdRequest(
-      ad.render(), ad_object_json, scoring_signals.at(ad.render()).GetString(),
-      ad.bid(), auction_config, bid_metadata, log_context,
-      enable_adtech_code_logging, enable_debug_reporting, code_version);
+
+  return BuildScoreAdRequest(ad.render(), ad_object_json, scoring_signals,
+                             ad.bid(), auction_config, bid_metadata,
+                             log_context, enable_adtech_code_logging,
+                             enable_debug_reporting, code_version);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -48,7 +48,8 @@ class SelectAdReactorInvalid : public SelectAdReactor {
  private:
   absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const std::optional<AuctionResult::Error>& error) override;
+      const std::optional<AuctionResult::Error>& error,
+      const AdScores* ghost_winning_scores = nullptr) override;
 
   [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
       absl::string_view encoded_data) override;
@@ -59,6 +60,13 @@ class SelectAdReactorInvalid : public SelectAdReactor {
   absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
+
+  KAnonAuctionResultData GetKAnonAuctionResultData(
+      const std::optional<ScoreAdsResponse::AdScore>& high_score,
+      const AdScores* ghost_winning_scores = nullptr) override;
+
+  AuctionResult::KAnonJoinCandidate GetKAnonJoinCandidate(
+      const ScoreAdsResponse::AdScore& score) override;
 
   ClientType client_type_;
 };

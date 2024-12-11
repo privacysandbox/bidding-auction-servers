@@ -179,3 +179,13 @@ cc_library(
         "@com_google_googletest//:gtest",
     ],
 )
+
+cc_library(
+    name = "tcmalloc",
+    hdrs = [
+        "tcmalloc.h",
+    ],
+    deps = [
+        "@com_google_tcmalloc//tcmalloc:malloc_extension",
+    ],
+)

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
+#include "api/bidding_auction_servers.pb.h"
 #include "public/query/v2/get_values_v2.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -58,6 +59,12 @@ namespace privacy_sandbox::bidding_auction_servers {
 absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
     const std::vector<std::string_view>& key_tags,
     kv_server::v2::GetValuesResponse& v2_response_to_convert);
+
+// Determine whether KV V2 should be used.
+// CLIENT_TYPE_ANDROID requests MUST go to TKV V2 for TEST_MODE=false.
+// CLIENT_TYPE_BROWSER requests go to TKV V2 only if use_tkv_v2_browser is true.
+bool UseKvV2(ClientType client_type, bool is_tkv_v2_browser_enabled,
+             bool is_test_mode_enabled, bool is_tkv_v2_empty);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

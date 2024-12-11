@@ -43,4 +43,6 @@ message ModelMetadata {
   // registration, schema should follow BatchInferenceRequest in inference_payload.proto
   // request text should be in json format.
   string warm_up_batch_request_json = 3;
+  // Time to wait after an eviction notification before deleting the model.
+  int32 eviction_grace_period_in_ms = 4;
 }

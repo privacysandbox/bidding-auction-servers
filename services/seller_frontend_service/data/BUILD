@@ -19,6 +19,7 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "seller_frontend_data",
     hdrs = [
+        "k_anon.h",
         "scoring_signals.h",
     ],
     deps = [

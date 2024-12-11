@@ -16,73 +16,67 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-long TrimAndReturnDebugUrlsSize(AdWithBid& ad_with_bid,
-                                int max_allowed_size_debug_url_chars,
-                                long max_allowed_size_all_debug_urls_chars,
-                                long total_debug_urls_chars,
-                                RequestLogContext& log_context) {
-  // Size of trimmed debug URLs for this bid.
-  long current_debug_urls_chars = 0;
+DebugUrlsSize TrimAndReturnDebugUrlsSize(
+    AdWithBid& ad_with_bid, int max_allowed_size_debug_url_chars,
+    long max_allowed_size_all_debug_urls_chars, long total_debug_urls_chars,
+    RequestLogContext& log_context) {
   // No debug URLs present.
   if (!ad_with_bid.has_debug_report_urls()) {
-    return current_debug_urls_chars;
+    return {.win_url_chars = 0, .loss_url_chars = 0};
   }
   // Size of existing debug URLs for this bid.
-  int win_url_length =
+  long win_url_chars =
       ad_with_bid.debug_report_urls().auction_debug_win_url().length();
-  int loss_url_length =
+  long loss_url_chars =
       ad_with_bid.debug_report_urls().auction_debug_loss_url().length();
   // Clear debug URLs for this bid since current size of all debug URLs already
   // exceeds maximum allowed size of all debug URLs.
   if (total_debug_urls_chars >= max_allowed_size_all_debug_urls_chars) {
-    if (win_url_length > 0) {
+    if (win_url_chars > 0) {
       PS_VLOG(kNoisyWarn, log_context)
           << "Skipped debug win URL for " << ad_with_bid.interest_group_name()
           << ": " << ad_with_bid.debug_report_urls().auction_debug_win_url();
     }
-    if (loss_url_length > 0) {
+    if (loss_url_chars > 0) {
       PS_VLOG(kNoisyWarn, log_context)
           << "Skipped debug loss URL for " << ad_with_bid.interest_group_name()
           << ": " << ad_with_bid.debug_report_urls().auction_debug_loss_url();
     }
     ad_with_bid.clear_debug_report_urls();
-    return current_debug_urls_chars;
+    return {.win_url_chars = 0, .loss_url_chars = 0};
   }
   // Clear win debug URL if:
   // i) it exceeds maximum allowed size per debug URL, or
   // ii) it causes total size of all debug URLs to exceed maximum allowed size
   // of all debug URLs.
-  if (win_url_length > max_allowed_size_debug_url_chars ||
-      win_url_length + total_debug_urls_chars >
+  if (win_url_chars > max_allowed_size_debug_url_chars ||
+      win_url_chars + total_debug_urls_chars >
           max_allowed_size_all_debug_urls_chars) {
     PS_VLOG(kNoisyWarn, log_context)
         << "Skipped debug win URL for " << ad_with_bid.interest_group_name()
         << ": " << ad_with_bid.debug_report_urls().auction_debug_win_url();
     ad_with_bid.mutable_debug_report_urls()->clear_auction_debug_win_url();
-    win_url_length = 0;
+    win_url_chars = 0;
   } else {
-    total_debug_urls_chars += win_url_length;
-    current_debug_urls_chars += win_url_length;
+    total_debug_urls_chars += win_url_chars;
   }
   // Clear loss debug URL if:
   // i) it exceeds maximum allowed size per debug URL, or
   // ii) it causes total size of all debug URLs to exceed maximum allowed size
   // of all debug URLs.
-  if (loss_url_length > max_allowed_size_debug_url_chars ||
-      loss_url_length + total_debug_urls_chars >
+  if (loss_url_chars > max_allowed_size_debug_url_chars ||
+      loss_url_chars + total_debug_urls_chars >
           max_allowed_size_all_debug_urls_chars) {
     PS_VLOG(kNoisyWarn, log_context)
         << "Skipped debug loss URL for " << ad_with_bid.interest_group_name()
         << ": " << ad_with_bid.debug_report_urls().auction_debug_loss_url();
     ad_with_bid.mutable_debug_report_urls()->clear_auction_debug_loss_url();
-    loss_url_length = 0;
-  } else {
-    current_debug_urls_chars += loss_url_length;
+    loss_url_chars = 0;
   }
-  if (win_url_length == 0 && loss_url_length == 0) {
+  if (win_url_chars == 0 && loss_url_chars == 0) {
     ad_with_bid.clear_debug_report_urls();
   }
-  return current_debug_urls_chars;
+  return {.win_url_chars = win_url_chars, .loss_url_chars = loss_url_chars};
 }
 
 absl::Status IsValidProtectedAudienceBid(const AdWithBid& bid,

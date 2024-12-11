@@ -314,8 +314,12 @@ absl::Status RunServer() {
   } else {
     PS_LOG(WARNING)
         << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID requests will "
-           "fail. Additionally, if ENABLE_TKV_V2_BROWSER is true, "
-           "CLIENT_TYPE_BROWSER requests will fail too.";
+           "fail.";
+    if (use_tkv_v2_browser) {
+      PS_LOG(WARNING)
+          << " TKV V2 endpoint not set, but ENABLE_TKV_V2_BROWSER is true. "
+             "All CLIENT_TYPE_BROWSER requests will fail.";
+    }
   }
 
   BuyerFrontEndService buyer_frontend_service(
@@ -344,6 +348,8 @@ absl::Status RunServer() {
           config_client.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
           config_client.GetBooleanParameter(CONSENT_ALL_REQUESTS),
           config_client.GetBooleanParameter(ENABLE_PRIORITY_VECTOR),
+          config_client.GetBooleanParameter(TEST_MODE),
+          buyer_tkv_v2_server_addr.empty(),
       },
       enable_buyer_frontend_benchmarking);
 

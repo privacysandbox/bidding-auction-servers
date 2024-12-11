@@ -20,8 +20,8 @@
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/util/json_util.h"
-#include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -164,7 +164,7 @@ absl::Status PerformReportResult(
                       SerializeJsonDoc(seller_device_signals));
   DispatchRequest dispatch_request = GetReportResultDispatchRequest(
       dispatch_request_config, request_data, seller_device_signals_json);
-  dispatch_request.tags[kRomaTimeoutMs] =
+  dispatch_request.tags[kRomaTimeoutTag] =
       dispatch_request_config.roma_timeout_ms;
   std::vector<DispatchRequest> dispatch_requests = {
       std::move(dispatch_request)};

@@ -28,6 +28,7 @@
 #include <google/protobuf/text_format.h>
 #include <rapidjson/stringbuffer.h>
 
+#include "absl/base/nullability.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "api/bidding_auction_servers.pb.h"
@@ -200,8 +201,6 @@ class ScoreAdsReactor
   void PerformDebugReporting(
       const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
 
-  static constexpr char kRomaTimeoutMs[] = "TimeoutMs";
-
   void DispatchReportingRequestForPA(
       absl::string_view dispatch_id,
       const ScoreAdsResponse::AdScore& winning_ad_score,
@@ -283,7 +282,8 @@ class ScoreAdsReactor
   // in the input proto for single seller and component auctions.
   void PopulateProtectedAudienceDispatchRequests(
       bool enable_debug_reporting,
-      const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
+      absl::Nullable<
+          const absl::flat_hash_map<std::string, rapidjson::StringBuffer>*>
           scoring_signals,
       const std::shared_ptr<std::string>& auction_config,
       google::protobuf::RepeatedPtrField<AdWithBidMetadata>& ads);
@@ -302,7 +302,8 @@ class ScoreAdsReactor
   // if the feature flag is enabled.
   void MayPopulateProtectedAppSignalsDispatchRequests(
       bool enable_debug_reporting,
-      const absl::flat_hash_map<std::string, rapidjson::StringBuffer>&
+      absl::Nullable<
+          const absl::flat_hash_map<std::string, rapidjson::StringBuffer>*>
           scoring_signals,
       const std::shared_ptr<std::string>& auction_config,
       google::protobuf::RepeatedPtrField<ProtectedAppSignalsAdWithBidMetadata>&
@@ -387,6 +388,7 @@ class ScoreAdsReactor
   absl::string_view code_version_;
   bool enable_report_win_url_generation_;
   bool enable_seller_and_buyer_code_isolation_;
+  bool require_scoring_signals_for_scoring_;
   ReportingDispatchRequestConfig reporting_dispatch_request_config_;
   PostAuctionSignals post_auction_signals_;
   google::protobuf::RepeatedPtrField<std::string>

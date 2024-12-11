@@ -14,6 +14,7 @@
 
 #include "services/seller_frontend_service/util/web_utils.h"
 
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -1079,6 +1080,7 @@ KAnonAuctionResultData SampleKAnonAuctionResultData() {
       SampleKAnonJoinCandidate();
   kanon_ghost_winner.set_interest_group_index(kSampleIgIndex);
   kanon_ghost_winner.set_owner(kSampleIgOwner);
+  kanon_ghost_winner.set_ig_name(kSampleIgName);
   // Add private aggregation signals.
   auto* ghost_winner_private_aggregation_signals =
       kanon_ghost_winner.mutable_ghost_winner_private_aggregation_signals();
@@ -1101,9 +1103,13 @@ KAnonAuctionResultData SampleKAnonAuctionResultData() {
   ghost_winner_for_top_level_auction
       ->set_selected_buyer_and_seller_reporting_id(
           kSampleSelectableBuyerAndSellerReportingId);
+  std::vector<AuctionResult::KAnonGhostWinner> ghost_winners = {
+      std::move(kanon_ghost_winner)};
 
-  return {.kanon_ghost_winners = {std::move(kanon_ghost_winner)},
-          .kanon_winner_join_candidates = SampleKAnonJoinCandidate(),
+  return {.kanon_ghost_winners =
+              std::make_unique<KAnonGhostWinners>(std::move(ghost_winners)),
+          .kanon_winner_join_candidates =
+              std::make_unique<KAnonJoinCandidate>(SampleKAnonJoinCandidate()),
           .kanon_winner_positional_index = kSampleWinnerPositionalIndex};
 }
 
@@ -1129,7 +1135,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
-      &kanon_auction_result_data);
+      std::move(kanon_auction_result_data));
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);
@@ -1156,6 +1162,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   const auto& ghost_winner = decoded_result->k_anon_ghost_winners(0);
   EXPECT_EQ(ghost_winner.interest_group_index(), kSampleIgIndex);
   EXPECT_EQ(ghost_winner.owner(), kSampleIgOwner);
+  EXPECT_EQ(ghost_winner.ig_name(), kSampleIgName);
   const auto& ghost_join_candidate = ghost_winner.k_anon_join_candidates();
   EXPECT_THAT(ghost_join_candidate.ad_render_url_hash(),
               ByteStringEq(kSampleAdRenderUrlHash));
@@ -1460,7 +1467,7 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
 
   auto ret = Encode(
       std::move(winner), bidding_group_map, update_group_map, std::nullopt,
-      [](auto error) {}, &kanon_auction_result_data);
+      [](auto error) {}, std::move(kanon_auction_result_data));
 
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
@@ -1479,28 +1486,28 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
           "6f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e636f6d78"
           "18696e746572616374696f6e5265706f7274696e6755524c73a165636c69636b7068"
           "7474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e616d6563"
-          "696731716b416e6f6e47686f737457696e6e65727381a5656f776e657269666f6f5f"
-          "6f776e657272696e74657265737447726f7570496e6465780a736b416e6f6e4a6f69"
-          "6e43616e64696461746573a36f616452656e64657255524c48617368450102030405"
-          "6f7265706f7274696e6749644861736845020406080978196164436f6d706f6e656e"
-          "7452656e64657255524c734861736881650504030201781d67686f737457696e6e65"
-          "72466f72546f704c6576656c41756374696f6ea86a61644d657461646174616a6164"
-          "4d657461646174616b616452656e64657255524c6b616452656e64657255726c6b62"
-          "696443757272656e63796b62696443757272656e63796b6d6f646966696564426964"
-          "fa3f9d70a47062757965725265706f7274696e6749647062757965725265706f7274"
-          "696e674964756164436f6d706f6e656e7452656e64657255524c7381546164436f6d"
-          "706f6e656e7452656e64657255726c78196275796572416e6453656c6c6572526570"
-          "6f7274696e67496478196275796572416e6453656c6c65725265706f7274696e6749"
-          "64782373656c65637461626c654275796572416e6453656c6c65725265706f727469"
-          "6e674964782373656c65637461626c654275796572416e6453656c6c65725265706f"
-          "7274696e674964782467686f737457696e6e65725072697661746541676772656761"
-          "74696f6e5369676e616c73a26576616c756515666275636b6574666275636b657472"
-          "696e74657265737447726f75704f776e65727268747470733a2f2f6164746563682e"
-          "636f6d78196b416e6f6e57696e6e65724a6f696e43616e64696461746573a36f6164"
-          "52656e64657255524c486173684501020304056f7265706f7274696e674964486173"
-          "6845020406080978196164436f6d706f6e656e7452656e64657255524c7348617368"
-          "81650504030201781a6b416e6f6e57696e6e6572506f736974696f6e616c496e6465"
-          "7805"));
+          "696731716b416e6f6e47686f737457696e6e65727381a6656f776e657269666f6f5f"
+          "6f776e657271696e74657265737447726f75704e616d656b666f6f5f69675f6e616d"
+          "6572696e74657265737447726f7570496e6465780a736b416e6f6e4a6f696e43616e"
+          "64696461746573a36f616452656e64657255524c486173684501020304056f726570"
+          "6f7274696e6749644861736845020406080978196164436f6d706f6e656e7452656e"
+          "64657255524c734861736881450504030201781d67686f737457696e6e6572466f72"
+          "546f704c6576656c41756374696f6ea86a61644d657461646174616a61644d657461"
+          "646174616b616452656e64657255524c6b616452656e64657255726c6b6269644375"
+          "7272656e63796b62696443757272656e63796b6d6f646966696564426964fa3f9d70"
+          "a47062757965725265706f7274696e6749647062757965725265706f7274696e6749"
+          "64756164436f6d706f6e656e7452656e64657255524c7381746164436f6d706f6e65"
+          "6e7452656e64657255726c78196275796572416e6453656c6c65725265706f727469"
+          "6e67496478196275796572416e6453656c6c65725265706f7274696e674964782373"
+          "656c65637461626c654275796572416e6453656c6c65725265706f7274696e674964"
+          "782373656c65637461626c654275796572416e6453656c6c65725265706f7274696e"
+          "674964782467686f737457696e6e6572507269766174654167677265676174696f6e"
+          "5369676e616c73a26576616c756515666275636b6574666275636b657472696e7465"
+          "7265737447726f75704f776e65727268747470733a2f2f6164746563682e636f6d78"
+          "196b416e6f6e57696e6e65724a6f696e43616e64696461746573a36f616452656e64"
+          "657255524c486173684501020304056f7265706f7274696e67496448617368450204"
+          "06080978196164436f6d706f6e656e7452656e64657255524c734861736881450504"
+          "030201781a6b416e6f6e57696e6e6572506f736974696f6e616c496e64657805"));
 }
 
 TEST(ChromeResponseUtils, VerifyMinimalComponentResponseEncoding) {

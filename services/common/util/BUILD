@@ -549,3 +549,36 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "constants",
+    hdrs = [
+        "constants.h",
+    ],
+)
+
+cc_library(
+    name = "event_base",
+    srcs = ["event_base.cc"],
+    hdrs = [
+        "event_base.h",
+    ],
+    deps = [
+        ":constants",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@libevent//:event",
+    ],
+)
+
+cc_library(
+    name = "event",
+    srcs = ["event.cc"],
+    hdrs = [
+        "event.h",
+    ],
+    deps = [
+        ":constants",
+        "@google_privacysandbox_servers_common//src/logger:request_context_logger",
+        "@libevent//:event",
+    ],
+)

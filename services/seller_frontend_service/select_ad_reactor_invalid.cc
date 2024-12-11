@@ -54,7 +54,8 @@ void SelectAdReactorInvalid::Execute() {
 
 absl::StatusOr<std::string> SelectAdReactorInvalid::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const std::optional<AuctionResult::Error>& error) {
+    const std::optional<AuctionResult::Error>& error,
+    const AdScores* ghost_winning_scores) {
   return "";
 }
 
@@ -72,6 +73,17 @@ absl::flat_hash_map<absl::string_view, BuyerInput>
 SelectAdReactorInvalid::GetDecodedBuyerinputs(
     const google::protobuf::Map<std::string, std::string>&
         encoded_buyer_inputs) {
+  return {};
+}
+
+AuctionResult::KAnonJoinCandidate SelectAdReactorInvalid::GetKAnonJoinCandidate(
+    const ScoreAdsResponse::AdScore& score) {
+  return {};
+}
+
+KAnonAuctionResultData SelectAdReactorInvalid::GetKAnonAuctionResultData(
+    const std::optional<ScoreAdsResponse::AdScore>& high_score,
+    const AdScores* ghost_winning_scores) {
   return {};
 }
 

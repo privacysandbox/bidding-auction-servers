@@ -1,0 +1,23 @@
+interest_group {
+  name: "interest_group_1"
+  trusted_bidding_signals_keys: "trusted_bidding_signals_key_1"
+  trusted_bidding_signals_keys: "trusted_bidding_signals_key_2"
+  ad_render_ids: "render_id_1"
+  ad_render_ids: "render_id_2"
+  user_bidding_signals: "[1, 2, 3]"
+}
+auction_signals: "{\"auction_signal_key\":\"1\"}"
+per_buyer_signals: "[4, 5]"
+trusted_bidding_signals: "{\"trusted_bidding_signals_key_1\":[6, 7, 8], \"trusted_bidding_signals_key_2\":[9, 10]}"
+browser_signals {
+  top_window_hostname: "example.com"
+  seller: "https://seller.com"
+  join_count: 1
+  bid_count: 15
+  recency: 150000000
+  prev_wins: "[]"
+}
+server_metadata {
+  debug_reporting_enabled: true
+  logging_enabled: true
+}

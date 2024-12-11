@@ -103,6 +103,7 @@ module "buyer" {
   gcp_project_id       = local.gcp_project_id
   bidding_image        = "${local.image_repo}/bidding_service:${each.value.image_tag}"
   buyer_frontend_image = "${local.image_repo}/buyer_frontend_service:${each.value.image_tag}"
+  fakekv_service_port  = 1900 # Ignore this.
 
   runtime_flags = merge({
     BIDDING_PORT                      = "50051"          # Do not change unless you are modifying the default GCP architecture.
@@ -207,6 +208,10 @@ module "buyer" {
     #    "num_interop_threads": 4,
     #    "num_intraop_threads": 4,
     #    "module_name": "tensorflow_v2_14_0",
+    #    "cpuset": [0, 1, 2, 3],
+    #    "tcmalloc_release_bytes_per_sec": 0,
+    #    "tcmalloc_max_total_thread_cache_bytes": 0,
+    #    "tcmalloc_max_per_cpu_cache_bytes": 0,
     # }"
 
     # TCMalloc related config parameters.

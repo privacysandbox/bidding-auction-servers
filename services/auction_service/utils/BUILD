@@ -32,6 +32,7 @@ cc_library(
         "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/common/util:reporting_util",
+        "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",

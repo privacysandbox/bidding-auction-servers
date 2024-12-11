@@ -156,12 +156,13 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//api/udf:generate_bid_sdk_cc_proto",
+        "//api/udf:generate_bid_byob_sdk_cc_proto",
         "//services/bidding_service/data:runtime_config",
         "//services/bidding_service/utils:validation",
         "//services/common/clients/code_dispatcher:request_context",
         "//services/common/clients/code_dispatcher/byob:byob_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
+        "//services/common/constants:common_constants",
         "//services/common/loggers:request_log_context",
         "//services/common/metric:server_definition",
         "//services/common/util:async_task_tracker",
@@ -170,7 +171,6 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
     ],
 )
 

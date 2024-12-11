@@ -106,40 +106,6 @@ void GetTraceFromCurl(CURL* handle) {
 
 }  // namespace
 
-EventBase::EventBase(int num_priorities) {
-  evthread_use_pthreads();
-  event_base_ = event_base_new();
-  event_base_priority_init(event_base_, num_priorities);
-  if (server_common::log::PS_VLOG_IS_ON(10)) {
-    event_enable_debug_mode();
-  }
-}
-
-EventBase::~EventBase() {
-  if (event_base_ != nullptr) {
-    event_base_free(event_base_);
-  }
-}
-
-struct event_base* EventBase::get() { return event_base_; }
-
-Event::Event(struct event_base* base, evutil_socket_t fd, short event_type,
-             EventCallback event_callback, void* arg, int priority,
-             struct timeval* event_timeout)
-    : priority_(priority),
-      event_(event_new(base, fd, event_type, event_callback, arg)) {
-  event_priority_set(event_, priority_);
-  event_add(event_, event_timeout);
-}
-
-struct event* Event::get() { return event_; }
-Event::~Event() {
-  if (event_) {
-    event_del(event_);
-    event_free(event_);
-  }
-}
-
 static struct timeval OneSecond = {1, 0};
 
 MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(

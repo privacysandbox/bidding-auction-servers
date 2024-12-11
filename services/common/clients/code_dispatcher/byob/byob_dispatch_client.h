@@ -42,13 +42,18 @@ class ByobDispatchClient : public UdfCodeLoaderInterface {
   // return: a status indicating whether the code load was successful.
   virtual absl::Status LoadSync(std::string version, std::string code) = 0;
 
-  // Executes a single request synchronously.
+  // Executes a single request asynchronously.
   //
   // request: the request object.
   // timeout: the maximum time this will block for.
-  // return: the output of the execution.
-  virtual absl::StatusOr<std::unique_ptr<ServiceResponse>> Execute(
-      const ServiceRequest& request, absl::Duration timeout) = 0;
+  // callback: called with the output of execution.
+  // return: a status indicating if the execution request was properly
+  //         processed by the implementing class. This should not be confused
+  //         with the output of the execution itself, which is sent to callback.
+  virtual absl::Status Execute(
+      ServiceRequest request, absl::Duration timeout,
+      absl::AnyInvocable<void(absl::StatusOr<ServiceResponse>) &&>
+          callback) = 0;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

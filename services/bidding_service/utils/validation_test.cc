@@ -42,34 +42,37 @@ TEST(TrimAndReturnDebugUrlsSize, HandlesEmptyDebugUrls) {
   ad_with_bid.clear_debug_report_urls();
   ASSERT_FALSE(ad_with_bid.has_debug_report_urls());
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid, /*max_allowed_size_debug_url_chars=*/5,
-                /*max_allowed_size_all_debug_urls_chars=*/10,
-                /*total_debug_urls_chars=*/5, NoOpContext().log),
-            0);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid, /*max_allowed_size_debug_url_chars=*/5,
+      /*max_allowed_size_all_debug_urls_chars=*/10,
+      /*total_debug_urls_chars=*/5, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 0);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 0);
 }
 
 TEST(TrimAndReturnDebugUrlsSize, ClearsDebugUrlsIfTotalSizeAlreadyEqualsMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("win", "loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/4,
-                /*max_allowed_size_all_debug_urls_chars=*/4,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            0);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/4,
+      /*max_allowed_size_all_debug_urls_chars=*/4,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 0);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 0);
   EXPECT_FALSE(ad_with_bid.has_debug_report_urls());
 }
 
 TEST(TrimAndReturnDebugUrlsSize, ClearsDebugWinUrlIfSizeExceedsMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("long_win", "loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/5,
-                /*max_allowed_size_all_debug_urls_chars=*/10,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            4);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/5,
+      /*max_allowed_size_all_debug_urls_chars=*/10,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 0);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 4);
   EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
   EXPECT_TRUE(ad_with_bid.debug_report_urls().auction_debug_win_url().empty());
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(), "loss");
@@ -78,12 +81,13 @@ TEST(TrimAndReturnDebugUrlsSize, ClearsDebugWinUrlIfSizeExceedsMax) {
 TEST(TrimAndReturnDebugUrlsSize, ClearsDebugWinUrlIfNewTotalExceedsMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("long_win", "loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/10,
-                /*max_allowed_size_all_debug_urls_chars=*/10,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            4);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/10,
+      /*max_allowed_size_all_debug_urls_chars=*/10,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 0);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 4);
   EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
   EXPECT_TRUE(ad_with_bid.debug_report_urls().auction_debug_win_url().empty());
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(), "loss");
@@ -92,12 +96,13 @@ TEST(TrimAndReturnDebugUrlsSize, ClearsDebugWinUrlIfNewTotalExceedsMax) {
 TEST(TrimAndReturnDebugUrlsSize, ClearsDebugLossUrlIfSizeExceedsMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("win", "long_loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/5,
-                /*max_allowed_size_all_debug_urls_chars=*/10,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            3);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/5,
+      /*max_allowed_size_all_debug_urls_chars=*/10,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 3);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 0);
   EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(), "win");
   EXPECT_TRUE(ad_with_bid.debug_report_urls().auction_debug_loss_url().empty());
@@ -106,12 +111,13 @@ TEST(TrimAndReturnDebugUrlsSize, ClearsDebugLossUrlIfSizeExceedsMax) {
 TEST(TrimAndReturnDebugUrlsSize, ClearsDebugLossUrlIfNewTotalExceedsMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("win", "long_loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/10,
-                /*max_allowed_size_all_debug_urls_chars=*/10,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            3);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/10,
+      /*max_allowed_size_all_debug_urls_chars=*/10,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 3);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 0);
   EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(), "win");
   EXPECT_TRUE(ad_with_bid.debug_report_urls().auction_debug_loss_url().empty());
@@ -120,24 +126,26 @@ TEST(TrimAndReturnDebugUrlsSize, ClearsDebugLossUrlIfNewTotalExceedsMax) {
 TEST(TrimAndReturnDebugUrlSize, ClearsDebugUrlsIfBothWinAndLossExceedMax) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("win", "loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/2,
-                /*max_allowed_size_all_debug_urls_chars=*/4,
-                /*total_debug_urls_chars=*/0, NoOpContext().log),
-            0);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/2,
+      /*max_allowed_size_all_debug_urls_chars=*/4,
+      /*total_debug_urls_chars=*/0, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 0);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 0);
   EXPECT_FALSE(ad_with_bid.has_debug_report_urls());
 }
 
 TEST(TrimAndReturnDebugUrlsSize, UpdatesTotalForValidDebugUrls) {
   AdWithBid ad_with_bid = MakeTestAdWithBidWithDebugUrls("win", "loss");
 
-  EXPECT_EQ(TrimAndReturnDebugUrlsSize(
-                ad_with_bid,
-                /*max_allowed_size_debug_url_chars=*/5,
-                /*max_allowed_size_all_debug_urls_chars=*/15,
-                /*total_debug_urls_chars=*/4, NoOpContext().log),
-            7);
+  DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
+      ad_with_bid,
+      /*max_allowed_size_debug_url_chars=*/5,
+      /*max_allowed_size_all_debug_urls_chars=*/15,
+      /*total_debug_urls_chars=*/4, NoOpContext().log);
+  EXPECT_EQ(debug_urls_size.win_url_chars, 3);
+  EXPECT_EQ(debug_urls_size.loss_url_chars, 4);
   EXPECT_TRUE(ad_with_bid.has_debug_report_urls());
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_win_url(), "win");
   EXPECT_EQ(ad_with_bid.debug_report_urls().auction_debug_loss_url(), "loss");

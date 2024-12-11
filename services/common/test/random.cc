@@ -779,6 +779,7 @@ GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest() {
   // request object will take ownership
   // https://developers.google.com/protocol-buffers/docs/reference/cpp-generated
   GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_client_type(ClientType::CLIENT_TYPE_BROWSER);
   raw_request.set_publisher_name("publisher_name");
   raw_request.set_allocated_auction_signals(
       MakeARandomStructJsonString(1).release());

@@ -29,6 +29,8 @@
 #include "absl/synchronization/notification.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/clients/http/multi_curl_request_manager.h"
+#include "services/common/util/event.h"
+#include "services/common/util/event_base.h"
 #include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -39,46 +41,6 @@ struct DataToUpload {
   std::string data;
   // First offset in the data that has not yet been uploaded.
   int offset = 0;
-};
-
-// Libevent uses default priority as half of the number of priorities.
-// We needed 2 priorities to begin with (high and default) but configured 3
-// here for future use if we have to configure a low priority event.
-inline constexpr int kNumEventPriorities = 3;
-
-// Wrapper for the libevent structure to hold information and state for a
-// libevent dispatch loop.
-class EventBase {
- public:
-  explicit EventBase(int num_priorities = kNumEventPriorities);
-  virtual ~EventBase();
-
-  // Gets the underlying event base data type.
-  struct event_base* get();
-
- private:
-  struct event_base* event_base_ = nullptr;
-};
-
-// Arguments are documented here:
-// https://libevent.org/doc/event_8h.html#aed2307f3d9b38e07cc10c2607322d758
-using EventCallback = void (*)(/*fd or signal=*/int, /*events=*/short,
-                               /*pointer to user provided data=*/void*);
-
-// Wraps the event used by libevent. This wrapper makes it easier to manage
-// lifecycle of the underlying event.
-class Event {
- public:
-  explicit Event(struct event_base* base, evutil_socket_t fd, short event_type,
-                 EventCallback event_callback, void* arg,
-                 int priority = kNumEventPriorities / 2,
-                 struct timeval* event_timeout = nullptr);
-  struct event* get();
-  virtual ~Event();
-
- private:
-  int priority_;
-  struct event* event_ = nullptr;
 };
 
 // MultiCurlHttpFetcherAsync provides a thread-safe libcurl wrapper to perform

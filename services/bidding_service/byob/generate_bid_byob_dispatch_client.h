@@ -23,6 +23,7 @@
 #include "api/udf/generate_bid_roma_byob_app_service.h"
 #include "api/udf/generate_bid_udf_interface.pb.h"
 #include "services/common/clients/code_dispatcher/byob/byob_dispatch_client.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/roma/byob/config/config.h"
 #include "src/roma/byob/utility/udf_blob.h"
 
@@ -35,7 +36,14 @@ class GenerateBidByobDispatchClient
  public:
   // Required for moving an instance (for eg. inside a factory function).
   GenerateBidByobDispatchClient(GenerateBidByobDispatchClient&& other) noexcept
-      : byob_service_(std::move(other.byob_service_)) {}
+      : byob_service_(std::move(other.byob_service_)),
+        num_workers_(other.num_workers_),
+        executor_(other.executor_) {
+    CHECK(executor_ != nullptr) << "Executor must not be null";
+  }
+
+  // Deleted copy constructor
+  GenerateBidByobDispatchClient(const GenerateBidByobDispatchClient&) = delete;
 
   ~GenerateBidByobDispatchClient() override = default;
 
@@ -44,7 +52,8 @@ class GenerateBidByobDispatchClient
   // num_workers: the number of workers to spin up in the execution environment
   // return: created instance if successful, a status indicating reason for
   // failure otherwise
-  static absl::StatusOr<GenerateBidByobDispatchClient> Create(int num_workers);
+  static absl::StatusOr<GenerateBidByobDispatchClient> Create(
+      int num_workers, server_common::Executor* executor);
 
   // Loads new execution code into ROMA BYOB synchronously. Tracks the code
   // token, version, and hash of the loaded code, if successful.
@@ -54,17 +63,39 @@ class GenerateBidByobDispatchClient
   // return: a status indicating whether the code load was successful.
   absl::Status LoadSync(std::string version, std::string code) override;
 
-  // Executes a single request synchronously.
+  // Executes a single request asynchronously.
   //
   // request: the request object.
   // timeout: the maximum time this will block for.
-  // return: the output of the execution.
-  absl::StatusOr<
-      std::unique_ptr<roma_service::GenerateProtectedAudienceBidResponse>>
-  Execute(const roma_service::GenerateProtectedAudienceBidRequest& request,
-          absl::Duration timeout) override;
+  // callback: called with the output of execution.
+  // return: a status indicating if the execution request was properly
+  //         processed by the implementing class. This should not be confused
+  //         with the output of the execution itself, which is sent to callback.
+  absl::Status Execute(
+      roma_service::GenerateProtectedAudienceBidRequest request,
+      absl::Duration timeout,
+      absl::AnyInvocable<
+          void(absl::StatusOr<
+               roma_service::GenerateProtectedAudienceBidResponse>) &&>
+          callback) override;
 
  private:
+  struct ResponseState {
+    absl::Notification execute_finish_notif;
+    absl::Mutex execution_mutex;
+    bool is_cancelled ABSL_GUARDED_BY(execution_mutex);
+    absl::AnyInvocable<
+        void(absl::StatusOr<
+             roma_service::GenerateProtectedAudienceBidResponse>) &&>
+        callback ABSL_GUARDED_BY(execution_mutex);
+
+    explicit ResponseState(
+        absl::AnyInvocable<
+            void(absl::StatusOr<
+                 roma_service::GenerateProtectedAudienceBidResponse>) &&>
+            callback);
+  };
+
   // ROMA BYOB service that encapsulates the AdTech UDF interface.
   roma_service::ByobGenerateProtectedAudienceBidService<> byob_service_;
 
@@ -72,7 +103,7 @@ class GenerateBidByobDispatchClient
   std::string code_token_;
 
   // AdTech code version corresponding to the most recently loaded code blob.
-  std::string code_version_;
+  std::string code_version_ ABSL_GUARDED_BY(code_mutex_);
 
   // Hash of the most recently loaded code blob. Used to prevent loading the
   // same code multiple times.
@@ -81,9 +112,22 @@ class GenerateBidByobDispatchClient
   // Mutex to protect information about the most recently loaded code blob.
   absl::Mutex code_mutex_;
 
+  // Number of UDF workers.
+  int num_workers_;
+
+  // The executor_ will receive execution tasks from Execute. It is not owned by
+  // this class instance but is required to outlive the lifetime of this class
+  // instance.
+  server_common::Executor* executor_;
+
   explicit GenerateBidByobDispatchClient(
-      roma_service::ByobGenerateProtectedAudienceBidService<> byob_service)
-      : byob_service_(std::move(byob_service)) {}
+      roma_service::ByobGenerateProtectedAudienceBidService<> byob_service,
+      int num_workers, server_common::Executor* executor)
+      : byob_service_(std::move(byob_service)),
+        num_workers_(num_workers),
+        executor_(executor) {
+    CHECK(executor_ != nullptr) << "Executor must not be null";
+  }
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

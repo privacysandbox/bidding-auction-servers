@@ -28,10 +28,12 @@
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "proto/inference_sidecar.grpc.pb.h"
 #include "proto/inference_sidecar.pb.h"
@@ -64,22 +66,65 @@ absl::Status PeriodicModelFetcher::Start() {
   return absl::OkStatus();
 }
 
-void PeriodicModelFetcher::GarbageCollectModels(
-    const absl::flat_hash_set<std::string>& model_paths) {
+void PeriodicModelFetcher::DeleteModel(absl::string_view model_path)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_) {
+  model_entry_map_[model_path].model_state = ModelState::IN_DELETION;
+  // TODO(b/380119479): Configure model management GRPC deadline.
+  grpc::ClientContext context;
+  DeleteModelRequest request;
+  request.mutable_model_spec()->set_model_path(model_path);
+  DeleteModelResponse response;
+  grpc::Status status =
+      inference_stub_->DeleteModel(&context, request, &response);
+  if (!status.ok()) {
+    PS_LOG(ERROR) << "Failed to delete model: " << model_path
+                  << " due to: " << status.error_message();
+    ModelFetcherMetric::IncrementModelDeletionFailedCountByStatus(
+        server_common::ToAbslStatus(status).code());
+  } else {
+    model_entry_map_.erase(model_path);
+    PS_LOG(INFO) << "Successful deletion of model: " << model_path;
+    ModelFetcherMetric::IncrementModelDeletionSuccessCount();
+  }
+}
+
+void PeriodicModelFetcher::DeleteModels(
+    const absl::flat_hash_set<std::string>& model_paths)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_) {
   for (const auto& model_path : model_paths) {
-    grpc::ClientContext context;
-    DeleteModelRequest request;
-    request.mutable_model_spec()->set_model_path(model_path);
-    DeleteModelResponse response;
-    grpc::Status status =
-        inference_stub_->DeleteModel(&context, request, &response);
-    if (!status.ok()) {
-      PS_LOG(ERROR) << "Failed to delete model: " << model_path
-                    << " due to: " << status.error_message();
-    } else {
-      model_entry_map_.erase(model_path);
-      PS_LOG(INFO) << "Successful deletion of model: " << model_path;
+    ModelEntry& model_entry = model_entry_map_[model_path];
+    // Case #1: If the model is IN_GRACE_PERIOD, skip it as the model deletion
+    // is already scheduled.
+    if (model_entry.model_state == ModelState::IN_GRACE_PERIOD) {
+      continue;
     }
+
+    // Case #2: If the model is ACTIVE and requested to be deleted, schedule the
+    // model deletion after the grace period.
+    if (model_entry.model_state == ModelState::ACTIVE &&
+        model_entry.eviction_grace_period_in_ms > 0) {
+      model_entry.model_state = ModelState::IN_GRACE_PERIOD;
+      PS_LOG(INFO) << "Model eviction grace period starts for model: "
+                   << model_path;
+      executor_.RunAfter(
+          absl::Milliseconds(model_entry.eviction_grace_period_in_ms),
+          [this, model_path] {
+            absl::MutexLock lock(&model_entry_mutex_);
+            PS_LOG(INFO) << "Model eviction grace period ends for model: "
+                         << model_path;
+            DeleteModel(model_path);
+            UpdateMetricsForAvailableModels();
+          });
+      continue;
+    }
+
+    // Case #3-a: If the model is ACTIVE with no grace period, delete the model
+    // immediately.
+    // Case #3-b: If the model failed to be deleted after the grace period with
+    // the IN_DELETION status, delete the model immediately.
+    // In this case, the metric partition will be set after the model fetcher
+    // finishes the current round polling.
+    DeleteModel(model_path);
   }
 }
 
@@ -105,6 +150,7 @@ absl::StatusOr<ModelConfig> PeriodicModelFetcher::FetchModelConfig() {
 }
 
 void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
+  absl::MutexLock lock(&model_entry_mutex_);
   absl::StatusOr<ModelConfig> config = FetchModelConfig();
   if (!config.ok()) {
     PS_LOG(ERROR) << "Failed to fetch model config: " << config.status();
@@ -113,36 +159,72 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
     return;
   }
 
-  // Models later found in the newly fetched model configuration will be removed
-  // from this container.
+  // Model deletion happens upon model configuration file changes.
+  // Case #1: If a model metadata (model path and checksum) stays unchanged in
+  // the configuration, no deletion will happen as the model will be erased from
+  // this deletion set.
+  // Case #2: If a model is removed from the model configuration file, model
+  // deletion will be triggered.
+  // Case #3: If a model's checksum changes, model deletion will be triggered
+  // for the old model content, and a model registration will happen for the new
+  // model content.
   absl::flat_hash_set<std::string> garbage_collectable_models;
   for (const auto& [model_path, model_entry] : model_entry_map_) {
     garbage_collectable_models.insert(model_path);
   }
 
+  // Keeps track of models that are registered successfully and those that are
+  // not for metric purposes.
+  std::vector<std::string> success_models;
+  std::vector<std::string> failure_models;
   BlobFetcherBase::FilterOptions filter_options;
   std::vector<ModelMetadata> pending_model_metadata;
+  // Processes model deletion.
+  for (const ModelMetadata& metadata : config->model_metadata()) {
+    const std::string& model_path = metadata.model_path();
+    auto it = model_entry_map_.find(model_path);
+    if (it != model_entry_map_.end() &&
+        it->second.checksum == metadata.checksum()) {
+      // The model with the matching checksum is already loaded.
+      // It should not be deleted.
+      garbage_collectable_models.erase(model_path);
+    }
+  }
+  DeleteModels(garbage_collectable_models);
+
+  // Processes model loading.
   for (const ModelMetadata& metadata : config->model_metadata()) {
     const std::string& model_path = metadata.model_path();
     if (model_path.empty()) {
       continue;
     }
-    auto it = model_entry_map_.find(model_path);
-    if (it != model_entry_map_.end() &&
-        it->second.checksum == metadata.checksum()) {
-      // If a given model with matched checksum has already been loaded, there
-      // is no need to load it again, and it is also not eligible for garbage
-      // collection.
-      garbage_collectable_models.erase(model_path);
-    } else {
-      // Fetches the model if the model at the given model path has not been
-      // loaded or the checksum doesn't match.
-      filter_options.included_prefixes.push_back(model_path);
-      pending_model_metadata.push_back(metadata);
-    }
-  }
 
-  GarbageCollectModels(garbage_collectable_models);
+    if (auto it = model_entry_map_.find(model_path);
+        it != model_entry_map_.end()) {
+      // When a model is overwritten with a different checksum, a deletion
+      // request is scheduled in the previous `DeleteModels` call. If deletion
+      // succeeds, the model is removed from the map and prepared for fetching.
+      // If a grace period is active, model fetching is postponed until the next
+      // polling cycle after the grace period has expired.
+      if (it->second.model_state == ModelState::IN_GRACE_PERIOD) {
+        PS_LOG(ERROR) << "Model registration failed for: " << model_path
+                      << " - model is in eviction grace period.";
+        failure_models.push_back(model_path);
+        ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
+            absl::StatusCode::kUnavailable);
+      } else if (it->second.model_state == ModelState::IN_DELETION) {
+        PS_LOG(ERROR) << "Model registration failed for: " << model_path
+                      << " - previous deletion attempt failed.";
+        failure_models.push_back(model_path);
+        ModelFetcherMetric::IncrementModelRegistrationFailedCountByStatus(
+            absl::StatusCode::kFailedPrecondition);
+      }
+      continue;
+    }
+
+    filter_options.included_prefixes.push_back(model_path);
+    pending_model_metadata.push_back(metadata);
+  }
 
   if (filter_options.included_prefixes.empty()) {
     PS_LOG(INFO) << "No additional model to load.";
@@ -159,10 +241,6 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
 
   ModelFetcherMetric::IncrementCloudFetchSuccessCount();
 
-  // Keeps track of models that are registered successfully and those that are
-  // not for metric purposes.
-  std::vector<std::string> success_models;
-  std::vector<std::string> failure_models;
   const std::vector<BlobFetcherBase::Blob>& bucket_snapshot =
       blob_fetcher_->snapshot();
   // A single model can consist of multiple model files and hence data blobs.
@@ -230,23 +308,27 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
           server_common::ToAbslStatus(status).code());
     } else {
       PS_VLOG(10) << "Registering model success for: " << model_path;
-      model_entry_map_[model_path] = {.checksum = metadata.checksum()};
+      model_entry_map_[model_path] = {
+          .checksum = metadata.checksum(),
+          .eviction_grace_period_in_ms = metadata.eviction_grace_period_in_ms(),
+          .model_state = ModelState::ACTIVE};
       success_models.push_back(model_path);
     }
   }
 
   ModelFetcherMetric::UpdateRecentModelRegistrationSuccess(success_models);
-  // We only reset the metrics partitioned by model when new models are loaded.
-  if (!success_models.empty()) {
-    std::vector<std::string> current_models;
-    for (const auto& [model_path, model_entry] : model_entry_map_) {
-      current_models.push_back(model_path);
-    }
-    SetModelPartition(current_models);
-    ModelFetcherMetric::UpdateAvailableModels(current_models);
-  }
-
   ModelFetcherMetric::UpdateRecentModelRegistrationFailure(failure_models);
+  UpdateMetricsForAvailableModels();
+}
+
+void PeriodicModelFetcher::UpdateMetricsForAvailableModels(void)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(model_entry_mutex_) {
+  std::vector<std::string> current_models;
+  for (const auto& [model_path, model_entry] : model_entry_map_) {
+    current_models.push_back(model_path);
+  }
+  SetModelPartition(current_models);
+  ModelFetcherMetric::UpdateAvailableModels(current_models);
 }
 
 void PeriodicModelFetcher::InternalPeriodicModelFetchAndRegistration() {

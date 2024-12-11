@@ -44,6 +44,7 @@ cc_library(
         "//services/common/chaffing:transcoding_utils",
         "//services/common/clients/bidding_server:async_client",
         "//services/common/clients/kv_server:kv_async_client",
+        "//services/common/clients/kv_server:kv_v2",
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:benchmarking_logger",
         "//services/common/loggers:build_input_process_response_benchmarking_logger",

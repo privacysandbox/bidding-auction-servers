@@ -35,6 +35,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/test/utils/test_init.h"
+#include "services/common/util/hash_util.h"
 #include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
@@ -90,6 +91,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
     config_.SetOverride(kFalse, TEST_MODE);
+    config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
   }
 
   void SetProtectedAuctionCipherText(
@@ -955,6 +957,186 @@ TYPED_TEST(SelectAdReactorForWebTest,
   EXPECT_EQ(
       deserialized_auction_result.auction_params().ciphertext_generation_id(),
       kSampleGenerationId);
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  // Create test AdScores for k-anon ghost winners.
+  ScoreAdsResponse::AdScore ghost_score_1;
+  ghost_score_1.set_render(absl::StrCat(kSampleBuyer2, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_1.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer2, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_1.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_1.set_interest_group_owner(kSampleBuyer2);
+  ghost_score_1.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_1.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ScoreAdsResponse::AdScore ghost_score_2;
+  ghost_score_2.set_render(absl::StrCat(kSampleBuyer3, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_2.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer3, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_2.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_2.set_interest_group_owner(kSampleBuyer3);
+  ghost_score_2.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_2.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          {std::move(ghost_score_1), std::move(ghost_score_2)});
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer2, kSampleBiddingUrl2);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer3, kSampleBiddingUrl3);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true, /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << absl::BytesToHexString(*decompressed_response);
+
+  absl::StatusOr<AuctionResult> deserialized_auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  EXPECT_TRUE(deserialized_auction_result.ok());
+  EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
+
+  // Validate that k-anon winner join candidate data is present in
+  // AuctionResult.
+  HashUtil hasher = HashUtil();
+  ASSERT_TRUE(deserialized_auction_result->has_k_anon_winner_join_candidates());
+  auto winner_candidate =
+      deserialized_auction_result->k_anon_winner_join_candidates();
+  EXPECT_EQ(
+      winner_candidate.ad_render_url_hash(),
+      hasher.HashedKAnonKeyForAdRenderURL(
+          /*owner=*/kSampleBuyer, /*bidding_url=*/kSampleBiddingUrl,
+          /*render_url=*/absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix)));
+  EXPECT_GT(winner_candidate.ad_component_render_urls_hash().size(), 0);
+  for (int i = 0; i < winner_candidate.ad_component_render_urls_hash().size();
+       i++) {
+    EXPECT_EQ(winner_candidate.ad_component_render_urls_hash().at(i),
+              hasher.HashedKAnonKeyForAdComponentRenderURL(
+                  absl::StrCat("https://fooAds.com/adComponents?id=", i)));
+  }
+  EXPECT_EQ(winner_candidate.reporting_id_hash(),
+            hasher.HashedKAnonKeyForReportingID(
+                /*owner=*/kSampleBuyer,
+                /*ig_name*/ kSampleInterestGroupName,
+                /*bidding_url*/ kSampleBiddingUrl,
+                /*render_url*/ absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix),
+                /*reporting_ids*/ {}));
+
+  // Validate that ghost winner data is present in AuctionResult.
+  ASSERT_GT(deserialized_auction_result->k_anon_ghost_winners().size(), 0);
+  auto ghost_winners = deserialized_auction_result->k_anon_ghost_winners();
+  EXPECT_GT(ghost_winners.size(), 0);
+  KAnonKeyReportingIDParam id_param = {
+      .buyer_reporting_id = kSampleBuyerReportingId,
+      .buyer_and_seller_reporting_id = kSampleBuyerAndSellerReportingId};
+  for (int i = 0; i < ghost_winners.size(); i++) {
+    EXPECT_EQ(ghost_winners.at(i).ig_name(), kSampleInterestGroupName);
+    ASSERT_TRUE(ghost_winners.at(i).has_k_anon_join_candidates());
+    auto ghost_winner_candidate = ghost_winners.at(i).k_anon_join_candidates();
+    auto ghost_winner_component_hash =
+        ghost_winner_candidate.ad_component_render_urls_hash();
+    if (i == 0) {
+      EXPECT_EQ(ghost_winners.at(i).owner(), kSampleBuyer2);
+      EXPECT_EQ(ghost_winner_candidate.ad_render_url_hash(),
+                hasher.HashedKAnonKeyForAdRenderURL(
+                    /*owner=*/kSampleBuyer2, /*bidding_url=*/kSampleBiddingUrl2,
+                    /*render_url=*/
+                    absl::StrCat(kSampleBuyer2, kTestRenderUrlSuffix)));
+      EXPECT_GT(ghost_winner_candidate.ad_component_render_urls_hash().size(),
+                0);
+      for (int j = 0; j < ghost_winner_component_hash.size(); j++) {
+        EXPECT_EQ(ghost_winner_component_hash.at(j),
+                  hasher.HashedKAnonKeyForAdComponentRenderURL(
+                      absl::StrCat(kSampleBuyer2, kTestComponentUrlSuffix, j)));
+      }
+      EXPECT_EQ(
+          ghost_winner_candidate.reporting_id_hash(),
+          hasher.HashedKAnonKeyForReportingID(
+              /*owner=*/kSampleBuyer2, /*ig_name*/ kSampleInterestGroupName,
+              /*bidding_url*/ kSampleBiddingUrl2,
+              /*render_url*/ absl::StrCat(kSampleBuyer2, kTestRenderUrlSuffix),
+              /*reporting_ids*/ id_param));
+    } else if (i == 1) {
+      EXPECT_EQ(ghost_winners.at(i).owner(), kSampleBuyer3);
+      EXPECT_EQ(ghost_winner_candidate.ad_render_url_hash(),
+                hasher.HashedKAnonKeyForAdRenderURL(
+                    /*owner=*/kSampleBuyer3, /*bidding_url=*/kSampleBiddingUrl3,
+                    /*render_url=*/
+                    absl::StrCat(kSampleBuyer3, kTestRenderUrlSuffix)));
+
+      for (int j = 0; j < ghost_winner_component_hash.size(); j++) {
+        EXPECT_EQ(ghost_winner_component_hash.at(j),
+                  hasher.HashedKAnonKeyForAdComponentRenderURL(
+                      absl::StrCat(kSampleBuyer3, kTestComponentUrlSuffix, j)));
+      }
+      EXPECT_EQ(
+          ghost_winner_candidate.reporting_id_hash(),
+          hasher.HashedKAnonKeyForReportingID(
+              /*owner=*/kSampleBuyer3, /*ig_name*/ kSampleInterestGroupName,
+              /*bidding_url*/ kSampleBiddingUrl3,
+              /*render_url*/ absl::StrCat(kSampleBuyer3, kTestRenderUrlSuffix),
+              /*reporting_ids*/ id_param));
+    }
+  }
 }
 
 }  // namespace

@@ -148,6 +148,13 @@ class ProtectedAppSignalsGenerateBidsReactor
              requests](
                 const std::vector<absl::StatusOr<DispatchResponse>>& result) {
               if (auto status = ValidateRomaResponse(result); !status.ok()) {
+                LogIfError(
+                    metric_context_
+                        ->LogHistogram<metric::kBiddingFailedToBidPercent>(
+                            1.0));
+                LogIfError(
+                    metric_context_
+                        ->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
                 PS_VLOG(kNoisyWarn, log_context_)
                     << "Failed to run UDF: " << roma_entry_function
                     << ". Error: " << status;
@@ -155,12 +162,18 @@ class ProtectedAppSignalsGenerateBidsReactor
                     grpc::StatusCode::INTERNAL, status.ToString()));
                 return;
               }
-
               PS_VLOG(kDispatch, log_context_)
                   << "Response from " << roma_entry_function << ": "
                   << result[0]->resp;
               auto parsed_response = std::move(parse_response)(result[0]->resp);
               if (!parsed_response.ok()) {
+                LogIfError(
+                    metric_context_
+                        ->LogHistogram<metric::kBiddingFailedToBidPercent>(
+                            1.0));
+                LogIfError(
+                    metric_context_
+                        ->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
                 PS_VLOG(kNoisyWarn, log_context_)
                     << "Failed to parse the response from: "
                     << roma_entry_function
@@ -170,10 +183,8 @@ class ProtectedAppSignalsGenerateBidsReactor
                                  parsed_response.status().ToString()));
                 return;
               }
-
               PS_VLOG(kDispatch, log_context_)
                   << "Successful V8 Response from: " << roma_entry_function;
-
               std::move(on_successful_response)(*std::move(parsed_response));
             },
             [this]() {
@@ -182,6 +193,11 @@ class ProtectedAppSignalsGenerateBidsReactor
             }));
 
     if (!status.ok()) {
+      LogIfError(
+          metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(
+              1.0));
+      LogIfError(
+          metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
       PS_VLOG(kNoisyWarn, log_context_)
           << "Failed to execute " << roma_entry_function
           << " in Roma. Error: " << status.ToString();

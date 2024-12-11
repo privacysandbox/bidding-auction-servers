@@ -49,8 +49,8 @@ int main(int argc, char* argv[]) {
   }
   int fd = std::stoi(argv[1]);
   GenerateProtectedAudienceBidRequest request = ReadRequestFromFd(fd);
-  GenerateProtectedAudienceBidResponse bin_response;
-  auto bid = bin_response.add_bids();
+  GenerateProtectedAudienceBidResponse response;
+  auto bid = response.add_bids();
   bid->set_ad("ad");
   bid->set_bid(1.0);
   bid->set_render("https://my-render-url");
@@ -62,8 +62,8 @@ int main(int argc, char* argv[]) {
       "https://my-debug-url/win");
   bid->mutable_debug_report_urls()->set_auction_debug_loss_url(
       "https://my-debug-url/loss");
-  bin_response.mutable_log_messages()->add_logs(
-      absl::StrCat("Generated bid of ", bin_response.bids(0).bid()));
-  WriteResponseToFd(fd, bin_response);
+  response.mutable_log_messages()->add_logs(
+      absl::StrCat("Generated bid of ", response.bids(0).bid()));
+  WriteResponseToFd(fd, response);
   return 0;
 }

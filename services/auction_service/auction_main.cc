@@ -84,6 +84,9 @@ ABSL_FLAG(std::optional<int64_t>, auction_tcmalloc_max_total_thread_cache_bytes,
           std::nullopt,
           "Maximum amount of cached memory in bytes across all threads (or "
           "logical CPUs)");
+ABSL_FLAG(std::optional<bool>, require_scoring_signals_for_scoring,
+          std::nullopt,
+          "Require scoring signals to exist for an AdWithBid to be scored.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -155,6 +158,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_auction_tcmalloc_max_total_thread_cache_bytes,
                         AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
+  config_client.SetFlag(FLAGS_require_scoring_signals_for_scoring,
+                        REQUIRE_SCORING_SIGNALS_FOR_SCORING);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -311,8 +316,8 @@ absl::Status RunServer() {
 
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
-      .roma_timeout_ms =
-          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(),
+      .roma_timeout_ms = absl::StrCat(
+          config_client.GetStringParameter(ROMA_TIMEOUT_MS).data(), "ms"),
       .enable_adtech_code_logging = enable_adtech_code_logging,
       .enable_report_result_url_generation =
           enable_report_result_url_generation,
@@ -329,7 +334,9 @@ absl::Status RunServer() {
           enable_seller_and_buyer_udf_isolation,
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
       .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
-      .enable_kanon = absl::GetFlag(FLAGS_enable_kanon)};
+      .enable_kanon = absl::GetFlag(FLAGS_enable_kanon),
+      .require_scoring_signals_for_scoring = config_client.GetBooleanParameter(
+          REQUIRE_SCORING_SIGNALS_FOR_SCORING)};
 
   PS_RETURN_IF_ERROR(
       code_fetch_manager.ConfigureRuntimeDefaults(runtime_config))

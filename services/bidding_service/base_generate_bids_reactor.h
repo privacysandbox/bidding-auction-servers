@@ -24,6 +24,7 @@
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_response_constants.h"
 
