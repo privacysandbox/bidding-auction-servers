@@ -129,6 +129,7 @@ resource "google_compute_global_forwarding_rule" "collectors" {
 resource "google_dns_record_set" "collector" {
   name         = "${var.collector_service_name}-${var.operator}-${var.environment}.${var.frontend_domain_name}."
   managed_zone = var.frontend_dns_zone
+  project      = var.gcp_dns_zones_project_id
   type         = "A"
   ttl          = 10
   routing_policy {

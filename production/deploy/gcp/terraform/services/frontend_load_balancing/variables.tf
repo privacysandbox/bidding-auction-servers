@@ -54,7 +54,6 @@ variable "frontend_service_name" {
   type = string
 }
 
-
 variable "google_compute_backend_service_ids" {
   description = "a map with environment as key, the value is google_compute_backend_service_id"
   type        = map(string)
@@ -63,4 +62,10 @@ variable "google_compute_backend_service_ids" {
 variable "traffic_weights" {
   description = "a map with environment as key, the value is traffic_weight between 0~1000"
   type        = map(number)
+}
+
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
 }

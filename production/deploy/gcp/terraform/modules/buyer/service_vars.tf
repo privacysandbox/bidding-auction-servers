@@ -140,3 +140,9 @@ variable "enable_tee_container_log_redirect" {
   type        = bool
   default     = true
 }
+
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
+}

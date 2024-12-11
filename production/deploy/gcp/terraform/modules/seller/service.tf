@@ -83,6 +83,7 @@ module "load_balancing" {
   collector_service_name            = "collector"
   collector_service_port            = var.collector_service_port
   region_config                     = var.region_config
+  gcp_dns_zones_project_id          = var.gcp_dns_zones_project_id
 }
 
 resource "google_secret_manager_secret" "runtime_flag_secrets" {
