@@ -1,0 +1,293 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+cost_model_metadata:
+  name: aws_buyer_us_west_1
+  description: A basic cost model for a buyer running on AWS in us-west-1
+  vendor: aws
+  region: us-west-1
+  num_requests_metric: bfe:request.count
+
+download_metrics:
+  - metric: request.size_bytes
+    aggregation: Average
+    service: [bfe, bidding]
+  - metric: response.size_bytes
+    aggregation: Average
+    service: [bfe, bidding]
+  - metric: initiated_request.to_kv.size_bytes
+    aggregation: Average
+    service: [bfe]
+  - metric: bfe.initiated_response.to_kv.size_bytes
+    aggregation: Average
+    service: [bfe]
+  - metric: bfe.initiated_request.to_bidding.size_bytes
+    aggregation: Average
+    service: [bfe]
+  - metric: bfe.initiated_response.to_bidding.size_bytes
+    aggregation: Average
+    service: [bfe]
+  - metric: system.cpu.percent
+    aggregation: Average
+    label: total utilization
+    service: [bfe, bidding]
+  - metric: request.count
+    aggregation: Sum
+    service: [bfe, bidding]
+  - metric: bidding.business_logic.bids_count
+    aggregation: Sum
+    service: [bidding]
+  - metric: system.cpu.percent
+    aggregation: Average
+    copy_to_variable: system.cpu.count
+    label: total cpu cores
+    service: [bfe, bidding]
+
+defined_values:
+  convert_to_gb: .000000001
+  buyer_availability_zones: 2
+
+usage_estimations:
+  'Buyer-Compute':
+    'BoxUsage:c6i.12xlarge': test.duration * bidding:num_instances
+    'BoxUsage:c6i.2xlarge': test.duration
+    'BoxUsage:t2.micro': test.duration
+
+  'Buyer-Network':
+    'LoadBalancerUsage': test.duration * 2  # A load balancer for bfe and bidding
+    'LCUUsage': (bfe:request.size_bytes + bfe:response.size_bytes + bidding:request.size_bytes + bidding:response.size_bytes)  * bfe:request.count * convert_to_gb
+    'DataTransfer-Regional-Bytes': (bfe:request.size_bytes + bfe:response.size_bytes)  * bfe:request.count * convert_to_gb
+    'AWS-Out-Bytes': 0
+    # There are 7 vpc endpoints talking to aws services
+    'VpcEndpoint-Hours': 7 * buyer_availability_zones * test.duration
+    'NatGateway-Bytes': (bfe:initiated_request.to_kv.size_bytes + bfe:bfe.initiated_response.to_kv.size_bytes) * bfe:request.count * convert_to_gb
+    'NatGateway-Hours': (bfe:num_instances + bidding:num_instances) * test.duration
+    'PublicIPv4:InUseAddress': 0
+...
+---
+cost_model_metadata:
+  name: aws_seller_us_west_1
+  description: A basic cost model for a seller running on AWS in us-west-1 with a single buyer.
+  vendor: aws
+  region: us-west-1
+  num_requests_metric: sfe:request.count
+
+download_metrics:
+  - metric: request.size_bytes
+    aggregation: Average
+    service: [sfe, auction]
+  - metric: response.size_bytes
+    aggregation: Average
+    service: [sfe, auction]
+  - metric: sfe.initiated_request.to_bfe.size_bytes
+    aggregation: Sum
+    service: [sfe]
+  - metric: sfe.initiated_response.to_bfe.size_bytes
+    aggregation: Sum
+    service: [sfe]
+  - metric: sfe.initiated_request.to_auction.size_bytes
+    aggregation: Average
+    service: [sfe]
+  - metric: sfe.initiated_response.to_auction.size_bytes
+    aggregation: Average
+    service: [sfe]
+  - metric: initiated_request.to_kv.size_bytes
+    aggregation: Average
+    service: [sfe]
+  - metric: sfe.initiated_response.to_kv.size_bytes
+    aggregation: Average
+    service: [sfe]
+  - metric: system.cpu.percent
+    aggregation: Average
+    label: total utilization
+    service: [sfe, auction]
+  - metric: request.count
+    aggregation: Sum
+    service: [sfe, auction]
+  - metric: auction.business_logic.bids_count
+    aggregation: Sum
+    service: [auction]
+  - metric: system.cpu.percent
+    aggregation: Average
+    copy_to_variable: system.cpu.count
+    label: total cpu cores
+    service: [sfe, auction]
+
+defined_values:
+  convert_to_gb: .000000001
+  seller_availability_zones: 2
+
+usage_estimations:
+  'Seller-Compute':
+    'BoxUsage:c6i.2xlarge': test.duration
+    'BoxUsage:c6i.4xlarge': test.duration * auction:num_instances
+    'BoxUsage:t2.micro': test.duration
+
+  'Seller-Network':
+    'LoadBalancerUsage': test.duration * 2
+    'LCUUsage': (sfe:request.size_bytes + sfe:response.size_bytes + auction:request.size_bytes + auction:response.size_bytes) * sfe:request.count * convert_to_gb
+    'DataTransfer-Out-Bytes': (sfe:response.size_bytes + sfe:initiated_request.to_kv.size_bytes) * sfe:request.count * convert_to_gb
+    # There are 7 vpc endpoints talking to aws services
+    'VpcEndpoint-Hours': 7 * seller_availability_zones * test.duration
+
+    # Note that the to_kv metrics here are averages since they are exported as distributions,
+    # so they need to be multiplied bu the number of requests
+    # The to_bfe metrics are not distributions so they can be summed up directly
+    # and do not need to be multiplied by number of requests.
+    'NatGateway-Bytes': convert_to_gb * (sfe:sfe.initiated_request.to_bfe.size_bytes + sfe:sfe.initiated_response.to_bfe.size_bytes)
+                        + sfe:request.count * convert_to_gb *
+                                        (sfe:initiated_request.to_kv.size_bytes + sfe:sfe.initiated_response.to_kv.size_bytes)
+
+    'NatGateway-Hours': (sfe:num_instances + auction:num_instances) * test.duration
+    'PublicIPv4:InUseAddress': 0
+...
+---
+cost_model_metadata:
+  name: gcp_buyer_us_east_4
+  description: A basic cost model for a buyer running on GCP in us-east4
+  vendor: gcp
+  region: us-east4
+  num_requests_metric: bfe:request.count
+
+download_metrics:
+  - service: [bfe, bidding]
+    metric: request.size_bytes
+  - service: [bfe, bidding]
+    metric: response.size_bytes
+  - service: [bfe, bidding]
+    metric: initiated_request.to_kv.size_bytes
+  - service: [bfe]
+    metric: bfe.initiated_response.to_kv.size_bytes
+  - service: [bfe]
+    metric: bfe.initiated_request.to_bidding.size_bytes
+  - service: [bfe, bidding]
+    metric: system.cpu.percent
+    label: total utilization
+  - service: [bfe, bidding]
+    metric: request.count
+  - service: [bidding]
+    metric: bidding.business_logic.bids_count
+  - service: [bfe, bidding]
+    metric: system.cpu.percent
+    label: total cpu cores
+    copy_to_variable: system.cpu.count
+  - metric: bfe.errors_count
+    service: [bfe]
+
+defined_values:
+  bfe_cpu_hours: test.duration * bfe:system.cpu.count * bfe:num_instances
+  bidding_cpu_hours: test.duration * bidding:system.cpu.count * bidding:num_instances
+  ram_gb_per_vcpu: 4
+  e2MicroCoreTime: 0.25
+  convert_to_gb: .000000001
+
+usage_estimations:
+  'Buyer-Compute':
+    'N2D AMD Instance Core running in Virginia': bfe_cpu_hours + bidding_cpu_hours
+    'N2D AMD Instance Ram running in Virginia': (bfe_cpu_hours + bidding_cpu_hours) * ram_gb_per_vcpu
+    'E2 Instance Core running in Virginia': test.duration * e2MicroCoreTime
+    'E2 Instance Ram running in Virginia': test.duration
+
+  'Buyer-Confidential-Compute':
+    'Confidential Computing Instance Core': bfe_cpu_hours + bidding_cpu_hours
+    'Confidential Computing Instance RAM': (bfe_cpu_hours + bidding_cpu_hours) * ram_gb_per_vcpu
+
+  'Buyer-Network':
+    'Global External Application Load Balancer Inbound Data Processing for Northern Virginia (us-east4)': bfe:request.size_bytes * convert_to_gb
+    'Global External Application Load Balancer Outbound Data Processing for Northern Virginia (us-east4)': bfe:response.size_bytes * convert_to_gb
+
+     # Inter zone egress usage set to 0 since we are runing in just one region
+    'Network Inter Zone Egress': 0
+    'Network Inter Zone Data Transfer Out': bfe:response.size_bytes * convert_to_gb
+
+    'Networking Cloud Nat Data Processing': (bfe:initiated_request.to_kv.size_bytes + bfe:bfe.initiated_response.to_kv.size_bytes) * convert_to_gb
+
+    'Networking Cloud NAT IP Usage': test.duration
+
+     # More than 32 VMs using the NAT gateways are charged at the 32 gateway price: https://cloud.google.com/nat/pricing
+    'Networking Cloud Nat Gateway Uptime': test.duration * min(32, bfe:num_instances + bidding:num_instances)
+...
+---
+cost_model_metadata:
+  name: gcp_seller_us_east_4
+  description: A basic cost model for a seller running on GCP in us-east4 with a single buyer.
+  vendor: gcp
+  region: us-east4
+  num_requests_metric: sfe:request.count
+
+download_metrics:
+  - service: [sfe, auction]
+    metric: request.size_bytes
+  - service: [sfe, auction]
+    metric: response.size_bytes
+  - metric: sfe.initiated_request.to_bfe.size_bytes
+    service: [sfe]
+  - metric: sfe.initiated_response.to_bfe.size_bytes
+    service: [sfe]
+  - service: [sfe, auction]
+    metric: initiated_request.to_kv.size_bytes
+  - service: [sfe]
+    metric: sfe.initiated_response.to_kv.size_bytes
+  - service: [sfe]
+    metric: sfe.initiated_request.to_auction.size_bytes
+  - service: [sfe, auction]
+    metric: system.cpu.percent
+    label: total utilization
+  - service: [sfe, auction]
+    metric: request.count
+  - service: [auction]
+    metric: auction.business_logic.bids_count
+  - service: [sfe, auction]
+    metric: system.cpu.percent
+    label: total cpu cores
+    copy_to_variable: system.cpu.count
+  - metric: sfe.errors_count
+    service: [sfe]
+
+defined_values:
+  sfe_cpu_hours: test.duration * sfe:system.cpu.count * sfe:num_instances
+  auction_cpu_hours: test.duration * auction:system.cpu.count * auction:num_instances
+  ram_gb_per_vcpu: 4
+  e2MicroCoreTime: 0.25
+  convert_to_gb: .000000001
+
+usage_estimations:
+  'Seller-Compute':
+    'N2D AMD Instance Core running in Virginia': sfe_cpu_hours + auction_cpu_hours
+    'N2D AMD Instance Ram running in Virginia': (sfe_cpu_hours + auction_cpu_hours) * ram_gb_per_vcpu
+    'E2 Instance Core running in Virginia': test.duration * e2MicroCoreTime
+    'E2 Instance Ram running in Virginia': test.duration
+
+  'Seller-Confidential-Compute':
+    'Confidential Computing Instance Core': sfe_cpu_hours + auction_cpu_hours
+    'Confidential Computing Instance RAM': (sfe_cpu_hours + auction_cpu_hours) * ram_gb_per_vcpu
+
+  'Seller-Network':
+    'Global External Application Load Balancer Inbound Data Processing for Northern Virginia (us-east4)': sfe:request.size_bytes * convert_to_gb
+    'Global External Application Load Balancer Outbound Data Processing for Northern Virginia (us-east4)': sfe:response.size_bytes * convert_to_gb
+
+    # Inter zone egress usage set to 0 since we are running in just one region
+    'Network Inter Zone Egress': 0
+    'Network Internet Data Transfer Out from Virginia to Americas': sfe:response.size_bytes * convert_to_gb
+    'Networking Cloud Nat Data Processing': convert_to_gb * (sfe:sfe.initiated_request.to_bfe.size_bytes
+                                            + sfe:sfe.initiated_response.to_bfe.size_bytes
+                                            + sfe:initiated_request.to_kv.size_bytes
+                                            + sfe:sfe.initiated_response.to_kv.size_bytes)
+
+    'Networking Cloud NAT IP Usage': test.duration
+
+    # More than 32 VMs using the NAT gateways are charged at the 32 gateway price: https://cloud.google.com/nat/pricing
+    'Networking Cloud Nat Gateway Uptime': test.duration * min(32, auction:num_instances + sfe:num_instances)
+...

@@ -1,0 +1,636 @@
+{
+  "aws": [
+    {
+      "region": "us-east-1",
+      "description": "BoxUsage:m5.4xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:c6i.16xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:c6i.12xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:c6i.8xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:c6i.4xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:c6i.2xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "BoxUsage:t2.micro",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east-1",
+      "description": "BoxUsage:t2.micro",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:c6i.16xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:c6i.12xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:c6i.8xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:c6i.4xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:c6i.2xlarge",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "BoxUsage:t2.micro",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "LoadBalancerUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "LCUUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-2",
+      "description": "LoadBalancerUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east-1",
+      "description": "LoadBalancerUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "LCUUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east-1",
+      "description": "LCUUsage",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "DataTransfer-Regional-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "DataTransfer-Out-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east-1",
+      "description": "DataTransfer-Out-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-2",
+      "description": "DataTransfer-Regional-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-2",
+      "description": "DataTransfer-Out-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "AWS-Out-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-2",
+      "description": "AWS-Out-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "VpcEndpoint-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "VpcEndpoint-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east-1",
+      "description": "VpcEndpoint-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east-1",
+      "description": "VpcEndpoint-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "NatGateway-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east-1",
+      "description": "NatGateway-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-1",
+      "description": "NatGateway-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-2",
+      "description": "NatGateway-Hours",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "NatGateway-Bytes",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-west-1",
+      "description": "PublicIPv4:InUseAddress",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-west-2",
+      "description": "PublicIPv4:InUseAddress",
+      "sku_id": "",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    }
+  ],
+  "gcp": [
+    {
+      "region": "us-east4",
+      "description": "N2D AMD Instance Core running in Virginia",
+      "sku_id": "809C-1E3B-306E",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "N2D AMD Instance Ram running in Virginia",
+      "sku_id": "D293-6255-369A",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "E2 Instance Core running in Virginia",
+      "sku_id": "D5C5-E209-22D3",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "E2 Instance Ram running in Virginia",
+      "sku_id": "6D24-3682-D284",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "N2D AMD Instance Ram running in Americas",
+      "sku_id": "CED4-7119-A546",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "N2D AMD Instance Core running in Americas",
+      "sku_id": "55FE-5117-DF8B",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "E2 Instance Core running in Americas",
+      "sku_id": "61C6-6F89-DCF4",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "E2 Instance Ram running in Americas",
+      "sku_id": "51E2-59BD-7A6E",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Confidential Computing Instance RAM",
+      "sku_id": "2D72-3D0A-7F71",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Confidential Computing Instance Core",
+      "sku_id": "78B2-4C77-BFD9",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "Confidential Computing Instance RAM",
+      "sku_id": "2D72-3D0A-7F71",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east1",
+      "description": "Confidential Computing Instance Core",
+      "sku_id": "78B2-4C77-BFD9",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Global External Application Load Balancer Inbound Data Processing for Northern Virginia (us-east4)",
+      "sku_id": "691C-F431-F86A",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Global External Application Load Balancer Outbound Data Processing for Northern Virginia (us-east4)",
+      "sku_id": "FDFC-D3EF-B0A1",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Network Internet Data Transfer Out from Virginia to Americas",
+      "sku_id": "1A51-8906-72EB",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Network Inter Zone Data Transfer Out",
+      "sku_id": "DE9E-AFBC-A15A",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Global External Application Load Balancer Inbound Data Processing for South Carolina (us-east1)",
+      "sku_id": "6A71-CA15-8BAD",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Global External Application Load Balancer Outbound Data Processing for South Carolina (us-east1)",
+      "sku_id": "E43F-E132-4694",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Global External Application Load Balancer Inbound Data Processing for South Carolina (us-east1)",
+      "sku_id": "FDFC-D3EF-B0A1",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Network Internet Egress from Virginia to Americas",
+      "sku_id": "1A51-8906-72EB",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Networking Cloud Nat Gateway Uptime",
+      "sku_id": "32E2-4EFC-EF9F",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Networking Cloud NAT IP Usage",
+      "sku_id": "8515-9425-D2CE",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Networking Cloud Nat Data Processing",
+      "sku_id": "015F-5732-FFF0",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Network Inter Zone Egress",
+      "sku_id": "DE9E-AFBC-A15A",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Network Data Transfer GCP Multi-region within Northern America",
+      "sku_id": "3C8A-99C5-F47B",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Network Data Transfer GCP Replication within Northern America",
+      "sku_id": "AED0-3315-7B11",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Network Inter Region Data Transfer Out from Americas to Virginia",
+      "sku_id": "C863-37DA-506E",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east1",
+      "description": "Message Delivery Basic",
+      "sku_id": "027D-B6C7-CCA2",
+      "unit_cost": 0,
+      "cost_basis": "TB"
+    },
+    {
+      "region": "us-east4",
+      "description": "C2D AMD Instance Core running in Americas",
+      "sku_id": "5E86-72F2-5688",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "C2D AMD Instance Ram running in Americas",
+      "sku_id": "CD98-F792-88FF",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "N2D AMD Instance Core running in Americas",
+      "sku_id": "A03E-E620-7389",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "N2D AMD Instance Ram running in Americas",
+      "sku_id": "5535-6D2D-4B50",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "E2 Instance Core running in Americas",
+      "sku_id": "CF4E-A0C7-E3BF",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "E2 Instance Ram running in Americas",
+      "sku_id": "F449-33EC-A5EF",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east4",
+      "description": "Global External Application Load Balancer Inbound Data Processing for South Carolina (us-east1)",
+      "sku_id": "6A71-CA15-8BAD",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east4",
+      "description": "Global External Application Load Balancer Outbound Data Processing for South Carolina (us-east1)",
+      "sku_id": "E43F-E132-4694",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-central1",
+      "description": "N2D AMD Instance Core running in Americas",
+      "sku_id": "A03E-E620-7389",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-central1",
+      "description": "N2D AMD Instance Ram running in Americas",
+      "sku_id": "5535-6D2D-4B50",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "N2D AMD Instance Core running in Columbus",
+      "sku_id": "2C08-0DED-36F3",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Networking Cloud Nat Data Processing",
+      "sku_id": "015F-5732-FFF0",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east5",
+      "description": "N2D AMD Instance Ram running in Columbus",
+      "sku_id": "5682-8AD5-97D9",
+      "unit_cost": 0,
+      "cost_basis": "GB HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Global External Application Load Balancer Inbound Data Processing for Columbus (us-east5)",
+      "sku_id": "26B1-07D2-A64C",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east5",
+      "description": "Network Inter Zone Data Transfer Out",
+      "sku_id": "DE9E-AFBC-A15A",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east5",
+      "description": "Confidential Computing Instance Core",
+      "sku_id": "78B2-4C77-BFD9",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Confidential Computing Instance RAM",
+      "sku_id": "2D72-3D0A-7F71",
+      "unit_cost": 0,
+      "cost_basis": "GB HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Network Internet Data Transfer Out from Columbus to Americas",
+      "sku_id": "2623-976D-48E0",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east5",
+      "description": "Cross Regional Internal Proxy Network Load Balancer Forwarding Rule Minimum for Columbus (us-east5)",
+      "sku_id": "8494-ACA8-D9C9",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Global External Application Load Balancer Outbound Data Processing for Columbus (us-east5)",
+      "sku_id": "8642-13C2-C67C",
+      "unit_cost": 0,
+      "cost_basis": "GB"
+    },
+    {
+      "region": "us-east5",
+      "description": "Networking Cloud Nat Gateway Uptime",
+      "sku_id": "32E2-4EFC-EF9F",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "E2 Instance Core running in Columbus",
+      "sku_id": "2B10-8ED1-31C6",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "Networking Cloud NAT IP Usage",
+      "sku_id": "8515-9425-D2CE",
+      "unit_cost": 0,
+      "cost_basis": "HR"
+    },
+    {
+      "region": "us-east5",
+      "description": "E2 Instance Ram running in Columbus",
+      "sku_id": "5BEB-8229-1894",
+      "unit_cost": 0,
+      "cost_basis": "GB HR"
+    }
+  ]
+}

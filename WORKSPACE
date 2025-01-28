@@ -119,6 +119,17 @@ local_repository(
     path = "services/inference_sidecar/modules/tensorflow_v2_14_0",
 )
 
+load("@rules_python//python:pip.bzl", "pip_parse")
+
+pip_parse(
+    name = "cost_estimation_deps",
+    requirements_lock = "//tools/cost_estimation:requirements_lock.txt",
+)
+
+load("@cost_estimation_deps//:requirements.bzl", cost_estimation_install_deps = "install_deps")
+
+cost_estimation_install_deps()
+
 http_archive(
     name = "libevent",
     build_file = "//third_party:libevent.BUILD",

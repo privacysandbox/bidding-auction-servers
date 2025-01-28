@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.5.1 (2025-01-28)
+
+
+### Features
+
+* Publish the cost tool externally
+
 ## 4.5.0 (2024-12-03)
 
 
