@@ -1,0 +1,92 @@
+diff --git a/proto_builder/field_builder.cc b/proto_builder/field_builder.cc
+index 2723ea1..5e44f56 100644
+--- a/proto_builder/field_builder.cc
++++ b/proto_builder/field_builder.cc
+@@ -19,7 +19,7 @@
+ #include <map>
+ #include <string>
+ 
+-#include "google/protobuf/compiler/cpp/cpp_helpers.h"
++#include "google/protobuf/compiler/cpp/helpers.h"
+ #include "proto_builder/builder_writer.h"
+ #include "proto_builder/oss/logging.h"
+ #include "proto_builder/proto_builder_config.h"
+diff --git a/proto_builder/message_builder.cc b/proto_builder/message_builder.cc
+index a2da95f..fc8b358 100644
+--- a/proto_builder/message_builder.cc
++++ b/proto_builder/message_builder.cc
+@@ -19,7 +19,7 @@
+ #include <memory>
+ #include <string>
+ 
+-#include "google/protobuf/compiler/cpp/cpp_helpers.h"
++#include "google/protobuf/compiler/cpp/helpers.h"
+ #include "proto_builder/field_builder.h"
+ #include "proto_builder/oss/logging.h"
+ #include "proto_builder/proto_builder_config.h"
+diff --git a/proto_builder/proto_builder.bzl b/proto_builder/proto_builder.bzl
+index 0899488..5d614e1 100644
+--- a/proto_builder/proto_builder.bzl
++++ b/proto_builder/proto_builder.bzl
+@@ -118,7 +118,7 @@ def _clang_tidy_impl(ctx, src, output_filename):
+ _clang_tidy_common_attrs = {
+     "_stable_clang_format_tool": attr.label(
+         doc = "The target of the clang-format executable.",
+-        default = Label("@llvm_toolchain//:bin/clang-format"),
++        # default = Label("@llvm_toolchain//:bin/clang-format"),
+         allow_single_file = True,
+         executable = True,
+         cfg = "exec",
+@@ -482,7 +482,7 @@ def _proto_builder_impl(ctx):
+         ],
+         inputs = proto_files + template_files + [
+             ctx.executable._proto_builder_tool,
+-            ctx.executable._stable_clang_format_tool,
++            # ctx.executable._stable_clang_format_tool,
+             conv_deps_file,
+         ] + proto_builder_config_files,
+         command = "\n".join([
+@@ -546,18 +546,18 @@ def _proto_builder_impl(ctx):
+                 interface_file,
+             ) if ctx.attr.make_interface else "",
+             # Clang format stage
+-            "{} -i --style=Google {}".format(
+-                ctx.executable._stable_clang_format_tool.path,
+-                source_file.path,
+-            ),
+-            "{} -i --style=Google {}".format(
+-                ctx.executable._stable_clang_format_tool.path,
+-                header_file.path,
+-            ),
+-            "{} -i --style=Google {}".format(
+-                ctx.executable._stable_clang_format_tool.path,
+-                interface_file.path,
+-            ) if ctx.attr.make_interface else "",
++            # "{} -i --style=Google {}".format(
++            #     ctx.executable._stable_clang_format_tool.path,
++            #     source_file.path,
++            # ),
++            # "{} -i --style=Google {}".format(
++            #     ctx.executable._stable_clang_format_tool.path,
++            #     header_file.path,
++            # ),
++            # "{} -i --style=Google {}".format(
++            #     ctx.executable._stable_clang_format_tool.path,
++            #     interface_file.path,
++            # ) if ctx.attr.make_interface else "",
+             "exit 0",
+         ]),
+         mnemonic = "CPPProtoBuilder",
+diff --git a/proto_builder/util.cc b/proto_builder/util.cc
+index 94e393f..1a14707 100644
+--- a/proto_builder/util.cc
++++ b/proto_builder/util.cc
+@@ -19,7 +19,7 @@
+ #include <string>
+ #include <utility>
+ 
+-#include "google/protobuf/compiler/cpp/cpp_helpers.h"
++#include "google/protobuf/compiler/cpp/helpers.h"
+ #include "proto_builder/oss/logging.h"
+ #include "proto_builder/proto_builder.pb.h"
+ #include "google/protobuf/descriptor.pb.h"

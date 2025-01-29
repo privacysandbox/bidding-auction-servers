@@ -19,16 +19,21 @@
 
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "services/auction_service/code_wrapper/generated_private_aggregation_wrapper.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 std::string GetBuyerWrappedCode(absl::string_view buyer_js_code,
-                                bool enable_protected_app_signals) {
+                                bool enable_protected_app_signals,
+                                bool enable_private_aggregate_reporting) {
   std::string wrap_code{kReportWinWrapperFunction};
   if (enable_protected_app_signals) {
     wrap_code = absl::StrReplaceAll(wrap_code, {{"$extraArgs", kEgressArgs}});
   }
   wrap_code.append(buyer_js_code);
+  if (!enable_protected_app_signals && enable_private_aggregate_reporting) {
+    wrap_code.append(kPrivateAggregationWrapperFunction);
+  }
   return wrap_code;
 }
 

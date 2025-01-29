@@ -23,6 +23,8 @@ constexpr char kTestReportWinUrl[] = "http://reportWinUrl.com";
 constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
 constexpr char kTestBuyerAndSellerReportingId[] =
     "testBuyerAndSellerReportingId";
+constexpr char kTestSelectedBuyerAndSellerReportingId[] =
+    "testSelectedBuyerAndSellerReportingId";
 constexpr char kTestReportWinUrlWithBuyerReportingId[] =
     "http://reportWinUrl.com&buyerReportingId=testId";
 constexpr char kTestLog[] = "testLog";
@@ -65,6 +67,7 @@ constexpr bool kTestEnableReportWinInputNoisingTrue = true;
 constexpr char kTestEgressPayload[] = "testEgressPayload";
 constexpr char kTestTemporaryUnlimitedEgressPayload[] =
     "testTemporaryUnlimitedEgressPayload";
+constexpr char kTestKAnonStatus[] = "passedNotEnforced";
 constexpr uint32_t kTestDataVersion = 1648;  // NOLINT
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -30,18 +30,6 @@ resource "aws_security_group" "elb_security_group" {
   }
 }
 
-# Security group to control ingress and egress traffic for the ssh ec2 instance.
-resource "aws_security_group" "ssh_security_group" {
-  name   = "${var.operator}-${var.environment}-ssh-sg"
-  vpc_id = var.vpc_id
-
-  tags = {
-    Name        = "${var.operator}-${var.environment}-ssh-sg"
-    operator    = var.operator
-    environment = var.environment
-  }
-}
-
 # Security group to control ingress and egress traffic for the server ec2 instances.
 resource "aws_security_group" "instance_security_group" {
   name   = "${var.operator}-${var.environment}-instance-sg"

@@ -331,7 +331,7 @@ TEST(PyTorchModulePredictTest, PredictSimpleSuccess_ValidateMetrics) {
   EXPECT_EQ(result->metrics_list().size(), 7);
   CheckMetricList(result->metrics_list(), "kInferenceRequestCount", 0, 1);
   CheckMetricList(result->metrics_list(), "kInferenceRequestSize", 0, 204);
-  CheckMetricList(result->metrics_list(), "kInferenceResponseSize", 0, 386);
+  CheckMetricList(result->metrics_list(), "kInferenceResponseSize", 0, 355);
   CheckMetricList(result->metrics_list(), "kInferenceRequestBatchCountByModel",
                   0, 1);
   auto it = result->metrics_list().find("kInferenceRequestDuration");
@@ -698,6 +698,195 @@ TEST(PyTorchModulePredictTest,
               AllOf(HasSubstr("INPUT_PARSING"), HasSubstr("\"tensors\":")));
 }
 
+constexpr char kValidAndInvalidParsingInputs[] = R"json({
+  "request" : [
+  {
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["3.14"]
+    }
+  ]
+  },
+  {
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["3.14"]
+    }
+  ]
+},
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+    "tensor_content": ["seven"]
+    }
+  ]
+}]
+    })json";
+
+TEST(PyTorchModulePredictTest,
+     PredictBothValidAndInvalidParsingInputsReturnsPartialResultsJsonResponse) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kValidAndInvalidParsingInputs);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  ASSERT_TRUE(result.ok());
+  // invalid parsing error from pytorch parser
+  EXPECT_THAT(result->output(), HasSubstr("Input Tensor Conversion Error."));
+  // invalid parsing error from request parser
+  EXPECT_THAT(result->output(),
+              HasSubstr("Missing model_path in the JSON document"));
+  // valid requests are executed
+  EXPECT_THAT(result->output(), HasSubstr("\"tensors\":"));
+}
+
+constexpr char kTwoInValidParsingInputs[] = R"json({
+  "request" : [
+  {
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["3.14"]
+    }
+  ]
+  },
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+    "tensor_content": [1.5]
+    }
+  ]
+}]
+    })json";
+
+TEST(PyTorchModulePredictTest, PredictTwoInvalidParsingInputs) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kTwoInValidParsingInputs);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  ASSERT_TRUE(result.ok());
+  // invalid parsing error from request parser
+  EXPECT_THAT(result->output(),
+              AllOf(HasSubstr("Missing model_path in the JSON document"),
+                    HasSubstr("All numbers within the tensor_content must be "
+                              "enclosed in quotes"),
+                    HasSubstr("simple_model")));
+}
+
+constexpr char kInvalidInputNoModelPath[] = R"json({
+  "request" : [
+  {
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["3.14"]
+    }
+  ]
+  }]
+})json";
+
+TEST(PyTorchModulePredictTest, PredictInvalidInputNoModelPath) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kInvalidInputNoModelPath);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  ASSERT_TRUE(result.ok());
+  // invalid parsing error from request parser
+  EXPECT_EQ(result->output(),
+            "{\"response\":[{\"model_path\":\"\",\"error\":{\"error_type\":"
+            "\"INPUT_PARSING\",\"description\":\"Missing model_path in the "
+            "JSON document\"}}]}");
+}
+
+constexpr char kInvalidInputModelPath[] = R"json({
+  "request" : [
+  {
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": [3.14]
+    }
+  ]
+  }]
+})json";
+
+TEST(PyTorchModulePredictTest, PredictInvalidInputModelPath) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kSimpleModel, register_request).ok());
+  ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(kInvalidInputModelPath);
+
+  const absl::StatusOr<PredictResponse> result =
+      torch_module->Predict(predict_request);
+  ASSERT_TRUE(result.ok());
+  // invalid parsing error from request parser
+  EXPECT_EQ(result->output(),
+            "{\"response\":[{\"model_path\":\"simple_model\",\"error\":{"
+            "\"error_type\":\"INPUT_PARSING\",\"description\":\"All numbers "
+            "within the tensor_content must be enclosed in quotes\"}}]}");
+}
+
 constexpr char kVariedInputsRequestBatchSize1[] = R"json({
   "request" : [{
     "model_path" : "e2e_model1",
@@ -893,6 +1082,37 @@ TEST(PyTorchModulePredictTest, RegisterModelWithWarmupDataSuccess) {
   register_request.set_warm_up_batch_request_json(
       kVariedInputsRequestBatchSize2);
   ASSERT_TRUE(torch_module->RegisterModel(register_request).ok());
+}
+
+TEST(PyTorchModulePredictTest, RegisterModelDefaultDoNotReturnConstructMetric) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
+          .ok());
+  auto register_response = torch_module->RegisterModel(register_request);
+  ASSERT_TRUE(register_response.ok());
+  EXPECT_EQ(register_response.value().metrics_list_size(), 0);
+}
+
+TEST(PyTorchModulePredictTest, RegisterModelWithWarmupDataShouldReturnMetric) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> torch_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kTestModelVariedInputs1, register_request)
+          .ok());
+  register_request.set_warm_up_batch_request_json(
+      kVariedInputsRequestBatchSize2);
+  auto register_response = torch_module->RegisterModel(register_request);
+  ASSERT_TRUE(register_response.ok());
+  EXPECT_EQ(register_response.value().metrics_list_size(), 1);
+  ASSERT_TRUE(register_response.value().metrics_list().find(
+                  "kInferenceRegisterModelResponseModelWarmUpDuration") !=
+              register_response.value().metrics_list().end());
 }
 
 constexpr char kVariedInputsRequestBatchSize2WithWrongPath[] = R"json({
@@ -1468,7 +1688,8 @@ class PyTorchModuleResetModelTest : public ::testing::Test {
   // No model freezing to allow stateful models to be loaded.
   static absl::StatusOr<std::shared_ptr<torch::jit::script::Module>>
   MockModelConstructor(const InferenceSidecarRuntimeConfig& config,
-                       const RegisterModelRequest& request) {
+                       const RegisterModelRequest& request,
+                       ModelConstructMetrics& construct_metrics) {
     try {
       const std::string& model_payload = request.model_files().begin()->second;
       std::istringstream is(model_payload);

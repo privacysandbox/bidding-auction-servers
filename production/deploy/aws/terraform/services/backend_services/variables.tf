@@ -63,8 +63,3 @@ variable "server_instance_role_arn" {
   description = "The operator role for server instancces."
   type        = string
 }
-
-variable "ssh_instance_role_arn" {
-  description = "The operator role for the SSH instancce."
-  type        = string
-}

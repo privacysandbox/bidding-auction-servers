@@ -87,10 +87,6 @@ proto_library(
 
 cc_proto_library(
     name = "auction_code_fetch_config_cc_proto",
-    visibility = [
-        "//services/auction_service:__subpackages__",
-        "//services/seller_frontend_service:__subpackages__",
-    ],
     deps = [":auction_code_fetch_config_proto"],
 )
 

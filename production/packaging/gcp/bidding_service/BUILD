@@ -13,7 +13,6 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@google_privacysandbox_servers_common//src/roma/byob/config:container.bzl", "roma_container_dir", "roma_container_root_dir")
 load("@google_privacysandbox_servers_common//third_party:container_deps.bzl", "get_user")
 load(
     "@io_bazel_rules_docker//container:container.bzl",
@@ -132,16 +131,24 @@ container_layer(
     ],
 )
 
-# gVisor dependencies
-pkg_files(
-    name = "gvisor_config_file",
-    srcs = ["@google_privacysandbox_servers_common//src/roma/byob/container:container_config"],
-    attributes = pkg_attributes(mode = "0600"),
+pkg_tar(
+    name = "root_certs",
+    srcs = ["@com_github_grpc_grpc//:root_certificates"],
+)
+
+container_layer(
+    name = "root_certs_layer",
+    directory = "/etc/",
+    tars = [
+        ":root_certs",
+    ],
 )
 
 pkg_tar(
-    name = "gvisor_config_tar",
-    srcs = [":gvisor_config_file"],
+    name = "var_run_runsc_tar_{}".format(user.flavor),
+    srcs = [
+        "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_dir",
+    ],
     owner = "{}.{}".format(
         user.uid,
         user.gid,
@@ -149,21 +156,9 @@ pkg_tar(
 )
 
 container_layer(
-    name = "gvisor_config_layer",
-    directory = "{}".format(roma_container_dir),
-    tars = [
-        ":gvisor_config_tar",
-    ],
-)
-
-container_layer(
     name = "byob_runtime_container_layer",
-    directory = "{roma_container_dir}/{root_dir}".format(
-        roma_container_dir = roma_container_dir,
-        root_dir = roma_container_root_dir,
-    ),
     tars = [
-        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_runtime_container_{user}.tar".format(user = user.user),
+        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_runtime_container_with_dir_{user}.tar".format(user = user.user),
     ],
 )
 
@@ -185,7 +180,7 @@ container_image(
         ":cddl_specs_layer",
         ":server_binary_layer",
         ":byob_runtime_container_layer",
-        ":gvisor_config_layer",
+        ":root_certs_layer",
     ] + select({
         "//:e2e_build": [
         ],
@@ -193,8 +188,8 @@ container_image(
     }),
     ports = ["50051"],
     tars = [
+        ":var_run_runsc_tar_{user}".format(user = user.user),
         "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
-        "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_tar_{user}".format(user = user.user),
         "//tools/udf/generate_bid/samples:sample_generate_bid_execs_tar",
     ],
 )

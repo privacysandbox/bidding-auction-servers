@@ -134,14 +134,17 @@ class SecureInvokeLib : public testing::Test {
     key_fetcher_manager_ = CreateKeyFetcherManager(
         config_client, CreatePublicKeyFetcher(config_client));
 
-    SetupBiddingProviderMock(
-        /*provider=*/*bidding_signals_provider_,
-        /*bidding_signals_value=*/valid_bidding_signals,
-        /*repeated_get_allowed=*/false,
-        /*server_error_to_return=*/std::nullopt,
-        /*match_any_params_any_times=*/true);
+    SetupBiddingProviderMock(*bidding_signals_provider_,
+                             {.bidding_signals_value = valid_bidding_signals,
+                              .match_any_params_any_times = true});
 
     GTEST_FLAG_SET(death_test_style, "threadsafe");
+    stub_ = BuyerFrontEnd::NewStub(
+        CreateChannel(bidding_service_client_config_.server_addr,
+                      bidding_service_client_config_.compression,
+                      bidding_service_client_config_.secure_client,
+                      /*grpc_arg_default_authority=*/"",
+                      bidding_service_client_config_.ca_root_pem));
   }
 
   GetBidsRequest request_;
@@ -152,7 +155,9 @@ class SecureInvokeLib : public testing::Test {
   GetBidsConfig get_bids_config_ = {
       .is_protected_audience_enabled = true,
   };
-  BiddingServiceClientConfig bidding_service_client_config_;
+  BiddingServiceClientConfig bidding_service_client_config_ = {
+      .ca_root_pem = kTestCaCertPath};
+  std::unique_ptr<BuyerFrontEnd::StubInterface> stub_;
   std::unique_ptr<MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>
       bidding_signals_provider_ = std::make_unique<
           MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>();

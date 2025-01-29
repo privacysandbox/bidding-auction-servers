@@ -320,6 +320,50 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
   EXPECT_TRUE(actual.value().enable_debug_reporting());
 }
 
+TEST(PaylodPackagingTest, SetsTheCorrectEnforceKAnonFlag) {
+  const bool enforce_kanon = true;
+  auto input =
+      R"JSON({"auction_config":{"sellerSignals":"{\"seller_signal\": \"1698245045006099572\"}","auctionSignals":"{\"auction_signal\": \"1698245045006100642\"}","buyerList":["1698245045005905922"],"seller":"seller.com","perBuyerConfig":{"1698245045005905922":{"buyerSignals":"1698245045006101412"}},"buyerTimeoutMs":1000},"raw_protected_audience_input":{"raw_buyer_input":{"ad_tech_A.com":{"interestGroups":[{"name":"1698245045006110232","biddingSignalsKeys":["1698245045006110482","1698245045006110862"],"adRenderIds":["ad_render_id_1698245045006122582","ad_render_id_1698245045006123002","ad_render_id_1698245045006123242","ad_render_id_1698245045006123472","ad_render_id_1698245045006123772","ad_render_id_1698245045006124002","ad_render_id_1698245045006124212","ad_render_id_1698245045006124412","ad_render_id_1698245045006124672"],"userBiddingSignals":"{\"1698245045006112422\":\"1698245045006112622\",\"1698245045006113232\":\"1698245045006113422\",\"1698245045006111322\":\"1698245045006111702\",\"1698245045006112802\":\"1698245045006112972\",\"1698245045006112032\":\"1698245045006112252\"}","browserSignals":{"joinCount":"8","bidCount":"41","recency":"1698245045","prevWins":"[[1698245045,\"ad_render_id_1698245045006122582\"],[1698245045,\"ad_render_id_1698245045006123002\"],[1698245045,\"ad_render_id_1698245045006123242\"],[1698245045,\"ad_render_id_1698245045006123472\"],[1698245045,\"ad_render_id_1698245045006123772\"],[1698245045,\"ad_render_id_1698245045006124002\"],[1698245045,\"ad_render_id_1698245045006124212\"],[1698245045,\"ad_render_id_1698245045006124412\"],[1698245045,\"ad_render_id_1698245045006124672\"]]"}}]}}}})JSON";
+
+  HpkeKeyset keyset;
+  auto select_ad_reqcurrent_all_debug_urls_chars =
+      std::move(PackagePlainTextSelectAdRequest(
+                    input, CLIENT_TYPE_BROWSER, keyset,
+                    /*enable_debug_reporting=*/true,
+                    /*enable_debug_info=*/false,
+                    /*protected_app_signals_json=*/"",
+                    /*enable_unlimited_egress=*/false, enforce_kanon))
+          .first;
+
+  absl::StatusOr<server_common::EncapsulatedRequest>
+      parsed_encapsulated_request = server_common::ParseEncapsulatedRequest(
+          select_ad_reqcurrent_all_debug_urls_chars
+              ->protected_auction_ciphertext());
+  ASSERT_TRUE(parsed_encapsulated_request.ok())
+      << parsed_encapsulated_request.status();
+
+  // Decrypt.
+  server_common::PrivateKey private_key;
+  private_key.key_id = std::to_string(keyset.key_id);
+  private_key.private_key = GetHpkePrivateKey(keyset.private_key);
+  auto decrypted_response = server_common::DecryptEncapsulatedRequest(
+      private_key, *parsed_encapsulated_request);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  absl::StatusOr<server_common::DecodedRequest> decoded_request =
+      server_common::DecodeRequestPayload(
+          decrypted_response->GetPlaintextData());
+  ASSERT_TRUE(decoded_request.ok()) << decoded_request.status();
+
+  // Decode.
+  ErrorAccumulator error_accumulator;
+  absl::StatusOr<ProtectedAuctionInput> actual = Decode<ProtectedAuctionInput>(
+      decoded_request->compressed_data, error_accumulator);
+  ASSERT_TRUE(actual.ok()) << actual.status();
+
+  EXPECT_TRUE(actual->enforce_kanon());
+}
+
 TEST(PaylodPackagingTest, SetEnableDebugInfo) {
   server_common::log::SetGlobalPSVLogLevel(10);
 

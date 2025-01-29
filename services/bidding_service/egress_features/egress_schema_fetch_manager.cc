@@ -38,60 +38,75 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-absl::StatusOr<EgressSchemaCaches> EgressSchemaFetchManager::Init() {
+absl::StatusOr<EgressSchemaCaches> EgressSchemaFetchManager::Init(
+    BiddingServiceRuntimeConfig& runtime_config) {
   EgressSchemaCaches caches;
   if (!options_.enable_protected_app_signals) {
     return caches;
   }
+  if (options_.fetch_config.empty()) {
+    return absl::InvalidArgumentError(kNoEgressSchemaFetchConfig);
+  }
+  PS_RETURN_IF_ERROR(google::protobuf::util::JsonStringToMessage(
+      options_.fetch_config.data(), &fetch_config_))
+      << kParseEgressSchemaFetchConfigFailure;
 
-  if (options_.fetch_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
+  PS_LOG(INFO) << "Fetched egress schema fetch config: "
+               << fetch_config_.DebugString();
+
+  PS_RETURN_IF_ERROR(ConfigureRuntimeDefaults(runtime_config));
+
+  if (fetch_config_.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     PS_RETURN_IF_ERROR(InitializeBucketClient());
   }
 
   if (options_.enable_temporary_unlimited_egress) {
-    PS_LOG(INFO) << "Temporary egress feature is enabled in the binary, "
-                    "attempting schema fetch...";
+    PS_LOG(INFO) << kTemporaryEgressEnabled;
     PS_ASSIGN_OR_RETURN(
         auto temporary_egress_cache_result,
         StartEgressSchemaFetch(
-            options_.fetch_config.temporary_unlimited_egress_schema_url(),
-            options_.fetch_config.temporary_unlimited_egress_schema_bucket(),
+            fetch_config_.temporary_unlimited_egress_schema_url(),
+            fetch_config_.temporary_unlimited_egress_schema_bucket(),
             std::move(options_.temporary_unlimited_egress_cddl_cache)),
-        _ << "Temporary egress schema fetch unsuccessful.");
-    PS_LOG(INFO) << "Temporary egress schema fetch successful.";
+        _ << kTemporaryEgressFetchUnsuccessful);
+    PS_LOG(INFO) << kTemporaryEgressFetchSuccessful;
     unlimited_egress_schema_fetcher_ =
         std::move(temporary_egress_cache_result.schema_fetcher);
     caches.unlimited_egress_schema_cache =
         std::move(temporary_egress_cache_result.schema_cache);
   } else {
-    PS_LOG(INFO) << "Temporary egress feature is not enabled in the binary";
+    PS_LOG(INFO) << kTemporaryEgressDisabled;
   }
 
   const bool egress_enabled = options_.limited_egress_bits > 0;
   if (egress_enabled) {
-    PS_LOG(INFO) << "Limited egress feature is enabled in the binary, "
-                    "attempting schema fetch...";
+    PS_LOG(INFO) << options_.limited_egress_bits << kLimitedEgressEnabled;
     PS_ASSIGN_OR_RETURN(
         auto egress_cache_result,
-        StartEgressSchemaFetch(options_.fetch_config.egress_schema_url(),
-                               options_.fetch_config.egress_schema_bucket(),
+        StartEgressSchemaFetch(fetch_config_.egress_schema_url(),
+                               fetch_config_.egress_schema_bucket(),
                                std::move(options_.egress_cddl_cache)),
-        _ << "Limited egress schema fetch unsuccessful.");
-    PS_LOG(INFO) << "Limited egress schema fetch successful.";
+        _ << kLimitedEgressFetchUnsuccessful);
+    PS_LOG(INFO) << kLimitedEgressFetchSuccessful;
     egress_schema_fetcher_ = std::move(egress_cache_result.schema_fetcher);
     caches.egress_schema_cache = std::move(egress_cache_result.schema_cache);
   } else {
-    PS_LOG(INFO) << "Limited egress feature is not enabled in the binary";
+    PS_LOG(INFO) << kLimitedEgressDisabled;
   }
 
   return caches;
 }
 
+const bidding_service::EgressSchemaFetchConfig&
+EgressSchemaFetchManager::GetFetchConfig() const {
+  return fetch_config_;
+}
+
 absl::Status EgressSchemaFetchManager::InitializeBucketClient() {
   PS_RETURN_IF_ERROR(options_.blob_storage_client->Init()).SetPrepend()
-      << "Egress blob storage client init failed.";
+      << kEgressBlobStorageClientInitFailure;
   PS_RETURN_IF_ERROR(options_.blob_storage_client->Run()).SetPrepend()
-      << "Egress blob storage client run failed.";
+      << kEgressBlobStorageClientRunFailure;
   return absl::OkStatus();
 }
 
@@ -99,33 +114,30 @@ absl::StatusOr<EgressSchemaFetchManager::StartEgressSchemaFetchResult>
 EgressSchemaFetchManager::StartEgressSchemaFetch(
     absl::string_view url, absl::string_view bucket,
     std::unique_ptr<CddlSpecCache> cddl_spec_cache) {
-  PS_RETURN_IF_ERROR(cddl_spec_cache->Init())
-      << "Unable to init cddl spec cache.";
+  PS_RETURN_IF_ERROR(cddl_spec_cache->Init()) << kCddlSpecCacheInitFailure;
   auto egress_schema_cache =
       std::make_unique<EgressSchemaCache>(std::move(cddl_spec_cache));
 
   std::unique_ptr<FetcherInterface> adtech_schema_fetcher;
-  if (options_.fetch_config.fetch_mode() == blob_fetch::FETCH_MODE_URL) {
+  if (fetch_config_.fetch_mode() == blob_fetch::FETCH_MODE_URL) {
     adtech_schema_fetcher = std::make_unique<AdtechSchemaFetcher>(
         std::vector<std::string>{std::string(url)},
-        absl::Milliseconds(options_.fetch_config.url_fetch_period_ms()),
-        absl::Milliseconds(options_.fetch_config.url_fetch_timeout_ms()),
+        absl::Milliseconds(fetch_config_.url_fetch_period_ms()),
+        absl::Milliseconds(fetch_config_.url_fetch_timeout_ms()),
         options_.http_fetcher_async, options_.executor,
         egress_schema_cache.get());
-  } else if (options_.fetch_config.fetch_mode() ==
-             blob_fetch::FETCH_MODE_BUCKET) {
+  } else if (fetch_config_.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     adtech_schema_fetcher = std::make_unique<EgressSchemaBucketFetcher>(
-        bucket, absl::Milliseconds(options_.fetch_config.url_fetch_period_ms()),
+        bucket, absl::Milliseconds(fetch_config_.url_fetch_period_ms()),
         options_.executor, options_.blob_storage_client.get(),
         egress_schema_cache.get());
 
   } else {
-    return absl::InvalidArgumentError(
-        "Egress schema fetch mode not supported.");
+    return absl::InvalidArgumentError(kEgressSchemaFetchModeNotSupported);
   }
 
   PS_RETURN_IF_ERROR(adtech_schema_fetcher->Start())
-      << "Unable to start fetching the egress schema.";
+      << kEgressSchemaFetchStartFailure;
 
   return EgressSchemaFetchManager::StartEgressSchemaFetchResult(
       {.schema_cache = std::move(egress_schema_cache),
@@ -134,22 +146,28 @@ EgressSchemaFetchManager::StartEgressSchemaFetch(
 
 absl::Status EgressSchemaFetchManager::ConfigureRuntimeDefaults(
     BiddingServiceRuntimeConfig& runtime_config) {
-  if (!options_.enable_protected_app_signals) {
-    return absl::OkStatus();
+  if (options_.enable_temporary_unlimited_egress == false &&
+      options_.limited_egress_bits < 1) {
+    return absl::InvalidArgumentError(kMustUseTemporaryOrLimitedEgress);
   }
-  if (options_.fetch_config.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
+  if (fetch_config_.fetch_mode() == blob_fetch::FETCH_MODE_BUCKET) {
     runtime_config.use_per_request_schema_versioning = true;
-    PS_ASSIGN_OR_RETURN(
-        runtime_config.default_egress_schema_version,
-        GetBucketBlobVersion(
-            options_.fetch_config.egress_schema_bucket(),
-            options_.fetch_config.egress_default_schema_in_bucket()));
-    PS_ASSIGN_OR_RETURN(
-        runtime_config.default_unlimited_egress_schema_version,
-        GetBucketBlobVersion(
-            options_.fetch_config.temporary_unlimited_egress_schema_bucket(),
-            options_.fetch_config
-                .temporary_unlimited_egress_default_schema_in_bucket()));
+    if (options_.enable_temporary_unlimited_egress) {
+      PS_ASSIGN_OR_RETURN(
+          runtime_config.default_unlimited_egress_schema_version,
+          GetBucketBlobVersion(
+              fetch_config_.temporary_unlimited_egress_schema_bucket(),
+              fetch_config_
+                  .temporary_unlimited_egress_default_schema_in_bucket()),
+          _ << kNoUnlimitedSchemaVersion);
+    }
+    if (options_.limited_egress_bits > 0) {
+      PS_ASSIGN_OR_RETURN(
+          runtime_config.default_egress_schema_version,
+          GetBucketBlobVersion(fetch_config_.egress_schema_bucket(),
+                               fetch_config_.egress_default_schema_in_bucket()),
+          _ << kNoLimitedSchemaVersion);
+    }
   } else {
     runtime_config.use_per_request_schema_versioning = false;
     runtime_config.default_egress_schema_version = kDefaultEgressSchemaId;

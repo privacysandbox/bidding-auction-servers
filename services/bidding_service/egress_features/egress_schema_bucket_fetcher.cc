@@ -21,11 +21,14 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/logger/request_context_logger.h"
 #include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
+#include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -38,35 +41,31 @@ EgressSchemaBucketFetcher::EgressSchemaBucketFetcher(
                             blob_storage_client),
       egress_schema_cache_(*egress_schema_cache) {}
 
-bool EgressSchemaBucketFetcher::OnFetch(
+absl::Status EgressSchemaBucketFetcher::OnFetch(
     const google::scp::core::AsyncContext<
         google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
         google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
         context) {
-  const absl::StatusOr<std::string> blob_name = GetBucketBlobVersion(
-      GetBucketName(), context.request->blob_metadata().blob_name());
+  PS_ASSIGN_OR_RETURN(
+      const std::string blob_name,
+      GetBucketBlobVersion(GetBucketName(),
+                           context.request->blob_metadata().blob_name()),
+      _ << "Failed to fetch schema bucket blob name.");
 
-  if (!blob_name.ok()) {
-    PS_LOG(ERROR) << "Failed to fetch schema bucket blob name "
-                  << blob_name.status();
-    return false;
-  }
   if (!context.result.Successful()) {
-    PS_LOG(ERROR) << "Failed to fetch egress schema " << *blob_name;
-    return false;
+    return absl::Status(
+        absl::StatusCode::kInvalidArgument,
+        absl::StrCat("Failed to fetch egress schema: ", blob_name));
   }
 
   const std::string& schema = context.response->blob().data();
 
-  if (absl::Status status = egress_schema_cache_.Update(schema, *blob_name);
-      !status.ok()) {
-    PS_LOG(ERROR) << "Failed to update egress cache with fetched schema:\n"
-                  << schema << "\n"
-                  << status;
-    return false;
-  }
+  PS_RETURN_IF_ERROR(egress_schema_cache_.Update(schema, blob_name))
+      << "Failed to update egress cache with fetched schema:\n"
+      << schema;
+
   PS_VLOG(kSuccess) << "Loaded egress schema:\n" << schema;
-  return true;
+  return absl::OkStatus();
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

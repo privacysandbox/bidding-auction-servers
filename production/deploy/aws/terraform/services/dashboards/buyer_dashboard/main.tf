@@ -757,6 +757,34 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                 },
                 "title": "bidding.business_logic.debug_urls_size_bytes [MEAN]"
             }
+        },
+        {
+            "height": 5,
+            "width": 20,
+            "y": 96,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "sparkline": false,
+                "view": "table",
+                "metrics": [
+                    [ { "expression": "SELECT MAX(\"system.bucket_fetch.blob_load_status\") FROM SCHEMA(bidding, Noise,OTelLib,\"deployment.environment\",label,operator,region,\"service.instance.id\",\"service.name\",\"service.version\",\"telemetry.sdk.language\",\"telemetry.sdk.name\",\"telemetry.sdk.version\") WHERE \"deployment.environment\" = '${var.environment}' AND \"service.name\" = 'bidding' GROUP BY label, \"service.instance.id\" ORDER BY MAX() DESC", "label": "Blob: ", "id": "q1" } ]
+                ],
+                "region": "${var.region}",
+                "stat": "Average",
+                "period": 300,
+                "table": {
+                    "summaryColumns": [
+                        "MAX",
+                        "MIN"
+                    ],
+                    "showTimeSeriesData": false,
+                    "layout": "horizontal"
+                },
+                "setPeriodToTimeRange": true,
+                "title": "Latest Blob Load Status",
+                "liveData": true
+            }
         }
     ]
 }

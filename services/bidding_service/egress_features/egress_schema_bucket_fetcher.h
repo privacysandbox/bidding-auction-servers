@@ -59,10 +59,11 @@ class EgressSchemaBucketFetcher : public PeriodicBucketFetcher {
 
  protected:
   // Loads the fetched code blobs into EgressSchemaCache.
-  bool OnFetch(const google::scp::core::AsyncContext<
-               google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
-               google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
-                   context) override;
+  absl::Status OnFetch(
+      const google::scp::core::AsyncContext<
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
+          context) override;
 
  private:
   EgressSchemaCache& egress_schema_cache_;

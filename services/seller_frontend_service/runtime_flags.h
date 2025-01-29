@@ -67,8 +67,27 @@ inline constexpr absl::string_view SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
 inline constexpr absl::string_view K_ANON_API_KEY = "K_ANON_API_KEY";
 inline constexpr absl::string_view ALLOW_COMPRESSED_AUCTION_CONFIG =
     "ALLOW_COMPRESSED_AUCTION_CONFIG";
+inline constexpr absl::string_view SCORING_SIGNALS_FETCH_MODE =
+    "SCORING_SIGNALS_FETCH_MODE";
+inline constexpr absl::string_view HEADER_PASSED_TO_BUYER =
+    "HEADER_PASSED_TO_BUYER";
+inline constexpr absl::string_view K_ANON_TOTAL_NUM_HASH =
+    "K_ANON_TOTAL_NUM_HASH";
+inline constexpr absl::string_view EXPECTED_K_ANON_TO_NON_K_ANON_RATIO =
+    "EXPECTED_K_ANON_TO_NON_K_ANON_RATIO";
+inline constexpr absl::string_view K_ANON_CLIENT_TIME_OUT_MS =
+    "K_ANON_CLIENT_TIME_OUT_MS";
+inline constexpr absl::string_view NUM_K_ANON_SHARDS = "NUM_K_ANON_SHARDS";
+inline constexpr absl::string_view NUM_NON_K_ANON_SHARDS =
+    "NUM_NON_K_ANON_SHARDS";
+inline constexpr absl::string_view TEST_MODE_K_ANON_CACHE_TTL_SECONDS =
+    "TEST_MODE_K_ANON_CACHE_TTL_SECONDS";
+inline constexpr absl::string_view TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS =
+    "TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS";
+inline constexpr absl::string_view ENABLE_K_ANON_QUERY_CACHE =
+    "ENABLE_K_ANON_QUERY_CACHE";
 
-inline constexpr int kNumRuntimeFlags = 27;
+inline constexpr int kNumRuntimeFlags = 37;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -97,7 +116,16 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     SELLER_CODE_FETCH_CONFIG,
     K_ANON_API_KEY,
     ALLOW_COMPRESSED_AUCTION_CONFIG,
-};
+    SCORING_SIGNALS_FETCH_MODE,
+    HEADER_PASSED_TO_BUYER,
+    K_ANON_TOTAL_NUM_HASH,
+    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO,
+    K_ANON_CLIENT_TIME_OUT_MS,
+    NUM_K_ANON_SHARDS,
+    NUM_NON_K_ANON_SHARDS,
+    TEST_MODE_K_ANON_CACHE_TTL_SECONDS,
+    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS,
+    ENABLE_K_ANON_QUERY_CACHE};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   std::vector<absl::string_view> flags(kFlags.begin(),

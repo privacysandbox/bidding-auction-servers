@@ -69,6 +69,34 @@ cc_library(
         "//tools/secure_invoke:__subpackages__",
     ],
     deps = [
+        ":cbor_common_util",
+        "//services/common/compression:gzip",
+        "//services/common/util:data_util",
+        "//services/common/util:scoped_cbor",
+        "//services/seller_frontend_service/private_aggregation:private_aggregation_helper",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/communication:compression",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@libcbor//:cbor",
+    ],
+)
+
+cc_library(
+    name = "cbor_common_util",
+    srcs = [
+        "cbor_common_util.cc",
+    ],
+    hdrs = [
+        "cbor_common_util.h",
+    ],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
+    deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/compression:gzip",
@@ -96,15 +124,23 @@ cc_test(
         "web_utils_test.cc",
     ],
     deps = [
+        ":cbor_common_util",
         ":web_utils",
+        "//api:bidding_auction_servers_cc_proto_builder",
+        "//services/common/private_aggregation:private_aggregation_test_util",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",
+        "//services/common/test/utils:proto_utils",
         "//services/common/util:request_response_constants",
+        "//services/seller_frontend_service/private_aggregation:private_aggregation_helper",
+        "//services/seller_frontend_service/test:constants",
+        "//services/seller_frontend_service/test:kanon_test_utils",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
     ],
 )
 
@@ -120,6 +156,7 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//services/common/compression:gzip",
+        "//services/common/private_aggregation:private_aggregation_test_util",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:cbor_test_utils",
@@ -128,7 +165,10 @@ cc_library(
         "//services/common/util:oblivious_http_utils",
         "//services/seller_frontend_service",
         "//services/seller_frontend_service/data:seller_frontend_data",
+        "//services/seller_frontend_service/k_anon:k_anon_cache_manager_interface",
+        "//services/seller_frontend_service/k_anon:k_anon_cache_manager_mock",
         "//services/seller_frontend_service/test:app_test_utils",
+        "//services/seller_frontend_service/test:constants",
         "//services/seller_frontend_service/util:framing_utils",
         "@com_github_google_quiche//quiche:oblivious_http_unstable_api",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -290,9 +330,12 @@ cc_test(
     deps = [
         ":proto_mapping_util",
         ":select_ad_reactor_test_utils",
+        "//api:bidding_auction_servers_cc_proto_builder",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/test:random",
         "//services/common/test/utils:ohttp_test_utils",
+        "//services/seller_frontend_service/test:constants",
+        "//services/seller_frontend_service/test:kanon_test_utils",
         "@com_google_googletest//:gtest",
         "@google_privacysandbox_servers_common//src/core/test/utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",

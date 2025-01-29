@@ -17,6 +17,8 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Used by expand_js_to_header genrule to generate the final js code with

@@ -32,6 +32,7 @@ constexpr double kTestAdCost = 2.0;
 constexpr long kTestRecency = 3;
 constexpr int kTestModelingSignals = 4;
 constexpr int kTestJoinCount = 5;
+constexpr int kTestIgIdx = 1;
 constexpr absl::string_view kTestBuyerSignals = R"([1,"test",[2]])";
 constexpr absl::string_view kTestAuctionSignals = R"([[3,"test",[4]]])";
 constexpr uint32_t kTestDataVersion = 1689;
@@ -46,11 +47,11 @@ constexpr inline char kTestGenerationId[] = "generationId";
 constexpr inline char kExpectedComponentReportWinUrl[] =
     "http://test.com?seller=http://"
     "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "buyerAndSellerReportingId=undefined&adCost=2&highestScoringOtherBid=0&"
-    "madeHighestScoringOtherBid=false&signalsForWinner="
-    "{\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&auctionSignals="
-    "3,test,4&desirability=undefined&topLevelSeller=topLevelSeller&"
-    "modifiedBid=undefined&dataVersion=1689";
+    "buyerAndSellerReportingId=undefined&selectedBuyerAndSellerReportingId="
+    "undefined&adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid="
+    "false&signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,"
+    "test,2&auctionSignals=3,test,4&desirability=undefined&topLevelSeller="
+    "topLevelSeller&modifiedBid=undefined&dataVersion=1689";
 constexpr inline char kTestInteractionEvent[] = "clickEvent";
 constexpr inline char kTestInteractionReportingUrl[] = "http://click.com";
 constexpr char kTestIgOwner[] = "barStandardAds.com";
@@ -108,9 +109,12 @@ struct TestScoreAdsRequestConfig {
   bool is_consented = false;
   std::optional<std::string> buyer_reporting_id;
   std::optional<std::string> buyer_and_seller_reporting_id;
+  std::optional<std::string> selected_buyer_and_seller_reporting_id;
   std::string interest_group_owner = "";
   TestComponentAuctionResultData component_auction_data;
   const uint32_t seller_data_version = kTestSellerDataVersion;
+  std::optional<bool> enforce_kanon;
+  std::optional<bool> k_anon_status;
 };
 
 // This function simulates a E2E successful call to ScoreAds in the

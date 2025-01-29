@@ -24,7 +24,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 using KAnonGhostWinners = std::vector<AuctionResult::KAnonGhostWinner>;
-using KAnonJoinCandidate = AuctionResult::KAnonJoinCandidate;
 
 // Data related to k-anon winner/ghost winner that is to be populated in the
 // AuctionResult returned to the client.

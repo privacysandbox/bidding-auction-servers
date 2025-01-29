@@ -19,6 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/util/hash_util.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/proto_mapping_util.h"
@@ -71,7 +72,8 @@ SelectAdReactorForApp::SelectAdReactorForApp(
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
-    bool enable_kanon, bool fail_fast)
+    bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
+    bool fail_fast)
     : SelectAdReactor(context, request, response, clients, config_client,
                       report_win_map, enable_cancellation, enable_kanon,
                       fail_fast) {}
@@ -226,8 +228,9 @@ SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
                                             const BuyerInput& buyer_input) {
   auto request =
       SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
-
-  // ToDo(b/369159855): use is_debug_eligible from client.
+  // Debug reporting is not supported for Android.
+  request->set_enable_debug_reporting(false);
+  // TODO(b/369159855): use is_debug_eligible from client.
   request->set_is_debug_eligible(request->enable_unlimited_egress());
   MayPopulateProtectedAppSignalsBuyerInput(buyer_ig_owner, request.get());
   return request;
@@ -236,6 +239,8 @@ SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
 SelectAdReactorForApp::CreateScoreAdsRequest() {
   auto request = SelectAdReactor::CreateScoreAdsRequest();
+  // Debug reporting is not supported for Android.
+  request->set_enable_debug_reporting(false);
   std::visit(
       [&request, this](const auto& protected_auction_input) {
         if (enable_enforce_kanon_) {
@@ -258,7 +263,6 @@ SelectAdReactorForApp::BuildProtectedAppSignalsAdWithBidMetadata(
   }
   result.set_bid(input.bid());
   result.set_render(input.render());
-  result.set_modeling_signals(input.modeling_signals());
   result.set_ad_cost(input.ad_cost());
   result.set_owner(buyer_owner);
   result.set_bid_currency(input.bid_currency());
@@ -283,27 +287,63 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBids(
       << "Protected App signals, may add protected app "
          "signals bids to score ads request";
   for (const auto& [buyer_owner, get_bid_response] : shared_buyer_bids_map_) {
-    for (int i = 0; i < get_bid_response->protected_app_signals_bids_size();
-         i++) {
-      const bool k_anon_status = GetKAnonStatusForAdWithBid(/*ad_key=*/"");
+    for (const auto& ad_with_bid :
+         get_bid_response->protected_app_signals_bids()) {
       auto ad_with_bid_metadata = BuildProtectedAppSignalsAdWithBidMetadata(
-          buyer_owner, get_bid_response->protected_app_signals_bids()[i],
-          k_anon_status);
+          buyer_owner, ad_with_bid, bid_k_anon_status_[&ad_with_bid]);
       score_ads_raw_request->mutable_protected_app_signals_ad_bids()->Add(
           std::move(ad_with_bid_metadata));
     }
   }
 }
 
-AuctionResult::KAnonJoinCandidate SelectAdReactorForApp::GetKAnonJoinCandidate(
+KAnonJoinCandidate SelectAdReactorForApp::GetKAnonJoinCandidate(
     const ScoreAdsResponse::AdScore& score) {
-  return {};
+  HashUtil hash_util = HashUtil();
+  KAnonJoinCandidate join_candidate;
+  auto bidding_js_it = report_win_map_.buyer_report_win_js_urls.find(
+      score.interest_group_owner());
+  DCHECK(bidding_js_it != report_win_map_.buyer_report_win_js_urls.end());
+  join_candidate.set_ad_render_url_hash(hash_util.HashedKAnonKeyForAdRenderURL(
+      score.interest_group_owner(), bidding_js_it->second, score.render()));
+  return join_candidate;
 }
 
-KAnonAuctionResultData SelectAdReactorForApp::GetKAnonAuctionResultData(
-    const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const AdScores* ghost_winning_scores) {
-  return {};
+SelectAdReactor::BidKAnonHashSets
+SelectAdReactorForApp::GetKAnonHashesForBids() {
+  PS_VLOG(6, log_context_) << " " << __func__;
+  SelectAdReactor::BidKAnonHashSets bid_k_anon_hashes =
+      SelectAdReactor::GetKAnonHashesForBids();
+  const auto& buyer_report_win_js_urls =
+      report_win_map_.buyer_report_win_js_urls;
+  HashUtil k_anon_hash_util;
+  for (auto& [owner, get_bids_raw_response] : shared_buyer_bids_map_) {
+    if (get_bids_raw_response->protected_app_signals_bids().empty()) {
+      continue;
+    }
+
+    auto report_win_it = buyer_report_win_js_urls.find(owner);
+    if (report_win_it == buyer_report_win_js_urls.end()) {
+      PS_VLOG(5, log_context_)
+          << "Unable to find buyer owner in win "
+          << "reporting URLs, considering related hashes as "
+          << "non-k-anonymous for buyer: " << owner;
+      continue;
+    }
+
+    for (const auto& bid :
+         get_bids_raw_response->protected_app_signals_bids()) {
+      absl::flat_hash_set<std::string> k_anon_hashes_for_bid;
+      k_anon_hashes_for_bid.insert(
+          k_anon_hash_util.HashedKAnonKeyForAdRenderURL(
+              owner, report_win_it->second, bid.render()));
+
+      bid_k_anon_hashes[&bid] = std::move(k_anon_hashes_for_bid);
+    }
+  }
+  return bid_k_anon_hashes;
 }
+
+absl::string_view SelectAdReactorForApp::GetKAnonSetType() { return kAndroid; }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

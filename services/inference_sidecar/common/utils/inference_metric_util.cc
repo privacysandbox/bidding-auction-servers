@@ -26,7 +26,17 @@ void AddMetric(PredictResponse& response, const std::string& key, int32_t value,
                std::optional<std::string> partition) {
   MetricValueList& metric_list = (*response.mutable_metrics_list())[key];
   MetricValue* metric = metric_list.add_metrics();
-  metric->set_value(value);
+  metric->set_value_int32(value);
+  if (partition) {
+    metric->set_partition(*partition);
+  }
+}
+
+void AddMetric(RegisterModelResponse& response, const std::string& key,
+               double value, std::optional<std::string> partition) {
+  MetricValueList& metric_list = (*response.mutable_metrics_list())[key];
+  MetricValue* metric = metric_list.add_metrics();
+  metric->set_value_double(value);
   if (partition) {
     metric->set_partition(*partition);
   }

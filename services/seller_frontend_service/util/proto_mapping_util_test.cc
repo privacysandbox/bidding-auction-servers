@@ -19,10 +19,15 @@
 #include <string>
 
 #include "absl/container/btree_map.h"
+#include "api/bidding_auction_servers_cc_proto_builder.h"
+#include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/ohttp_utils.h"
+#include "services/seller_frontend_service/data/k_anon.h"
+#include "services/seller_frontend_service/test/constants.h"
+#include "services/seller_frontend_service/test/kanon_test_utils.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
 #include "src/core/test/utils/proto_test_utils.h"
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
@@ -32,9 +37,17 @@ namespace {
 
 using google::scp::core::test::EqualsProto;
 
-constexpr char kTestSeller[] = "sample-seller";
-constexpr char kBuyer1[] = "bg1";
-constexpr char kBuyer2[] = "bg2";
+inline constexpr char kEmptyAdAuctionResultNonce[] = "";
+inline constexpr char kRandomAdAuctionResultNonce[] = "ad-auction-n0nce";
+inline constexpr char kTestSeller[] = "sample-seller";
+inline constexpr char kBuyer1[] = "bg1";
+inline constexpr char kBuyer2[] = "bg2";
+inline constexpr char kTestOwner[] = "test-owner";
+inline constexpr char kTestRender[] = "test-render";
+inline constexpr char kTestComponentRender[] = "test-component-render";
+inline constexpr char kTestBuyerReportingId[] = "buyer-reporting-id";
+inline constexpr char kTestBuyerAndSellerReportingId[] =
+    "buyer-seller-reporting-id";
 
 ScoreAdsResponse::AdScore MakeAnAdScore() {
   // Populate rejection reasons and highest other buyers.
@@ -191,6 +204,7 @@ void MapServerComponentAuctionFieldsToAuctionResult(
 }
 
 class AdScoreToAuctionResultTest : public testing::Test {
+ public:
   void SetUp() override {
     valid_score_ = MakeAnAdScore();
     valid_seller_ = MakeARandomString();
@@ -291,6 +305,109 @@ TEST_F(AdScoreToAuctionResultTest, MapsErrorOverAdScoreIfPresent) {
       valid_error_, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER, empty_seller_,
       empty_audience_);
   EXPECT_THAT(expected, EqualsProto(output));
+}
+
+ScoreAdsResponse::AdScore SampleAdScore() {
+  ScoreAdsResponse::AdScore ad_score;
+  ad_score.set_desirability(kSampleScore);
+  ad_score.set_render(kSampleAdRenderUrl);
+  ad_score.set_interest_group_name(kSampleIgName);
+  ad_score.set_buyer_bid(kSampleBid);
+  ad_score.set_interest_group_owner(kSampleIgOwner);
+  ad_score.set_interest_group_origin(kSampleIgOrigin);
+  ad_score.set_ad_metadata(kSampleAdMetadata);
+  ad_score.set_allow_component_auction(false);
+  ad_score.set_bid(kSampleBid);
+  return ad_score;
+}
+
+class AdScoreToAuctionResultWithKAnonTest : public AdScoreToAuctionResultTest {
+ public:
+  void SetUp() {
+    AdScoreToAuctionResultTest::SetUp();
+    valid_score_ = SampleAdScore();
+    kanon_auction_result_data_ = SampleKAnonAuctionResultData(
+        {.ig_index = kSampleIgIndex,
+         .ig_owner = kSampleIgOwner,
+         .ig_name = kSampleIgName,
+         .bucket_name = kSampleBucket,
+         .bucket_value = kSampleValue,
+         .ad_render_url = kSampleAdRenderUrl,
+         .ad_component_render_url = kSampleAdComponentRenderUrl,
+         .modified_bid = kSampleModifiedBid,
+         .bid_currency = kSampleBidCurrency,
+         .ad_metadata = kSampleAdMetadata,
+         .buyer_reporting_id = kSampleBuyerReportingId,
+         .buyer_and_seller_reporting_id = kSampleBuyerAndSellerReportingId,
+         .selected_buyer_and_seller_reporting_id =
+             kSampleSelectedBuyerAndSellerReportingId,
+         .ad_render_url_hash = std::vector<uint8_t>(
+             kSampleAdRenderUrlHash.begin(), kSampleAdRenderUrlHash.end()),
+         .ad_component_render_urls_hash =
+             std::vector<uint8_t>(kSampleAdComponentRenderUrlsHash.begin(),
+                                  kSampleAdComponentRenderUrlsHash.end()),
+         .reporting_id_hash = std::vector<uint8_t>(
+             kSampleReportingIdHash.begin(), kSampleReportingIdHash.end()),
+         .winner_positional_index = kSampleWinnerPositionalIndex});
+  }
+
+ protected:
+  std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data_;
+};
+
+TEST_F(AdScoreToAuctionResultWithKAnonTest, MapsKAnonData) {
+  UpdateGroupMap empty_updates;
+  AuctionResult expected;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_render_url: "adRenderUrl"
+        interest_group_name: "foo_ig_name"
+        interest_group_owner: "foo_owner"
+        score: 1.12
+        bid: 1.75
+        win_reporting_urls {
+          buyer_reporting_urls {}
+          component_seller_reporting_urls {}
+          top_level_seller_reporting_urls {}
+        }
+        interest_group_origin: "ig_origin"
+        k_anon_winner_join_candidates {
+          ad_render_url_hash: "\001\002\003\004\005"
+          ad_component_render_urls_hash: "\005\004\003\002\001"
+          reporting_id_hash: "\002\004\006\010\t"
+        }
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\001\002\003\004\005"
+            ad_component_render_urls_hash: "\005\004\003\002\001"
+            reporting_id_hash: "\002\004\006\010\t"
+          }
+          interest_group_index: 10
+          owner: "foo_owner"
+          ig_name: "foo_ig_name"
+          ghost_winner_private_aggregation_signals {
+            bucket: "bucket"
+            value: 21
+          }
+          ghost_winner_for_top_level_auction {
+            ad_render_url: "adRenderUrl"
+            ad_component_render_urls: "adComponentRenderUrl"
+            modified_bid: 1.23
+            bid_currency: "bidCurrency"
+            ad_metadata: "adMetadata"
+            buyer_reporting_id: "buyerReportingId"
+            selected_buyer_and_seller_reporting_id: "selectedBuyerAndSellerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+          }
+        }
+      )pb",
+      &expected));
+  AuctionResult output = AdScoreToAuctionResult(
+      valid_score_, /*maybe_bidding_groups=*/std::nullopt, empty_updates,
+      /*error=*/std::nullopt, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER,
+      empty_seller_, empty_audience_, /*top_level_seller=*/"",
+      std::move(kanon_auction_result_data_));
+  EXPECT_THAT(output, EqualsProto(expected));
 }
 
 ScoreAdsRequest::ScoreAdsRawRequest MapScoreAdsRawRequest(
@@ -496,9 +613,10 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
   auto decrypted_message = MakeDecryptedMessage();
-  auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, std::nullopt, empty_updates,
-      ClientType::CLIENT_TYPE_ANDROID, *decrypted_message, *this->log_context_);
+  auto output = CreateNonChaffAuctionResultCiphertext(
+      kEmptyAdAuctionResultNonce, this->valid_score_, std::nullopt,
+      empty_updates, ClientType::CLIENT_TYPE_ANDROID, *decrypted_message,
+      *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_THAT(DecryptAppProtoAuctionResult(*output, decrypted_message->context),
@@ -515,21 +633,128 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   expected.mutable_update_groups()->insert(this->update_group_map_.begin(),
                                            this->update_group_map_.end());
   auto decrypted_message = MakeDecryptedMessage();
-  auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, this->bidding_group_map_, this->update_group_map_,
-      ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_);
+  auto output = CreateNonChaffAuctionResultCiphertext(
+      kEmptyAdAuctionResultNonce, this->valid_score_, this->bidding_group_map_,
+      this->update_group_map_, ClientType::CLIENT_TYPE_BROWSER,
+      *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
-  EXPECT_THAT(DecryptBrowserAuctionResult(*output, decrypted_message->context),
-              EqualsProto(expected));
+  EXPECT_THAT(
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context)
+          .first,
+      EqualsProto(expected));
+}
+
+TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWebWithNonce) {
+  AuctionResult expected =
+      MapBasicScoreFieldsToAuctionResult(this->valid_score_);
+  // IG Origin is Android exclusive and will not be parsed or encoded for web.
+  expected.clear_interest_group_origin();
+  expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),
+                                            this->bidding_group_map_.end());
+  expected.mutable_update_groups()->insert(this->update_group_map_.begin(),
+                                           this->update_group_map_.end());
+  auto decrypted_message = MakeDecryptedMessage();
+  auto output = CreateNonChaffAuctionResultCiphertext(
+      kRandomAdAuctionResultNonce, this->valid_score_, this->bidding_group_map_,
+      this->update_group_map_, ClientType::CLIENT_TYPE_BROWSER,
+      *decrypted_message, *this->log_context_);
+
+  ASSERT_TRUE(output.ok()) << output.status();
+
+  auto actual =
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context);
+  EXPECT_THAT(actual.first, EqualsProto(expected));
+  EXPECT_EQ(actual.second, kRandomAdAuctionResultNonce);
+}
+
+TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWebWithKAnonData) {
+  auto decrypted_message = MakeDecryptedMessage();
+  auto k_anon_auction_result_data = SampleKAnonAuctionResultData(
+      {.ig_index = kSampleIgIndex,
+       .ig_owner = kSampleIgOwner,
+       .ig_name = kSampleIgName,
+       .bucket_name = kSampleBucket,
+       .bucket_value = kSampleValue,
+       .ad_render_url = kSampleAdRenderUrl,
+       .ad_component_render_url = kSampleAdComponentRenderUrl,
+       .modified_bid = kSampleModifiedBid,
+       .bid_currency = kSampleBidCurrency,
+       .ad_metadata = kSampleAdMetadata,
+       .buyer_reporting_id = kSampleBuyerReportingId,
+       .buyer_and_seller_reporting_id = kSampleBuyerAndSellerReportingId,
+       .selected_buyer_and_seller_reporting_id =
+           kSampleSelectedBuyerAndSellerReportingId,
+       .ad_render_url_hash = std::vector<uint8_t>(
+           kSampleAdRenderUrlHash.begin(), kSampleAdRenderUrlHash.end()),
+       .ad_component_render_urls_hash =
+           std::vector<uint8_t>(kSampleAdComponentRenderUrlsHash.begin(),
+                                kSampleAdComponentRenderUrlsHash.end()),
+       .reporting_id_hash = std::vector<uint8_t>(kSampleReportingIdHash.begin(),
+                                                 kSampleReportingIdHash.end()),
+       .winner_positional_index = kSampleWinnerPositionalIndex});
+  // We clean the input data to CreateNonChaffAuctionResultCiphertext to
+  // avoid confusion about this method populating fields for top level auction.
+  // In real usage, the caller of the method is responsible for ensuring that
+  // the ghost winners for top level auctions are not present in the input.
+  for (auto& ghost_winner : *k_anon_auction_result_data->kanon_ghost_winners) {
+    ghost_winner.clear_ghost_winner_for_top_level_auction();
+  }
+  ScoreAdsResponse::AdScore ad_score =
+      ScoreAdsResponse_AdScoreBuilder()
+          .SetInterestGroupOwner(kTestOwner)
+          .SetRender(kTestRender)
+          .AddComponentRenders(kTestComponentRender)
+          .SetBuyerReportingId(kTestBuyerReportingId)
+          .SetBuyerAndSellerReportingId(kTestBuyerAndSellerReportingId);
+  auto output = CreateNonChaffAuctionResultCiphertext(
+      kEmptyAdAuctionResultNonce, ad_score, {}, {},
+      ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_,
+      std::move(k_anon_auction_result_data));
+  ASSERT_TRUE(output.ok()) << output.status();
+
+  AuctionResult expected;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_render_url: "test-render"
+        ad_component_render_urls: "test-component-render"
+        interest_group_owner: "test-owner"
+        buyer_reporting_id: "buyer-reporting-id"
+        k_anon_winner_join_candidates {
+          ad_render_url_hash: "\001\002\003\004\005"
+          ad_component_render_urls_hash: "\005\004\003\002\001"
+          reporting_id_hash: "\002\004\006\010\t"
+        }
+        k_anon_winner_positional_index: 5
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\001\002\003\004\005"
+            ad_component_render_urls_hash: "\005\004\003\002\001"
+            reporting_id_hash: "\002\004\006\010\t"
+          }
+          interest_group_index: 10
+          owner: "foo_owner"
+          ig_name: "foo_ig_name"
+          ghost_winner_private_aggregation_signals {
+            bucket: "bucket"
+            value: 21
+          }
+        }
+      )pb",
+      &expected));
+  EXPECT_THAT(
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context)
+          .first,
+      EqualsProto(expected));
 }
 
 TEST_F(CreateAuctionResultCiphertextTest, ReturnsErrorForInvalidClientAdScore) {
   UpdateGroupMap empty_updates;
   auto decrypted_message = MakeDecryptedMessage();
-  auto output = CreateWinningAuctionResultCiphertext(
-      this->valid_score_, this->bidding_group_map_, empty_updates,
-      ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message, *this->log_context_);
+  auto output = CreateNonChaffAuctionResultCiphertext(
+      kEmptyAdAuctionResultNonce, this->valid_score_, this->bidding_group_map_,
+      empty_updates, ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message,
+      *this->log_context_);
 
   ASSERT_FALSE(output.ok());
 }
@@ -539,8 +764,8 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsClientErrorForAndroid) {
       MapBasicErrorFieldsToAuctionResult(this->valid_error_);
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateErrorAuctionResultCiphertext(
-      this->valid_error_, ClientType::CLIENT_TYPE_ANDROID, *decrypted_message,
-      *this->log_context_);
+      kEmptyAdAuctionResultNonce, this->valid_error_,
+      ClientType::CLIENT_TYPE_ANDROID, *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_THAT(DecryptAppProtoAuctionResult(*output, decrypted_message->context),
@@ -552,20 +777,37 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsClientErrorForWeb) {
       MapBasicErrorFieldsToAuctionResult(this->valid_error_);
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateErrorAuctionResultCiphertext(
-      this->valid_error_, ClientType::CLIENT_TYPE_BROWSER, *decrypted_message,
-      *this->log_context_);
+      kEmptyAdAuctionResultNonce, this->valid_error_,
+      ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
-  EXPECT_THAT(DecryptBrowserAuctionResult(*output, decrypted_message->context),
-              EqualsProto(expected));
+  EXPECT_THAT(
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context)
+          .first,
+      EqualsProto(expected));
+}
+
+TEST_F(CreateAuctionResultCiphertextTest, ConvertsClientErrorForWebWithNonce) {
+  AuctionResult expected =
+      MapBasicErrorFieldsToAuctionResult(this->valid_error_);
+  auto decrypted_message = MakeDecryptedMessage();
+  auto output = CreateErrorAuctionResultCiphertext(
+      kRandomAdAuctionResultNonce, this->valid_error_,
+      ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_);
+
+  ASSERT_TRUE(output.ok()) << output.status();
+  auto actual =
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context);
+  EXPECT_THAT(actual.first, EqualsProto(expected));
+  EXPECT_EQ(actual.second, kRandomAdAuctionResultNonce);
 }
 
 TEST_F(CreateAuctionResultCiphertextTest,
        ReturnsErrorForInvalidClientErrorMessage) {
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateErrorAuctionResultCiphertext(
-      this->valid_error_, ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message,
-      *this->log_context_);
+      kEmptyAdAuctionResultNonce, this->valid_error_,
+      ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message, *this->log_context_);
 
   ASSERT_FALSE(output.ok());
 }
@@ -573,7 +815,8 @@ TEST_F(CreateAuctionResultCiphertextTest,
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsChaffForAndroid) {
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateChaffAuctionResultCiphertext(
-      ClientType::CLIENT_TYPE_ANDROID, *decrypted_message, *this->log_context_);
+      kEmptyAdAuctionResultNonce, ClientType::CLIENT_TYPE_ANDROID,
+      *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   AuctionResult decrypted_output =
@@ -584,18 +827,34 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsChaffForAndroid) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsChaffForWeb) {
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateChaffAuctionResultCiphertext(
-      ClientType::CLIENT_TYPE_BROWSER, *decrypted_message, *this->log_context_);
+      kEmptyAdAuctionResultNonce, ClientType::CLIENT_TYPE_BROWSER,
+      *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   AuctionResult decrypted_output =
-      DecryptBrowserAuctionResult(*output, decrypted_message->context);
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context)
+          .first;
   EXPECT_TRUE(decrypted_output.is_chaff());
+}
+
+TEST_F(CreateAuctionResultCiphertextTest, ConvertsChaffForWebWithNonce) {
+  auto decrypted_message = MakeDecryptedMessage();
+  auto output = CreateChaffAuctionResultCiphertext(
+      kRandomAdAuctionResultNonce, ClientType::CLIENT_TYPE_BROWSER,
+      *decrypted_message, *this->log_context_);
+
+  ASSERT_TRUE(output.ok()) << output.status();
+  auto decrypted_output =
+      DecryptBrowserAuctionResultAndNonce(*output, decrypted_message->context);
+  EXPECT_TRUE(decrypted_output.first.is_chaff());
+  EXPECT_EQ(decrypted_output.second, kRandomAdAuctionResultNonce);
 }
 
 TEST_F(CreateAuctionResultCiphertextTest, ReturnsErrorForInvalidClientChaff) {
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateChaffAuctionResultCiphertext(
-      ClientType::CLIENT_TYPE_UNKNOWN, *decrypted_message, *this->log_context_);
+      kEmptyAdAuctionResultNonce, ClientType::CLIENT_TYPE_UNKNOWN,
+      *decrypted_message, *this->log_context_);
 
   ASSERT_FALSE(output.ok());
 }

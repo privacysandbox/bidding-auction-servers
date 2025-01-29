@@ -56,6 +56,8 @@ message ProtectedAudienceInput {
   string generation_id = 4;
 
   // Consented debugging field.
+  // Consented debugging requests increase server load in production. A high QPS
+  // of these requests can lead to unhealthy servers.
   server_common.ConsentedDebugConfiguration consented_debug_config = 5;
 
   // Optional.
@@ -115,6 +117,8 @@ message ProtectedAuctionInput {
   string generation_id = 4;
 
   // Consented debugging field.
+  // Consented debugging requests increase server load in production. A high QPS
+  // of these requests can lead to unhealthy servers.
   server_common.ConsentedDebugConfiguration consented_debug_config = 5;
 
   // Optional.
@@ -220,6 +224,35 @@ message BuyerInput {
   ProtectedAppSignals protected_app_signals = 2;
 }
 
+// Internal representation of BuyerInput, which represents buyer input as
+// passed to BFE and Bidding. Any changes made to BuyerInput should be
+// reflected in this message to maintain consistency.
+message BuyerInputForBidding {
+  message InterestGroupForBidding {
+    string name = 1;
+
+    repeated string bidding_signals_keys = 2;
+
+    repeated string ad_render_ids = 3;
+
+    repeated string component_ads = 4;
+
+    string user_bidding_signals = 5;
+
+    oneof DeviceSignals {
+      AndroidSignalsForBidding android_signals = 6;
+
+      BrowserSignalsForBidding browser_signals = 7;
+    }
+
+    string origin = 8;
+  }
+
+  repeated InterestGroupForBidding interest_groups = 1;
+
+  ProtectedAppSignals protected_app_signals = 2;
+}
+
 // Information about an Interest Group passed by the browser.
 //
 // NOTE: Any changes made to this proto should be manually copied over to
@@ -252,6 +285,26 @@ message BrowserSignals {
 }
 // (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:browser_signals_generate_bid) --)
 
+// Internal representation of BrowserSignals, with additional data for server-side
+// processing. Any changes made to BrowserSignals should be reflected in this
+// message to maintain consistency.
+message BrowserSignalsForBidding {
+  int64 join_count = 1;
+
+  int64 bid_count = 2;
+
+  int64 recency = 3;
+
+  string prev_wins = 4;
+
+  optional int64 recency_ms = 5;
+
+  // Tuple of time-ad pairs for a previous win for this interest group
+  // that occurred in the last 30 days. The time is specified in milliseconds
+  // before the containing auctionBlob was requested.
+  optional string prev_wins_ms = 6;
+}
+
 // Information passed by Android.
 //
 // NOTE: Any changes made to this proto should be manually copied over to
@@ -260,6 +313,11 @@ message BrowserSignals {
 // (-- LINT.IfChange(android_signals_bidding) --)
 message AndroidSignals {}
 // (-- LINT.ThenChange(/services/bidding_service/udf/api/generate_bid.proto:android_signals_generate_bid) --)
+
+// Internal representation of AndroidSignals, with additional data for server-side
+// processing. Any changes made to AndroidSignals should be reflected in this
+// message to maintain consistency.
+message AndroidSignalsForBidding {}
 
 // Specifies type of the ad. It can help differentiate between ads when
 // B&A is supporting multiple ad targeting use cases concurrently.
@@ -303,6 +361,48 @@ message UpdateInterestGroupList {
   repeated UpdateInterestGroup interest_groups = 1;
 }
 
+// Join candidates for K-Anonymity for the winner. This should include
+// key hashes corresponding to the winning ad only.
+// Refer https://wicg.github.io/turtledove/#k-anonymity for details around
+// how clients call the Join API using the hash.
+message KAnonJoinCandidate {
+  // Protected Audience:
+  // - SHA-256 hash of the tuple: render_url, interest group owner, reportWin()
+  //   UDF endpoint.
+  //
+  // Protected App Signals:
+  // - SHA-256 hash of render_url, reportWin UDF endpoint.
+  //
+  // NOTE: The buyer's reportWin() UDF url endpoint must match with what
+  // Chrome has.
+  // Refer to the spec to create key hashes-   https://wicg.github.io/turtledove/#query-ad-k-anonymity-count
+  bytes ad_render_url_hash = 1;
+
+  // Protected Audience:
+  // - SHA-256 hash of an ad_component_render_url.
+  //
+  // Refer to the spec to create key hashes- https://wicg.github.io/turtledove/#query-component-ad-k-anonymity-count
+  //
+  // Note: There is a maximum limit of 40 ad component render urls per
+  // render url.
+  // Note: Currently component ads are not in scope of Protected App Signals
+  // for Android.
+  repeated bytes ad_component_render_urls_hash = 2;
+
+  // Protected Audience:
+  // - SHA-256 hash should include IG owner, ad render url, reportWin() UDF
+  // url and one of the following:
+  //   - If buyerAndSellerReportingId exists, this hash should  include that.
+  //   - Else if buyerReportingId exists, hash should include that.
+  //   - Else IG name should be included in the hash.
+  //
+  // Note: By design, an adtech can use either buyerReportingId or
+  // buyerAndSellerReportingId.
+  // Note: Currently reporting Ids are not in scope of Protected Audience
+  // for Android and Protected App Signal for Android.
+  bytes reporting_id_hash = 3;
+}
+
 // Protected Audience auction result returned from SellerFrontEnd to the client
 // through the Seller service. It is encrypted by the SellerFrontEnd, passed
 // through the untrusted Seller service and decrypted by the client. Note that
@@ -340,13 +440,7 @@ message AuctionResult {
   // reportWin().
   WinReportingUrls win_reporting_urls = 8;
 
-  // Debugging URLs for the Buyer. This information is populated only in case of
-  // component auctions.
-  DebugReportUrls buyer_debug_report_urls = 9;
-
-  // Debugging URLs for the Seller. This information is populated only in case
-  // of component auctions.
-  DebugReportUrls seller_debug_report_urls = 10;
+  reserved 9, 10;
 
   // List of interest group indices that generated bids.
   message InterestGroupIndex {
@@ -400,6 +494,7 @@ message AuctionResult {
   string bid_currency = 17;
 
   message AuctionParams {
+    // This is only populated for component auctions.
     // The generation id in the request ciphertext. This is to ensure that
     // the result from a component auction can only be used in the same
     // top level auction as other component auctions conducted from the original
@@ -408,13 +503,19 @@ message AuctionResult {
     string ciphertext_generation_id = 1;
 
     // Component Seller domain.
-    // This field is used to tie the auction result to the specific seller who
-    // conducted the auction and is used in the top level auction as input
-    // to the scoreAd function.
+    // This field is used to tie the auction result to a specific component
+    // seller. This field is returned in server orchestrated
+    // component and top level auctions.
+    // 1. This is returned from a server orchestrated component auction and passed
+    // by the top level seller as part of component_auction_results in the top level
+    // auction. The top level seller's scoreAd function then receives this as input.
+    // 2. This is returned from top level auction conducted using server orchestrated
+    // component_auction_results. This is then passed to the device (Android) which
+    // uses the field to deduce the winning seller for the SDK.
     string component_seller = 2;
   }
 
-  // This is only populated for component auctions.
+  // This is populated for multi seller auctions.
   AuctionParams auction_params = 18;
 
   // BuyerReportingId of the winning Ad.
@@ -427,52 +528,10 @@ message AuctionResult {
   // properties on the browser.
   optional string buyer_and_seller_reporting_id = 20;
 
-  // SelectableBuyerAndSellerReportingId of the winning Ad.
+  // SelectedBuyerAndSellerReportingId of the winning Ad.
   // This will be verified with the buyerAndSellerReportingId in the Ad
   // properties on the browser.
   optional string selected_buyer_and_seller_reporting_id = 26;
-
-  // Join candidates for K-Anonymity for the winner. This should include
-  // key hashes corresponding to the winning ad only.
-  // Refer https://wicg.github.io/turtledove/#k-anonymity for details around
-  // how clients call the Join API using the hash.
-  message KAnonJoinCandidate {
-    // Protected Audience:
-    // - SHA-256 hash of the tuple: render_url, interest group owner, reportWin()
-    //   UDF endpoint.
-    //
-    // Protected App Signals:
-    // - SHA-256 hash of render_url, reportWin UDF endpoint.
-    //
-    // NOTE: The buyer's reportWin() UDF url endpoint must match with what
-    // Chrome has.
-    // Refer to the spec to create key hashes-   https://wicg.github.io/turtledove/#query-ad-k-anonymity-count
-    bytes ad_render_url_hash = 1;
-
-    // Protected Audience:
-    // - SHA-256 hash of an ad_component_render_url.
-    //
-    // Refer to the spec to create key hashes- https://wicg.github.io/turtledove/#query-component-ad-k-anonymity-count
-    //
-    // Note: There is a maximum limit of 40 ad component render urls per
-    // render url.
-    // Note: Currently component ads are not in scope of Protected App Signals
-    // for Android.
-    repeated bytes ad_component_render_urls_hash = 2;
-
-    // Protected Audience:
-    // - SHA-256 hash should include IG owner, ad render url, reportWin() UDF
-    // url and one of the following:
-    //   - If buyerAndSellerReportingId exists, this hash should  include that.
-    //   - Else if buyerReportingId exists, hash should include that.
-    //   - Else IG name should be included in the hash.
-    //
-    // Note: By design, an adtech can use either buyerReportingId or
-    // buyerAndSellerReportingId.
-    // Note: Currently reporting Ids are not in scope of Protected Audience
-    // for Android and Protected App Signal for Android.
-    bytes reporting_id_hash = 3;
-  }
 
   KAnonJoinCandidate k_anon_winner_join_candidates = 21;
 
@@ -570,7 +629,7 @@ message AuctionResult {
       // properties on the browser.
       optional string buyer_reporting_id = 6;
 
-      // SelectableBuyerAndSellerReportingId of the ghost winning Ad.
+      // SelectedBuyerAndSellerReportingId of the ghost winning Ad.
       // This will be verified with the buyerAndSellerReportingId in the Ad
       // properties on the browser.
       optional string selected_buyer_and_seller_reporting_id = 7;
@@ -587,6 +646,10 @@ message AuctionResult {
   // This field will be populated for all seller and buyer contributions in
   // single seller auctions and server orchestrated multi seller auctions.
   repeated PrivateAggregateReportingResponse top_level_contributions = 24;
+
+  // Map from adtech origin (seller/interest group owner) to the list of
+  // corresponding debugging reports.
+  map<string, DebugReports> adtech_origin_debug_urls_map = 27;
 }
 
 message GetComponentAuctionCiphertextsRequest {
@@ -873,6 +936,14 @@ message SelectAdRequest {
     // To override an entry for a particular buyer, see
     // 'PerBuyerConfig.priority_signals_overrides'.
     string priority_signals = 13;
+
+    // Optional.
+    // A UUID version 4 (128 bits) nonce for a B&A auction generated by
+    // the seller to parallelize on-device and server-side auctions
+    // (https://github.com/privacysandbox/protected-auction-services-docs/blob/main/protected_audience_auctions_mixed_mode.md).
+    // This is included in the encrypted AuctionResult and is used by Chrome to verify
+    // the origin domain of the AuctionResult.
+    string ad_auction_result_nonce = 14;
   }
 
   message ComponentAuctionResult {
@@ -977,7 +1048,7 @@ message GetBidsRequest {
     // Buyer Input for the Buyer that includes keys for Buyer Key Value lookup
     // and other signals for bidding. In the case of is_chaff = true, this will
     // be noise.
-    BuyerInput buyer_input = 2;
+    BuyerInput buyer_input = 2 [deprecated = true];
 
     // Information about auction (ad format, size) derived contextually.
     // Represents a serialized string that is deserialized to a JSON object
@@ -1007,6 +1078,8 @@ message GetBidsRequest {
     server_common.LogContext log_context = 8;
 
     // Consented debugging field.
+    // Consented debugging requests increase server load in production. A high
+    // QPS of these requests can lead to unhealthy servers.
     server_common.ConsentedDebugConfiguration consented_debug_config = 9;
 
     // Protected App signals buyer input.
@@ -1062,6 +1135,11 @@ message GetBidsRequest {
     // Represents all blob versions the buyer logic should use for this request.
     // Buyer can pass this information to the Seller in RTB response.
     BuyerBlobVersions blob_versions = 19;
+
+    // Buyer Input for the Buyer that includes keys for Buyer Key Value lookup
+    // and other signals for bidding. In the case of is_chaff = true, this will
+    // be noise.
+    BuyerInputForBidding buyer_input_for_bidding = 20;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -1236,18 +1314,28 @@ message GenerateBidsRequest {
       // Contains filtering data, like Frequency Cap.
       oneof DeviceSignals {
         // Information passed by Android.
-        AndroidSignals android_signals = 6;
+        AndroidSignals android_signals = 6 [deprecated = true];
 
         // An object constructed by the browser, containing information that
         // the browser knows like previous wins of ads / Frequency Cap
         // information.
-        BrowserSignals browser_signals = 7;
+        BrowserSignals browser_signals = 7 [deprecated = true];
       }
 
       // Real time bidding signals fetched from buyer's key/value service
       // passed to the Interest Group's GenerateBid() function as the
       // trustedBiddingSignals parameter.
       string trusted_bidding_signals = 8;
+
+      oneof DeviceSignalsForBidding {
+        // Information passed by Android.
+        AndroidSignalsForBidding android_signals_for_bidding = 9;
+
+        // An object constructed by the browser, containing information that
+        // the browser knows like previous wins of ads / Frequency Cap
+        // information.
+        BrowserSignalsForBidding browser_signals_for_bidding = 10;
+      }
     }
 
     // Interest Group is an input to bidding code.
@@ -1348,6 +1436,9 @@ message GenerateBidsResponse {
     // IG (CA). Note GenerateBid() per IG returns bid for one ad per IG (though
     // for component auction this would be slightly different).
     repeated AdWithBid bids = 1;
+
+    // Indicates whether debug data is exported.
+    bool bidding_export_debug = 2;
 
     // Debug logs for bidding servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
@@ -1467,9 +1558,7 @@ message ProtectedAppSignalsAdWithBid {
   // performed stochastically.
   double ad_cost = 4;
 
-  // A 12 bit integer signal used as input to win reporting url generation for
-  // the Buyer.
-  int32 modeling_signals = 5;
+  reserved 5;
 
   // Indicates the currency used for the bid price.
   string bid_currency = 6;
@@ -1494,6 +1583,9 @@ message GenerateProtectedAppSignalsBidsResponse {
   message GenerateProtectedAppSignalsBidsRawResponse {
     // Bids corresponding to ads.
     repeated ProtectedAppSignalsAdWithBid bids = 1;
+
+    // Indicates whether debug data is exported.
+    bool bidding_export_debug = 2;
 
     // Debug logs for app signal servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
@@ -1763,8 +1855,9 @@ enum SellerRejectionReason {
   BLOCKED_BY_PUBLISHER = 5;
   LANGUAGE_EXCLUSIONS = 6;
   CATEGORY_EXCLUSIONS = 7;
-  BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK = 8;
-  BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK = 9;
+  DID_NOT_MEET_THE_KANONYMITY_THRESHOLD = 8;
+  BID_FROM_GENERATE_BID_FAILED_CURRENCY_CHECK = 9;
+  BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK = 10;
 }
 
 // Current scope of Protected Audience Auction (single seller or multi-seller).
@@ -1831,12 +1924,17 @@ message ScoreAdsResponse {
     // a bid, and when that bid is being scored by the top-level auction.
     bool allow_component_auction = 8;
 
-    // Optional for Android, required for Web in case of component auctions.
     // Modified bid value to provide to the top-level seller script. If
     // present, this will be passed to the top-level seller's scoring function
     // instead of the original bid, if the ad wins the component auction and
     // top-level auction respectively.
-    // This is also optional for Component Auctions.
+    // Seller's scoreAd() UDF is not required to set this,
+    // as B&A may be able to use the buyer's bid in that case, please see the
+    // documentation for full details.
+    // Web requires that this value be returned to the
+    // browser in case of device orchestrated component auctions for top level
+    // auction on browser.
+    // Android does not require that this value be returned to the device.
     float bid = 9;
 
     // The reporting urls registered during the execution of reportResult() and
@@ -1886,7 +1984,7 @@ message ScoreAdsResponse {
     // This will be verified with the buyerReportingId in the Ad properties on
     // the browser.
     optional string buyer_reporting_id = 18;
-    // BuyerAnd SellerReportingId of the winning Ad.
+    // BuyerAndSellerReportingId of the winning Ad.
     // This will be verified with the buyerAndSellerReportingId in the Ad
     // properties on the browser.
     optional string buyer_and_seller_reporting_id = 19;
@@ -1898,6 +1996,14 @@ message ScoreAdsResponse {
     // This field will be populated for all seller and buyer contributions in
     // single seller auctions and server orchestrated multi seller auctions.
     repeated PrivateAggregateReportingResponse top_level_contributions = 21;
+
+    // selectedBuyerAndSellerReportingId of the winning Ad.
+    // This will be verified with the selectablebuyerAndSellerReportingId in the
+    // Ad properties on the browser.
+    optional string selected_buyer_and_seller_reporting_id = 22;
+
+    // Used for top level seller orchestrated auctions.
+    optional KAnonJoinCandidate k_anon_join_candidate = 23;
   }
 
   // The response includes the top scored ad, optionally ghost winner(s), along
@@ -1913,6 +2019,9 @@ message ScoreAdsResponse {
     // SelectAdRequest from device.
     repeated AdScore ghost_winning_ad_scores = 2;
 
+    // Indicates whether debug data is exported.
+    bool auction_export_debug = 3;
+
     // Debug logs for auction servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
   }
@@ -1922,7 +2031,7 @@ message ScoreAdsResponse {
 }
 
 // The reporting urls registered during the execution of reportResult() and
-// reportWin(). These urls will be pined from the client.
+// reportWin(). These urls will be pinged from the client.
 message WinReportingUrls {
   message ReportingUrls {
     // The url to be pinged for reporting win to the Buyer or Seller.
@@ -1945,6 +2054,33 @@ message WinReportingUrls {
   // seller in case of single seller auction and top level seller in case of
   // multi seller auctions. These urls will be pinged from client.
   ReportingUrls top_level_seller_reporting_urls = 3;
+}
+
+// The debug reports corresponding to a single adtech that are not yet pinged.
+message DebugReports {
+  message DebugReport {
+    // The debugging url for this report.
+    string url = 1;
+
+    // Boolean indicating whether this url corresponds to a win (true) or a
+    // loss (false).
+    bool is_win_report = 2;
+
+    // Boolean indicating whether this url is for a seller (true) or a
+    // buyer (false).
+    bool is_seller_report = 3;
+
+    // Boolean indicating whether this url is for the winner of a component
+    // auction (true) or not (false).
+    //
+    // In case of a component winner, the appropriate win/loss url will be
+    // pinged AFTER the result of the top-level auction from the client
+    // (device-orchestrated) or the top-level server (server-orchestrated).
+    bool is_component_win = 4;
+  }
+
+  // The list of debug reports corresponding to a single adtech.
+  repeated DebugReport reports = 1;
 }
 
 // message to store the server request/ response.

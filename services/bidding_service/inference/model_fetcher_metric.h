@@ -76,6 +76,12 @@ class ModelFetcherMetric {
     return model_registration_failure_count_by_error_code_;
   }
 
+  static absl::flat_hash_map<std::string, double>
+  GetModelRegistrationPrewarmLatency() ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    return model_registration_prewarm_latency_;
+  }
+
   static absl::flat_hash_map<std::string, double> GetAvailableModels()
       ABSL_LOCKS_EXCLUDED(mu_) {
     absl::MutexLock lock(&mu_);
@@ -86,6 +92,7 @@ class ModelFetcherMetric {
         available_models_;
     for (auto it = available_models_.begin(); it != available_models_.end();) {
       if (it->second == 0) {
+        model_registration_prewarm_latency_.erase(it->first);
         available_models_.erase(it++);
       } else {
         it++;
@@ -156,6 +163,15 @@ class ModelFetcherMetric {
     }
   }
 
+  static void UpdateModelRegistrationPrewarmLatency(
+      const absl::flat_hash_map<std::string, double>& prewarm_latencys)
+      ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    for (const auto& [model_name, latency] : prewarm_latencys) {
+      model_registration_prewarm_latency_[model_name] = latency;
+    }
+  }
+
   // Clears all metric counters.
   static void ClearStates() ABSL_LOCKS_EXCLUDED(mu_) {
     absl::MutexLock lock(&mu_);
@@ -169,6 +185,8 @@ class ModelFetcherMetric {
     recent_model_registration_success_.clear();
     recent_model_registration_failure_.clear();
     model_registration_failure_count_by_error_code_.clear();
+
+    model_registration_prewarm_latency_.clear();
 
     available_models_.clear();
   }
@@ -197,6 +215,9 @@ class ModelFetcherMetric {
 
   static inline absl::flat_hash_map<std::string, double> available_models_
       ABSL_GUARDED_BY(mu_){};
+
+  static inline absl::flat_hash_map<std::string, double>
+      model_registration_prewarm_latency_ ABSL_GUARDED_BY(mu_){};
 };
 
 // Adds model fetcher metrics to a metric context map to bidding server.
@@ -223,6 +244,9 @@ inline absl::Status AddModelFetcherMetricToBidding() {
   PS_RETURN_IF_ERROR(context_map->AddObserverable(
       metric::kInferenceAvailableModels,
       inference::ModelFetcherMetric::GetAvailableModels));
+  PS_RETURN_IF_ERROR(context_map->AddObserverable(
+      metric::kInferenceModelRegistrationPrewarmLatency,
+      inference::ModelFetcherMetric::GetModelRegistrationPrewarmLatency));
   return context_map->AddObserverable(
       metric::kInferenceModelRegistrationFailedCountByStatus,
       inference::ModelFetcherMetric::GetModelRegistrationFailedCountByStatus);

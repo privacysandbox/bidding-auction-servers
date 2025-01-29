@@ -24,14 +24,15 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+namespace {
+
 using ::google::protobuf::RepeatedPtrField;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
 using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
-
-namespace {
-
+using GhostWinnerForTopLevelAuction =
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction;
 // Builds a map of render urls to JSON objects holding the scoring signals.
 // An entry looks like: url_to_signals["fooAds.com/123"] = {"fooAds.com/123":
 // {"some", "scoring", "signals"}}. Notice the render URL is present in the map
@@ -157,7 +158,8 @@ std::string MakeOpenBidMetadataJson(
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
-    absl::string_view bid_currency, const uint32_t seller_data_version) {
+    absl::string_view bid_currency, const uint32_t seller_data_version,
+    ReportingIdsParamForBidMetadata reporting_ids = {}) {
   std::string bid_metadata = "{";
   if (!interest_group_owner.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON", kIGOwnerPropertyForScoreAd,
@@ -192,6 +194,24 @@ std::string MakeOpenBidMetadataJson(
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
                     kSellerDataVersionPropertyForScoreAd, R"JSON(":)JSON",
                     seller_data_version, R"JSON(,)JSON");
+  }
+  if (reporting_ids.buyer_reporting_id) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON", kBuyerReportingIdForScoreAd,
+                    R"JSON(":")JSON", reporting_ids.buyer_reporting_id.value(),
+                    R"JSON(",)JSON");
+  }
+  if (reporting_ids.buyer_and_seller_reporting_id) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kBuyerAndSellerReportingIdForScoreAd, R"JSON(":")JSON",
+                    reporting_ids.buyer_and_seller_reporting_id.value(),
+                    R"JSON(",)JSON");
+  }
+  if (reporting_ids.selected_buyer_and_seller_reporting_id) {
+    absl::StrAppend(
+        &bid_metadata, R"JSON(")JSON",
+        kSelectedBuyerAndSellerReportingIdForScoreAd, R"JSON(":")JSON",
+        reporting_ids.selected_buyer_and_seller_reporting_id.value(),
+        R"JSON(",)JSON");
   }
   return bid_metadata;
 }
@@ -265,10 +285,12 @@ std::string MakeBidMetadata(
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
     absl::string_view top_level_seller, absl::string_view bid_currency,
-    const uint32_t seller_data_version) {
-  std::string bid_metadata = MakeOpenBidMetadataJson(
-      publisher_hostname, interest_group_owner, render_url,
-      ad_component_render_urls, bid_currency, seller_data_version);
+    const uint32_t seller_data_version,
+    ReportingIdsParamForBidMetadata reporting_ids) {
+  std::string bid_metadata =
+      MakeOpenBidMetadataJson(publisher_hostname, interest_group_owner,
+                              render_url, ad_component_render_urls,
+                              bid_currency, seller_data_version, reporting_ids);
   // Only add top level seller to bid metadata if it's non empty.
   if (!top_level_seller.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
@@ -434,13 +456,13 @@ void MayPopulateScoringSignalsForProtectedAppSignals(
 }
 
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
-    bool enable_ad_tech_code_logging, const std::string& response,
-    RequestLogContext& log_context) {
-  PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
-  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, document, log_context);
+    bool enable_ad_tech_code_logging, RequestLogContext& log_context,
+    const rapidjson::Document& score_ads_wrapper_response) {
+  MayVlogAdTechCodeLogs(enable_ad_tech_code_logging, score_ads_wrapper_response,
+                        log_context);
   rapidjson::Document response_obj;
-  auto iterator = document.FindMember("response");
-  if (iterator != document.MemberEnd()) {
+  auto iterator = score_ads_wrapper_response.FindMember("response");
+  if (iterator != score_ads_wrapper_response.MemberEnd()) {
     if (iterator->value.IsObject()) {
       response_obj.CopyFrom(iterator->value, response_obj.GetAllocator());
     } else if (iterator->value.IsNumber()) {
@@ -633,7 +655,7 @@ absl::StatusOr<DispatchRequest> BuildScoreAdRequest(
 }
 
 std::unique_ptr<AdWithBidMetadata> MapAuctionResultToAdWithBidMetadata(
-    AuctionResult& auction_result) {
+    AuctionResult& auction_result, bool k_anon_status) {
   auto ad = std::make_unique<AdWithBidMetadata>();
   ad->set_bid(auction_result.bid());
   ad->set_allocated_render(auction_result.release_ad_render_url());
@@ -644,6 +666,22 @@ std::unique_ptr<AdWithBidMetadata> MapAuctionResultToAdWithBidMetadata(
   ad->set_allocated_interest_group_owner(
       auction_result.release_interest_group_owner());
   ad->set_allocated_bid_currency(auction_result.release_bid_currency());
+  ad->set_k_anon_status(k_anon_status);
+  return ad;
+}
+
+std::unique_ptr<AdWithBidMetadata> MapKAnonGhostWinnerToAdWithBidMetadata(
+    absl::string_view owner, absl::string_view ig_name,
+    GhostWinnerForTopLevelAuction& ghost_winner) {
+  auto ad = std::make_unique<AdWithBidMetadata>();
+  ad->set_bid(ghost_winner.modified_bid());
+  ad->set_allocated_render(ghost_winner.release_ad_render_url());
+  ad->mutable_ad_components()->Swap(
+      ghost_winner.mutable_ad_component_render_urls());
+  ad->set_interest_group_name(ig_name);
+  ad->set_interest_group_owner(owner);
+  ad->set_allocated_bid_currency(ghost_winner.release_bid_currency());
+  ad->set_k_anon_status(false);
   return ad;
 }
 

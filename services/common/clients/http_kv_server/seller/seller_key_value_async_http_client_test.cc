@@ -14,6 +14,8 @@
 
 #include "services/common/clients/http_kv_server/seller/seller_key_value_async_http_client.h"
 
+#include <algorithm>
+
 #include "absl/synchronization/notification.h"
 #include "gtest/gtest.h"
 #include "services/common/test/mocks.h"
@@ -484,7 +486,8 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesSSPUrlCorrectlyWithNoRenderUrls) {
   CheckGetValuesFromKeysViaHttpClient(std::move(input3));
 }
 
-TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
+TEST_F(KeyValueAsyncHttpClientTest,
+       AddsMetadataToHeadersAndContainsDVInIncludeHeaders) {
   RequestMetadata expected_metadata = MakeARandomMap();
   std::vector<std::string> expected_headers;
   for (const auto& it : expected_metadata) {
@@ -508,7 +511,10 @@ TEST_F(KeyValueAsyncHttpClientTest, AddsMetadataToHeaders) {
                     absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_EQ(expected_headers, request.headers);
-
+        EXPECT_TRUE(std::find(request.include_headers.begin(),
+                              request.include_headers.end(),
+                              kDataVersionResponseHeaderName) !=
+                    request.include_headers.end());
         HTTPResponse actual_http_response;
         actual_http_response.body = kExpectedResponseBodyJsonString;
         // Add an INVALID header, one which EXCEEDS even the 32-bit limit!

@@ -47,7 +47,6 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr absl::string_view kSampleInterestGroupName = "interest_group";
 constexpr absl::string_view kSampleBuyer = "ad_tech_A.com";
 constexpr char kSampleComponentSeller[] = "caveatEmptor.ads";
 constexpr absl::string_view kSampleGenerationId =
@@ -126,12 +125,22 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetOverride("", K_ANON_API_KEY);
     config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
     config_.SetOverride(kTrue, TEST_MODE);
+    config_.SetOverride(kSignalsRequired, SCORING_SIGNALS_FETCH_MODE);
+    config_.SetOverride("", HEADER_PASSED_TO_BUYER);
+    config_.SetOverride("0", K_ANON_TOTAL_NUM_HASH);
+    config_.SetOverride("0", EXPECTED_K_ANON_TO_NON_K_ANON_RATIO);
+    config_.SetOverride("0", K_ANON_CLIENT_TIME_OUT_MS);
+    config_.SetOverride("0", NUM_K_ANON_SHARDS);
+    config_.SetOverride("0", NUM_NON_K_ANON_SHARDS);
+    config_.SetOverride("0", TEST_MODE_K_ANON_CACHE_TTL_SECONDS);
+    config_.SetOverride("0", TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS);
+    config_.SetOverride(kTrue, ENABLE_K_ANON_QUERY_CACHE);
   }
 
   ClientRegistry CreateValidClientRegistry() {
-    return {valid_clients_.scoring_signals_provider,
+    return {&(valid_clients_.scoring_signals_provider),
             valid_clients_.scoring_client, valid_clients_.buyer_clients,
-            valid_clients_.kv_v2_client, valid_clients_.key_fetcher_manager,
+            &(valid_clients_.kv_v2_client), valid_clients_.key_fetcher_manager,
             /* crypto_client= */ nullptr,
             // Reporting Client.
             std::make_unique<MockAsyncReporter>(
@@ -160,10 +169,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
   auto scoring = ScoringAsyncClientMock();
   KVAsyncClientMock kv_v2_client;
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -236,19 +245,18 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
   request.clear_auction_config();
 
-  const float bid_value = 1.0;
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
     std::string ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, bid_value);
+    AdWithBid bid = BuildNewAdWithBid(
+        ad_url, {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse response;
     auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
 
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
+                         {.repeated_get_allowed = true});
     expected_buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -282,10 +290,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -329,10 +337,10 @@ TYPED_TEST(SellerFrontEndServiceTest, FailsWhenBothAuctionConfigsSet) {
   KVAsyncClientMock kv_v2_client;
   ScoringAsyncClientMock scoring_client;
   server_common::MockKeyFetcherManager key_fetcher_manager;
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::make_unique<MockAsyncReporter>(
@@ -378,10 +386,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
   KVAsyncClientMock kv_v2_client;
 
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -415,10 +423,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -452,10 +460,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyRequest) {
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -489,10 +497,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -539,10 +547,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /*crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -581,10 +589,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /*crypto_client_ptr = */ nullptr,
                          std::move(async_reporter)};
@@ -644,10 +652,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /*crypto_client_ptr = */ nullptr,
                          std::move(async_reporter)};
@@ -703,10 +711,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
   auto scoring = ScoringAsyncClientMock();
   auto bfe_client = BuyerFrontEndAsyncClientFactoryMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          bfe_client,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -765,10 +773,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
       MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>();
   auto scoring = ScoringAsyncClientMock();
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{async_provider,
+  ClientRegistry clients{&async_provider,
                          scoring,
                          client_factory_mock,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -786,8 +794,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  AuctionResult auction_result = DecryptBrowserAuctionResult(
-      *response.mutable_auction_result_ciphertext(), encryption_context);
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), encryption_context)
+          .first;
   EXPECT_TRUE(auction_result.is_chaff());
 }
 
@@ -836,7 +846,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
        protected_auction_input.buyer_input()) {
     GetBidsResponse::GetBidsRawResponse response;
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
+                         {.repeated_get_allowed = true});
     expected_buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -858,10 +868,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
           std::make_unique<MockHttpFetcherAsync>());
   KVAsyncClientMock kv_v2_client;
 
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -876,8 +886,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  AuctionResult auction_result = DecryptBrowserAuctionResult(
-      *response.mutable_auction_result_ciphertext(), encryption_context);
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), encryption_context)
+          .first;
   EXPECT_TRUE(auction_result.is_chaff());
 }
 
@@ -968,19 +980,18 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   EXPECT_EQ(buyer_input_count, 1);
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
-  const float bid_value = 1.0;
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
     std::string ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, bid_value);
+    AdWithBid bid = BuildNewAdWithBid(
+        ad_url, {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse response;
     auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
 
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
+                         {.repeated_get_allowed = true});
     expected_buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -1014,10 +1025,10 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1075,19 +1086,18 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   EXPECT_EQ(buyer_input_count, 1);
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(request);
-  const float bid_value = 1.0;
   BuyerBidsResponseMap expected_buyer_bids;
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
     std::string ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, bid_value);
+    AdWithBid bid = BuildNewAdWithBid(
+        ad_url, {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse response;
     auto* mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
 
     SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true);
+                         {.repeated_get_allowed = true});
     expected_buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -1129,10 +1139,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1212,10 +1222,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1281,10 +1291,10 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1330,8 +1340,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
       // cover the scenario where select ad reactor may be terminating the
       // SelectAdRequest RPC prematurely on finding a a buyer with no client.
       AdWithBid bid = BuildNewAdWithBid(
-          /*ad_url=*/absl::StrCat(buyer, "/ad"), kSampleInterestGroupName,
-          kNonZeroBidValue);
+          /*ad_url=*/absl::StrCat(buyer, "/ad"),
+          {.interest_group_name = kSampleInterestGroupName});
       GetBidsResponse::GetBidsRawResponse get_bids_response;
       get_bids_response.mutable_bids()->Add(std::move(bid));
       SetupBuyerClientMock(buyer, buyer_clients, get_bids_response);
@@ -1394,10 +1404,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1413,8 +1423,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   scoring_done.Wait();
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  AuctionResult auction_result = DecryptBrowserAuctionResult(
-      *response.mutable_auction_result_ciphertext(), encryption_context);
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), encryption_context)
+          .first;
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
 }
@@ -1447,13 +1459,12 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
         BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+                          {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
-                         /*repeated_get_allowed=*/false,
-                         /*expect_all_buyers_solicited=*/false,
-                         /*num_buyers_solicited=*/&buyer_calls_counter);
+                         {.expect_all_buyers_solicited = false,
+                          .num_buyers_solicited = &buyer_calls_counter});
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1510,10 +1521,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1529,8 +1540,10 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
   notification.WaitForNotification();
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  AuctionResult auction_result = DecryptBrowserAuctionResult(
-      *response.mutable_auction_result_ciphertext(), encryption_context);
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), encryption_context)
+          .first;
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_FALSE(auction_result.is_chaff());
 
@@ -1564,12 +1577,11 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
         BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+                          {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
-                         /*repeated_get_allowed=*/false,
-                         /*expect_all_buyers_solicited=*/false);
+                         {.expect_all_buyers_solicited = false});
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1604,10 +1616,10 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1622,8 +1634,10 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
   grpc::Status status = stub->SelectAd(&context, request, &response);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  AuctionResult auction_result = DecryptBrowserAuctionResult(
-      *response.mutable_auction_result_ciphertext(), encryption_context);
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), encryption_context)
+          .first;
   ABSL_LOG(INFO) << "Response: " << auction_result.DebugString();
   EXPECT_TRUE(auction_result.is_chaff());
 }
@@ -1656,12 +1670,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
   for (const auto& [buyer, unused] : protected_auction_input.buyer_input()) {
     AdWithBid bid =
         BuildNewAdWithBid(/*ad_url=*/absl::StrCat(buyer, "/ad"),
-                          kSampleInterestGroupName, kNonZeroBidValue);
+                          {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse get_bids_response;
     get_bids_response.mutable_bids()->Add(std::move(bid));
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response,
-                         /*repeated_get_allowed=*/false,
-                         /*expect_all_buyers_solicited=*/false);
+                         {.expect_all_buyers_solicited = false});
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
                    get_bids_response));
@@ -1697,10 +1710,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1751,10 +1764,10 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
   KVAsyncClientMock kv_v2_client;
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_v2_client,
+                         &kv_v2_client,
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
@@ -1919,9 +1932,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
       .WillRepeatedly(Return(GetPrivateKey()));
   SellerFrontEndService seller_frontend_service(
       &this->config_,
-      {this->valid_clients_.scoring_signals_provider,
+      {&(this->valid_clients_.scoring_signals_provider),
        this->valid_clients_.scoring_client, this->valid_clients_.buyer_clients,
-       this->valid_clients_.kv_v2_client, key_fetcher_manager,
+       &(this->valid_clients_.kv_v2_client), key_fetcher_manager,
        /* crypto_client= */ nullptr,
        std::make_unique<MockAsyncReporter>(
            std::make_unique<MockHttpFetcherAsync>())});

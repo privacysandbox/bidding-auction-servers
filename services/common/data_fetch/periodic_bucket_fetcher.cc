@@ -29,6 +29,8 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
 #include "services/common/data_fetch/fetcher_interface.h"
+#include "services/common/data_fetch/periodic_bucket_fetcher_metrics.h"
+#include "services/common/data_fetch/version_util.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_response_constants.h"
 #include "src/core/interface/async_context.h"
@@ -82,6 +84,7 @@ PeriodicBucketFetcher::ListBlobsSync() {
   absl::StatusOr<ListBlobsMetadataResponse> result;
   absl::Notification notification;
   auto list_blobs_request = std::make_shared<ListBlobsMetadataRequest>();
+  list_blobs_request->set_exclude_directories(true);
   list_blobs_request->mutable_blob_metadata()->set_bucket_name(bucket_name_);
 
   AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
@@ -125,6 +128,8 @@ void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
     task_id_ = executor_.RunAfter(fetch_period_ms_,
                                   [this]() { PeriodicBucketFetchSync(); });
     return;
+  } else {
+    PS_VLOG(5) << "Will attempt to fetch blobs: " << blob_list->DebugString();
   }
 
   // TODO: We must evict any versions in Roma but not in the bucket. We
@@ -140,8 +145,20 @@ void PeriodicBucketFetcher::PeriodicBucketFetchSync() {
     AsyncContext<GetBlobRequest, GetBlobResponse> get_blob_context(
         get_blob_request, [&blobs_remaining, this](const auto& context) {
           {
+            PS_VLOG(5) << "Processing GetBlobResponse for: "
+                       << context.request->blob_metadata().DebugString();
             absl::MutexLock lock(&some_load_success_mu_);
-            some_load_success_ = OnFetch(context) || some_load_success_;
+            absl::Status load_status = OnFetch(context);
+            if (!load_status.ok()) {
+              PS_LOG(ERROR, SystemLogContext())
+                  << load_status << " for blob "
+                  << context.request->blob_metadata().blob_name()
+                  << " in bucket " << GetBucketName();
+            }
+            PeriodicBucketFetcherMetrics::UpdateBlobLoadMetrics(
+                context.request->blob_metadata().blob_name(), GetBucketName(),
+                load_status);
+            some_load_success_ = load_status.ok() || some_load_success_;
           }
           blobs_remaining.DecrementCount();
         });

@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
+}
+
 ################ Common Setup ################
 
 module "iam_roles" {
   source      = "../../services/iam_roles"
-  environment = var.environment
-  operator    = var.operator
-  region      = var.region
-}
-
-module "iam_groups" {
-  source      = "../../services/iam_groups"
   environment = var.environment
   operator    = var.operator
   region      = var.region
@@ -44,16 +45,6 @@ module "security_groups" {
   vpc_id      = module.networking.vpc_id
 }
 
-module "iam_group_policies" {
-  source               = "../../services/iam_group_policies"
-  region               = var.region
-  operator             = var.operator
-  environment          = var.environment
-  ssh_users_group_name = module.iam_groups.ssh_users_group_name
-  ssh_instance_arn     = module.ssh.ssh_instance_arn
-}
-
-
 module "backend_services" {
   source                          = "../../services/backend_services"
   region                          = var.region
@@ -66,17 +57,6 @@ module "backend_services" {
   vpc_id                          = module.networking.vpc_id
   vpc_interface_endpoint_services = var.vpc_interface_endpoint_services
   server_instance_role_arn        = module.iam_roles.instance_role_arn
-  ssh_instance_role_arn           = module.iam_roles.ssh_instance_role_arn
-}
-
-module "ssh" {
-  source                  = "../../services/ssh"
-  environment             = var.environment
-  instance_sg_id          = module.security_groups.ssh_security_group_id
-  operator                = var.operator
-  ssh_instance_subnet_ids = module.networking.public_subnet_ids
-  instance_profile_name   = module.iam_roles.ssh_instance_profile_name
-  ssh_instance_type       = var.ssh_instance_type
 }
 
 module "security_group_rules" {
@@ -88,10 +68,8 @@ module "security_group_rules" {
   vpc_id                            = module.networking.vpc_id
   elb_security_group_id             = module.security_groups.elb_security_group_id
   instances_security_group_id       = module.security_groups.instance_security_group_id
-  ssh_security_group_id             = module.security_groups.ssh_security_group_id
   vpce_security_group_id            = module.security_groups.vpc_endpoint_security_group_id
   gateway_endpoints_prefix_list_ids = module.backend_services.gateway_endpoints_prefix_list_ids
-  ssh_source_cidr_blocks            = var.ssh_source_cidr_blocks
   use_service_mesh                  = var.use_service_mesh
   tee_kv_servers_port               = var.tee_kv_servers_port
 }
@@ -102,7 +80,6 @@ module "iam_role_policies" {
   operator                  = var.operator
   environment               = var.environment
   server_instance_role_name = module.iam_roles.instance_role_name
-  ssh_instance_role_name    = module.iam_roles.ssh_instance_role_name
   autoscaling_group_arns    = [module.autoscaling_bfe.autoscaling_group_arn, module.autoscaling_bidding.autoscaling_group_arn]
 }
 
@@ -129,6 +106,21 @@ module "buyer_app_mesh" {
 }
 
 ################ Bidding operator Setup ################
+
+# Latest AMIs per service, filtered by workspace
+data "aws_ami_ids" "bidding_amis" {
+  owners         = ["self"]
+  sort_ascending = false
+  filter {
+    name   = "name"
+    values = ["bidding_service-*"]
+  }
+
+  filter {
+    name   = "tag:build_env"
+    values = [terraform.workspace]
+  }
+}
 
 module "bidding_mesh_service" {
   # Only create if using service mesh
@@ -191,7 +183,7 @@ module "autoscaling_bidding" {
   enclave_debug_mode              = var.enclave_debug_mode
   service                         = "bidding"
   autoscaling_subnet_ids          = module.networking.private_subnet_ids
-  instance_ami_id                 = var.bidding_instance_ami_id
+  instance_ami_id                 = coalesce(var.bidding_instance_ami_id, data.aws_ami_ids.bidding_amis.ids...)
   instance_security_group_id      = module.security_groups.instance_security_group_id
   instance_type                   = var.bidding_instance_type
   target_group_arns               = var.use_service_mesh ? [] : module.load_balancing_bidding[0].target_group_arns
@@ -214,6 +206,20 @@ module "autoscaling_bidding" {
 }
 
 ################ Buyer FrontEnd operator Setup ################
+# Latest AMIs per service, filtered by workspace
+data "aws_ami_ids" "buyer_frontend_amis" {
+  owners         = ["self"]
+  sort_ascending = false
+
+  filter {
+    name   = "name"
+    values = ["buyer_frontend_service-*"]
+  }
+  filter {
+    name   = "tag:build_env"
+    values = [terraform.workspace]
+  }
+}
 
 module "bfe_mesh_service" {
   # Only create if using service mesh
@@ -268,7 +274,7 @@ module "autoscaling_bfe" {
   enclave_debug_mode              = var.enclave_debug_mode
   service                         = "bfe"
   autoscaling_subnet_ids          = module.networking.private_subnet_ids
-  instance_ami_id                 = var.bfe_instance_ami_id
+  instance_ami_id                 = coalesce(var.bfe_instance_ami_id, data.aws_ami_ids.buyer_frontend_amis.ids...)
   instance_security_group_id      = module.security_groups.instance_security_group_id
   instance_type                   = var.bfe_instance_type
   target_group_arns               = module.load_balancing_bfe.target_group_arns

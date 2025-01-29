@@ -38,6 +38,7 @@ repos:
   - id: check-case-conflict
   - id: check-merge-conflict
   - id: check-yaml
+    entry: check-yaml --allow-multiple-documents
   - id: check-json
   - id: check-symlinks
   - id: check-added-large-files

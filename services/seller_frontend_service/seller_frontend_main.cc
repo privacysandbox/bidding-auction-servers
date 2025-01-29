@@ -38,10 +38,13 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/tcmalloc_utils.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
 #include "services/seller_frontend_service/report_win_map.h"
 #include "services/seller_frontend_service/runtime_flags.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
 #include "src/public/cpio/interface/cpio.h"
 #include "src/util/rlimit_core_config.h"
@@ -115,8 +118,42 @@ ABSL_FLAG(std::optional<std::string>, k_anon_api_key, "",
 ABSL_FLAG(
     std::optional<bool>, allow_compressed_auction_config, false,
     "Enable reading of the compressed auction config field in SelectAdRequest");
+ABSL_FLAG(
+    std::optional<std::string>, scoring_signals_fetch_mode, std::nullopt,
+    "Specifies whether KV lookup for scoring signals is made or not, and if "
+    "so, whether scoring signals are required for scoring ads or not.");
+ABSL_FLAG(std::optional<std::string>, header_passed_to_buyer, std::nullopt,
+          "http headers in sfe request to be passed in bfe request, multiple "
+          "headers in lower case separated by comma without space");
+ABSL_FLAG(std::optional<int>, k_anon_total_num_hash, 1000,
+          "Total number of entries to k-anon cache. Required when k-anon is "
+          "enabled.");
+ABSL_FLAG(std::optional<double>, expected_k_anon_to_non_k_anon_ratio, 1.0,
+          "Expected ratio of k-anon to non-k-anon hashes used to size the "
+          "caches. Required when k-anon is enabled.");
+ABSL_FLAG(
+    std::optional<int64_t>, k_anon_client_time_out_ms, 60000,
+    "A time out for k-anon client query. Required when k-anon is enabled.");
+ABSL_FLAG(std::optional<int>, num_k_anon_shards, 1,
+          "Number of shards for cache storing k-anon hashes. Required when "
+          "k-anon is enabled.");
+ABSL_FLAG(std::optional<int>, num_non_k_anon_shards, 1,
+          "Number of shards for cache storing non k-anon hashes. Required "
+          "when k-anon is enabled.");
+ABSL_FLAG(std::optional<int64_t>, test_mode_k_anon_cache_ttl_seconds, 86400,
+          "Configurable k-anon cache TTL in TEST_MODE. Set to be 24 hours "
+          "otherwise.");
+ABSL_FLAG(std::optional<int64_t>, test_mode_non_k_anon_cache_ttl_seconds, 10800,
+          "Configurable non k-anon cache TTL in TEST_MODE. Set to be 3 hours "
+          "otherwise.");
+ABSL_FLAG(std::optional<bool>, enable_k_anon_query_cache, true,
+          "Flag to make k-anon cache query optional. If set to false, k-anon "
+          "caches will not be queried.");
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+// K-anon service address to use for querying the status of k-anon hashes.
+inline constexpr char kKAnonServiceAddr[] = "kanonymityquery.googleapis.com";
 
 ReportWinMap GetReportWinMapFromSellerCodeFetchConfig(
     const auction_service::SellerCodeFetchConfig& seller_code_fetch_config) {
@@ -137,6 +174,29 @@ ReportWinMap GetReportWinMapFromSellerCodeFetchConfig(
       .protected_app_signals_buyer_report_win_js_urls =
           std::move(protected_app_signals_buyer_report_win_js_urls),
   };
+}
+
+KAnonCacheManagerConfig GetKAnonCacheManagerConfig(
+    const TrustedServersConfigClient& config_client) {
+  KAnonCacheManagerConfig config = {
+      .total_num_hash = config_client.GetIntParameter(K_ANON_TOTAL_NUM_HASH),
+      .expected_k_anon_to_non_k_anon_ratio =
+          config_client.GetDoubleParameter(EXPECTED_K_ANON_TO_NON_K_ANON_RATIO),
+      .client_time_out = absl::Milliseconds(
+          config_client.GetInt64Parameter(K_ANON_CLIENT_TIME_OUT_MS)),
+      .num_k_anon_shards = config_client.GetIntParameter(NUM_K_ANON_SHARDS),
+      .num_non_k_anon_shards =
+          config_client.GetIntParameter(NUM_NON_K_ANON_SHARDS),
+      .enable_k_anon_cache =
+          config_client.GetBooleanParameter(ENABLE_K_ANON_QUERY_CACHE)};
+
+  if (config_client.GetBooleanParameter(TEST_MODE)) {
+    config.k_anon_ttl = absl::Seconds(
+        config_client.GetInt64Parameter(TEST_MODE_K_ANON_CACHE_TTL_SECONDS));
+    config.non_k_anon_ttl = absl::Seconds(config_client.GetInt64Parameter(
+        TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS));
+  }
+  return config;
 }
 
 using ::grpc::Server;
@@ -230,7 +290,22 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
   config_client.SetFlag(FLAGS_allow_compressed_auction_config,
                         ALLOW_COMPRESSED_AUCTION_CONFIG);
-
+  config_client.SetFlag(FLAGS_scoring_signals_fetch_mode,
+                        SCORING_SIGNALS_FETCH_MODE);
+  config_client.SetFlag(FLAGS_header_passed_to_buyer, HEADER_PASSED_TO_BUYER);
+  config_client.SetFlag(FLAGS_k_anon_total_num_hash, K_ANON_TOTAL_NUM_HASH);
+  config_client.SetFlag(FLAGS_expected_k_anon_to_non_k_anon_ratio,
+                        EXPECTED_K_ANON_TO_NON_K_ANON_RATIO);
+  config_client.SetFlag(FLAGS_k_anon_client_time_out_ms,
+                        K_ANON_CLIENT_TIME_OUT_MS);
+  config_client.SetFlag(FLAGS_num_k_anon_shards, NUM_K_ANON_SHARDS);
+  config_client.SetFlag(FLAGS_num_non_k_anon_shards, NUM_NON_K_ANON_SHARDS);
+  config_client.SetFlag(FLAGS_test_mode_k_anon_cache_ttl_seconds,
+                        TEST_MODE_K_ANON_CACHE_TTL_SECONDS);
+  config_client.SetFlag(FLAGS_test_mode_non_k_anon_cache_ttl_seconds,
+                        TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS);
+  config_client.SetFlag(FLAGS_enable_k_anon_query_cache,
+                        ENABLE_K_ANON_QUERY_CACHE);
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -264,6 +339,19 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     PS_LOG(WARNING) << "TRUSTED_KEY_VALUE_V2_SIGNALS_HOST is set to "
                     << kIgnoredPlaceholderValue
                     << ", this can affect Android auctions";
+    trusted_key_value_v2_signals_host = "";
+  }
+
+  std::string byos_key_value_signals_host =
+      std::string(config_client.GetStringParameter(KEY_VALUE_SIGNALS_HOST));
+  if (config_client.GetStringParameter(SCORING_SIGNALS_FETCH_MODE) !=
+          kSignalsNotFetched &&
+      (byos_key_value_signals_host.empty() ||
+       byos_key_value_signals_host == kIgnoredPlaceholderValue) &&
+      trusted_key_value_v2_signals_host.empty()) {
+    return absl::InvalidArgumentError(
+        "The server is configured to perform the trusted scoring signals fetch "
+        "yet no host has been provided, BYOS or Trusted KV.");
   }
 
   PS_LOG(INFO) << "Successfully constructed the config client.";
@@ -310,6 +398,27 @@ absl::Status RunServer() {
       absl::StrCat("0.0.0.0:", config_client.GetStringParameter(PORT));
   server_common::GrpcInit gprc_init;
 
+  std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager = nullptr;
+  std::unique_ptr<server_common::Executor> executor = nullptr;
+  if (absl::GetFlag(FLAGS_enable_kanon)) {
+    PS_LOG(INFO) << "K-Anon is enabled on the service; instantiating the "
+                    "k-anon cache manager";
+    auto k_anon_client = std::make_unique<KAnonGrpcClient>(KAnonClientConfig{
+        // TODO(b/383913428): We might want to make this configurable for
+        // TEST_MODE.
+        .server_addr = kKAnonServiceAddr,
+        .api_key =
+            std::string(config_client.GetStringParameter(K_ANON_API_KEY)),
+        .compression = true,
+        .secure_client = true,
+    });
+    executor = std::make_unique<server_common::EventEngineExecutor>(
+        grpc_event_engine::experimental::CreateEventEngine());
+    k_anon_cache_manager = std::make_unique<KAnonCacheManager>(
+        executor.get(), std::move(k_anon_client),
+        GetKAnonCacheManagerConfig(config_client));
+  }
+
   PS_ASSIGN_OR_RETURN(std::unique_ptr<server_common::PublicKeyFetcherInterface>
                           public_key_fetcher,
                       CreateSfePublicKeyFetcher(config_client));
@@ -317,7 +426,8 @@ absl::Status RunServer() {
       &config_client,
       CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),
       CreateCryptoClient(),
-      GetReportWinMapFromSellerCodeFetchConfig(code_fetch_proto));
+      GetReportWinMapFromSellerCodeFetchConfig(code_fetch_proto),
+      std::move(k_anon_cache_manager));
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
@@ -359,6 +469,8 @@ absl::Status RunServer() {
   // Set max message size to 256 MB.
   builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
                              256L * 1024L * 1024L);
+  // Set soft limit of metadata size to 64 KB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_METADATA_SIZE, 64L * 1024L);
   builder.RegisterService(&seller_frontend_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());

@@ -54,7 +54,7 @@ class PeriodicBucketFetcher : public FetcherInterface {
 
  protected:
   // Callback that handles a GetBlob fetch result.
-  virtual bool OnFetch(
+  virtual absl::Status OnFetch(
       const google::scp::core::AsyncContext<
           google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
           google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&

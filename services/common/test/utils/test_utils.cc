@@ -89,7 +89,6 @@ ProtectedAppSignalsAdWithBid CreateProtectedAppSignalsAdWithBid() {
       MakeAnAd(kTestRender2, kTestMetadataKey2, kTestMetadataValue2));
   ad_with_bid.set_bid(kTestBidValue2);
   ad_with_bid.set_render(kTestRender2);
-  ad_with_bid.set_modeling_signals(kTestModelingSignals2);
   ad_with_bid.set_ad_cost(kTestAdCost2);
   ad_with_bid.set_bid_currency(kTestCurrency2);
   ad_with_bid.set_egress_payload(kTestEgressPayload);

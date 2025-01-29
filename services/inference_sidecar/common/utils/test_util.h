@@ -29,7 +29,7 @@ inline void CheckMetric(
     const std::string& expected_partition = "") {
   auto it = metrics.find(key);
   ASSERT_NE(it, metrics.end()) << "Metric " << key << " is missing.";
-  EXPECT_EQ(it->second.value(), expected_value)
+  EXPECT_EQ(it->second.value_int32(), expected_value)
       << "Unexpected value for metric " << key;
   if (!expected_partition.empty()) {
     EXPECT_EQ(it->second.partition(), expected_partition)
@@ -45,7 +45,7 @@ inline void CheckMetricList(
   ASSERT_NE(it, metrics_list.end()) << "Metric list" << key << " is missing.";
   MetricValueList metric_list = it->second;
   MetricValue metric = metric_list.metrics().at(index);
-  EXPECT_EQ(metric.value(), expected_value)
+  EXPECT_EQ(metric.value_int32(), expected_value)
       << "Unexpected value for metric " << key;
   if (!expected_partition.empty()) {
     EXPECT_EQ(metric.partition(), expected_partition)

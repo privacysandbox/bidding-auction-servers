@@ -38,6 +38,7 @@ struct AuctionServiceClientConfig {
   bool compression = false;
   bool secure_client = true;
   std::string grpc_arg_default_authority = "";
+  std::string ca_root_pem = "/etc/roots.pem";
 };
 
 // This class is an async grpc client for the Fledge Auction (Scoring) Service.

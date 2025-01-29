@@ -241,6 +241,7 @@ cc_test(
         "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
         "//services/common/test:random",
+        "//services/common/test/utils:service_utils",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -292,6 +293,7 @@ proto_library(
 
 cc_proto_library(
     name = "bidding_code_fetch_config_cc_proto",
+    visibility = ["//visibility:public"],
     deps = [":bidding_code_fetch_config_proto"],
 )
 
@@ -342,6 +344,7 @@ cc_binary(
         "//services/common/blob_fetch:blob_fetcher",
         "//services/common/clients/config:config_client_util",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
+        "//services/common/data_fetch:periodic_bucket_fetcher_metrics",
         "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/data_fetch:version_util",
         "//services/common/encryption:crypto_client_factory",

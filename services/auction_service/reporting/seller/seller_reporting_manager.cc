@@ -18,6 +18,7 @@
 
 #include "absl/status/statusor.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
+#include "services/auction_service/private_aggregation/private_aggregation_manager.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/constants/common_constants.h"
@@ -148,6 +149,28 @@ rapidjson::Document GenerateSellerDeviceSignals(
       dispatch_request_data.post_auction_signals.highest_scoring_other_bid,
       document.GetAllocator());
 
+  // If selectedBuyerAndSellerId is present, it will be provided to
+  // ReportResult() along with buyerAndSellerReportingId if present. If only
+  // buyerAndSellerReportingId is present, it will be provided to
+  // ReportResult(). Else, no reporting ID will be provided. Reference:
+  // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#54-reporting-ids
+  if (dispatch_request_data.selected_buyer_and_seller_reporting_id) {
+    rapidjson::Value selected_buyer_and_seller_reporting_id(
+        dispatch_request_data.selected_buyer_and_seller_reporting_id->c_str(),
+        document.GetAllocator());
+    document.AddMember(kSelectedBuyerAndSellerReportingIdTag,
+                       selected_buyer_and_seller_reporting_id.Move(),
+                       document.GetAllocator());
+  }
+  if (dispatch_request_data.buyer_and_seller_reporting_id) {
+    rapidjson::Value buyer_and_seller_reporting_id(
+        dispatch_request_data.buyer_and_seller_reporting_id->c_str(),
+        document.GetAllocator());
+    document.AddMember(kBuyerAndSellerReportingIdTag,
+                       buyer_and_seller_reporting_id.Move(),
+                       document.GetAllocator());
+  }
+
   return document;
 }
 
@@ -174,7 +197,8 @@ absl::Status PerformReportResult(
 
 absl::StatusOr<ReportResultResponse> ParseReportResultResponse(
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    absl::string_view response, RequestLogContext& log_context) {
+    absl::string_view response, const BaseValues& base_values,
+    RequestLogContext& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   auto it = document.FindMember(kResponse);
   if (it == document.MemberEnd()) {
@@ -215,6 +239,17 @@ absl::StatusOr<ReportResultResponse> ParseReportResultResponse(
                   log_context);
     HandleUdfLogs(document, kReportingUdfWarnings, kReportResultUDFName,
                   log_context);
+  }
+  rapidjson::Document paapi_response_obj;
+  auto pagg_iterator = document.FindMember(kPAggContributions);
+  if (pagg_iterator != document.MemberEnd() &&
+      pagg_iterator->value.IsObject()) {
+    paapi_response_obj.CopyFrom(pagg_iterator->value,
+                                paapi_response_obj.GetAllocator());
+    PrivateAggregateReportingResponse pagg_response =
+        GetPrivateAggregateReportingResponseForWinner(base_values,
+                                                      paapi_response_obj);
+    report_result_response.pagg_response = pagg_response;
   }
   return report_result_response;
 }

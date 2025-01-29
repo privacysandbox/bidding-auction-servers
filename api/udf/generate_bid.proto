@@ -158,6 +158,16 @@ message ProtectedAudienceBrowserSignals {
       ' occurred in the last 30 days. The time is specified in seconds'
       ' before the containing auctionBlob was requested.'
 }];
+
+  int32 multi_bid_limit = 8 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
+      'A limit enforced by sellers on number of bids returned by each'
+      ' generateBid() execution With K-Anonymity integration, each generateBid()'
+      ' can return multiple bids instead of one, this is referred to as multi-bid'
+      ' generation. This limit is required to enforce a limit with multi-bid'
+      ' generation. For Protected Audience, the limit would be enforced on'
+      ' generateBid() execution per Interest Group. If the seller doesn\'t set'
+      ' the limit, a default would be set by the Bidding server.'
+}];
 }
 // (-- LINT.ThenChange(/api/bidding_auction_servers.proto:browser_signals_bidding) --)
 
@@ -248,7 +258,7 @@ message ProtectedAudienceBid {
       ' alpha code).'
 }];
 
-  string buyer_reporting_id = 9 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Optional. buyerReportingId set in buyerReportingMetadata of reportWin().'}];
+  optional string buyer_reporting_id = 9 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Optional. buyerReportingId set in buyerReportingMetadata of reportWin().'}];
 
   DebugReportUrls debug_report_urls = 10 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
       'Optional field for debug report URLs. This should only be populated by'
@@ -256,6 +266,10 @@ message ProtectedAudienceBid {
 }];
 
   repeated PrivateAggregateContribution private_aggregation_contributions = 11 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Private aggregation object.'}];
+
+  optional string buyer_and_seller_reporting_id = 12 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Optional. buyerAndSellerReportingId in buyerReportingMetadata of reportWin(). If provided, and selectedBuyerAndSellerReportingId is not set then this will be substituted for interestGroupName.'}];
+
+  optional string selected_buyer_and_seller_reporting_id = 13 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Optional. buyerAndSellerReportingId in buyerReportingMetadata of reportWin(). If provided, this will be substituted for interestGroupName.'}];
 }
 // (-- LINT.ThenChange(/api/bidding_auction_servers.proto:bid_bidding) --)
 
@@ -295,7 +309,7 @@ message PrivateAggregateContribution {
       ' and server orchestrated multi seller auctions.'
 }];
 
-  int32 ig_idx = 4 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Tells the browser which interest group was this contribution made for.'}];
+  optional int32 ig_idx = 4 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Tells the browser which interest group was this contribution made for.'}];
 }
 
 message PrivateAggregationBucket {

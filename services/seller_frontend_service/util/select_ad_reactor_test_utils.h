@@ -35,8 +35,10 @@
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/test/utils/ohttp_utils.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager_mock.h"
 #include "services/seller_frontend_service/seller_frontend_service.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
+#include "services/seller_frontend_service/test/constants.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/communication/encoding_utils.h"
@@ -55,7 +57,6 @@ constexpr absl::string_view kEmptyBuyer = "";
 constexpr absl::string_view kSampleBuyer = "https://ad_tech_A.com";
 constexpr absl::string_view kSampleBuyer2 = "https://ad_tech_B.com";
 constexpr absl::string_view kSampleBuyer3 = "https://ad_tech_C.com";
-constexpr absl::string_view kSampleGenerationId = "a-standard-uuid";
 constexpr absl::string_view kSampleSellerDebugId = "sample-seller-debug-id";
 constexpr absl::string_view kSampleBuyerDebugId = "sample-buyer-debug-id";
 constexpr absl::string_view kSampleBuyerSignals = "[]";
@@ -64,7 +65,6 @@ constexpr float kNonZeroBidValue = 1.0;
 constexpr float kZeroBidValue = 0.0;
 constexpr int kNonZeroDesirability = 1;
 constexpr bool kIsConsentedDebug = true;
-constexpr absl::string_view kConsentedDebugToken = "test";
 inline constexpr char kTestEvent[] = "click";
 inline constexpr char kTestInteractionUrl[] = "http://click.com";
 inline constexpr char kTestTopLevelSellerReportingUrl[] =
@@ -90,11 +90,16 @@ inline constexpr char kKvV2CompressionGroup[] =
 constexpr absl::string_view kSampleBiddingUrl = "https://ad_tech_A.com/bid.js";
 constexpr absl::string_view kSampleBiddingUrl2 = "https://ad_tech_B.com/bid.js";
 constexpr absl::string_view kSampleBiddingUrl3 = "https://ad_tech_C.com/bid.js";
-inline constexpr char kSampleBuyerReportingId[] = "buyerReportingId";
-inline constexpr char kSampleBuyerAndSellerReportingId[] =
-    "buyerAndSellerReportingId";
 constexpr absl::string_view kTestRenderUrlSuffix = "/ad";
 constexpr absl::string_view kTestComponentUrlSuffix = "/ad-component-";
+constexpr absl::string_view kTestBuyerDebugWinUrlPrefix =
+    "https://buyer.com/debugWin?render=";
+constexpr absl::string_view kTestBuyerDebugLossUrlPrefix =
+    "https://buyer.com/debugLoss?render=";
+constexpr absl::string_view kTestSellerDebugWinUrlPrefix =
+    "https://seller.com/debugWin?render=";
+constexpr absl::string_view kTestSellerDebugLossUrlPrefix =
+    "https://seller.com/debugLoss?render=";
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -110,44 +115,47 @@ struct EncryptedSelectAdRequestWithContext {
 absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
     const SelectAdRequest& request);
 
+struct BuildNewAdWithBidOptions {
+  absl::string_view interest_group_name = "";
+  const float bid_value = 1.0f;
+  const bool enable_event_level_debug_reporting = false;
+  const int number_ad_component_render_urls = kDefaultNumAdComponents;
+  absl::string_view bid_currency = "";
+  absl::string_view buyer_reporting_id = "";
+  absl::string_view buyer_and_seller_reporting_id = "";
+  absl::string_view selected_buyer_and_seller_reporting_id = "";
+  uint32_t data_version = kDefaultDataVersion;
+  std::vector<PrivateAggregateContribution> contributions;
+};
+
 GetBidsResponse::GetBidsRawResponse BuildGetBidsResponseWithSingleAd(
-    const std::string& ad_url,
-    absl::optional<std::string> interest_group_name = absl::nullopt,
-    absl::optional<float> bid_value = absl::nullopt,
-    const bool enable_event_level_debug_reporting = false,
-    int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<std::string>& bid_currency = absl::nullopt,
-    absl::string_view buyer_reporting_id = "",
-    absl::string_view buyer_and_seller_reporting_id = "",
-    absl::string_view selected_buyer_and_seller_reporting_id = "");
+    absl::string_view ad_url,
+    const BuildNewAdWithBidOptions& options = BuildNewAdWithBidOptions{});
 
 void SetupMockCryptoClient(MockCryptoClientWrapper& crypto_client);
+
+struct SetupBuyerClientMockOptions {
+  bool repeated_get_allowed = false;
+  bool expect_all_buyers_solicited = true;
+  int* num_buyers_solicited;
+  absl::string_view top_level_seller = "";
+};
 
 void SetupBuyerClientMock(
     absl::string_view hostname,
     const BuyerFrontEndAsyncClientFactoryMock& buyer_clients,
     const std::optional<GetBidsResponse::GetBidsRawResponse>& bid,
-    bool repeated_get_allowed = false, bool expect_all_buyers_solicited = true,
-    int* num_buyers_solicited = nullptr,
-    absl::string_view top_level_seller = "");
+    const SetupBuyerClientMockOptions& options = {});
 
-void BuildAdWithBidFromAdWithBidMetadata(
+AdWithBid BuildAdWithBidFromAdWithBidMetadata(
     const ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata& input,
-    AdWithBid* result, absl::string_view buyer_reporting_id = "",
+    absl::string_view buyer_reporting_id = "",
     absl::string_view buyer_and_seller_reporting_id = "",
     absl::string_view selected_buyer_and_seller_reporting_id = "");
 
 AdWithBid BuildNewAdWithBid(
-    const std::string& ad_url,
-    absl::optional<absl::string_view> interest_group_name = absl::nullopt,
-    absl::optional<float> bid_value = absl::nullopt,
-    const bool enable_event_level_debug_reporting = false,
-    int number_ad_component_render_urls = kDefaultNumAdComponents,
-    const absl::optional<absl::string_view>& bid_currency = absl::nullopt,
-    absl::string_view buyer_reporting_id = "",
-    absl::string_view buyer_and_seller_reporting_id = "",
-    absl::string_view selected_buyer_and_seller_reporting_id = "",
-    uint32_t data_version = kDefaultDataVersion);
+    absl::string_view ad_url,
+    const BuildNewAdWithBidOptions& options = BuildNewAdWithBidOptions{});
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
@@ -211,17 +219,18 @@ void MockEntriesCallOnBuyerFactory(
 TrustedServersConfigClient CreateConfig();
 
 template <class T>
-SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
-                            const ClientRegistry& clients,
-                            const SelectAdRequest& request,
-                            const ReportWinMap& report_win_map,
-                            int max_buyers_solicited = 2,
-                            bool enable_kanon = false) {
+SelectAdResponse RunRequest(
+    const TrustedServersConfigClient& config_client,
+    const ClientRegistry& clients, const SelectAdRequest& request,
+    const ReportWinMap& report_win_map, const int max_buyers_solicited = 2,
+    const bool enable_kanon = false,
+    const bool enable_buyer_private_aggregate_reporting = false) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
             report_win_map,
             /*enable_cancellation=*/false, enable_kanon,
+            enable_buyer_private_aggregate_reporting,
             /*fail_fast=*/true, max_buyers_solicited);
   reactor.Execute();
   return response;
@@ -241,15 +250,16 @@ BuyerBidsResponseMap GetBuyerClientsAndBidsForReactor(
   for (const auto& [local_buyer, unused] :
        protected_auction_input.buyer_input()) {
     const std::string& ad_url = buyer_to_ad_url.at(local_buyer);
-    AdWithBid bid =
-        BuildNewAdWithBid(ad_url, kSampleInterestGroupName, kNonZeroBidValue);
+    AdWithBid bid = BuildNewAdWithBid(
+        ad_url, {.interest_group_name = kSampleInterestGroupName});
     GetBidsResponse::GetBidsRawResponse response;
     auto mutable_bids = response.mutable_bids();
     mutable_bids->Add(std::move(bid));
 
-    SetupBuyerClientMock(local_buyer, buyer_clients, response,
-                         /*repeated_get_allowed=*/true,
-                         expect_all_buyers_solicited);
+    SetupBuyerClientMock(
+        local_buyer, buyer_clients, response,
+        {.repeated_get_allowed = true,
+         .expect_all_buyers_solicited = expect_all_buyers_solicited});
     buyer_bids.try_emplace(
         local_buyer,
         std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
@@ -391,12 +401,13 @@ template <typename T, bool UseKvV2>
 std::pair<EncryptedSelectAdRequestWithContext<T>, ClientRegistry>
 GetSelectAdRequestAndClientRegistryForTest(
     ClientType client_type, std::optional<float> buyer_bid,
-    const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>&
+    absl::Nullable<
+        const MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>* const>
         scoring_signals_provider,
     ScoringAsyncClientMock& scoring_client,
     const BuyerFrontEndAsyncClientFactoryMock&
         buyer_front_end_async_client_factory_mock,
-    KVAsyncClientMock& kv_async_client,
+    absl::Nullable<KVAsyncClientMock* const> kv_async_client,
     server_common::MockKeyFetcherManager* mock_key_fetcher_manager,
     BuyerBidsResponseMap& expected_buyer_bids,
     absl::string_view seller_origin_domain,
@@ -405,7 +416,8 @@ GetSelectAdRequestAndClientRegistryForTest(
     bool force_set_modified_bid_to_zero = false,
     ServerComponentAuctionParams server_component_auction_params = {},
     bool enforce_kanon = false,
-    const std::vector<ScoreAdsResponse::AdScore>& kanon_ghost_winners = {}) {
+    const std::vector<ScoreAdsResponse::AdScore>& kanon_ghost_winners = {},
+    std::unique_ptr<KAnonCacheManagerMock> k_anon_cache_manager = nullptr) {
   auto encrypted_request_with_context = GetSampleSelectAdRequest<T>(
       client_type, seller_origin_domain,
       /*is_consented_debug=*/false, top_level_seller,
@@ -424,11 +436,15 @@ GetSelectAdRequestAndClientRegistryForTest(
     kv_server::v2::GetValuesResponse kv_response;
     EXPECT_TRUE(google::protobuf::TextFormat::ParseFromString(
         kKvV2CompressionGroup, &kv_response));
-    SetupKvAsyncClientMock(kv_async_client, kv_response, expected_buyer_bids,
-                           {.repeated_get_allowed = true});
-  } else {
-    SetupScoringProviderMock(scoring_signals_provider, expected_buyer_bids,
+    if (kv_async_client != nullptr) {
+      SetupKvAsyncClientMock(*kv_async_client, kv_response, expected_buyer_bids,
                              {.repeated_get_allowed = true});
+    }
+  } else {
+    if (scoring_signals_provider != nullptr) {
+      SetupScoringProviderMock(*scoring_signals_provider, expected_buyer_bids,
+                               {.repeated_get_allowed = true});
+    }
   }
   float bid_value = kNonZeroBidValue;
   if (buyer_bid) {
@@ -523,7 +539,8 @@ GetSelectAdRequestAndClientRegistryForTest(
                          kv_async_client,
                          *mock_key_fetcher_manager,
                          server_component_auction_params.crypto_client,
-                         std::move(async_reporter)};
+                         std::move(async_reporter),
+                         std::move(k_anon_cache_manager)};
 
   return {std::move(encrypted_request_with_context), std::move(clients)};
 }
@@ -532,14 +549,16 @@ template <typename T>
 SelectAdResponse RunReactorRequest(
     const TrustedServersConfigClient& config_client,
     const ClientRegistry& clients, const SelectAdRequest& request,
-    bool enable_kanon = false, bool fail_fast = false,
-    const ReportWinMap& report_win_map = {}) {
+    bool enable_kanon = false,
+    bool enable_buyer_private_aggregate_reporting = false,
+    bool fail_fast = false, const ReportWinMap& report_win_map = {}) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
             report_win_map,
-            /*enable_cancellation=*/false, enable_kanon, fail_fast);
+            /*enable_cancellation=*/false, enable_kanon,
+            enable_buyer_private_aggregate_reporting, fail_fast);
   reactor.Execute();
   return response;
 }
@@ -569,7 +588,7 @@ AuctionResult DecryptAppProtoAuctionResult(
     std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context);
 
-AuctionResult DecryptBrowserAuctionResult(
+std::pair<AuctionResult, std::string> DecryptBrowserAuctionResultAndNonce(
     std::string& auction_result_ciphertext,
     quiche::ObliviousHttpRequest::Context& context);
 

@@ -23,9 +23,10 @@
 #include "absl/strings/str_format.h"
 #include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
+#include "services/common/test/utils/test_utils.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
-namespace kv_server::application_pas {
+namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 using google::protobuf::TextFormat;
 using google::scp::core::test::EqualsProto;
@@ -34,11 +35,6 @@ using privacy_sandbox::bidding_auction_servers::BuyerInput;
 using privacy_sandbox::bidding_auction_servers::ConvertV2BiddingSignalsToV1;
 using privacy_sandbox::bidding_auction_servers::CreateV2BiddingRequest;
 using privacy_sandbox::bidding_auction_servers::GetBidsRequest;
-
-std::string RemoveWhiteSpaces(std::string s) {
-  s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
-  return s;
-}
 
 TEST(KvBuyerSignalsAdapter, Convert) {
   kv_server::v2::GetValuesResponse response;
@@ -329,7 +325,7 @@ BuyerInput::InterestGroup MakeAnInterestGroup(const std::string& id,
 }
 
 TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
-  v2::GetValuesRequest expected;
+  kv_server::v2::GetValuesRequest expected;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
         client_version: "Bna.PA.Buyer.20240930"
@@ -432,5 +428,97 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestCreationNoIGsFail) {
   auto maybe_result = CreateV2BiddingRequest(bidding_signals_request);
   ASSERT_FALSE(maybe_result.ok());
 }
+
+TEST(KvBuyerSignalsAdapter,
+     CreateV2BiddingRequestWithContextualBuyerSignalsSuccess) {
+  kv_server::v2::GetValuesRequest expected;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      R"pb(
+        client_version: "Bna.PA.Buyer.20240930"
+        metadata {
+          fields {
+            key: "buyer_signals"
+            value { string_value: "contextual_buyer_signals" }
+          }
+          fields {
+            key: "client_type"
+            value { string_value: "1" }
+          }
+          fields {
+            key: "experiment_group_id"
+            value { string_value: "1689" }
+          }
+          fields {
+            key: "hostname"
+            value { string_value: "somepublisher.com" }
+          }
+        }
+        partitions {
+          id: 0
+          compression_group_id: 0
+          arguments {
+            tags { values { string_value: "keys" } }
+            data {
+              list_value { values { string_value: "bidding_signal_key_00" } }
+            }
+          }
+          arguments {
+            tags { values { string_value: "keys" } }
+            data {
+              list_value { values { string_value: "bidding_signal_key_01" } }
+            }
+          }
+        }
+        partitions {
+          id: 1
+          compression_group_id: 1
+          arguments {
+            tags { values { string_value: "keys" } }
+            data {
+              list_value { values { string_value: "bidding_signal_key_10" } }
+            }
+          }
+          arguments {
+            tags { values { string_value: "keys" } }
+            data {
+              list_value { values { string_value: "bidding_signal_key_11" } }
+            }
+          }
+        }
+        log_context {
+          generation_id: "generation_id"
+          adtech_debug_id: "debug_id"
+        }
+        consented_debug_config { is_consented: true token: "test_token" })pb",
+      &expected));
+  privacy_sandbox::server_common::ConsentedDebugConfiguration
+      consented_debug_configuration;
+  consented_debug_configuration.set_is_consented(true);
+  consented_debug_configuration.set_token("test_token");
+  privacy_sandbox::server_common::LogContext log_context;
+  log_context.set_generation_id("generation_id");
+  log_context.set_adtech_debug_id("debug_id");
+  GetBidsRequest::GetBidsRawRequest bids_request;
+  bids_request.set_buyer_kv_experiment_group_id(1689);
+  bids_request.set_client_type(
+      privacy_sandbox::bidding_auction_servers::CLIENT_TYPE_ANDROID);
+  bids_request.set_publisher_name("somepublisher.com");
+  bids_request.set_buyer_signals("contextual_buyer_signals");
+  *bids_request.mutable_consented_debug_config() =
+      std::move(consented_debug_configuration);
+  *bids_request.mutable_log_context() = std::move(log_context);
+  for (int i = 0; i < 2; i++) {
+    *bids_request.mutable_buyer_input()->mutable_interest_groups()->Add() =
+        MakeAnInterestGroup(std::to_string(i), 2);
+  }
+  BiddingSignalsRequest bidding_signals_request(bids_request, {});
+  auto maybe_result =
+      CreateV2BiddingRequest(bidding_signals_request,
+                             /* propagate_buyer_signals_to_tkv */ true);
+  ASSERT_TRUE(maybe_result.ok()) << maybe_result.status();
+  auto& request = *(*maybe_result);
+  EXPECT_THAT(request, EqualsProto(expected));
+}
+
 }  // namespace
-}  // namespace kv_server::application_pas
+}  // namespace privacy_sandbox::bidding_auction_servers

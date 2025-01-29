@@ -152,9 +152,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, /* public_key_fetcher= */ nullptr);
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
@@ -209,9 +210,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, /* public_key_fetcher= */ nullptr);
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
@@ -265,9 +267,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, CreatePublicKeyFetcher(this->config_client_));
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
@@ -327,9 +330,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, CreatePublicKeyFetcher(this->config_client_));
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   grpc::ClientContext context;
@@ -376,9 +380,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, CreatePublicKeyFetcher(this->config_client_));
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
@@ -427,9 +432,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
   SetupMockCryptoClientError(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, CreatePublicKeyFetcher(this->config_client_));
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;
@@ -479,9 +485,10 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   SetupMockCryptoClientWrapper(raw_request, crypto_client);
   auto key_fetcher_manager = CreateKeyFetcherManager(
       this->config_client_, CreatePublicKeyFetcher(this->config_client_));
-  auto stub = ServiceType::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+  auto stub = ServiceType::NewStub(
+      CreateChannel(client_config.server_addr, client_config.compression,
+                    client_config.secure_client,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
   TestClient class_under_test(key_fetcher_manager.get(), &crypto_client,
                               client_config, stub.get());
   absl::Notification notification;

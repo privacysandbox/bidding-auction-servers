@@ -62,9 +62,11 @@ struct TestSellerUdfConfig {
   std::string pas_buyer_udf_url = "bar.com/";
   bool enable_report_win_url_generation = true;
   FetchMode fetch_mode = blob_fetch::FETCH_MODE_URL;
+  bool enable_report_result_url_generation = true;
   bool enable_seller_and_buyer_udf_isolation = false;
   std::string auction_js_bucket = "";
   std::string auction_js_bucket_default_blob = "";
+  bool enable_private_aggregate_reporting = false;
 };
 
 class SellerUdfFetchManagerTest : public testing::Test {
@@ -88,7 +90,8 @@ auction_service::SellerCodeFetchConfig GetTestSellerUdfConfig(
   udf_config.set_fetch_mode(test_seller_udf_config.fetch_mode);
   udf_config.set_enable_report_win_url_generation(
       test_seller_udf_config.enable_report_win_url_generation);
-  udf_config.set_enable_report_result_url_generation(true);
+  udf_config.set_enable_report_result_url_generation(
+      test_seller_udf_config.enable_report_result_url_generation);
   udf_config.mutable_buyer_report_win_js_urls()->try_emplace(
       test_seller_udf_config.pa_buyer_origin,
       test_seller_udf_config.pa_buyer_udf_url);
@@ -103,6 +106,8 @@ auction_service::SellerCodeFetchConfig GetTestSellerUdfConfig(
   udf_config.set_auction_js_bucket(test_seller_udf_config.auction_js_bucket);
   udf_config.set_auction_js_bucket_default_blob(
       test_seller_udf_config.auction_js_bucket_default_blob);
+  udf_config.set_enable_private_aggregate_reporting(
+      test_seller_udf_config.enable_private_aggregate_reporting);
   return udf_config;
 }
 
@@ -112,6 +117,7 @@ TEST_F(SellerUdfFetchManagerTest, FetchModeLocalTriesFileLoad) {
 
   SellerCodeFetchConfig udf_config;
   udf_config.set_fetch_mode(blob_fetch::FETCH_MODE_LOCAL);
+  udf_config.set_enable_report_result_url_generation(true);
   const std::string bad_path = "error";
   const bool enable_protected_app_signals = true;
 
@@ -444,6 +450,105 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                                  udf_config.auction_js_bucket_default_blob());
         EXPECT_TRUE(result.ok());
         EXPECT_EQ(version, *result);
+        EXPECT_EQ(blob_data,
+                  GetSellerWrappedCode(
+                      expected_seller_udf,
+                      udf_config.enable_report_result_url_generation(),
+                      udf_config.enable_private_aggregate_reporting()));
+        return absl::OkStatus();
+      });
+
+  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
+                                    executor_.get(), http_fetcher_.get(),
+                                    http_fetcher_.get(), dispatcher_.get(),
+                                    udf_config, enable_protected_app_signals);
+  absl::Status load_status = udf_fetcher.Init();
+  EXPECT_TRUE(load_status.ok());
+}
+
+TEST_F(SellerUdfFetchManagerTest,
+       ReportWinWrappingSuccessWithPrivateAggregationEnabled) {
+  std::string expected_seller_udf = R"JS_CODE(
+scoreAd = function(ad_metadata, bid, auction_config, scoring_signals, bid_metadata, directFromSellerSignals){
+}
+reportResult = function(auctionConfig, sellerReportingSignals, directFromSellerSignals){
+}
+)JS_CODE";
+  std::string expected_buyer_udf = R"JS_CODE(
+reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
+                              directFromSellerSignals){
+}
+)JS_CODE";
+  absl::flat_hash_map<std::string, absl::StatusOr<std::string>>
+      valid_response_headers;
+  valid_response_headers.try_emplace(kUdfRequiredResponseHeader,
+                                     absl::StatusOr<std::string>("true"));
+  std::string expected_pa_version = "pa_PABuyerOrigin.com";
+  std::string expected_pas_version = "pas_PASBuyerOrigin.com";
+  bool enable_protected_app_signals = false;
+  bool enable_private_aggregate_reporting = true;
+  TestSellerUdfConfig test_udf_config = {
+      .enable_report_result_url_generation = false,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_private_aggregate_reporting = enable_private_aggregate_reporting};
+  SellerCodeFetchConfig udf_config = GetTestSellerUdfConfig(test_udf_config);
+  EXPECT_CALL(*blob_storage_client_, Init).Times(0);
+  EXPECT_CALL(*blob_storage_client_, Run).Times(0);
+  EXPECT_CALL(*executor_, RunAfter).Times(2);
+  EXPECT_CALL(*http_fetcher_, FetchUrlsWithMetadata)
+      .WillOnce(
+          [&test_udf_config, &expected_buyer_udf, &valid_response_headers](
+              const std::vector<HTTPRequest>& requests, absl::Duration timeout,
+              OnDoneFetchUrlsWithMetadata done_callback) {
+            EXPECT_EQ(requests[0].url, test_udf_config.pa_buyer_udf_url);
+            EXPECT_EQ(requests[1].url, test_udf_config.pas_buyer_udf_url);
+
+            std::move(done_callback)({absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PABuyerOrigin.com"}),
+                                      absl::StatusOr<HTTPResponse>(HTTPResponse{
+                                          .body = expected_buyer_udf,
+                                          .headers = valid_response_headers,
+                                          .final_url = "PASBuyerOrigin.com"})});
+          });
+  EXPECT_CALL(*http_fetcher_, FetchUrls)
+      .WillOnce([&udf_config, &expected_seller_udf](
+                    const std::vector<HTTPRequest>& requests,
+                    absl::Duration timeout, OnDoneFetchUrls done_callback) {
+        EXPECT_EQ(requests[0].url, udf_config.auction_js_url());
+        std::move(done_callback)({expected_seller_udf});
+      });
+
+  EXPECT_CALL(*dispatcher_, LoadSync)
+      .Times(3)
+      .WillOnce([&expected_buyer_udf, &expected_pa_version,
+                 &enable_protected_app_signals,
+                 enable_private_aggregate_reporting](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, expected_pa_version);
+
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(
+                        expected_buyer_udf, enable_protected_app_signals,
+                        enable_private_aggregate_reporting)));
+        return absl::OkStatus();
+      })
+      .WillOnce([&expected_buyer_udf, &expected_pas_version,
+                 &enable_protected_app_signals,
+                 enable_private_aggregate_reporting](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, expected_pas_version);
+
+        EXPECT_THAT(blob_data,
+                    StrEq(GetBuyerWrappedCode(
+                        expected_buyer_udf, enable_protected_app_signals,
+                        enable_private_aggregate_reporting)));
+        return absl::OkStatus();
+      })
+      .WillOnce([&udf_config, &expected_seller_udf](
+                    std::string_view version, absl::string_view blob_data) {
+        EXPECT_EQ(version, kScoreAdBlobVersion);
         EXPECT_EQ(blob_data,
                   GetSellerWrappedCode(
                       expected_seller_udf,

@@ -72,13 +72,17 @@ ABSL_FLAG(std::string, key_id, "4000000000000000",
           "Use exact output from the coordinator. Hexadecimal key id string "
           "with trailing zeros. Defaults to a test key ID.");
 
-ABSL_FLAG(bool, enable_debug_reporting, false,
+ABSL_FLAG(std::optional<bool>, enable_debug_reporting, std::nullopt,
           "Set to true to send a request to an SFE server with "
           "debug reporting enabled for this request");
 
 ABSL_FLAG(std::optional<bool>, enable_debug_info, std::nullopt,
           "Set to true to send a request to an SFE server with "
           "DebugInfo enabled for this request");
+
+ABSL_FLAG(bool, enforce_kanon, false,
+          "If set to true SFE will validate run k-anonymity check on the ads "
+          "participating in the auction");
 
 ABSL_FLAG(std::string, pas_buyer_input_json, "",
           "PAS specific buyer input for each buyer app signal proto.");

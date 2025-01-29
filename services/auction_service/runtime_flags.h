@@ -38,8 +38,8 @@ inline constexpr char
 inline constexpr absl::string_view
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
         "AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
-inline constexpr absl::string_view REQUIRE_SCORING_SIGNALS_FOR_SCORING =
-    "REQUIRE_SCORING_SIGNALS_FOR_SCORING";
+inline constexpr absl::string_view SCORING_SIGNALS_FETCH_MODE =
+    "SCORING_SIGNALS_FETCH_MODE";
 
 inline constexpr int kNumRuntimeFlags = 10;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
@@ -52,7 +52,7 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     ENABLE_REPORT_WIN_INPUT_NOISING,
     AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
-    REQUIRE_SCORING_SIGNALS_FOR_SCORING,
+    SCORING_SIGNALS_FETCH_MODE,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

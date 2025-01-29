@@ -25,6 +25,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "api/k_anon_query.grpc.pb.h"
 #include "api/udf/generate_bid_udf_interface.pb.h"
 #include "gmock/gmock.h"
 #include "include/grpc/event_engine/event_engine.h"
@@ -46,12 +47,18 @@
 #include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
+#include "services/common/clients/k_anon_server/k_anon_client.h"
 #include "services/common/concurrent/local_cache.h"
 #include "services/common/providers/async_provider.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/common/test/constants.h"
 #include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+using ::google::chrome::kanonymityquery::v1::KAnonymousSetsQueryService;
+using ::google::chrome::kanonymityquery::v1::ValidateHashesRequest;
+using ::google::chrome::kanonymityquery::v1::ValidateHashesResponse;
 
 class MockBuyerFrontEnd : public BuyerFrontEnd::CallbackService {
  public:
@@ -272,6 +279,29 @@ class SellerFrontEndServiceMock : public SellerFrontEnd::CallbackService {
 };
 
 // Dummy server in leu of no support for mocking async stubs
+class KAnonServiceMock : public KAnonymousSetsQueryService::CallbackService {
+ public:
+  explicit KAnonServiceMock(
+      std::function<grpc::ServerUnaryReactor*(grpc::CallbackServerContext*,
+                                              const ValidateHashesRequest*,
+                                              ValidateHashesResponse*)>
+          rpc_method)
+      : server_rpc_(std::move(rpc_method)) {}
+
+  grpc::ServerUnaryReactor* ValidateHashes(
+      grpc::CallbackServerContext* ctxt, const ValidateHashesRequest* req,
+      ValidateHashesResponse* resp) override {
+    return server_rpc_(ctxt, req, resp);
+  }
+
+ private:
+  std::function<grpc::ServerUnaryReactor*(grpc::CallbackServerContext*,
+                                          const ValidateHashesRequest*,
+                                          ValidateHashesResponse*)>
+      server_rpc_;
+};
+
+// Dummy server in leu of no support for mocking async stubs
 class BiddingServiceMock : public Bidding::CallbackService {
  public:
   explicit BiddingServiceMock(
@@ -439,7 +469,7 @@ class MockScoreAdsReactor : public ScoreAdsReactor {
       CryptoClientWrapperInterface* crypto_client,
       const AuctionServiceRuntimeConfig& runtime_config,
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
-      const AsyncReporter* async_reporter, absl::string_view js)
+      const AsyncReporter& async_reporter, absl::string_view js)
       : ScoreAdsReactor(context, dispatcher, request, response,
                         std::move(benchmarking_logger), key_fetcher_manager,
                         crypto_client, async_reporter, runtime_config) {}
@@ -504,9 +534,9 @@ class MockServerThread {
 
     auto certificate_provider =
         std::make_shared<grpc::experimental::FileWatcherCertificateProvider>(
-            ca_private_key_path, ca_private_cert_path, ca_root_cert_path, 1);
+            ca_private_key_path, ca_private_cert_path, kTestCaCertPath, 1);
 
-    setenv(ca_root_path_env_key.c_str(), ca_root_cert_path.c_str(), 1);
+    setenv(ca_root_path_env_key.c_str(), kTestCaCertPath, 1);
 
     grpc::experimental::TlsServerCredentialsOptions options(
         certificate_provider);
@@ -539,8 +569,6 @@ class MockServerThread {
   void RunServerLoop() { server_->Wait(); }
 
   std::string ca_root_path_env_key = "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH";
-  std::string ca_root_cert_path =
-      "services/common/test/artifacts/grpc_tls/root_certificate_authority.pem";
   std::string ca_private_key_path =
       "services/common/test/artifacts/grpc_tls/localhost.key";
   std::string ca_private_cert_path =
@@ -563,6 +591,19 @@ class MockAsyncProvider : public AsyncProvider<Params, Provision> {
            on_done,
        absl::Duration timeout, RequestContext context),
       (const, override));
+};
+
+class MockKAnonClient : public KAnonGrpcClientInterface {
+ public:
+  MockKAnonClient() = default;
+  MOCK_METHOD(
+      absl::Status, Execute,
+      (std::unique_ptr<ValidateHashesRequest> request,
+       absl::AnyInvocable<
+           void(absl::StatusOr<std::unique_ptr<ValidateHashesResponse>>) &&>
+           on_done,
+       absl::Duration timeout),
+      (override));
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

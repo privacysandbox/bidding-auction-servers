@@ -47,8 +47,8 @@ class ModelStore {
  public:
   using ModelConstructor =
       absl::AnyInvocable<absl::StatusOr<std::shared_ptr<ModelType>>(
-          const InferenceSidecarRuntimeConfig&, const RegisterModelRequest&)
-                             const>;
+          const InferenceSidecarRuntimeConfig&, const RegisterModelRequest&,
+          ModelConstructMetrics&) const>;
 
   explicit ModelStore(const InferenceSidecarRuntimeConfig& config,
                       ModelConstructor model_constructor)
@@ -86,11 +86,15 @@ class ModelStore {
   // Request. Overwrites a model entry if the key already exists.
   // This method is thread-safe.
   absl::Status PutModel(absl::string_view key,
-                        const RegisterModelRequest& request) {
-    PS_ASSIGN_OR_RETURN(std::shared_ptr<ModelType> prod_model,
-                        model_constructor_(config_, request));
-    PS_ASSIGN_OR_RETURN(std::shared_ptr<ModelType> consented_model,
-                        model_constructor_(config_, request));
+                        const RegisterModelRequest& request,
+                        ModelConstructMetrics& prod_model_construct_metrics) {
+    PS_ASSIGN_OR_RETURN(
+        std::shared_ptr<ModelType> prod_model,
+        model_constructor_(config_, request, prod_model_construct_metrics));
+    ModelConstructMetrics consented_model_model_metrics;
+    PS_ASSIGN_OR_RETURN(
+        std::shared_ptr<ModelType> consented_model,
+        model_constructor_(config_, request, consented_model_model_metrics));
 
     absl::MutexLock model_data_lock(&model_data_mutex_);
     absl::MutexLock prod_model_lock(&prod_model_mutex_);
@@ -132,8 +136,9 @@ class ModelStore {
       return absl::OkStatus();
     }
     const RegisterModelRequest& request = it->second;
+    ModelConstructMetrics model_metrics;
     PS_ASSIGN_OR_RETURN(std::shared_ptr<ModelType> model,
-                        model_constructor_(config_, request));
+                        model_constructor_(config_, request, model_metrics));
 
     absl::flat_hash_map<std::string, std::shared_ptr<ModelType>>& model_map =
         is_consented ? consented_model_map_ : prod_model_map_;
@@ -190,7 +195,8 @@ class ModelStore {
   // Constructs and returns model by invoking the model constructor.
   absl::StatusOr<std::shared_ptr<ModelType>> ConstructModel(
       const RegisterModelRequest& request) const {
-    return model_constructor_(config_, request);
+    ModelConstructMetrics model_metrics;
+    return model_constructor_(config_, request, model_metrics);
   }
 
  protected:

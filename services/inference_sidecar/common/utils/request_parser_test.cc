@@ -14,14 +14,20 @@
 
 #include "utils/request_parser.h"
 
+#include <string>
+
 #include "absl/status/statusor.h"
 #include "googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
+#include "proto/inference_sidecar.pb.h"
+#include "utils/inference_error_code.h"
+#include "utils/test_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
 TEST(Test, Failure_EmptyString) {
-  const absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest("");
   ASSERT_FALSE(output.ok());
   EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
@@ -30,7 +36,7 @@ TEST(Test, Failure_EmptyString) {
 }
 
 TEST(Test, Failure_WrongFormat) {
-  const absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest("1.0");
   ASSERT_FALSE(output.ok());
   EXPECT_EQ(output.status().code(), absl::StatusCode::kInvalidArgument);
@@ -54,11 +60,12 @@ constexpr char kJsonStringBasic[] = R"json({
     })json";
 
 TEST(Test, Success_BasicInput) {
-  const absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonStringBasic);
   ASSERT_TRUE(output.ok());
   ASSERT_EQ(output.value().size(), 1);
-  const InferenceRequest parsed_data = output.value()[0];
+  ASSERT_TRUE(output.value()[0].request);
+  const InferenceRequest parsed_data = output.value()[0].request.value();
   ASSERT_EQ(parsed_data.model_path, "my_bucket/models/pcvr_models/1/");
   std::vector<Tensor> inputs = parsed_data.inputs;
   ASSERT_EQ(inputs.size(), 1);
@@ -90,11 +97,15 @@ constexpr char kJsonStringWithNumber[] = R"json({
     })json";
 
 TEST(Test, Failure_NumberInsteadOfString) {
-  const absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonStringWithNumber);
-  ASSERT_FALSE(output.ok());
-  ASSERT_EQ(output.status().message(),
+  ASSERT_TRUE(output.ok());
+  ASSERT_EQ(output.value().size(), 1);
+  ASSERT_TRUE(output.value()[0].error);
+  const Error error = output.value()[0].error.value();
+  EXPECT_EQ(error.description,
             "All numbers within the tensor_content must be enclosed in quotes");
+  EXPECT_EQ(error.model_path, "my_bucket/models/pcvr_models/1/");
 }
 
 constexpr char kJsonString[] = R"json({
@@ -169,17 +180,17 @@ constexpr char kJsonString[] = R"json({
     })json";
 
 TEST(Test, SmallModel) {
-  absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonString);
   ASSERT_TRUE(output.ok());
   ASSERT_EQ(output.value().size(), 1);
-  for (const privacy_sandbox::bidding_auction_servers::inference::
-           InferenceRequest& parsed_data : output.value()) {
-    ASSERT_EQ(parsed_data.model_path, "my_bucket/models/pcvr/1/");
-    std::vector<Tensor> inputs = parsed_data.inputs;
-    ASSERT_EQ(inputs.size(), 7);
-    constexpr char kExpectedString[] =
-        R"(Model path: my_bucket/models/pcvr/1/
+  ASSERT_TRUE(output.value()[0].request);
+  const InferenceRequest parsed_data = output.value()[0].request.value();
+  ASSERT_EQ(parsed_data.model_path, "my_bucket/models/pcvr/1/");
+  std::vector<Tensor> inputs = parsed_data.inputs;
+  ASSERT_EQ(inputs.size(), 7);
+  constexpr char kExpectedString[] =
+      R"(Model path: my_bucket/models/pcvr/1/
 Tensors: [
 Tensor name: scalar1
 Data type: INT64
@@ -217,8 +228,7 @@ Tensor shape: [1, 3]
 Tensor content: [0.62, 0.18, 0.23]
 ]
 )";
-    ASSERT_EQ(parsed_data.DebugString(), kExpectedString);
-  }
+  ASSERT_EQ(parsed_data.DebugString(), kExpectedString);
 }
 
 constexpr char kJsonStringTwoModels[] = R"json({
@@ -249,10 +259,11 @@ constexpr char kJsonStringTwoModels[] = R"json({
 })json";
 
 TEST(Test, TwoModels) {
-  absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonStringTwoModels);
   ASSERT_TRUE(output.ok());
   ASSERT_EQ(output.value().size(), 2);
+  ASSERT_TRUE(output.value()[0].request);
 
   constexpr char kExpectedStringPcvrModel[] =
       R"(Model path: my_bucket/models/pcvr/1/
@@ -274,21 +285,14 @@ Tensor content: [0.5, 0.6, 0.7, 0.8]
 ]
 )";
 
-  bool found_pcvr = false, found_pctr = false;
-
-  for (const auto& model_data : output.value()) {
-    std::string model_path = model_data.model_path;
-    if (model_path == "my_bucket/models/pcvr/1/") {
-      found_pcvr = true;
-      ASSERT_EQ(model_data.DebugString(), kExpectedStringPcvrModel);
-    } else if (model_path == "my_bucket/models/pctr/2/") {
-      found_pctr = true;
-      ASSERT_EQ(model_data.DebugString(), kExpectedStringPctrModel);
-    }
-  }
-
-  ASSERT_TRUE(found_pcvr);
-  ASSERT_TRUE(found_pctr);
+  ASSERT_TRUE(output.value()[0].request);
+  const InferenceRequest pcvr_data = output.value()[0].request.value();
+  ASSERT_EQ(pcvr_data.model_path, "my_bucket/models/pcvr/1/");
+  ASSERT_EQ(pcvr_data.DebugString(), kExpectedStringPcvrModel);
+  ASSERT_TRUE(output.value()[1].request);
+  const InferenceRequest pctr_data = output.value()[1].request.value();
+  ASSERT_EQ(pctr_data.model_path, "my_bucket/models/pctr/2/");
+  ASSERT_EQ(pctr_data.DebugString(), kExpectedStringPctrModel);
 }
 
 constexpr char kJsonStringIntTypes[] = R"json({
@@ -327,17 +331,18 @@ constexpr char kJsonStringIntTypes[] = R"json({
     })json";
 
 TEST(Test, IntTypes) {
-  absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonStringIntTypes);
   ASSERT_TRUE(output.ok());
-  EXPECT_EQ(output.value().size(), 1);
-  for (const privacy_sandbox::bidding_auction_servers::inference::
-           InferenceRequest& parsed_data : output.value()) {
-    EXPECT_EQ(parsed_data.model_path, "my_bucket/models/pcvr/1/");
-    std::vector<Tensor> inputs = parsed_data.inputs;
-    EXPECT_EQ(inputs.size(), 3);
-    constexpr char kExpectedString[] =
-        R"(Model path: my_bucket/models/pcvr/1/
+  ASSERT_EQ(output.value().size(), 1);
+  ASSERT_TRUE(output.value()[0].request);
+  const InferenceRequest parsed_data = output.value()[0].request.value();
+
+  EXPECT_EQ(parsed_data.model_path, "my_bucket/models/pcvr/1/");
+  std::vector<Tensor> inputs = parsed_data.inputs;
+  EXPECT_EQ(inputs.size(), 3);
+  constexpr char kExpectedString[] =
+      R"(Model path: my_bucket/models/pcvr/1/
 Tensors: [
 Tensor name: scalar1
 Data type: INT8
@@ -355,8 +360,7 @@ Tensor shape: [1, 1]
 Tensor content: [2]
 ]
 )";
-    EXPECT_EQ(parsed_data.DebugString(), kExpectedString);
-  }
+  EXPECT_EQ(parsed_data.DebugString(), kExpectedString);
 }
 
 constexpr char kJsonStringFloat16[] = R"json({
@@ -377,11 +381,135 @@ constexpr char kJsonStringFloat16[] = R"json({
     })json";
 
 TEST(Test, UnsupportedFloat16Type) {
-  absl::StatusOr<std::vector<InferenceRequest>> output =
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
       ParseJsonInferenceRequest(kJsonStringFloat16);
-  ASSERT_FALSE(output.ok());
-  EXPECT_EQ(output.status().message(),
+  ASSERT_TRUE(output.ok());
+  ASSERT_EQ(output.value().size(), 1);
+  ASSERT_TRUE(output.value()[0].error);
+  const Error error = output.value()[0].error.value();
+  EXPECT_EQ(error.description,
             "Invalid JSON format: Unsupported 'data_type' field FLOAT16");
+  EXPECT_EQ(error.model_path, "my_bucket/models/pcvr/1/");
+}
+
+constexpr char kJsonStringNoModelPath[] = R"json({
+  "request" : [{
+    "tensors" : [
+    {
+      "tensor_name": "scalar1",
+      "data_type": "INT8",
+      "tensor_shape": [
+        1,
+        1
+      ],
+      "tensor_content": ["1"]
+    }
+  ]
+}]
+    })json";
+
+TEST(Test, MissingModelPath) {
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
+      ParseJsonInferenceRequest(kJsonStringNoModelPath);
+  ASSERT_TRUE(output.ok());
+  ASSERT_EQ(output.value().size(), 1);
+  ASSERT_TRUE(output.value()[0].error);
+  const Error error = output.value()[0].error.value();
+  EXPECT_EQ(error.description, "Missing model_path in the JSON document");
+  EXPECT_EQ(error.model_path, "");
+}
+
+constexpr char kBothValidAndInvalidInputs[] = R"json({
+  "request" : [{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": ["3.14"]
+    }
+  ]
+},
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "INT16",
+      "tensor_shape": [
+        0
+      ],
+    "tensor_content": ["1"]
+    }
+  ]
+}]
+    })json";
+
+TEST(Test, BothValidAndInvalidInputs) {
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
+      ParseJsonInferenceRequest(kBothValidAndInvalidInputs);
+  ASSERT_TRUE(output.ok());
+  ASSERT_EQ(output.value().size(), 2);
+  ASSERT_TRUE(output.value()[0].request);
+  const InferenceRequest parsed_data = output.value()[0].request.value();
+  constexpr char kExpectedString[] =
+      R"(Model path: simple_model
+Tensors: [
+Data type: DOUBLE
+Tensor shape: [1]
+Tensor content: [3.14]
+]
+)";
+  ASSERT_EQ(parsed_data.DebugString(), kExpectedString);
+
+  ASSERT_TRUE(output.value()[1].error);
+  const Error error = output.value()[1].error.value();
+  EXPECT_EQ(error.description,
+            "Invalid tensor dimension: it has to be greater than 0");
+  EXPECT_EQ(error.model_path, "simple_model");
+}
+
+constexpr char kTwoInvalidInputs[] = R"json({
+  "request" : [{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1
+      ],
+      "tensor_content": [3.14]
+    }
+  ]
+},
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "data_type": "UNSUPPORTED",
+      "tensor_shape": [
+        1
+      ],
+    "tensor_content": ["1"]
+    }
+  ]
+}]
+    })json";
+
+TEST(Test, TwoInvalidInputs) {
+  const absl::StatusOr<std::vector<ParsedRequestOrError>> output =
+      ParseJsonInferenceRequest(kTwoInvalidInputs);
+  ASSERT_TRUE(output.ok());
+  ASSERT_EQ(output.value().size(), 2);
+  ASSERT_TRUE(output.value()[0].error);
+  const Error error_0 = output.value()[0].error.value();
+  EXPECT_EQ(error_0.description,
+            "All numbers within the tensor_content must be enclosed in quotes");
+  ASSERT_TRUE(output.value()[1].error);
+  const Error error_1 = output.value()[1].error.value();
+  EXPECT_EQ(error_1.description,
+            "Invalid JSON format: Unsupported 'data_type' field UNSUPPORTED");
 }
 
 }  // namespace

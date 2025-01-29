@@ -34,12 +34,16 @@ cc_test(
     name = "async_reporter_test",
     size = "small",
     srcs = ["async_reporter_test.cc"],
+    data = [
+        "//services/common:roots_pem",
+    ],
     tags = [
         "requires-network",
     ],
     deps = [
         ":async_reporter",
         "//services/common/clients/http:multi_curl_http_fetcher_async",
+        "//services/common/test:constants",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

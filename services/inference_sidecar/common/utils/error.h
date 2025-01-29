@@ -42,6 +42,9 @@ struct Error {
   // Error description
   std::string description;
 
+  // Optional error model_path
+  std::string model_path;
+
   const char* ErrorTypeToString() const {
     static const char* error_type_strs[] = {
         "UNKNOWN",         "INPUT_PARSING",  "MODEL_NOT_FOUND",

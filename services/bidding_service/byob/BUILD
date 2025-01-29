@@ -26,7 +26,6 @@ cc_library(
         "//services/common/clients/code_dispatcher/byob:byob_dispatch_client",
         "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/synchronization",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/roma/byob/config",
         "@google_privacysandbox_servers_common//src/roma/byob/utility:udf_blob",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",

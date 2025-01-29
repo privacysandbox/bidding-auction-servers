@@ -35,36 +35,6 @@ resource "aws_security_group_rule" "allow_elb_to_ec2_egress" {
   source_security_group_id = var.instances_security_group_id
 }
 
-
-# Ingress and egress rules for SSH.
-resource "aws_security_group_rule" "allow_all_ssh_ingress" {
-  from_port         = 22
-  protocol          = "TCP"
-  security_group_id = var.ssh_security_group_id
-  to_port           = 22
-  type              = "ingress"
-  cidr_blocks       = var.ssh_source_cidr_blocks
-}
-
-resource "aws_security_group_rule" "allow_ssh_to_ec2_egress" {
-  from_port                = 22
-  protocol                 = "TCP"
-  security_group_id        = var.ssh_security_group_id
-  to_port                  = 22
-  type                     = "egress"
-  source_security_group_id = var.instances_security_group_id
-}
-
-
-resource "aws_security_group_rule" "allow_ssh_secure_tcp_egress" {
-  from_port         = 443
-  protocol          = "TCP"
-  security_group_id = var.ssh_security_group_id
-  to_port           = 443
-  type              = "egress"
-  cidr_blocks       = ["0.0.0.0/0"]
-}
-
 # Ingress and egress rules for server ec2 instances.
 resource "aws_security_group_rule" "allow_elb_to_ec2_ingress" {
   from_port                = var.server_instance_port
@@ -84,14 +54,6 @@ resource "aws_security_group_rule" "allow_app_mesh_to_ec2_ingress" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
-resource "aws_security_group_rule" "allow_ssh_to_ec2_ingress" {
-  from_port                = 22
-  protocol                 = "TCP"
-  security_group_id        = var.instances_security_group_id
-  to_port                  = 22
-  type                     = "ingress"
-  source_security_group_id = var.ssh_security_group_id
-}
 
 resource "aws_security_group_rule" "allow_ec2_to_vpc_endpoint_egress" {
   from_port                = 443
@@ -145,6 +107,24 @@ resource "aws_security_group_rule" "allow_ec2_http_egress" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
+resource "aws_security_group_rule" "allow_ec2_http_egress_ipv6" {
+  from_port         = 80
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = 80
+  type              = "egress"
+  ipv6_cidr_blocks  = ["::/0"]
+}
+
+resource "aws_security_group_rule" "allow_ec2_https_egress_ipv6" {
+  from_port         = 443
+  protocol          = "TCP"
+  security_group_id = var.instances_security_group_id
+  to_port           = 443
+  type              = "egress"
+  ipv6_cidr_blocks  = ["::/0"]
+}
+
 resource "aws_security_group_rule" "allow_ec2_app_mesh_egress" {
   from_port         = 50051
   protocol          = "TCP"
@@ -186,13 +166,4 @@ resource "aws_security_group_rule" "allow_ec2_to_vpce_ingress" {
   to_port                  = 443
   type                     = "ingress"
   source_security_group_id = var.instances_security_group_id
-}
-
-resource "aws_security_group_rule" "allow_ssh_instance_to_vpce_ingress" {
-  from_port                = 443
-  protocol                 = "TCP"
-  security_group_id        = var.vpce_security_group_id
-  to_port                  = 443
-  type                     = "ingress"
-  source_security_group_id = var.ssh_security_group_id
 }

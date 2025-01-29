@@ -49,17 +49,17 @@ testSuite({
 
     // Test with custom event
     privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
+    assertEquals(privateAggregationContributions.custom_events[customEventName].length, 1);
     // Assert the expected fields and values directly
     assertEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[0],
+      privateAggregationContributions.custom_events[customEventName][0].bucket.bucket_128_bit.bucket_128_bits[0],
       10
     );
     assertEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[1],
+      privateAggregationContributions.custom_events[customEventName][0].bucket.bucket_128_bit.bucket_128_bits[1],
       0
     );
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].value.int_value, 30);
+    assertEquals(privateAggregationContributions.custom_events[customEventName][0].value.int_value, 30);
   },
 
   /** @return {void} */
@@ -78,15 +78,15 @@ testSuite({
 
     const invalidCustomEventName1 = 'reserved.';
     privateAggregation.contributeToHistogramOnEvent(invalidCustomEventName1, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(invalidCustomEventName1), undefined);
+    assertEquals(privateAggregationContributions.custom_events[invalidCustomEventName1], undefined);
 
     const invalidCustomEventName2 = '';
     privateAggregation.contributeToHistogramOnEvent(invalidCustomEventName2, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(invalidCustomEventName2), undefined);
+    assertEquals(privateAggregationContributions.custom_events[invalidCustomEventName2], undefined);
 
     const invalidCustomEventName3 = null;
     privateAggregation.contributeToHistogramOnEvent(invalidCustomEventName3, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(invalidCustomEventName3), undefined);
+    assertEquals(privateAggregationContributions.custom_events[invalidCustomEventName3], undefined);
   },
 
   /** @return {void} */
@@ -156,13 +156,13 @@ testSuite({
     assertObjectEquals(privateAggregationContributions.win[0].bucket.signal_bucket, signal_bucket);
     assertEquals(privateAggregationContributions.win[0].value.int_value, 30);
 
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
+    assertEquals(privateAggregationContributions.custom_events[customEventName].length, 1);
     // Assert the expected fields and values directly
     assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.signal_bucket,
+      privateAggregationContributions.custom_events[customEventName][0].bucket.signal_bucket,
       signal_bucket
     );
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName)[0].value.int_value, 30);
+    assertEquals(privateAggregationContributions.custom_events[customEventName][0].value.int_value, 30);
   },
 
   /** @return {void} */
@@ -191,18 +191,18 @@ testSuite({
 
     // Test with custom event
     privateAggregation.contributeToHistogramOnEvent(customEventName, contribution);
-    assertEquals(privateAggregationContributions.custom_events.get(customEventName).length, 1);
+    assertEquals(privateAggregationContributions.custom_events[customEventName].length, 1);
     // Assert the expected fields and values directly
     assertEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[0],
+      privateAggregationContributions.custom_events[customEventName][0].bucket.bucket_128_bit.bucket_128_bits[0],
       5
     );
     assertEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].bucket.bucket_128_bit.bucket_128_bits[1],
+      privateAggregationContributions.custom_events[customEventName][0].bucket.bucket_128_bit.bucket_128_bits[1],
       0
     );
     assertObjectEquals(
-      privateAggregationContributions.custom_events.get(customEventName)[0].value.extended_value,
+      privateAggregationContributions.custom_events[customEventName][0].value.extended_value,
       signalValue
     );
   },
@@ -255,6 +255,6 @@ testSuite({
     privateAggregationContributions.win = [];
     privateAggregationContributions.loss = [];
     privateAggregationContributions.always = [];
-    privateAggregationContributions.custom_events.clear();
+    privateAggregationContributions.custom_events = {};
   },
 });

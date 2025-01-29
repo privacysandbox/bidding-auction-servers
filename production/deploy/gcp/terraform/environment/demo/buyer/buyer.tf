@@ -74,6 +74,32 @@ locals {
     # optional: more experiment arm
     # "${local.environment}-2" = ...
   }
+
+  # Divert request to different bfe and bidding servers by http headers at frontend load balancer.
+  # seller needs to set HEADER_PASSED_TO_BUYER for the headers.
+  buyer_header_experiment = {
+    # optional: header experiment arm 1
+    "${local.environment}-h1" = {
+      image_tag     = ""                          # Image built and uploaded by production/packaging/build_and_test_all_in_docker
+      region_config = local.default_region_config # region config can be different for each arm
+      runtime_flag_override = {
+        # Example: MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB = "12345"
+      }
+      match_rules = [
+        # The request matches when any of match_rules are satisfied. Arm with empty match_rules will be skipped.
+        # { # Only one of exactMatch, prefixMatch, or presentMatch must be specified.
+        #   header_name   = "exp-id123"
+        #   exact_match   = ""
+        #   prefix_match  = ""
+        #   present_match = true
+        # },
+      ]
+    }
+
+    # optional: more header experiment arm
+    # "${local.environment}-h2" = ...
+  }
+
 }
 
 provider "google" {
@@ -97,7 +123,13 @@ module "secrets" {
 }
 
 module "buyer" {
-  for_each             = { for key, value in local.buyer_traffic_splits : key => value if value.traffic_weight > 0 }
+  for_each = merge(
+    { for key, value in local.buyer_traffic_splits :
+    key => value if value.traffic_weight > 0 },
+    { for key, value in local.buyer_header_experiment :
+    key => value if length(value.match_rules) > 0 }
+  )
+
   source               = "../../../modules/buyer"
   environment          = each.key
   gcp_project_id       = local.gcp_project_id
@@ -173,7 +205,7 @@ module "buyer" {
     TELEMETRY_CONFIG          = "" # Example: "mode: EXPERIMENT"
     COLLECTOR_ENDPOINT        = "" # Example: "collector-buyer-1-${each.key}.bfe-gcp.com:4317"
     ENABLE_OTEL_BASED_LOGGING = "" # Example: "false"
-    CONSENTED_DEBUG_TOKEN     = "" # Example: "<unique_id>"
+    CONSENTED_DEBUG_TOKEN     = "" # Example: "<unique_id>". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
     DEBUG_SAMPLE_RATE_MICRO   = "0"
 
     # Coordinator-based attestation flags.
@@ -202,7 +234,7 @@ module "buyer" {
     INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar_<module_name>"
     INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
     INFERENCE_MODEL_CONFIG_PATH      = "" # Example: "model_config.json"
-    INFERENCE_MODEL_FETCH_PERIOD_MS  = "" # Example: "60000"
+    INFERENCE_MODEL_FETCH_PERIOD_MS  = "" # Example: "300000"
     INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:
     # "{
     #    "num_interop_threads": 4,
@@ -220,6 +252,11 @@ module "buyer" {
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240" # Example: 10737418240
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
+    # Possible values:
+    # NOT_FETCHED: No call to KV server is made. All interest groups are sent to generateBid().
+    # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All interest groups are sent to generateBid() irrespective of whether they have bidding signals or not.
+    # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those interest groups are sent to generateBid() that have at least one bidding signals key for which non-empty bidding signals are fetched.
+    BIDDING_SIGNALS_FETCH_MODE = "REQUIRED"
   }, each.value.runtime_flag_override)
 
   frontend_domain_name               = local.buyer_domain_name
@@ -259,17 +296,22 @@ module "buyer_frontend_load_balancing" {
     for buyer_key, buyer in module.buyer :
     buyer_key => buyer.google_compute_backend_service_id
   }
-  traffic_weights = { for key, value in local.buyer_traffic_splits : key => value.traffic_weight }
+  traffic_weights        = { for key, value in local.buyer_traffic_splits : key => value.traffic_weight if value.traffic_weight > 0 }
+  experiment_match_rules = { for key, value in local.buyer_header_experiment : key => value.match_rules if length(value.match_rules) > 0 }
 }
 
 module "buyer_dashboard" {
-  source      = "../../services/dashboards/buyer_dashboard"
-  environment = join("|", [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0])
+  source = "../../services/dashboards/buyer_dashboard"
+  environment = join("|", concat(
+    [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
+  [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
 }
 
 module "inference_dashboard" {
-  source      = "../../services/dashboards/inference_dashboard"
-  environment = join("|", [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0])
+  source = "../../services/dashboards/inference_dashboard"
+  environment = join("|", concat(
+    [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
+  [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
 }
 
 # use below to perform an in-place upgrade from pre 4.2 to 4.2 and after, replace $ENV with $local.environment value

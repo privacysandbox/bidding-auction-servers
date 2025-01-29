@@ -17,6 +17,7 @@
 
 #include "gtest/gtest.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
+#include "services/auction_service/code_wrapper/generated_private_aggregation_wrapper.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -33,6 +34,17 @@ TEST(GetBuyerWrappedCode, GeneratesCompleteFinalCodeForPAS) {
   std::string observed = GetBuyerWrappedCode(kTestReportWinUdfWithValidation,
                                              enable_protected_app_signals);
   EXPECT_THAT(observed, StrEq(kExpectedBuyerCodeWithReportWinForPAS));
+}
+
+TEST(GetBuyerWrappedCode, GeneratesWrappedCodeWithPrivateAggregationWrapper) {
+  bool enable_protected_app_signals = false;
+  bool enable_private_aggregate_reporting = true;
+  std::string observed = GetBuyerWrappedCode(
+      kTestReportWinUdfWithValidation, enable_protected_app_signals,
+      enable_private_aggregate_reporting);
+  EXPECT_THAT(observed,
+              testing::StrEq(absl::StrCat(kExpectedBuyerCodeWithReportWinForPA,
+                                          kPrivateAggregationWrapperFunction)));
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

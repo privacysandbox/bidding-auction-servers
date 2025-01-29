@@ -87,9 +87,11 @@ PackageBuyerInputsForBrowser(
   return GetEncodedBuyerInputMap(buyer_inputs);
 }
 
-absl::StatusOr<AuctionResult> UnpackageAuctionResult(
-    std::string& auction_result_ciphertext, ClientType client_type,
-    quiche::ObliviousHttpRequest::Context& context, const HpkeKeyset& keyset) {
+absl::StatusOr<std::pair<AuctionResult, std::string>>
+UnpackageAuctionResultAndNonce(std::string& auction_result_ciphertext,
+                               ClientType client_type,
+                               quiche::ObliviousHttpRequest::Context& context,
+                               const HpkeKeyset& keyset) {
   // Decrypt Response.
   PS_ASSIGN_OR_RETURN(
       auto decrypted_response,
@@ -104,7 +106,7 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
           UnframeAndDecompressAuctionResult(decrypted_response));
 
       // Decode the response.
-      return CborDecodeAuctionResultToProto(decompressed_response);
+      return CborDecodeAuctionResultAndNonceToProto(decompressed_response);
     }
     case CLIENT_TYPE_ANDROID: {
       absl::StatusOr<server_common::DecodedRequest> decoded_response;
@@ -117,7 +119,8 @@ absl::StatusOr<AuctionResult> UnpackageAuctionResult(
         return absl::InternalError(
             "Unable to decode the response (CLIENT_TYPE_ANDROID) from server");
       }
-      return auction_result;
+      return absl::StatusOr<std::pair<AuctionResult, std::string>>(
+          {auction_result, ""});
     } break;
     default:
       return absl::InvalidArgumentError(

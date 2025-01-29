@@ -23,10 +23,12 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/private_aggregation:private_aggregation_manager",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_response",
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/constants:common_constants",
+        "//services/common/private_aggregation:private_aggregation_post_auction_util",
         "//services/common/util:json_util",
         "@com_google_absl//absl/status:statusor",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
@@ -81,6 +83,7 @@ cc_test(
     visibility = ["//visibility:public"],
     deps = [
         ":seller_reporting_manager",
+        "//services/auction_service/private_aggregation:private_aggregation_manager_test_util",
         "//services/auction_service/reporting:reporting_helper",
         "//services/auction_service/reporting:reporting_helper_test",
         "//services/auction_service/reporting:reporting_response",
@@ -88,6 +91,7 @@ cc_test(
         "//services/auction_service/udf_fetcher:adtech_code_version_util",
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
+        "//services/common/private_aggregation:private_aggregation_test_util",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/status",

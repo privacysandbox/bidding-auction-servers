@@ -25,6 +25,10 @@ BUYER_REPORT_WIN_SCRIPT="${BUYER_REPORT_WIN_SCRIPT:-}"
 BUYER_PAS_REPORT_WIN_SCRIPT="${BUYER_PAS_REPORT_WIN_SCRIPT:-}"
 AUCTION_JS_URL="${AUCTION_JS_URL:-}"
 PS_VERBOSITY="${PS_VERBOSITY:-10}"
+ENABLE_KANON="${ENABLE_KANON:-false}"
+ENABLE_PROTECTED_AUDIENCE="${ENABLE_PROTECTED_AUDIENCE:-true}"
+ENABLE_PROTECTED_APP_SIGNALS="${ENABLE_PROTECTED_APP_SIGNALS:-false}"
+TELEMETRY_CONFIG="${TELEMETRY_CONFIG:-mode: EXPERIMENT metric_export_interval_ms: 600000}"
 
 # Pass in custom docker arguments as a string such as:
 # DOCKER_RUN_ARGS_STRING="--network host -p 172.16.117.19:80:50051"
@@ -38,13 +42,6 @@ else
     # Convert DOCKER_RUN_ARGS_STRING to an array DOCKER_RUN_ARGS
     read -r -a DOCKER_RUN_ARGS <<< "${DOCKER_RUN_ARGS_STRING}"
 fi
-
-# copybara:strip_begin(internal_data)
-AUCTION_JS_URL="${AUCTION_JS_URL:-https://pubads.g.doubleclick.net/td/sjs}"
-BUYER_REPORT_WIN_URL="${BUYER_REPORT_WIN_URL:-https://td.doubleclick.net}"
-BUYER_REPORT_WIN_SCRIPT="${BUYER_REPORT_WIN_SCRIPT:-https://td.doubleclick.net/td/bjs}"
-BUYER_PAS_REPORT_WIN_SCRIPT="${BUYER_PAS_REPORT_WIN_SCRIPT:-https://storage.googleapis.com/wasm-explorer/PAS/PASreportWin.js}"
-# copybara:strip_end
 
 SELLER_CODE_FETCH_CONFIG=$(cat << END
 --seller_code_fetch_config={

@@ -24,7 +24,10 @@ cc_library(
         "//services/common/test:grpc_tls",
     ],
     deps = [
+        ":constants",
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:k_anon_query_cc_grpc_proto",
+        "//api:k_anon_query_cc_proto",
         "//api/udf:generate_bid_byob_sdk_cc_proto",
         "//services/auction_service:score_ads_reactor",
         "//services/bidding_service:cddl_spec_cache",
@@ -39,6 +42,7 @@ cc_library(
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/clients/code_dispatcher/byob:byob_dispatch_client",
         "//services/common/clients/http:http_fetcher_async",
+        "//services/common/clients/k_anon_server:k_anon_client",
         "//services/common/concurrent:local_cache",
         "//services/common/providers:async_provider",
         "//services/common/reporters:async_reporter",
@@ -75,4 +79,10 @@ filegroup(
         "artifacts/grpc_tls/localhost.pem",
         "artifacts/grpc_tls/root_certificate_authority.pem",
     ],
+)
+
+cc_library(
+    name = "constants",
+    testonly = 1,
+    hdrs = ["constants.h"],
 )

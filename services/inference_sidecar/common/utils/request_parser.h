@@ -21,6 +21,9 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
+#include "proto/inference_sidecar.pb.h"
+#include "rapidjson/document.h"
+#include "utils/error.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
@@ -86,10 +89,19 @@ struct InferenceRequest {
   std::string DebugString() const;
 };
 
+// A struct representing parsed inference request or parsing error
+struct ParsedRequestOrError {
+  std::optional<InferenceRequest> request;
+  std::optional<Error> error;
+};
+
 // Validates and parses JSON inference request to an internal data structure.
 // For a practical example, see generateBidRunInference.js.
-absl::StatusOr<std::vector<InferenceRequest>> ParseJsonInferenceRequest(
+absl::StatusOr<std::vector<ParsedRequestOrError>> ParseJsonInferenceRequest(
     absl::string_view json_string);
+
+template <typename T>
+absl::StatusOr<T> Convert(const std::string& str);
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference
 

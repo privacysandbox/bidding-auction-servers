@@ -91,7 +91,6 @@ absl::Status IsValidProtectedAudienceBid(const AdWithBid& bid,
   if (auction_scope ==
           AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER &&
       !bid.allow_component_auction()) {
-    // TODO(b/311234165): Add metric for rejected component ads.
     return absl::PermissionDeniedError(
         absl::StrCat("Component bid is not allowed for ",
                      GetProtectedAudienceBidDebugInfo(bid)));

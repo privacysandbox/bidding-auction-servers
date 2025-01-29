@@ -20,14 +20,22 @@
 #include "api/bidding_auction_servers.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-// Determines the scope of the auction(single seller, multiseller)
+// Determines the scope of the auction (single seller, multiseller)
 // based on SelectAdRequest.
 AuctionScope GetAuctionScope(const SelectAdRequest& request);
 
-// Determins the scope of the auction(single seller, multiseller)
+// Determines the scope of the auction (single seller, multiseller)
 // based on ScoreAdsRawRequest.
 AuctionScope GetAuctionScope(
     const ScoreAdsRequest::ScoreAdsRawRequest& request);
+
+// Determines if an auction is a component auction based on its scope.
+inline bool IsComponentAuction(AuctionScope auction_scope) {
+  return auction_scope ==
+             AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER ||
+         auction_scope ==
+             AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER;
+}
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_AUCTION_SCOPE_UTIL_H_

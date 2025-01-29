@@ -79,8 +79,10 @@ cc_library(
     ],
     hdrs = [
         "buyer_reporting_udf_wrapper.h",
+        "generated_private_aggregation_wrapper.h",
     ],
     deps = [
+        ":expand_js_to_header",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -89,6 +91,7 @@ cc_library(
     name = "buyer_reporting_test_constants",
     hdrs = [
         "buyer_reporting_test_constants.h",
+        "generated_private_aggregation_wrapper.h",
     ],
     deps = [
         "@com_google_absl//absl/strings",

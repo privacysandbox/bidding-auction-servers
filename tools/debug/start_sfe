@@ -38,6 +38,7 @@ SERVER_START_CMD=$(cat << END
 --auction_server_host="${AUCTION_SERVER_ADDR}" \
 --key_value_signals_host="${KEY_VALUE_SIGNALS_ADDR}" \
 --trusted_key_value_v2_signals_host="${TRUSTED_KEY_VALUE_V2_SIGNALS_ADDR}" \
+--scoring_signals_fetch_mode="REQUIRED" \
 --seller_origin_domain="${SELLER_ORIGIN_DOMAIN}" \
 "${SELLER_CODE_FETCH_CONFIG}" \
 --seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
@@ -48,16 +49,16 @@ SERVER_START_CMD=$(cat << END
 --create_new_event_engine="false" \
 --test_mode="true" \
 --enable_chaffing="false" \
---enable_kanon="false" \
+--enable_kanon=${ENABLE_KANON} \
 --k_anon_api_key="PLACEHOLDER" \
---telemetry_config="mode: OFF" \
+--telemetry_config="${TELEMETRY_CONFIG}" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --ps_verbosity=${PS_VERBOSITY} \
---enable_protected_audience="true" \
+--enable_protected_audience=${ENABLE_PROTECTED_AUDIENCE} \
 --sfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --sfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
---enable_protected_app_signals="true" && exit
+--enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} && exit
 END
 )
 

@@ -61,60 +61,60 @@ void LogMetrics(
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context->AccumulateMetric<metric::kInferenceRequestCount>(
-                metric_value.value());
+                metric_value.value_int32());
       }
     } else if (key == "kInferenceRequestDuration") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context->AccumulateMetric<metric::kInferenceRequestDuration>(
-                metric_value.value());
+                metric_value.value_int32());
       }
     } else if (key == "kInferenceRequestSize") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context->AccumulateMetric<metric::kInferenceRequestSize>(
-                metric_value.value());
+                metric_value.value_int32());
       }
     } else if (key == "kInferenceResponseSize") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context->AccumulateMetric<metric::kInferenceResponseSize>(
-                metric_value.value());
+                metric_value.value_int32());
       }
     } else if (key == "kInferenceErrorCountByErrorCode") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context
                 ->AccumulateMetric<metric::kInferenceErrorCountByErrorCode>(
-                    metric_value.value(), metric_value.partition());
+                    metric_value.value_int32(), metric_value.partition());
       }
     } else if (key == "kInferenceRequestCountByModel") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context
                 ->AccumulateMetric<metric::kInferenceRequestCountByModel>(
-                    metric_value.value(), metric_value.partition());
+                    metric_value.value_int32(), metric_value.partition());
       }
     } else if (key == "kInferenceRequestDurationByModel") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context
                 ->AccumulateMetric<metric::kInferenceRequestDurationByModel>(
-                    metric_value.value(), metric_value.partition());
+                    metric_value.value_int32(), metric_value.partition());
       }
     } else if (key == "kInferenceRequestFailedCountByModel") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context
                 ->AccumulateMetric<metric::kInferenceRequestFailedCountByModel>(
-                    metric_value.value(), metric_value.partition());
+                    metric_value.value_int32(), metric_value.partition());
       }
     } else if (key == "kInferenceRequestBatchCountByModel") {
       for (const auto& metric_value : metric_value_list.metrics()) {
         log_status =
             metric_context
                 ->AccumulateMetric<metric::kInferenceRequestBatchCountByModel>(
-                    metric_value.value(), metric_value.partition());
+                    metric_value.value_int32(), metric_value.partition());
       }
     } else {
       log_status = absl::NotFoundError("Unrecognized metric key: " + key);
@@ -133,7 +133,8 @@ SandboxExecutor& Executor() {
   // TODO(b/317124648): Pass a SandboxExecutor object via Roma's `TMetadata`.
   static SandboxExecutor* executor = new SandboxExecutor(
       absl::GetFlag(FLAGS_inference_sidecar_binary_path).value_or(""),
-      {absl::GetFlag(FLAGS_inference_sidecar_runtime_config).value_or("")});
+      {absl::GetFlag(FLAGS_inference_sidecar_runtime_config).value_or("")},
+      absl::GetFlag(FLAGS_inference_sidecar_rlimit_mb).value_or(0));
   return *executor;
 }
 
@@ -218,7 +219,7 @@ absl::Status RegisterModelsFromBucket(
 }
 
 void RunInference(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
         wrapper) {
   absl::Time start_inference_execution_time = absl::Now();
   const std::string& payload = wrapper.io_proto.input_string();
@@ -231,8 +232,8 @@ void RunInference(
   PredictRequest predict_request;
   predict_request.set_input(payload);
 
-  absl::StatusOr<std::shared_ptr<RomaRequestContextBidding>>
-      roma_request_context = wrapper.metadata.GetRomaRequestContext();
+  absl::StatusOr<std::shared_ptr<RomaRequestContext>> roma_request_context =
+      wrapper.metadata.GetRomaRequestContext();
 
   if (roma_request_context.ok()) {
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
@@ -255,16 +256,15 @@ void RunInference(
       if (auto inference_metric_context =
               (*roma_request_context)->GetMetricContext();
           inference_metric_context.ok()) {
-        auto metric_context = inference_metric_context.value();
-        LogMetrics(predict_response.metrics_list(), metric_context,
-                   log_context);
+        metric::BiddingContext* context =
+            std::get<metric::BiddingContext*>(*inference_metric_context);
+        LogMetrics(predict_response.metrics_list(), context, log_context);
         int inference_execution_time_ms =
             (absl::Now() - start_inference_execution_time) /
             absl::Milliseconds(1);
         LogIfError(
-            metric_context
-                ->AccumulateMetric<metric::kBiddingInferenceRequestDuration>(
-                    inference_execution_time_ms));
+            context->AccumulateMetric<metric::kBiddingInferenceRequestDuration>(
+                inference_execution_time_ms));
       }
     }
     return;
@@ -281,9 +281,10 @@ void RunInference(
     if (auto inference_metric_context =
             (*roma_request_context)->GetMetricContext();
         inference_metric_context.ok()) {
-      auto metric_context = inference_metric_context.value();
+      metric::BiddingContext* context =
+          std::get<metric::BiddingContext*>(*inference_metric_context);
       LogIfError(
-          metric_context
+          context
               ->AccumulateMetric<metric::kInferenceRequestFailedCountByStatus>(
                   1, StatusCodeToString(status.code())));
     }
@@ -310,7 +311,7 @@ std::string GetModelResponseToJson(const GetModelPathsResponse& response) {
 }
 
 void GetModelPaths(
-    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>&
+    google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext>&
         wrapper) {
   SandboxExecutor& executor = Executor();
   std::unique_ptr<InferenceService::StubInterface> stub =

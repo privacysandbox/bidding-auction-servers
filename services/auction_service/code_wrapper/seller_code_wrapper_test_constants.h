@@ -19,10 +19,11 @@
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
 constexpr char kTestReportResultUrl[] =
-    "http://test.com&bid=1&bidCurrency=EUR&dataVersion=1989&"
-    "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
-    "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
-    "barStandardAds.com";
+    "http://"
+    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=1&"
+    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
+    "com&interestGroupOwner=barStandardAds.com&buyerAndSellerReportingId="
+    "undefined&selectedBuyerAndSellerReportingId=undefined";
 constexpr char kTestComponentReportResultUrlWithEverything[] =
     "http://"
     "test.com&topLevelSeller=topLevelSeller&bid=1&bidCurrency=EUR&dataVersion="
@@ -71,7 +72,6 @@ constexpr absl::string_view kBuyerBaseCode =
           return
         }
         var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
-                    "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&modelingSignals="+buyerReportingSignals.modelingSignals+
                     "&recency="+buyerReportingSignals.recency+
@@ -449,7 +449,6 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           return
         }
         var reportWinUrl = "http://test.com?seller="+buyerReportingSignals.seller+
-                    "&interestGroupName="+buyerReportingSignals.interestGroupName+
                     "&adCost="+buyerReportingSignals.adCost+
                     "&modelingSignals="+buyerReportingSignals.modelingSignals+
                     "&recency="+buyerReportingSignals.recency+
@@ -511,7 +510,9 @@ constexpr absl::string_view kExpectedFinalCode = R"JS_CODE(
           "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
           "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
           "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
-          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner+
+          "&buyerAndSellerReportingId="+sellerReportingSignals.buyerAndSellerReportingId+
+          "&selectedBuyerAndSellerReportingId="+sellerReportingSignals.selectedBuyerAndSellerReportingId)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
@@ -879,7 +880,9 @@ constexpr absl::string_view kExpectedProtectedAppSignalsFinalCode = R"JS_CODE(
           "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
           "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
           "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
-          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner+
+          "&buyerAndSellerReportingId="+sellerReportingSignals.buyerAndSellerReportingId+
+          "&selectedBuyerAndSellerReportingId="+sellerReportingSignals.selectedBuyerAndSellerReportingId)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }
@@ -1048,7 +1051,9 @@ constexpr absl::string_view kExpectedCodeWithReportWinDisabled = R"JS_CODE(
           "&highestScoringOtherBid="+sellerReportingSignals.highestScoringOtherBid+
           "&highestScoringOtherBidCurrency="+sellerReportingSignals.highestScoringOtherBidCurrency+
           "&topWindowHostname="+sellerReportingSignals.topWindowHostname+
-          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner)
+          "&interestGroupOwner="+sellerReportingSignals.interestGroupOwner+
+          "&buyerAndSellerReportingId="+sellerReportingSignals.buyerAndSellerReportingId+
+          "&selectedBuyerAndSellerReportingId="+sellerReportingSignals.selectedBuyerAndSellerReportingId)
         } else {
           sendReportTo("http://test.com&topLevelSeller="+sellerReportingSignals.topLevelSeller+"&componentSeller="+sellerReportingSignals.componentSeller)
         }

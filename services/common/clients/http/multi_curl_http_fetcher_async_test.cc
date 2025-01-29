@@ -48,7 +48,11 @@ class MultiCurlHttpFetcherAsyncTest : public ::testing::Test {
     server_common::log::SetGlobalPSVLogLevel(10);
     executor_ = std::make_unique<server_common::EventEngineExecutor>(
         grpc_event_engine::experimental::CreateEventEngine());
-    fetcher_ = std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get());
+    fetcher_ = std::make_unique<MultiCurlHttpFetcherAsync>(
+        executor_.get(),
+        /*keepalive_interval_sec=*/2,
+        /*keepalive_idle_sec=*/2,
+        "external/com_github_grpc_grpc/etc/roots.pem");
   }
 
   std::unique_ptr<server_common::EventEngineExecutor> executor_;
@@ -93,7 +97,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest,
   absl::BlockingCounter done(request_count_per_url * 3);
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
     done.DecrementCount();
-    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_GT(result.value().length(), 0);
   };
 
@@ -137,7 +141,7 @@ TEST_F(MultiCurlHttpFetcherAsyncTest, SetsAcceptEncodingHeaderOnRequest) {
   absl::BlockingCounter done(1);
   auto done_cb = [&done](absl::StatusOr<std::string> result) {
     done.DecrementCount();
-    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(result.ok()) << result.status();
 
     // Response has a 'headers' field of the headers sent in the request.
     rapidjson::Document document;

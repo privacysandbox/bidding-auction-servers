@@ -16,6 +16,7 @@
 
 #include "tensorflow.h"
 
+#include <algorithm>
 #include <future>
 #include <memory>
 #include <optional>
@@ -57,6 +58,8 @@
 
 ABSL_FLAG(bool, testonly_disable_model_freezing, false,
           "Disable model freezing for testing purposes.");
+ABSL_FLAG(bool, testonly_disable_model_validation, false,
+          "Disable model validation for testing purposes.");
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -173,7 +176,8 @@ absl::Status FreezeSavedModel(tensorflow::SessionOptions& session_options,
 
 absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>>
 TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
-                           const RegisterModelRequest& request) {
+                           const RegisterModelRequest& request,
+                           ModelConstructMetrics& construct_metrics) {
   tensorflow::SessionOptions session_options;
   // TODO(b/332599154): Support runtime configuration on a per-session basis.
   if (config.num_intraop_threads() != 0) {
@@ -205,25 +209,47 @@ TensorFlowModelConstructor(const InferenceSidecarRuntimeConfig& config,
   // perform warm up if metadata been provided.
   // TODO(b/362338463): Add optional execute mode choice.
   if (!request.warm_up_batch_request_json().empty()) {
-    absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
+    absl::StatusOr<std::vector<ParsedRequestOrError>> parsed_requests =
         ParseJsonInferenceRequest(request.warm_up_batch_request_json());
     if (!parsed_requests.ok()) {
       return absl::InvalidArgumentError(absl::StrCat(
           "Encounters warm up batch inference request parsing error: ",
           parsed_requests.status().message()));
     }
+    size_t parsed_request_size = 0;
     // Process warm up for each inference request.
-    for (const InferenceRequest& inference_request : (*parsed_requests)) {
-      if (inference_request.model_path != model_path) {
-        return absl::InvalidArgumentError(
-            "Warm up request using different model path.");
-      }
-      auto inference_response =
-          PredictPerModel(model_bundle, inference_request);
-      if (!inference_response.ok()) {
-        return inference_response.status();
+    auto start_pre_warm_time = absl::Now();
+    for (const ParsedRequestOrError& parsed_request : (*parsed_requests)) {
+      if (parsed_request.request) {
+        InferenceRequest inference_request = parsed_request.request.value();
+        parsed_request_size += 1;
+        if (inference_request.model_path != model_path) {
+          return absl::InvalidArgumentError(
+              "Warm up request using different model path.");
+        }
+        auto inference_response =
+            PredictPerModel(model_bundle, inference_request);
+        if (!inference_response.ok()) {
+          return inference_response.status();
+        }
+      } else {
+        // TODO(b/384551230): parsing error handling when partial failure
+        ABSL_LOG(ERROR)
+            << "Encounters warm up batch inference request parsing error: "
+            << "Model: "
+            << absl::StrCat(parsed_request.error.value().model_path)
+            << " Description: "
+            << absl::StrCat(parsed_request.error.value().description);
       }
     }
+    if (parsed_request_size == 0) {
+      return absl::InvalidArgumentError(
+          "Encounters warm up batch inference request parsing error: All "
+          "requests can not be parsed");
+    }
+    // Set warm up latency metric
+    construct_metrics.set_model_pre_warm_latency(
+        ToDoubleMicroseconds((absl::Now() - start_pre_warm_time)));
   }
   return model_bundle;
 }
@@ -246,7 +272,7 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   PredictResponse predict_response;
   absl::Time start_inference_execution_time = absl::Now();
   AddMetric(predict_response, "kInferenceRequestSize", request.ByteSizeLong());
-  absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
+  absl::StatusOr<std::vector<ParsedRequestOrError>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
     AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
@@ -264,32 +290,40 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
   std::vector<std::future<absl::StatusOr<std::vector<TensorWithName>>>> tasks(
       parsed_requests->size());
   for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
-    const InferenceRequest& inference_request = (*parsed_requests)[task_id];
-    const std::string& model_path = inference_request.model_path;
-    INFERENCE_LOG(INFO, request_context)
-        << "Received inference request to model: " << model_path;
-    absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>> model =
-        store_->GetModel(model_path, request.is_consented());
-    if (!model.ok()) {
-      AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
-                std::string(kInferenceModelNotFoundError));
-      INFERENCE_LOG(ERROR, request_context)
-          << "Fails to get model: " << model_path
-          << " Reason: " << model.status();
-      batch_outputs[task_id] = TensorsOrError{
-          .model_path = model_path,
-          .error = Error{.error_type = Error::MODEL_NOT_FOUND,
-                         .description = std::string(model.status().message())}};
+    if ((*parsed_requests)[task_id].request) {
+      const InferenceRequest& inference_request =
+          (*parsed_requests)[task_id].request.value();
+      const std::string& model_path = inference_request.model_path;
+      INFERENCE_LOG(INFO, request_context)
+          << "Received inference request to model: " << model_path;
+      absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>> model =
+          store_->GetModel(model_path, request.is_consented());
+      if (!model.ok()) {
+        AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+                  std::string(kInferenceModelNotFoundError));
+        INFERENCE_LOG(ERROR, request_context)
+            << "Fails to get model: " << model_path
+            << " Reason: " << model.status();
+        batch_outputs[task_id] = TensorsOrError{
+            .model_path = model_path,
+            .error =
+                Error{.error_type = Error::MODEL_NOT_FOUND,
+                      .description = std::string(model.status().message())}};
+      } else {
+        // Only log count by model for available models since there is no metric
+        // partition for unregistered models.
+        AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
+                  model_path);
+        int batch_count = inference_request.inputs[0].tensor_shape[0];
+        AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
+                  batch_count, model_path);
+        tasks[task_id] = std::async(std::launch::async, &PredictPerModel,
+                                    *model, inference_request);
+      }
     } else {
-      // Only log count by model for available models since there is no metric
-      // partition for unregistered models.
-      AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
-                model_path);
-      int batch_count = inference_request.inputs[0].tensor_shape[0];
-      AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
-                batch_count, model_path);
-      tasks[task_id] = std::async(std::launch::async, &PredictPerModel, *model,
-                                  inference_request);
+      const Error error = (*parsed_requests)[task_id].error.value();
+      batch_outputs[task_id] =
+          TensorsOrError{.model_path = error.model_path, .error = error};
     }
   }
 
@@ -297,7 +331,8 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
     if (!batch_outputs[task_id].error) {
       absl::StatusOr<std::vector<TensorWithName>> tensors =
           tasks[task_id].get();
-      const std::string& model_path = (*parsed_requests)[task_id].model_path;
+      const std::string& model_path =
+          (*parsed_requests)[task_id].request.value().model_path;
 
       if (!tensors.ok()) {
         AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
@@ -341,22 +376,30 @@ absl::StatusOr<PredictResponse> TensorflowModule::Predict(
               .description = "Error during output parsing to json."}));
     return predict_response;
   }
-  for (const InferenceRequest& inference_request : *parsed_requests) {
-    store_->IncrementModelInferenceCount(inference_request.model_path);
+  for (const ParsedRequestOrError& parsed_request : *parsed_requests) {
+    if (parsed_request.request) {
+      store_->IncrementModelInferenceCount(
+          parsed_request.request.value().model_path);
+    }
   }
 
   predict_response.set_output(output_json.value());
+  AddMetric(predict_response, "kInferenceResponseSize",
+            predict_response.ByteSizeLong());
   int inference_execution_time_ms =
       (absl::Now() - start_inference_execution_time) / absl::Milliseconds(1);
   AddMetric(predict_response, "kInferenceRequestDuration",
             inference_execution_time_ms);
-  AddMetric(predict_response, "kInferenceResponseSize",
-            predict_response.ByteSizeLong());
   return predict_response;
 }
 
 // TODO(b/346418962): Move the function into TensorFlowGraphValidator.
 absl::Status IsModelAllowed(const RegisterModelRequest& request) {
+  // TODO(b/368374975): Deprecate the absl flag at least for the prod build.
+  if (absl::GetFlag(FLAGS_testonly_disable_model_validation)) {
+    return absl::OkStatus();
+  }
+
   tensorflow::SessionOptions session_options;
   const std::unordered_set<std::string> tags = {"serve"};
   const auto& model_path = request.model_spec().model_path();
@@ -401,8 +444,18 @@ absl::StatusOr<RegisterModelResponse> TensorflowModule::RegisterModel(
     model_request.set_warm_up_batch_request_json(
         request.warm_up_batch_request_json());
   }
-  PS_RETURN_IF_ERROR(store_->PutModel(model_path, model_request));
-  return RegisterModelResponse();
+  // Set collector for metric during model construct.
+  ModelConstructMetrics model_construct_metrics;
+  PS_RETURN_IF_ERROR(
+      store_->PutModel(model_path, model_request, model_construct_metrics));
+
+  RegisterModelResponse register_model_response;
+  if (!request.warm_up_batch_request_json().empty()) {
+    AddMetric(register_model_response,
+              "kInferenceRegisterModelResponseModelWarmUpDuration",
+              model_construct_metrics.model_pre_warm_latency());
+  }
+  return register_model_response;
 }
 
 absl::StatusOr<DeleteModelResponse> TensorflowModule::DeleteModel(

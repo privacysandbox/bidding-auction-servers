@@ -20,6 +20,7 @@
 #include "public/query/v2/get_values_v2.pb.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
+#include "services/common/test/constants.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
@@ -39,7 +40,8 @@ using ::testing::AnyNumber;
 std::unique_ptr<kv_server::v2::KeyValueService::Stub> CreateStub(
     absl::string_view server_addr) {
   return kv_server::v2::KeyValueService::NewStub(
-      CreateChannel(server_addr, /*compression=*/true, /*secure=*/true));
+      CreateChannel(server_addr, /*compression=*/true, /*secure=*/true,
+                    /*grpc_arg_default_authority=*/"", kTestCaCertPath));
 }
 
 class KVAsyncGrpcTest : public ::testing::Test {

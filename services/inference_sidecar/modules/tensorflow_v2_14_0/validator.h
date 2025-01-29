@@ -16,8 +16,10 @@
 #ifndef SERVICES_INFERENCE_SIDECAR_MODULES_TENSORFLOW_V2_14_0_VALIDATOR_H_
 #define SERVICES_INFERENCE_SIDECAR_MODULES_TENSORFLOW_V2_14_0_VALIDATOR_H_
 
+#include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "model/validator.h"
 #include "tensorflow/core/public/session.h"
 
@@ -26,15 +28,18 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 class TensorFlowGraphValidator
     : public GraphValidatorInterface<tensorflow::NodeDef> {
  public:
-  explicit TensorFlowGraphValidator(const tensorflow::GraphDef& graph)
-      : graph_(graph) {}
+  explicit TensorFlowGraphValidator(const tensorflow::GraphDef& graph);
+
+ protected:
+  bool IsOpAllowlisted(const tensorflow::NodeDef& node) const override;
 
  private:
   std::vector<tensorflow::NodeDef> GetAllNodes() const override;
   bool IsOpDenylisted(const tensorflow::NodeDef& node) const override;
-  // TODO(b/346418962): Implement IsOpStateful() and allow read ops.
+  bool IsOpStateful(const tensorflow::NodeDef& node) const override;
 
   tensorflow::GraphDef graph_;
+  absl::flat_hash_set<std::string> stateful_ops_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

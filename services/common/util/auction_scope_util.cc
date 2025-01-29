@@ -47,7 +47,7 @@ AuctionScope GetAuctionScope(
     return AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER;
   }
   // If there is no top level seller specified and other auction
-  // results included in the requet, we assume that it's a top level auction.
+  // results included in the request, we assume that it's a top level auction.
   if (request.component_auction_results_size() > 0) {
     return AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER;
   }

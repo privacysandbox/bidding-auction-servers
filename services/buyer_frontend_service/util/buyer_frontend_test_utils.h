@@ -25,18 +25,20 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+struct BiddingProviderMockOptions {
+  std::string bidding_signals_value;
+  bool repeated_get_allowed = false;
+  std::optional<absl::Status> server_error_to_return;
+  bool match_any_params_any_times = false;
+};
+
 void SetupBiddingProviderMock(
     const MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>& provider,
-    const std::optional<std::string>& bidding_signals_value,
-    bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return,
-    bool match_any_params_any_times = false);
+    const BiddingProviderMockOptions& options = BiddingProviderMockOptions{});
 
 std::unique_ptr<MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>
 SetupBiddingProviderMock(
-    const std::optional<std::string>& bidding_signals_value,
-    bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return);
+    const BiddingProviderMockOptions& options = BiddingProviderMockOptions{});
 
 void SetupBiddingProviderMockV2(
     KVAsyncClientMock* kv_async_client,

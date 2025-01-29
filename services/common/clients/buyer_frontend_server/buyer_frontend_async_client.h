@@ -46,6 +46,7 @@ struct BuyerServiceClientConfig {
   bool secure_client = true;
   server_common::CloudPlatform cloud_platform;
   bool chaffing_enabled = false;
+  std::string ca_root_pem = "/etc/roots.pem";
 };
 
 // This class is an async grpc client for Fledge Buyer FrontEnd Service.

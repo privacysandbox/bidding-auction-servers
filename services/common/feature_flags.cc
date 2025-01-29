@@ -29,5 +29,9 @@ ABSL_FLAG(bool, enable_cancellation, false,
           "If true, request cancellations are allowed. This will try to cancel "
           "downstream requests and RPC and then finish the reactor.");
 
-ABSL_FLAG(bool, enable_kanon, false,
+ABSL_FLAG(bool, enable_kanon, true,
           "If true, k-anonymity checks on ads will be enabled.");
+
+ABSL_FLAG(bool, enable_buyer_private_aggregate_reporting, true,
+          "If true, private aggregate reports from the buyers will be "
+          "processed and sent to the device.");

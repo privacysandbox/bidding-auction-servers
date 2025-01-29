@@ -42,6 +42,7 @@ constexpr char kSampleBucketName[] = "BucketName";
 constexpr char kSampleBlobName[] = "BlobName1";
 constexpr char kSampleBlobName2[] = "BlobName2";
 constexpr char kSampleBlobName3[] = "BlobName3";
+constexpr char kDeeplyNestedBlobName[] = "dir1/dir2/dir3/NestedBlob";
 
 constexpr char kSampleData[] = "test1";
 constexpr char kSampleData2[] = "test2";
@@ -160,7 +161,7 @@ TEST_F(PeriodicBucketCodeFetcherTest, LoadsAllBlobsInBucket) {
             md.set_blob_name(std::string(kSampleBlobName));
             BlobMetadata md2;
             md2.set_bucket_name(std::string(kSampleBucketName));
-            md2.set_blob_name(std::string(kSampleBlobName2));
+            md2.set_blob_name(std::string(kDeeplyNestedBlobName));
             async_context.response =
                 std::make_shared<ListBlobsMetadataResponse>();
             async_context.response->mutable_blob_metadatas()->Add(
@@ -205,7 +206,7 @@ TEST_F(PeriodicBucketCodeFetcherTest, LoadsAllBlobsInBucket) {
       GetBucketBlobVersion(kSampleBucketName, kSampleBlobName);
   ASSERT_TRUE(versionA.ok()) << versionA.status();
   const absl::StatusOr<std::string> versionB =
-      GetBucketBlobVersion(kSampleBucketName, kSampleBlobName2);
+      GetBucketBlobVersion(kSampleBucketName, kDeeplyNestedBlobName);
   ASSERT_TRUE(versionB.ok()) << versionB.status();
 
   EXPECT_CALL(dispatcher, LoadSync(*versionA, kSampleData))

@@ -165,5 +165,28 @@ TEST_F(ModelFetcherMetricTest, GetAvailableModelsShouldRemoveZeroValueEntries) {
   EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(), UnorderedElementsAre());
 }
 
+TEST_F(ModelFetcherMetricTest, GetModelPrewarmLatencySuccess) {
+  EXPECT_THAT(ModelFetcherMetric::GetModelRegistrationPrewarmLatency(),
+              UnorderedElementsAre());
+  ModelFetcherMetric::UpdateModelRegistrationPrewarmLatency({{"model1", 25}});
+  EXPECT_THAT(ModelFetcherMetric::GetModelRegistrationPrewarmLatency(),
+              UnorderedElementsAre(Pair("model1", 25)));
+}
+
+TEST_F(ModelFetcherMetricTest,
+       GetAvailableModelsShouldAlsoRemoveZeroValueModelPreWarmLatency) {
+  ModelFetcherMetric::UpdateAvailableModels({"model1"});
+  ModelFetcherMetric::UpdateModelRegistrationPrewarmLatency({{"model1", 25}});
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
+              UnorderedElementsAre(Pair("model1", 1)));
+  EXPECT_THAT(ModelFetcherMetric::GetModelRegistrationPrewarmLatency(),
+              UnorderedElementsAre(Pair("model1", 25)));
+  ModelFetcherMetric::UpdateAvailableModels({});
+  EXPECT_THAT(ModelFetcherMetric::GetAvailableModels(),
+              UnorderedElementsAre(Pair("model1", 0)));
+  EXPECT_THAT(ModelFetcherMetric::GetModelRegistrationPrewarmLatency(),
+              UnorderedElementsAre());
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

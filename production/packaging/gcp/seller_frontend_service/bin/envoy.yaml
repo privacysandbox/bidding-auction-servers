@@ -67,6 +67,9 @@ static_resources:
             tls_certificates:
             - certificate_chain: {filename: "/etc/envoy/cert.pem"}
               private_key: {filename: "/etc/envoy/key.pem"}
+            validation_context:
+              trusted_ca:
+                filename: /etc/roots.pem
 
   clusters:
   - name: grpc_cluster

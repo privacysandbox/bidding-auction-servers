@@ -109,19 +109,6 @@ TEST(ClientParamsTest, OnDoneExecutesCallback) {
   EXPECT_EQ(output_value, expected_value);
 }
 
-TEST(ClientParamsTest, OnDoneDeletesInstance) {
-  std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
-  absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<MockResponse>>) &&>
-      callback = [](absl::StatusOr<std::unique_ptr<MockResponse>> response) {};
-
-  auto class_under_test = new ClientParams<MockRequest, MockResponse>(
-      std::move(input_request), std::move(callback));
-  class_under_test->OnDone(grpc::Status::OK);
-
-  // dies due to double call on delete
-  EXPECT_DEATH(delete class_under_test, "");
-}
-
 TEST(ClientParamsTest, ReceivesMetadataObject) {
   std::unique_ptr<MockRequest> input_request = std::make_unique<MockRequest>();
   absl::flat_hash_map<std::string, std::string> metadata = MakeARandomMap();

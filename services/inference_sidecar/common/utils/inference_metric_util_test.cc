@@ -26,12 +26,24 @@ TEST(AddMetricTest, AddSimpleMetric) {
   AddMetric(response, "total_requests", 3);
   ASSERT_TRUE(response.metrics_list().contains("total_requests"));
   EXPECT_EQ(response.metrics_list().at("total_requests").metrics().size(), 3);
-  EXPECT_EQ(
-      response.metrics_list().at("total_requests").metrics().at(0).value(), 1);
-  EXPECT_EQ(
-      response.metrics_list().at("total_requests").metrics().at(1).value(), 2);
-  EXPECT_EQ(
-      response.metrics_list().at("total_requests").metrics().at(2).value(), 3);
+  EXPECT_EQ(response.metrics_list()
+                .at("total_requests")
+                .metrics()
+                .at(0)
+                .value_int32(),
+            1);
+  EXPECT_EQ(response.metrics_list()
+                .at("total_requests")
+                .metrics()
+                .at(1)
+                .value_int32(),
+            2);
+  EXPECT_EQ(response.metrics_list()
+                .at("total_requests")
+                .metrics()
+                .at(2)
+                .value_int32(),
+            3);
 }
 
 TEST(AddMetricTest, AddPartitionedMetric) {
@@ -39,8 +51,9 @@ TEST(AddMetricTest, AddPartitionedMetric) {
   AddMetric(response, "error_count", 5, "Not Found");
 
   ASSERT_TRUE(response.metrics_list().contains("error_count"));
-  EXPECT_EQ(response.metrics_list().at("error_count").metrics().at(0).value(),
-            5);
+  EXPECT_EQ(
+      response.metrics_list().at("error_count").metrics().at(0).value_int32(),
+      5);
   EXPECT_EQ(
       response.metrics_list().at("error_count").metrics().at(0).partition(),
       "Not Found");
@@ -55,26 +68,54 @@ TEST(AddMetricTest, MultipleMetrics) {
   AddMetric(response, "model_batch", 1, "model 2");
 
   ASSERT_EQ(response.metrics_list_size(), 4);
+  EXPECT_EQ(response.metrics_list()
+                .at("total_requests")
+                .metrics()
+                .at(0)
+                .value_int32(),
+            150);
   EXPECT_EQ(
-      response.metrics_list().at("total_requests").metrics().at(0).value(),
-      150);
-  EXPECT_EQ(response.metrics_list().at("success_count").metrics().at(0).value(),
-            140);
-  EXPECT_EQ(response.metrics_list().at("failure_count").metrics().at(0).value(),
-            10);
+      response.metrics_list().at("success_count").metrics().at(0).value_int32(),
+      140);
+  EXPECT_EQ(
+      response.metrics_list().at("failure_count").metrics().at(0).value_int32(),
+      10);
   EXPECT_EQ(
       response.metrics_list().at("failure_count").metrics().at(0).partition(),
       "Not Found");
-  EXPECT_EQ(response.metrics_list().at("model_batch").metrics().at(0).value(),
-            2);
+  EXPECT_EQ(
+      response.metrics_list().at("model_batch").metrics().at(0).value_int32(),
+      2);
   EXPECT_EQ(
       response.metrics_list().at("model_batch").metrics().at(0).partition(),
       "model 1");
-  EXPECT_EQ(response.metrics_list().at("model_batch").metrics().at(1).value(),
-            1);
+  EXPECT_EQ(
+      response.metrics_list().at("model_batch").metrics().at(1).value_int32(),
+      1);
   EXPECT_EQ(
       response.metrics_list().at("model_batch").metrics().at(1).partition(),
       "model 2");
+}
+
+TEST(AddMetricTest, AddSimpleRegisterModelResponseMetric) {
+  RegisterModelResponse response;
+  double test_durationn = 1.5;
+  AddMetric(response, "kInferenceRegisterModelResponseModelWarmUpDuration",
+            test_durationn);
+
+  ASSERT_TRUE(response.metrics_list().contains(
+      "kInferenceRegisterModelResponseModelWarmUpDuration"));
+  EXPECT_EQ(response.metrics_list()
+                .at("kInferenceRegisterModelResponseModelWarmUpDuration")
+                .metrics()
+                .size(),
+            1);
+  EXPECT_EQ(response.metrics_list()
+                .at("kInferenceRegisterModelResponseModelWarmUpDuration")
+                .metrics()
+                .at(0)
+                .value_double(),
+            test_durationn);
 }
 
 }  // namespace

@@ -918,6 +918,32 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                 },
                 "title": "sfe.auction_config.size_bytes [MEAN]"
             }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 120,
+            "width": 20,
+            "height": 6,
+            "properties": {
+                "sparkline": false,
+                "view": "table",
+                "metrics": [
+                    [ { "expression": "SELECT MAX(\"system.bucket_fetch.blob_load_status\") FROM SCHEMA(auction, Noise,OTelLib,\"deployment.environment\",label,operator,region,\"service.instance.id\",\"service.name\",\"service.version\",\"telemetry.sdk.language\",\"telemetry.sdk.name\",\"telemetry.sdk.version\") WHERE \"deployment.environment\" = '${var.environment}' AND \"service.name\" = 'auction' GROUP BY label, \"service.instance.id\" ORDER BY MAX() DESC", "label": "Blob: ", "id": "q1" } ]
+                ],
+                "region": "${var.region}",
+                "stat": "Average",
+                "period": 300,
+                "table": {
+                    "summaryColumns": [
+                        "MIN",
+                        "MAX"
+                    ],
+                    "showTimeSeriesData": false
+                },
+                "title": "Latest Blob Load Status",
+                "liveData": true
+            }
         }
     ]
 }

@@ -26,13 +26,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 using ::privacy_sandbox::server_common::byob::UdfBlob;
 
 absl::StatusOr<GenerateBidByobDispatchClient>
-GenerateBidByobDispatchClient::Create(int num_workers,
-                                      server_common::Executor* executor) {
+GenerateBidByobDispatchClient::Create(int num_workers) {
   PS_ASSIGN_OR_RETURN(
       auto byob_service,
       roma_service::ByobGenerateProtectedAudienceBidService<>::Create({}));
-  return GenerateBidByobDispatchClient(std::move(byob_service), num_workers,
-                                       executor);
+  return GenerateBidByobDispatchClient(std::move(byob_service), num_workers);
 }
 
 absl::Status GenerateBidByobDispatchClient::LoadSync(std::string version,
@@ -81,69 +79,17 @@ absl::Status GenerateBidByobDispatchClient::Execute(
         void(absl::StatusOr<
              roma_service::GenerateProtectedAudienceBidResponse>) &&>
         callback) {
-  auto response_state = std::make_unique<ResponseState>(std::move(callback));
   PS_VLOG(kNoisyInfo) << "Dispatching GenerateBid Binary UDF";
   // Start the call.
-  PS_ASSIGN_OR_RETURN(
-      auto execution_token,
-      byob_service_.GenerateProtectedAudienceBid(
-          [response_state_ptr = response_state.get()](
+  return byob_service_
+      .GenerateProtectedAudienceBid(
+          [callback = std::move(callback)](
               absl::StatusOr<roma_service::GenerateProtectedAudienceBidResponse>
-                  response) {
-            absl::MutexLock execution_lock(
-                &(response_state_ptr->execution_mutex));
-            if (!response_state_ptr->is_cancelled) {
-              std::move(response_state_ptr->callback)(std::move(response));
-            }
-
-            // Always notify to signal that response_state_ptr can be destroyed.
-            response_state_ptr->execute_finish_notif.Notify();
+                  response) mutable {
+            std::move(callback)(std::move(response));
           },
-          std::move(request), /*metadata=*/{}, code_token_));
-
-  // Start a thread to wait for response to become available, or cancel on
-  // timeout
-  PS_VLOG(kStats) << "Setting UDF Timeout: " << timeout;
-  executor_->RunAfter(
-      timeout, [byob_service = &byob_service_,
-                execution_token = std::move(execution_token),
-                response_state_ptr = std::move(response_state)]() mutable {
-        {
-          absl::MutexLock execution_lock(
-              &(response_state_ptr->execution_mutex));
-          if (response_state_ptr->execute_finish_notif.HasBeenNotified()) {
-            PS_VLOG(8) << "UDF execution completed before timeout";
-            return;
-          }
-
-          // Unblock reactor.
-          std::move(response_state_ptr->callback)(absl::DeadlineExceededError(
-              absl::StrCat("Deadline exceeded for generateBid execution: ",
-                           execution_token.value)));
-          response_state_ptr->is_cancelled = true;
-          // Call cancel on ROMA API.
-          PS_VLOG(kNoisyInfo) << "Cancelling generateBid UDF with token: "
-                              << execution_token.value;
-          byob_service->Cancel(execution_token);
-        }
-
-        // Wait for notification before destroying response_state_ptr.
-        PS_VLOG(kNoisyInfo)
-            << "Waiting for cancellation to invoke callback for: "
-            << execution_token.value;
-        response_state_ptr->execute_finish_notif.WaitForNotification();
-        PS_VLOG(kNoisyInfo)
-            << "Returning from timeout thread for cancelled request: "
-            << execution_token.value;
-        // After this line, response_state_ptr is invalid (null)
-      });
-  return absl::OkStatus();
+          std::move(request), /*metadata=*/{}, code_token_)
+      .status();
 }
 
-GenerateBidByobDispatchClient::ResponseState::ResponseState(
-    absl::AnyInvocable<
-        void(absl::StatusOr<
-             roma_service::GenerateProtectedAudienceBidResponse>) &&>
-        callback)
-    : is_cancelled(false), callback(std::move(callback)) {}
 }  // namespace privacy_sandbox::bidding_auction_servers

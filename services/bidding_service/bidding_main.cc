@@ -56,6 +56,7 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/data_fetch/periodic_bucket_fetcher_metrics.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
@@ -209,6 +210,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         INFERENCE_MODEL_CONFIG_PATH);
   config_client.SetFlag(FLAGS_inference_sidecar_runtime_config,
                         INFERENCE_SIDECAR_RUNTIME_CONFIG);
+  config_client.SetFlag(FLAGS_inference_sidecar_rlimit_mb,
+                        INFERENCE_SIDECAR_RLIMIT_MB);
   config_client.SetFlag(
       FLAGS_bidding_tcmalloc_background_release_rate_bytes_per_second,
       BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
@@ -246,6 +249,14 @@ absl::string_view GetStringParameterSafe(
   return "";
 }
 
+int64_t GetInt64ParameterSafe(const TrustedServersConfigClient& client,
+                              absl::string_view name) {
+  if (client.HasParameter(name)) {
+    return client.GetInt64Parameter(name);
+  }
+  return 0;
+}
+
 inline bool UdfConfigHasByob(
     const bidding_service::BuyerCodeFetchConfig& udf_config) {
   return (udf_config.fetch_mode() == blob_fetch::FETCH_MODE_LOCAL &&
@@ -265,22 +276,13 @@ DispatchConfig GetV8DispatchConfig(
     config.worker_queue_max_items =
         config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
     config.number_of_workers = config_client.GetIntParameter(UDF_NUM_WORKERS);
-
-    PS_LOG(INFO) << "Register logCustomMetric API.";
-    auto log_custom_metric_binding =
-        std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-            RomaRequestSharedContextBidding>>();
-    log_custom_metric_binding->function_name =
-        std::string(kLogMetricFunctionName);
-    log_custom_metric_binding->function =
-        CustomMetricCallBack<RomaRequestSharedContextBidding>;
-    config.RegisterFunctionBinding(std::move(log_custom_metric_binding));
+    config.RegisterFunctionBinding(RegisterLogCustomMetric());
 
     if (enable_inference) {
       PS_LOG(INFO) << "Register runInference API.";
       auto run_inference_function_object =
           std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContextBidding>>();
+              RomaRequestSharedContext>>();
       run_inference_function_object->function_name =
           std::string(inference::kInferenceFunctionName);
       run_inference_function_object->function = inference::RunInference;
@@ -290,16 +292,15 @@ DispatchConfig GetV8DispatchConfig(
       PS_LOG(INFO) << "Register getModelPaths API.";
       auto get_model_paths_function_object =
           std::make_unique<google::scp::roma::FunctionBindingObjectV2<
-              RomaRequestSharedContextBidding>>();
+              RomaRequestSharedContext>>();
       get_model_paths_function_object->function_name =
           std::string(inference::kGetModelPathsFunctionName);
       get_model_paths_function_object->function = inference::GetModelPaths;
       config.RegisterFunctionBinding(
           std::move(get_model_paths_function_object));
       PS_LOG(INFO) << "getModelPaths registered.";
-
       PS_LOG(INFO) << "Start the inference sidecar.";
-      // This usage of the following two flags is not consistent with rest
+      // This usage of the following three flags is not consistent with rest
       // of the codebase, where we use the parameter from the config client
       // directly instead of passing it back to the absl flag.
       absl::SetFlag(
@@ -308,6 +309,9 @@ DispatchConfig GetV8DispatchConfig(
       absl::SetFlag(&FLAGS_inference_sidecar_runtime_config,
                     GetStringParameterSafe(config_client,
                                            INFERENCE_SIDECAR_RUNTIME_CONFIG));
+      absl::SetFlag(
+          &FLAGS_inference_sidecar_rlimit_mb,
+          GetInt64ParameterSafe(config_client, INFERENCE_SIDECAR_RLIMIT_MB));
       inference::SandboxExecutor& inference_executor = inference::Executor();
       CHECK_EQ(inference_executor.StartSandboxee().code(),
                absl::StatusCode::kOk);
@@ -402,10 +406,9 @@ absl::Status RunServer() {
     CHECK(enable_protected_audience) << kProtectedAudienceMustBeEnabled;
     CHECK(!enable_protected_app_signals) << kProtectedAppSignalsMustBeDisabled;
 
-    PS_ASSIGN_OR_RETURN(
-        auto temp_client,
-        GenerateBidByobDispatchClient::Create(
-            config_client.GetIntParameter(UDF_NUM_WORKERS), executor.get()));
+    PS_ASSIGN_OR_RETURN(auto temp_client,
+                        GenerateBidByobDispatchClient::Create(
+                            config_client.GetIntParameter(UDF_NUM_WORKERS)));
     byob_client =
         std::make_unique<GenerateBidByobDispatchClient>(std::move(temp_client));
 
@@ -432,7 +435,6 @@ absl::Status RunServer() {
         enable_protected_audience, enable_protected_app_signals);
     PS_RETURN_IF_ERROR(udf_fetcher->Init())
         << "Failed to initialize UDF fetch.";
-
     generate_bids_reactor_factory = GetProtectedAudienceV8ReactorFactory(
         *v8_client, enable_bidding_service_benchmark);
     protected_app_signals_generate_bids_reactor_factory =
@@ -515,6 +517,8 @@ absl::Status RunServer() {
   const bool enable_temporary_unlimited_egress =
       absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
 
+  PS_VLOG(5) << "Temp egress enabled: " << enable_temporary_unlimited_egress;
+
   BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
@@ -546,40 +550,35 @@ absl::Status RunServer() {
   PS_RETURN_IF_ERROR(udf_fetcher->ConfigureRuntimeDefaults(runtime_config))
       << "Could not init runtime defaults for udf fetching.";
 
-  PS_VLOG(5) << "Fetching egress schema fetch config";
   bidding_service::EgressSchemaFetchConfig egress_schema_fetch_config;
-  PS_RETURN_IF_ERROR(google::protobuf::util::JsonStringToMessage(
-      config_client.GetStringParameter(EGRESS_SCHEMA_FETCH_CONFIG).data(),
-      &egress_schema_fetch_config))
-      << "Unable to convert EGRESS_SCHEMA_FETCH_CONFIG from JSON to proto"
-         " (Invalid JSON provided?)";
-  PS_VLOG(5) << "Fetched egress schema fetch config: "
-             << egress_schema_fetch_config.DebugString();
+  EgressSchemaCaches egress_schema_caches;
+  if (enable_protected_app_signals) {
+    EgressSchemaFetchManager egress_schema_fetch_manager({
+        .enable_protected_app_signals = enable_protected_app_signals,
+        .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress,
+        .limited_egress_bits = absl::GetFlag(FLAGS_limited_egress_bits),
+        .fetch_config =
+            config_client.GetStringParameter(EGRESS_SCHEMA_FETCH_CONFIG),
+        .executor = executor.get(),
+        .http_fetcher_async = http_fetcher_async.get(),
+        .blob_storage_client = BlobStorageClientFactory::Create(),
+        .temporary_unlimited_egress_cddl_cache =
+            std::make_unique<CddlSpecCache>(
+                "services/bidding_service/egress_cddl_spec/"),
+        .egress_cddl_cache = std::make_unique<CddlSpecCache>(
+            "services/bidding_service/egress_cddl_spec/"),
+    });
 
-  const int limited_egress_bits = absl::GetFlag(FLAGS_limited_egress_bits);
-  PS_LOG(INFO) << "Allowed limited egress bits: " << limited_egress_bits;
-
-  EgressSchemaFetchManager egress_schema_fetch_manager({
-      .enable_protected_app_signals = enable_protected_app_signals,
-      .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress,
-      .limited_egress_bits = limited_egress_bits,
-      .fetch_config = egress_schema_fetch_config,
-      .executor = executor.get(),
-      .http_fetcher_async = http_fetcher_async.get(),
-      .blob_storage_client = BlobStorageClientFactory::Create(),
-      .temporary_unlimited_egress_cddl_cache = std::make_unique<CddlSpecCache>(
-          "services/bidding_service/egress_cddl_spec/"),
-      .egress_cddl_cache = std::make_unique<CddlSpecCache>(
-          "services/bidding_service/egress_cddl_spec/"),
-  });
+    PS_ASSIGN_OR_RETURN(egress_schema_caches,
+                        egress_schema_fetch_manager.Init(runtime_config),
+                        _ << "Failed to init egress schema cache.");
+    egress_schema_fetch_config = egress_schema_fetch_manager.GetFetchConfig();
+  }
 
   PS_RETURN_IF_ERROR(
-      egress_schema_fetch_manager.ConfigureRuntimeDefaults(runtime_config))
-      << "Failed to init runtime defaults for egress schema fetching.";
-
-  PS_ASSIGN_OR_RETURN(EgressSchemaCaches egress_schema_caches,
-                      egress_schema_fetch_manager.Init(),
-                      _ << "Failed to init egress schema cache.");
+      PeriodicBucketFetcherMetrics::RegisterBiddingServiceMetrics(
+          enable_protected_app_signals, enable_protected_audience,
+          egress_schema_fetch_config, udf_config));
 
   PS_VLOG(5) << "Creating bidding service instance";
   BiddingService bidding_service(
@@ -617,6 +616,8 @@ absl::Status RunServer() {
   // Set max message size to 256 MB.
   builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
                              256L * 1024L * 1024L);
+  // Set soft limit of metadata size to 64 KB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_METADATA_SIZE, 64L * 1024L);
   builder.RegisterService(&bidding_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());

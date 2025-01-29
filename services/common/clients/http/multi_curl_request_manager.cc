@@ -31,18 +31,12 @@ namespace {
 
 using EventCallback = void (*)(int, short, void*);
 
-std::string GetLogSocketActivityType(int what) {
-  static std::vector<std::string> ret = {"none", "IN", "OUT", "INOUT",
-                                         "REMOVE"};
-  return ret[what];
-}
-
 }  // namespace
 
 void RemoveSocketFromLibevent(std::unique_ptr<SocketInfo> socket_info) {
-  PS_VLOG(10) << __func__
-              << "Removing socket and cleaning associated socket info";
-  if (!socket_info) return;
+  if (!socket_info) {
+    return;
+  }
 
   if (event_initialized(&socket_info->tracked_event)) {
     // Make the event non-pending and non-active i.e.
@@ -53,7 +47,6 @@ void RemoveSocketFromLibevent(std::unique_ptr<SocketInfo> socket_info) {
 
 void MultiCurlRequestManager::OnLibeventSocketActivity(int fd, short kind,
                                                        void* data) {
-  PS_VLOG(8) << __func__;
   int action = ((kind & EV_READ) ? CURL_CSELECT_IN : 0) |
                ((kind & EV_WRITE) ? CURL_CSELECT_OUT : 0);
 
@@ -69,7 +62,6 @@ void MultiCurlRequestManager::OnLibeventSocketActivity(int fd, short kind,
 void MultiCurlRequestManager::UpsertSocketInLibevent(curl_socket_t sock_fd,
                                                      int activity,
                                                      SocketInfo* socket_info) {
-  PS_VLOG(8) << __func__ << ": Relaying insert/update socket event to libevent";
   int kind = ((activity & CURL_POLL_IN) ? EV_READ : 0) |
              ((activity & CURL_POLL_OUT) ? EV_WRITE : 0) | EV_PERSIST;
 
@@ -87,8 +79,6 @@ void MultiCurlRequestManager::UpsertSocketInLibevent(curl_socket_t sock_fd,
 
 void MultiCurlRequestManager::AddSocketToLibevent(curl_socket_t sock,
                                                   int activity, void* data) {
-  PS_VLOG(8) << __func__ << ": Adding new socket event to libevent";
-
   auto socket_info = std::make_unique<SocketInfo>();
   auto* self = reinterpret_cast<MultiCurlRequestManager*>(data);
   self->UpsertSocketInLibevent(sock, activity, socket_info.get());
@@ -99,10 +89,6 @@ int MultiCurlRequestManager::OnLibcurlSocketUpdate(CURL* easy_handle,
                                                    curl_socket_t sock_fd,
                                                    int activity, void* data,
                                                    void* socket_info_pointer) {
-  PS_VLOG(10) << __func__ << ": sock_fd=" << sock_fd
-              << ", easy_handle=" << easy_handle
-              << ", activity=" << GetLogSocketActivityType(activity);
-
   struct SocketInfo* socket_info =
       reinterpret_cast<struct SocketInfo*>(socket_info_pointer);
   auto* self = reinterpret_cast<MultiCurlRequestManager*>(data);
@@ -119,7 +105,6 @@ int MultiCurlRequestManager::OnLibcurlSocketUpdate(CURL* easy_handle,
 }
 
 int OnLibcurlTimerUpdate(CURLM* multi, long timeout_ms, void* timer_event_arg) {
-  PS_VLOG(10) << __func__ << ": New Timeout value (ms): " << timeout_ms;
   DCHECK_NE(timer_event_arg, nullptr) << "Timer event not found";
   struct event* timer_event = reinterpret_cast<struct event*>(timer_event_arg);
   if (timeout_ms == -1) {
@@ -154,14 +139,12 @@ MultiCurlRequestManager::~MultiCurlRequestManager() {
 // static
 void MultiCurlRequestManager::MultiTimerCallback(int fd, short what,
                                                  void* arg) {
-  PS_VLOG(9) << "Multi timeout event callback called";
   auto* self = reinterpret_cast<MultiCurlRequestManager*>(arg);
   {
     absl::MutexLock l(&self->request_manager_mu_);
     curl_multi_socket_action(self->request_manager_, CURL_SOCKET_TIMEOUT, 0,
                              &self->running_handles_);
   }
-  PS_VLOG(9) << "Updating easy handles callback to be called";
   self->update_easy_handles_callback_();
 }
 
@@ -177,7 +160,6 @@ void MultiCurlRequestManager::Configure(
 CURLMcode MultiCurlRequestManager::Add(CURL* curl_handle)
     ABSL_LOCKS_EXCLUDED(request_manager_mu_) {
   absl::MutexLock l(&request_manager_mu_);
-  PS_VLOG(8) << "Adding easy curl handle to multi handle";
   return curl_multi_add_handle(request_manager_, curl_handle);
 }
 

@@ -63,8 +63,8 @@ TEST_F(InferenceUtilsTest, TestAPIOutputs) {
   // register a model
   ASSERT_TRUE(RegisterModelsFromLocal({std::string(kTestModelPath)}).ok());
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto;
-  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>
-      wrapper{input_output_proto, {}};
+  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper{
+      input_output_proto, {}};
   wrapper.io_proto.set_input_string(absl::StrCat("1.0"));
   wrapper.io_proto.set_output_string(kInit);
   RunInference(wrapper);
@@ -75,8 +75,8 @@ TEST_F(InferenceUtilsTest, TestAPIOutputs) {
 
   // make sure GetModelPaths returns the registered model
   google::scp::roma::proto::FunctionBindingIoProto input_output_proto_1;
-  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContextBidding>
-      wrapper_1{input_output_proto_1, {}};
+  google::scp::roma::FunctionBindingPayload<RomaRequestSharedContext> wrapper_1{
+      input_output_proto_1, {}};
   GetModelPaths(wrapper_1);
   ASSERT_EQ(wrapper_1.io_proto.output_string(),
             "[\"" + std::string(kTestModelPath) + "\"]");

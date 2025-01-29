@@ -77,23 +77,26 @@ constexpr absl::string_view kEntryFunction = R"JS_CODE(
 
 inline constexpr absl::string_view kReportResultWrapperFunction =
     R"JS_CODE(
+    var ps_response = {
+      response: {},
+      logs: [],
+      errors: [],
+      warnings: []
+    }
     //Handler method to call adTech provided reportResult method and wrap the
     // response with reportResult url and interaction reporting urls.
     function reportResultEntryFunction(auctionConfig, sellerReportingSignals, directFromSellerSignals, enable_logging) {
     ps_sendReportTo_invoked = false
     ps_registerAdBeacon_invoked = false
-    const ps_report_result_response = {
+    ps_response.response = {
         signalsForWinner : "null",
         reportResultUrl : "",
         interactionReportingUrls : {},
       }
-      const ps_logs = [];
-      const ps_errors = [];
-      const ps_warns = [];
     if (enable_logging) {
-        console.log = (...args) => ps_logs.push(JSON.stringify(args));
-        console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-        console.error = (...args) => ps_errors.push(JSON.stringify(args));
+        console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+        console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+        console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
     } else {
       console.log = console.warn = console.error = function() {};
     }
@@ -101,28 +104,23 @@ inline constexpr absl::string_view kReportResultWrapperFunction =
         if(ps_sendReportTo_invoked) {
           throw new Error("sendReportTo function invoked more than once");
         }
-        ps_report_result_response.reportResultUrl = url;
+        ps_response.response.reportResultUrl = url;
         ps_sendReportTo_invoked = true;
       }
       globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap){
         if(ps_registerAdBeacon_invoked) {
           throw new Error("registerAdBeaconInvoked function invoked more than once");
         }
-        ps_report_result_response.interactionReportingUrls=eventUrlMap;
+        ps_response.response.interactionReportingUrls=eventUrlMap;
         ps_registerAdBeacon_invoked = true;
       }
       try{
         signalsForWinner = reportResult(auctionConfig, sellerReportingSignals, directFromSellerSignals);
-        ps_report_result_response.signalsForWinner = JSON.stringify(signalsForWinner)
+        ps_response.response.signalsForWinner = JSON.stringify(signalsForWinner)
       } catch(ex){
         console.error(ex.message)
       }
-      return {
-        response: ps_report_result_response,
-        logs: ps_logs,
-        errors: ps_errors,
-        warnings: ps_warns
-      }
+      return ps_response;
     }
 )JS_CODE";
 

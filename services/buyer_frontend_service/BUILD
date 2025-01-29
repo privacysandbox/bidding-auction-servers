@@ -134,6 +134,7 @@ cc_binary(
         "//services/common/clients/config:config_client",
         "//services/common/clients/config:config_client_util",
         "//services/common/concurrent:local_cache",
+        "//services/common/constants:common_constants",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
@@ -207,6 +208,7 @@ cc_test(
     ],
     deps = [
         ":kv_buyer_signals_adapter",
+        "//services/common/test/utils:test_utils",
         "@google_privacysandbox_servers_common//src/core/test/utils",
     ],
 )

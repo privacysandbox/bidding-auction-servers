@@ -138,6 +138,12 @@ int64_t TrustedServersConfigClient::GetInt64Parameter(
   return std::stol(config_entries_map_.at(name));
 }
 
+double TrustedServersConfigClient::GetDoubleParameter(
+    absl::string_view name) const noexcept {
+  DCHECK(HasParameter(name)) << "Flag " << name << " not found";
+  return std::stod(config_entries_map_.at(name));
+}
+
 absl::Status TrustedServersConfigClient::InitAndRunConfigClient() noexcept {
   PS_RETURN_IF_ERROR(config_client_->Init()).SetPrepend()
       << "Cannot init config client: ";

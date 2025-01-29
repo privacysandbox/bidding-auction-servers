@@ -67,6 +67,19 @@ container_layer(
     ],
 )
 
+pkg_tar(
+    name = "root_certs",
+    srcs = ["@com_github_grpc_grpc//:root_certificates"],
+)
+
+container_layer(
+    name = "root_certs_layer",
+    directory = "/etc/",
+    tars = [
+        ":root_certs",
+    ],
+)
+
 # This image target is meant for testing running the server in an enclave using
 # aws proxy to abstract vsock communication.
 container_image(
@@ -85,6 +98,7 @@ container_image(
         "/busybox/sh",
     ],
     layers = [
+        ":root_certs_layer",
         ":server_binary_layer",
     ] + select({
         "//:e2e_build": [

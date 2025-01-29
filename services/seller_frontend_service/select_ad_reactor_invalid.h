@@ -61,12 +61,10 @@ class SelectAdReactorInvalid : public SelectAdReactor {
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
 
-  KAnonAuctionResultData GetKAnonAuctionResultData(
-      const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const AdScores* ghost_winning_scores = nullptr) override;
-
-  AuctionResult::KAnonJoinCandidate GetKAnonJoinCandidate(
+  KAnonJoinCandidate GetKAnonJoinCandidate(
       const ScoreAdsResponse::AdScore& score) override;
+
+  absl::string_view GetKAnonSetType() override;
 
   ClientType client_type_;
 };

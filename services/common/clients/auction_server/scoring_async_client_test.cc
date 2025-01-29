@@ -38,6 +38,9 @@ namespace {
 class ScoringAsyncClientTest : public ::testing::Test {
  protected:
   void SetUp() override { CommonTestInit(); }
+  AuctionServiceClientConfig client_config_ = {.compression = false,
+                                               .secure_client = true,
+                                               .ca_root_pem = kTestCaCertPath};
 };
 
 TEST_F(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
@@ -60,11 +63,7 @@ TEST_F(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
         response->MergeFrom(mock_server_response);
         return reactor;
       });
-
-  AuctionServiceClientConfig client_config = {
-      .server_addr = dummy_service_thread_->GetServerAddr(),
-      .compression = false,
-      .secure_client = true};
+  client_config_.server_addr = dummy_service_thread_->GetServerAddr();
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -93,7 +92,7 @@ TEST_F(ScoringAsyncClientTest, CallServerWithEncryptionEnabled_Success) {
       .WillOnce(testing::Return(decrypt_response));
 
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
-                                          client_config);
+                                          client_config_);
   ScoreAdsRequest::ScoreAdsRawRequest request;
 
   grpc::ClientContext context;
@@ -136,18 +135,14 @@ TEST_F(ScoringAsyncClientTest,
   auto dummy_service_thread_ = std::make_unique<ServiceThread>(
       [&](grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
           ScoreAdsResponse* response) { return context->DefaultReactor(); });
-
-  AuctionServiceClientConfig client_config = {
-      .server_addr = dummy_service_thread_->GetServerAddr(),
-      .compression = false,
-      .secure_client = true};
+  client_config_.server_addr = dummy_service_thread_->GetServerAddr();
 
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPublicKey)
       .WillOnce(testing::Return(absl::InternalError("failure")));
   MockCryptoClientWrapper crypto_client;
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
-                                          client_config);
+                                          client_config_);
 
   grpc::ClientContext context;
   absl::Status execute_result = class_under_test.ExecuteInternal(
@@ -180,11 +175,7 @@ TEST_F(ScoringAsyncClientTest,
         response->MergeFrom(mock_server_response);
         return reactor;
       });
-
-  AuctionServiceClientConfig client_config = {
-      .server_addr = dummy_service_thread_->GetServerAddr(),
-      .compression = false,
-      .secure_client = true};
+  client_config_.server_addr = dummy_service_thread_->GetServerAddr();
 
   // Return an empty key.
   server_common::MockKeyFetcherManager key_fetcher_manager;
@@ -206,7 +197,7 @@ TEST_F(ScoringAsyncClientTest,
       .WillOnce(testing::Return(absl::InternalError("failure")));
 
   ScoringAsyncGrpcClient class_under_test(&key_fetcher_manager, &crypto_client,
-                                          client_config);
+                                          client_config_);
   ScoreAdsRequest::ScoreAdsRawRequest request;
 
   grpc::ClientContext context;

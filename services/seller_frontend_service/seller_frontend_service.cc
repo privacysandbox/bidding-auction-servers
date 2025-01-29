@@ -42,7 +42,7 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
-    bool enable_kanon) {
+    bool enable_kanon, bool enable_buyer_private_aggregate_reporting) {
   switch (request->client_type()) {
     case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(
@@ -51,7 +51,8 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     case CLIENT_TYPE_BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(
           context, request, response, clients, config_client, report_win_map,
-          enable_cancellation, enable_kanon);
+          enable_cancellation, enable_kanon,
+          enable_buyer_private_aggregate_reporting);
     default:
       return std::make_unique<SelectAdReactorInvalid>(
           context, request, response, clients, config_client, report_win_map);
@@ -88,13 +89,15 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
       auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     auto reactor = std::make_unique<SelectAuctionResultReactor>(
         context, request, response, clients_, config_client_,
-        enable_cancellation_);
+        enable_cancellation_,
+        /*enable_buyer_private_aggregate_reporting=*/false, enable_kanon_);
     reactor->Execute();
     return reactor.release();
   }
   std::unique_ptr<SelectAdReactor> reactor =
       GetSelectAdReactor(context, request, response, clients_, config_client_,
-                         report_win_map_, enable_cancellation_, enable_kanon_);
+                         report_win_map_, enable_cancellation_, enable_kanon_,
+                         enable_buyer_private_aggregate_reporting_);
   reactor->Execute();
   return reactor.release();
 }

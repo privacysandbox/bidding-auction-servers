@@ -72,10 +72,12 @@ variable "auction_instance_type" {
 variable "sfe_instance_ami_id" {
   description = "Seller FrontEnd operator Amazon Machine Image to run on EC2 instance."
   type        = string
+  default     = ""
 }
 variable "auction_instance_ami_id" {
   description = "Auction operator Amazon Machine Image to run on EC2 instance."
   type        = string
+  default     = ""
 }
 
 # Variables related to server configuration.
@@ -188,19 +190,6 @@ variable "healthcheck_unhealthy_threshold" {
   description = "Consecutive health check failures required to be considered unhealthy."
   type        = number
   default     = 2
-}
-
-# Variables related to SSH
-variable "ssh_source_cidr_blocks" {
-  description = "Source ips allowed to send ssh traffic to the ssh instance."
-  type        = set(string)
-  default     = ["0.0.0.0/0"]
-}
-
-variable "ssh_instance_type" {
-  description = "type, that is, hardware resource configuration, for EC2 instance"
-  type        = string
-  default     = "t2.micro"
 }
 
 variable "enclave_debug_mode" {

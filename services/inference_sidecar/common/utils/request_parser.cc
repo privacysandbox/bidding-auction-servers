@@ -14,11 +14,17 @@
 
 #include "utils/request_parser.h"
 
+#include <limits>
 #include <utility>
 
 #include "absl/strings/str_join.h"
+#include "proto/inference_sidecar.pb.h"
 #include "rapidjson/document.h"
+#include "rapidjson/writer.h"
 #include "src/util/status_macro/status_macros.h"
+#include "utils/error.h"
+#include "utils/inference_error_code.h"
+#include "utils/inference_metric_util.h"
 #include "utils/json_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
@@ -120,8 +126,34 @@ absl::StatusOr<Tensor> ParseTensor(const rapidjson::Value& tensor_value) {
   return tensor;
 }
 
-absl::StatusOr<std::vector<InferenceRequest>> ParseJsonInferenceRequest(
+// Parses individual inference request. It takes an
+// inference_request as input and populates an InferenceRequest proto and the
+// model_path (for error logging purpose)
+absl::StatusOr<InferenceRequest> ParseInternal(
+    const rapidjson::Value& inference_request, Error& error) {
+  InferenceRequest model_input;
+
+  // Get model_path.
+  PS_ASSIGN_OR_RETURN(model_input.model_path,
+                      GetStringMember(inference_request, "model_path"),
+                      _.LogError());
+  error.model_path = model_input.model_path;
+
+  // Get tensors.
+  PS_ASSIGN_OR_RETURN(
+      rapidjson::GenericValue<rapidjson::UTF8<>>::ConstArray tensors,
+      GetArrayMember(inference_request, "tensors"), _.LogError());
+
+  for (const rapidjson::Value& tensor_value : tensors) {
+    PS_ASSIGN_OR_RETURN(Tensor result, ParseTensor(tensor_value), _.LogError());
+    model_input.inputs.push_back(std::move(result));
+  }
+  return model_input;
+}
+
+absl::StatusOr<std::vector<ParsedRequestOrError>> ParseJsonInferenceRequest(
     absl::string_view json_string) {
+  // TODO(b/382526825): parse async in PredictInternal()
   PS_ASSIGN_OR_RETURN(rapidjson::Document document,
                       ParseJsonString(json_string), _.LogError());
 
@@ -129,29 +161,92 @@ absl::StatusOr<std::vector<InferenceRequest>> ParseJsonInferenceRequest(
                           batch_inference_request,
                       GetArrayMember(document, "request"), _.LogError());
 
-  std::vector<InferenceRequest> parsed_inputs;
+  std::vector<ParsedRequestOrError> parsed_inputs;
   // Extract values.
   for (const rapidjson::Value& inference_request : batch_inference_request) {
-    InferenceRequest model_input;
-
-    // Get model_path.
-    PS_ASSIGN_OR_RETURN(model_input.model_path,
-                        GetStringMember(inference_request, "model_path"),
-                        _.LogError());
-
-    // Get tensors.
-    PS_ASSIGN_OR_RETURN(
-        rapidjson::GenericValue<rapidjson::UTF8<>>::ConstArray tensors,
-        GetArrayMember(inference_request, "tensors"), _.LogError());
-    for (const rapidjson::Value& tensor_value : tensors) {
-      PS_ASSIGN_OR_RETURN(Tensor result, ParseTensor(tensor_value),
-                          _.LogError());
-      model_input.inputs.push_back(std::move(result));
+    Error error;
+    absl::StatusOr<InferenceRequest> result =
+        ParseInternal(inference_request, error);
+    if (result.ok()) {
+      parsed_inputs.push_back(ParsedRequestOrError{.request = result.value()});
+    } else {
+      error.description = std::string(result.status().message());
+      error.error_type = Error::INPUT_PARSING;
+      parsed_inputs.push_back(ParsedRequestOrError{.error = std::move(error)});
     }
-    parsed_inputs.push_back(std::move(model_input));
   }
   // TODO(b/319500803): Implement input validation against the model signature.
   return parsed_inputs;
+}
+
+template <>
+absl::StatusOr<float> Convert<float>(const std::string& str) {
+  float result;
+  if (absl::SimpleAtof(str, &result)) {
+    return result;
+  } else {
+    return absl::FailedPreconditionError("Error in float conversion");
+  }
+}
+
+template <>
+absl::StatusOr<double> Convert<double>(const std::string& str) {
+  double result;
+  if (absl::SimpleAtod(str, &result)) {
+    return result;
+  } else {
+    return absl::FailedPreconditionError("Error in double conversion");
+  }
+}
+
+template <>
+absl::StatusOr<int8_t> Convert<int8_t>(const std::string& str) {
+  int result;
+  if (absl::SimpleAtoi(str, &result)) {
+    if (result < std::numeric_limits<int8_t>::min() ||
+        result > std::numeric_limits<int8_t>::max()) {
+      return absl::FailedPreconditionError(
+          "The number is outside of bounds of int8_t.");
+    }
+    return result;  // Implicit conversion to int8_t.
+  } else {
+    return absl::FailedPreconditionError("Error in int8 conversion");
+  }
+}
+
+template <>
+absl::StatusOr<int16_t> Convert<int16_t>(const std::string& str) {
+  int result;
+  if (absl::SimpleAtoi(str, &result)) {
+    if (result < std::numeric_limits<int16_t>::min() ||
+        result > std::numeric_limits<int16_t>::max()) {
+      return absl::FailedPreconditionError(
+          "The number is outside of bounds of int16_t.");
+    }
+    return result;  // Implicit conversion to int16_t.
+  } else {
+    return absl::FailedPreconditionError("Error in int16 conversion");
+  }
+}
+
+template <>
+absl::StatusOr<int> Convert<int>(const std::string& str) {
+  int result;
+  if (absl::SimpleAtoi(str, &result)) {
+    return result;
+  } else {
+    return absl::FailedPreconditionError("Error in int32 conversion");
+  }
+}
+
+template <>
+absl::StatusOr<int64_t> Convert<int64_t>(const std::string& str) {
+  int64_t result;
+  if (absl::SimpleAtoi(str, &result)) {
+    return result;
+  } else {
+    return absl::FailedPreconditionError("Error in int64 conversion");
+  }
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers::inference

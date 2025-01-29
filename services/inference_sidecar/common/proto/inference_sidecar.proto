@@ -53,8 +53,10 @@ message PredictResponse {
 // Metric value of the metric we want to log
 message MetricValue {
   // Value of the metric.
-  // TODO(b/349053046) :  Add support for other data types like double, etc.
-  int32 value = 1;
+  oneof value_type{
+    int32 value_int32 = 1;
+    double value_double = 3;
+  }
   // Partition specifies a subgroup for the metric to facilitate segmented analysis.
   string partition = 2;
 }
@@ -83,6 +85,9 @@ message RegisterModelRequest {
 }
 
 message RegisterModelResponse {
+  // Map of metric names to lists of metric values and optional partition.
+  map<string, MetricValueList> metrics_list = 1;
+
 }
 
 message DeleteModelRequest {
@@ -146,4 +151,10 @@ message InferenceSidecarRuntimeConfig {
 // PredictResponse to the caller of the Predict RPC.
 message InferenceDebugInfo {
   repeated string logs = 1;
+}
+
+// Proto to store metric when construct model.
+message ModelConstructMetrics {
+  // E2E Latency for pre warm process.
+  double model_pre_warm_latency = 1;
 }

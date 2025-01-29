@@ -63,6 +63,19 @@ container_layer(
     ],
 )
 
+pkg_tar(
+    name = "root_certs",
+    srcs = ["@com_github_grpc_grpc//:root_certificates"],
+)
+
+container_layer(
+    name = "root_certs_layer",
+    directory = "/etc/",
+    tars = [
+        ":root_certs",
+    ],
+)
+
 container_image(
     name = "server_docker_image",
     base = select({
@@ -76,6 +89,7 @@ container_image(
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
+        ":root_certs_layer",
     ] + select({
         "//:e2e_build": [
         ],

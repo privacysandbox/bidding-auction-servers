@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"
@@ -49,7 +50,10 @@ void CustomMetricCallBack(
         << "Failed parse BatchUDFMetric" << result.message();
     return;
   }
-  absl::Status log_metric = (*metric_context)->LogUDFMetrics(metrics);
+
+  absl::Status log_metric = std::visit(
+      [&metrics](auto* context) { return context->LogUDFMetrics(metrics); },
+      *metric_context);
   if (!log_metric.ok()) {
     wrapper.io_proto.set_output_string("fail log metric");
     PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
@@ -60,6 +64,19 @@ void CustomMetricCallBack(
   PS_VLOG(8, (*roma_request_context)->GetLogContext())
       << "Success log UDF metrics:\n"
       << metrics;
+}
+
+std::unique_ptr<
+    google::scp::roma::FunctionBindingObjectV2<RomaRequestSharedContext>>
+RegisterLogCustomMetric() {
+  PS_LOG(INFO) << "Register logCustomMetric API.";
+  auto log_custom_metric_binding = std::make_unique<
+      google::scp::roma::FunctionBindingObjectV2<RomaRequestSharedContext>>();
+  log_custom_metric_binding->function_name =
+      std::string(kLogMetricFunctionName);
+  log_custom_metric_binding->function =
+      CustomMetricCallBack<RomaRequestSharedContext>;
+  return log_custom_metric_binding;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

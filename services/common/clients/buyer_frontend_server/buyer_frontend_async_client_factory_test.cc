@@ -34,7 +34,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest, GetCachesClientObjects) {
   absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
   host_addr_map.emplace(ig_owner, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
-      host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
+      host_addr_map, nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
   EXPECT_EQ(class_under_test.Get(ig_owner).get(),
             class_under_test.Get(ig_owner).get());
@@ -49,7 +49,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest, GetReturnsNonNullClient) {
   absl::flat_hash_map<std::string, BuyerServiceEndpoint> host_addr_map;
   host_addr_map.emplace(ig_owner, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
-      host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
+      host_addr_map, nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
   std::shared_ptr<const BuyerFrontEndAsyncClient> output =
       class_under_test.Get(ig_owner);
@@ -68,7 +68,7 @@ TEST(BuyerFrontEndAsyncClientFactoryTest,
   host_addr_map.emplace(ig_owner_1, endpoint);
   host_addr_map.emplace(ig_owner_2, endpoint);
   BuyerFrontEndAsyncClientFactory class_under_test(
-      host_addr_map, nullptr, nullptr, BuyerServiceClientConfig());
+      host_addr_map, nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
   std::shared_ptr<const BuyerFrontEndAsyncClient> output_1 =
       class_under_test.Get(ig_owner_1);

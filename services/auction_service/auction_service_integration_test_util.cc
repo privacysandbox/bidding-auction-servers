@@ -79,6 +79,10 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
     ad.set_buyer_and_seller_reporting_id(
         *test_score_ads_request_config.buyer_and_seller_reporting_id);
   }
+  if (test_score_ads_request_config.selected_buyer_and_seller_reporting_id) {
+    ad.set_selected_buyer_and_seller_reporting_id(
+        *test_score_ads_request_config.selected_buyer_and_seller_reporting_id);
+  }
   ad.set_bid_currency(kEurosIsoCode);
   ad.set_ad_cost(
       test_score_ads_request_config.test_buyer_reporting_signals.ad_cost);
@@ -97,6 +101,10 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
       test_score_ads_request_config.test_buyer_reporting_signals.recency);
   ad.set_data_version(
       test_score_ads_request_config.test_buyer_reporting_signals.data_version);
+  ad.set_interest_group_idx(kTestIgIdx);
+  if (test_score_ads_request_config.k_anon_status) {
+    ad.set_k_anon_status(*test_score_ads_request_config.k_anon_status);
+  }
   return ad;
 }
 
@@ -151,6 +159,9 @@ ScoreAdsRequest BuildScoreAdsRequest(
         component_auction_data);
     *raw_request.mutable_component_auction_results()->Add() =
         std::move(auction_result);
+  }
+  if (test_score_ads_request_config.enforce_kanon) {
+    raw_request.set_enforce_kanon(*test_score_ads_request_config.enforce_kanon);
   }
   ScoreAdsRequest request;
   *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
@@ -288,7 +299,8 @@ void LoadWrapperWithMockReportWinUdf(
   }
   for (const auto& ad_bid : raw_request.ad_bids()) {
     std::string wrapper_js_blob = GetBuyerWrappedCode(
-        buyer_udf, auction_service_runtime_config.enable_protected_app_signals);
+        buyer_udf, auction_service_runtime_config.enable_protected_app_signals,
+        auction_service_runtime_config.enable_private_aggregate_reporting);
     absl::StatusOr<std::string> version =
         GetBuyerReportWinVersion(ad_bid.interest_group_owner(), auction_type);
     ASSERT_TRUE(version.ok());
@@ -335,7 +347,7 @@ void RunTestScoreAds(
         return std::make_unique<ScoreAdsReactor>(
             context, client, request, response,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client, async_reporter_local.get(), runtime_config);
+            crypto_client, *async_reporter_local, runtime_config);
       };
 
   auto crypto_client = std::make_unique<MockCryptoClientWrapper>();

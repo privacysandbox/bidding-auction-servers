@@ -35,7 +35,7 @@
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
 
-constexpr absl::Duration kFetchPeriod = absl::Seconds(1);
+constexpr absl::Duration kFetchPeriod = absl::Milliseconds(60001);
 constexpr char kTestModelName1[] = "model1";
 constexpr char kTestModelContent1[] = "bytes1";
 constexpr char kTestModelName2[] = "model2";

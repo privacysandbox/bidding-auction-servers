@@ -76,15 +76,11 @@ SelectAdReactorInvalid::GetDecodedBuyerinputs(
   return {};
 }
 
-AuctionResult::KAnonJoinCandidate SelectAdReactorInvalid::GetKAnonJoinCandidate(
+KAnonJoinCandidate SelectAdReactorInvalid::GetKAnonJoinCandidate(
     const ScoreAdsResponse::AdScore& score) {
   return {};
 }
 
-KAnonAuctionResultData SelectAdReactorInvalid::GetKAnonAuctionResultData(
-    const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const AdScores* ghost_winning_scores) {
-  return {};
-}
+absl::string_view SelectAdReactorInvalid::GetKAnonSetType() { return ""; }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

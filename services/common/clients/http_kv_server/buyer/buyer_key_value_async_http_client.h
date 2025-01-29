@@ -75,7 +75,8 @@ class BuyerKeyValueAsyncHttpClient
   // Builds Buyer KV Value lookup Request.
   static HTTPRequest BuildBuyerKeyValueRequest(
       absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
-      std::unique_ptr<GetBuyerValuesInput> client_input);
+      std::unique_ptr<GetBuyerValuesInput> client_input,
+      std::vector<std::string> expected_response_headers_to_include = {});
 
   // HttpFetcherAsync argument must outlive instance.
   // This class uses the http client to fetch KV values in real time.

@@ -30,7 +30,8 @@ constexpr auto kEnableEncodeParams = true;
 
 HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
     absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
-    std::unique_ptr<GetBuyerValuesInput> client_input) {
+    std::unique_ptr<GetBuyerValuesInput> client_input,
+    std::vector<std::string> expected_response_headers_to_include) {
   HTTPRequest request;
   ClearAndMakeStartOfUrl(kv_server_host_domain, &request.url);
 
@@ -63,6 +64,8 @@ HTTPRequest BuyerKeyValueAsyncHttpClient::BuildBuyerKeyValueRequest(
 
   request.headers = RequestMetadataToHttpHeaders(metadata, kMandatoryHeaders);
 
+  request.include_headers = std::move(expected_response_headers_to_include);
+
   return request;
 }
 
@@ -72,8 +75,9 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
         void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
         on_done,
     absl::Duration timeout, RequestContext context) const {
-  HTTPRequest request = BuildBuyerKeyValueRequest(kv_server_base_address_,
-                                                  metadata, std::move(keys));
+  HTTPRequest request = BuildBuyerKeyValueRequest(
+      kv_server_base_address_, metadata, std::move(keys),
+      {kDataVersionResponseHeaderName});
 
   size_t request_size = 0;
   for (absl::string_view header : request.headers) {

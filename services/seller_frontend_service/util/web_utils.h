@@ -18,8 +18,10 @@
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_WEB_UTILS_H_
 
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
@@ -32,6 +34,7 @@
 #include "services/common/util/request_response_constants.h"
 #include "services/common/util/scoped_cbor.h"
 #include "services/seller_frontend_service/data/k_anon.h"
+#include "services/seller_frontend_service/util/cbor_common_util.h"
 
 #include "cbor.h"
 
@@ -141,8 +144,9 @@ absl::StatusOr<std::string> Encode(
     const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler,
-    const std::optional<KAnonAuctionResultData>& kanon_auction_result_data =
-        std::nullopt);
+    absl::string_view ad_auction_result_nonce = "",
+    std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data =
+        nullptr);
 
 // Encodes the data into a CBOR-serialized AuctionResult response for component
 // seller auction.
@@ -152,8 +156,12 @@ absl::StatusOr<std::string> EncodeComponent(
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
     const UpdateGroupMap& update_group_map,
+    const AdtechOriginDebugUrlsMap& adtech_origin_debug_urls_map,
     const std::optional<AuctionResult::Error>& error,
-    const std::function<void(const grpc::Status&)>& error_handler);
+    const std::function<void(const grpc::Status&)>& error_handler,
+    absl::string_view ad_auction_result_nonce = "",
+    std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data =
+        nullptr);
 
 // Helper to validate the type of a CBOR object.
 bool IsTypeValid(
@@ -161,10 +169,6 @@ bool IsTypeValid(
     const cbor_item_t* item, absl::string_view field_name,
     absl::string_view expected_type, ErrorAccumulator& error_accumulator,
     server_common::SourceLocation location PS_LOC_CURRENT_DEFAULT_ARG);
-
-// Reads a cbor item into a string. Caller must verify that the item is a string
-// before calling this method.
-std::string DecodeCborString(const cbor_item_t* item);
 
 // Decodes the key (i.e. owner) in the BuyerInputs in ProtectedAudienceInput
 // and copies the corresponding value (i.e. BuyerInput) as-is. Note: this method
@@ -198,7 +202,7 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
     }
 
     const int index =
-        FindItemIndex(kRequestRootKeys, DecodeCborString(entry.key));
+        FindItemIndex(kRequestRootKeys, CborDecodeString(entry.key));
     switch (index) {
       case 0: {  // Schema version.
         bool is_valid_schema_type = IsTypeValid(
@@ -221,7 +225,7 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
         RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
 
         if (is_valid_publisher_type) {
-          output.set_publisher_name(DecodeCborString(entry.value));
+          output.set_publisher_name(CborDecodeString(entry.value));
         }
         break;
       }
@@ -237,7 +241,7 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
         RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
 
         if (is_valid_gen_type) {
-          output.set_generation_id(DecodeCborString(entry.value));
+          output.set_generation_id(CborDecodeString(entry.value));
         }
         break;
       }
@@ -308,6 +312,12 @@ T Decode(absl::string_view cbor_payload, ErrorAccumulator& error_accumulator,
   return DecodeProtectedAuctionInput<T>(*root, error_accumulator, fail_fast);
 }
 
+// Serializes the adtech origin => debug reports map to CBOR. Note: this should
+// not be used directly and is only here to facilitate testing.
+absl::Status CborSerializeDebugReports(
+    const AdtechOriginDebugUrlsMap& adtech_origin_debug_urls_map,
+    ErrorHandler error_handler, cbor_item_t& root);
+
 // Serializes the bidding groups (buyer origin => interest group indices map)
 // to CBOR. Note: this should not be used directly and is only here to
 // facilitate testing.
@@ -357,33 +367,11 @@ cbor_item_t* cbor_build_int(int input);
 // the reference once done with the returned int.
 absl::StatusOr<cbor_item_t*> cbor_build_float(double input);
 
-// Checks for floats equality (subject to the system's limits).
-template <typename T, typename U>
-bool AreFloatsEqual(T a, U b) {
-  bool result = std::fabs(a - b) < std::numeric_limits<double>::epsilon();
-  PS_VLOG(6) << "a: " << a << ", b: " << b << ", diff: " << fabs(a - b)
-             << ", EPS: " << std::numeric_limits<double>::epsilon()
-             << ", floats equal: " << result;
-  return result;
-}
-
 // Serializes WinReportingUrls for buyer and seller.
 absl::Status CborSerializeWinReportingUrls(
     const WinReportingUrls& win_reporting_urls,
     const std::function<void(const grpc::Status&)>& error_handler,
     cbor_item_t& root);
-
-// Decodes cbor string input to std::string
-inline std::string CborDecodeString(cbor_item_t* input) {
-  return std::string(reinterpret_cast<char*>(cbor_string_handle(input)),
-                     cbor_string_length(input));
-}
-
-// Decodes cbor byte string input to std::string
-inline std::string CborDecodeByteString(cbor_item_t* input) {
-  return std::string(reinterpret_cast<char*>(cbor_bytestring_handle(input)),
-                     cbor_bytestring_length(input));
-}
 
 inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
     kAuctionResultKeys = {
@@ -400,11 +388,14 @@ inline constexpr std::array<std::string_view, kNumAuctionResultKeys>
         kAdMetadata,                  // 10
         kTopLevelSeller,              // 11
         kBidCurrency,                 // 12
-        kBuyerReportingId,            // 13
-        kKAnonGhostWinners,           // 14
-        kKAnonWinnerJoinCandidates,   // 15
-        kKAnonWinnerPositionalIndex,  // 16
-        kUpdateGroups                 // 17
+        kPAggResponse,                // 13
+        kBuyerReportingId,            // 14
+        kKAnonGhostWinners,           // 15
+        kKAnonWinnerJoinCandidates,   // 16
+        kKAnonWinnerPositionalIndex,  // 17
+        kUpdateGroups,                // 18
+        kAdAuctionResultNonce,        // 19
+        kDebugReports                 // 20
 };
 
 template <std::size_t Size>
@@ -420,6 +411,9 @@ int FindKeyIndex(const std::array<absl::string_view, Size>& haystack,
 // Decodes the CBOR-serialized AuctionResult to proto.
 absl::StatusOr<AuctionResult> CborDecodeAuctionResultToProto(
     absl::string_view serialized_input);
+
+absl::StatusOr<std::pair<AuctionResult, std::string>>
+CborDecodeAuctionResultAndNonceToProto(absl::string_view serialized_input);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

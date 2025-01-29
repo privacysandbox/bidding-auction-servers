@@ -154,7 +154,7 @@ class ProtectedAppSignalsGenerateBidsReactor
                             1.0));
                 LogIfError(
                     metric_context_
-                        ->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
+                        ->LogHistogram<metric::kBiddingTotalBidsCount>(0));
                 PS_VLOG(kNoisyWarn, log_context_)
                     << "Failed to run UDF: " << roma_entry_function
                     << ". Error: " << status;
@@ -173,7 +173,7 @@ class ProtectedAppSignalsGenerateBidsReactor
                             1.0));
                 LogIfError(
                     metric_context_
-                        ->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
+                        ->LogHistogram<metric::kBiddingTotalBidsCount>(0));
                 PS_VLOG(kNoisyWarn, log_context_)
                     << "Failed to parse the response from: "
                     << roma_entry_function
@@ -197,7 +197,7 @@ class ProtectedAppSignalsGenerateBidsReactor
           metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(
               1.0));
       LogIfError(
-          metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
+          metric_context_->LogHistogram<metric::kBiddingTotalBidsCount>(0));
       PS_VLOG(kNoisyWarn, log_context_)
           << "Failed to execute " << roma_entry_function
           << " in Roma. Error: " << status.ToString();

@@ -58,7 +58,6 @@ absl::Status SellerUdfFetchManager::Init() {
     PS_RETURN_IF_ERROR(buyer_reporting_fetcher_->Start())
         << kBuyerReportingFailedStartup;
   }
-
   switch (udf_config_.fetch_mode()) {
     case blob_fetch::FETCH_MODE_LOCAL: {
       return InitializeLocalCodeFetch();
@@ -106,9 +105,12 @@ absl::Status SellerUdfFetchManager::ConfigureRuntimeDefaults(
 }
 
 WrapSingleCodeBlobForDispatch SellerUdfFetchManager::GetUdfWrapperForBuyer() {
-  return [enable_protected_app_signals = enable_protected_app_signals_](
+  return [enable_protected_app_signals = enable_protected_app_signals_,
+          enable_private_aggregate_reporting =
+              udf_config_.enable_private_aggregate_reporting()](
              const std::string& ad_tech_code_blob) {
-    return GetBuyerWrappedCode(ad_tech_code_blob, enable_protected_app_signals);
+    return GetBuyerWrappedCode(ad_tech_code_blob, enable_protected_app_signals,
+                               enable_private_aggregate_reporting);
   };
 }
 

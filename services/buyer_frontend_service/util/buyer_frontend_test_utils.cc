@@ -41,34 +41,35 @@ using ::testing::AnyNumber;
 
 void SetupBiddingProviderMock(
     const MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>& provider,
-    const std::optional<std::string>& bidding_signals_value,
-    bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return,
-    bool match_any_params_any_times) {
+    const BiddingProviderMockOptions& options) {
+  // Note: options has to be passed by value, performing a copy, since the
+  // lambda will run after the factory has gone out of scope. We can afford the
+  // performance hit since this is for testing. Changing this to a pass by
+  // reference is unsafe.
   auto MockBiddingSignalsProvider =
-      [bidding_signals_value, server_error_to_return](
+      [options](
           const BiddingSignalsRequest& bidding_signals_request,
           absl::AnyInvocable<void(
               absl::StatusOr<std::unique_ptr<BiddingSignals>>, GetByteSize)&&>
               on_done,
           absl::Duration timeout, RequestContext context) {
         GetByteSize get_byte_size;
-        if (server_error_to_return) {
-          std::move(on_done)(*server_error_to_return, get_byte_size);
+        if (options.server_error_to_return) {
+          std::move(on_done)(*(options.server_error_to_return), get_byte_size);
         } else {
           auto bidding_signals = std::make_unique<BiddingSignals>();
-          if (bidding_signals_value) {
+          if (!options.bidding_signals_value.empty()) {
             bidding_signals->trusted_signals =
-                std::make_unique<std::string>(bidding_signals_value.value());
+                std::make_unique<std::string>(options.bidding_signals_value);
           }
           std::move(on_done)(std::move(bidding_signals), get_byte_size);
         }
       };
-  if (match_any_params_any_times) {
+  if (options.match_any_params_any_times) {
     EXPECT_CALL(provider, Get(_, _, _, _))
         .Times(AnyNumber())
         .WillOnce(MockBiddingSignalsProvider);
-  } else if (repeated_get_allowed) {
+  } else if (options.repeated_get_allowed) {
     EXPECT_CALL(provider,
                 Get(An<const BiddingSignalsRequest&>(),
                     An<absl::AnyInvocable<
@@ -88,17 +89,13 @@ void SetupBiddingProviderMock(
 }
 
 std::unique_ptr<MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>
-SetupBiddingProviderMock(
-    const std::optional<std::string>& bidding_signals_value,
-    bool repeated_get_allowed,
-    const std::optional<absl::Status>& server_error_to_return) {
+SetupBiddingProviderMock(const BiddingProviderMockOptions& options) {
   auto provider = std::make_unique<
       MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>>();
   // De-referencing the uPtr gives us the object. We can take a reference of it
   // since we know the object will outlive its reference and will not be moved
   // or modified while this method runs.
-  SetupBiddingProviderMock(*provider, bidding_signals_value,
-                           repeated_get_allowed, server_error_to_return);
+  SetupBiddingProviderMock(*provider, options);
   return provider;
 }
 

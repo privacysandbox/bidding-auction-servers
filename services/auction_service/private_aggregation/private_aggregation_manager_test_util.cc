@@ -55,11 +55,17 @@ rapidjson::Value ContributionToJson(
   if (contribution.has_bucket()) {
     rapidjson::Value bucket_json(rapidjson::kObjectType);
     if (contribution.bucket().has_bucket_128_bit()) {
-      rapidjson::Value bucket_128_bit_json(rapidjson::kArrayType);
+      rapidjson::Value bucket_128_bit_json(rapidjson::kObjectType);
+      rapidjson::Value bucket_128_bits_json(rapidjson::kArrayType);
       for (const auto& bucket_value :
            contribution.bucket().bucket_128_bit().bucket_128_bits()) {
-        bucket_128_bit_json.PushBack(bucket_value, allocator);
+        bucket_128_bits_json.PushBack(bucket_value, allocator);
       }
+      bucket_128_bit_json.AddMember(
+          rapidjson::StringRef(kSignalBucketBucket128BitBucket128Bits,
+                               strlen(kSignalBucketBucket128BitBucket128Bits)),
+          bucket_128_bits_json, allocator);
+
       bucket_json.AddMember(
           rapidjson::StringRef(kSignalBucketBucket128Bit,
                                strlen(kSignalBucketBucket128Bit)),
@@ -248,7 +254,7 @@ rapidjson::Document CreateContributionResponseDocument(
 BaseValues MakeDefaultBaseValues() {
   BaseValues base_values;
   base_values.winning_bid = kTestBidInSellerCurrency;
-  base_values.highest_scoring_other_bid = kTestHighestScoringOtherBid;
+  base_values.highest_scoring_other_bid = kTestHighestScoringOtherBidValue;
   base_values.reject_reason = SellerRejectionReason::INVALID_BID;
   return base_values;
 }
@@ -256,7 +262,7 @@ BaseValues MakeDefaultBaseValues() {
 BaseValues MakeDefaultBaseValuesWithNoRejectionReason() {
   BaseValues base_values;
   base_values.winning_bid = kTestBidInSellerCurrency;
-  base_values.highest_scoring_other_bid = kTestHighestScoringOtherBid;
+  base_values.highest_scoring_other_bid = kTestHighestScoringOtherBidValue;
   return base_values;
 }
 

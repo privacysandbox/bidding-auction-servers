@@ -28,8 +28,11 @@
 #include <include/gmock/gmock-nice-strict.h>
 
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
+#include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
+#include "services/common/clients/k_anon_server/k_anon_client.h"
 #include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
@@ -39,13 +42,21 @@
 #include "services/common/util/oblivious_http_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/data/scoring_signals.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager_mock.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
+#include "src/core/test/utils/proto_test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
 constexpr int kSampleBidValue = 10.0;
 constexpr char kSampleScoringSignals[] = "sampleScoringSignals";
+constexpr KAnonCacheManagerConfig kKAnonCacheManagerConfig = {
+    .total_num_hash = 3,
+    .client_time_out = absl::Minutes(1),
+    .k_anon_ttl = absl::Hours(24),
+    .non_k_anon_ttl = absl::Hours(24)};
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -60,6 +71,10 @@ using GetBidDoneCallback = absl::AnyInvocable<
 using ScoringSignalsDoneCallback =
     absl::AnyInvocable<void(absl::StatusOr<std::unique_ptr<ScoringSignals>>,
                             GetByteSize) &&>;
+using ScoreAdsDoneCallback = absl::AnyInvocable<
+    void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+         ResponseMetadata) &&>;
+using google::scp::core::test::EqualsProto;
 
 template <typename T, bool UseKvV2ForBrowser>
 struct TypeDefinitions {
@@ -92,6 +107,8 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_.SetOverride("", K_ANON_API_KEY);
     config_.SetOverride(kFalse, TEST_MODE);
     config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
+    config_.SetOverride(kSignalsRequired, SCORING_SIGNALS_FETCH_MODE);
+    config_.SetOverride("", HEADER_PASSED_TO_BUYER);
   }
 
   void SetProtectedAuctionCipherText(
@@ -107,6 +124,11 @@ class SelectAdReactorForWebTest : public ::testing::Test {
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
+  std::unique_ptr<server_common::Executor> executor_ =
+      std::make_unique<MockExecutor>();
+  std::unique_ptr<KAnonGrpcClient> k_anon_grpc_client_ =
+      std::make_unique<KAnonGrpcClient>(
+          KAnonClientConfig{.ca_root_pem = kTestCaCertPath});
 };
 
 using ProtectedAuctionInputTypes =
@@ -139,9 +161,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain);
 
   MockEntriesCallOnBuyerFactory(
@@ -214,9 +236,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain);
 
   MockEntriesCallOnBuyerFactory(
@@ -288,13 +310,6 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
-                         scoring_client,
-                         buyer_front_end_async_client_factory_mock,
-                         kv_async_client,
-                         *key_fetcher_manager,
-                         /* *crypto_client = */ nullptr,
-                         std::move(async_reporter)};
 
   // Setup expectation on buyer client to receive appropriate log context from
   // SFE.
@@ -303,16 +318,23 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   expected_log_context->set_generation_id(kSampleGenerationId);
   expected_log_context->set_adtech_debug_id(kSampleBuyerDebugId);
 
+  auto test_get_bids_response = []() {
+    auto get_bids_response =
+        std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+    auto* bid = get_bids_response->mutable_bids()->Add();
+    bid->set_bid(kSampleBidValue);
+    bid->set_interest_group_name(kSampleBuyer);
+    bid->set_render("someKey");  // Needs to match with the scoring signals.
+    return get_bids_response;
+  };
+  expected_buyer_bids.try_emplace(std::string(kSampleBuyer),
+                                  test_get_bids_response());
   auto MockGetBids =
-      [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         grpc::ClientContext* context, GetBidDoneCallback on_done,
-         absl::Duration timeout, RequestConfig request_config) {
-        auto get_bids_response =
-            std::make_unique<GetBidsResponse::GetBidsRawResponse>();
-        auto* bid = get_bids_response->mutable_bids()->Add();
-        bid->set_bid(kSampleBidValue);
-        bid->set_interest_group_name(kSampleBuyer);
-        std::move(on_done)(std::move(get_bids_response),
+      [test_get_bids_response](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(test_get_bids_response(),
                            /* response_metadata= */ {});
         return absl::OkStatus();
       };
@@ -332,20 +354,28 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(_))
       .WillRepeatedly(MockBuyerFactoryCall);
 
-  // Setting up simple scoring signals provider so that the call flow can
-  // proceed to Ad Scoring.
-  auto MockScoringSignalsProvider =
-      [](const ScoringSignalsRequest& scoring_signals_request,
-         ScoringSignalsDoneCallback on_done, absl::Duration timeout,
-         RequestContext context) {
-        auto scoring_signals = std::make_unique<ScoringSignals>();
-        scoring_signals->scoring_signals =
-            std::make_unique<std::string>(kSampleScoringSignals);
-        GetByteSize get_byte_size;
-        std::move(on_done)(std::move(scoring_signals), get_byte_size);
-      };
-  EXPECT_CALL(scoring_signals_provider, Get)
-      .WillRepeatedly(MockScoringSignalsProvider);
+  if (TypeParam::kUseKvV2ForBrowser) {
+    kv_server::v2::GetValuesResponse kv_response;
+    ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+        kKvV2CompressionGroup, &kv_response));
+    SetupKvAsyncClientMock(kv_async_client, kv_response, expected_buyer_bids,
+                           {.repeated_get_allowed = true});
+  } else {
+    // Setting up simple scoring signals provider so that the call flow can
+    // proceed to Ad Scoring.
+    auto MockScoringSignalsProvider =
+        [](const ScoringSignalsRequest& scoring_signals_request,
+           ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+           RequestContext context) {
+          auto scoring_signals = std::make_unique<ScoringSignals>();
+          scoring_signals->scoring_signals =
+              std::make_unique<std::string>(kSampleScoringSignals);
+          GetByteSize get_byte_size;
+          std::move(on_done)(std::move(scoring_signals), get_byte_size);
+        };
+    EXPECT_CALL(scoring_signals_provider, Get)
+        .WillRepeatedly(MockScoringSignalsProvider);
+  }
 
   // Setup expectation on scoring client to receive appropriate log context from
   // SFE.
@@ -384,7 +414,13 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
 
   MockEntriesCallOnBuyerFactory(protected_auction_input.buyer_input(),
                                 buyer_front_end_async_client_factory_mock);
-
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_front_end_async_client_factory_mock,
+                         &kv_async_client,
+                         *key_fetcher_manager,
+                         /* *crypto_client = */ nullptr,
+                         std::move(async_reporter)};
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
 }
@@ -403,9 +439,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
@@ -494,9 +530,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
@@ -561,9 +597,9 @@ TYPED_TEST(SelectAdReactorForWebTest,
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/false);
 
@@ -657,10 +693,10 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
-  ClientRegistry clients{scoring_signals_provider,
+  ClientRegistry clients{&scoring_signals_provider,
                          scoring_client,
                          buyer_front_end_async_client_factory_mock,
-                         kv_async_client,
+                         &kv_async_client,
                          *key_fetcher_manager,
                          /* *crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -672,16 +708,23 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   expected_consented_debug_config->set_is_consented(kIsConsentedDebug);
   expected_consented_debug_config->set_token(kConsentedDebugToken);
 
+  auto test_get_bids_response = []() {
+    auto get_bids_response =
+        std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+    auto* bid = get_bids_response->mutable_bids()->Add();
+    bid->set_bid(kSampleBidValue);
+    bid->set_interest_group_name(kSampleBuyer);
+    bid->set_render("someKey");  // Needs to match with the scoring signals.
+    return get_bids_response;
+  };
+  expected_buyer_bids.try_emplace(std::string(kSampleBuyer),
+                                  test_get_bids_response());
   auto MockGetBids =
-      [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
-         grpc::ClientContext* context, GetBidDoneCallback on_done,
-         absl::Duration timeout, RequestConfig request_config) {
-        auto get_bids_response =
-            std::make_unique<GetBidsResponse::GetBidsRawResponse>();
-        auto* bid = get_bids_response->mutable_bids()->Add();
-        bid->set_bid(kSampleBidValue);
-        bid->set_interest_group_name(kSampleBuyer);
-        std::move(on_done)(std::move(get_bids_response),
+      [test_get_bids_response](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_values_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        std::move(on_done)(test_get_bids_response(),
                            /* response_metadata= */ {});
         return absl::OkStatus();
       };
@@ -702,20 +745,28 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(_))
       .WillRepeatedly(MockBuyerFactoryCall);
 
-  // Setting up simple scoring signals provider so that the call flow can
-  // proceed to Ad Scoring.
-  auto MockScoringSignalsProvider =
-      [](const ScoringSignalsRequest& scoring_signals_request,
-         ScoringSignalsDoneCallback on_done, absl::Duration timeout,
-         RequestContext context) {
-        auto scoring_signals = std::make_unique<ScoringSignals>();
-        scoring_signals->scoring_signals =
-            std::make_unique<std::string>(kSampleScoringSignals);
-        GetByteSize get_byte_size;
-        std::move(on_done)(std::move(scoring_signals), get_byte_size);
-      };
-  EXPECT_CALL(scoring_signals_provider, Get)
-      .WillRepeatedly(MockScoringSignalsProvider);
+  if (TypeParam::kUseKvV2ForBrowser) {
+    kv_server::v2::GetValuesResponse kv_response;
+    ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+        kKvV2CompressionGroup, &kv_response));
+    SetupKvAsyncClientMock(kv_async_client, kv_response, expected_buyer_bids,
+                           {.repeated_get_allowed = true});
+  } else {
+    // Setting up simple scoring signals provider so that the call flow can
+    // proceed to Ad Scoring.
+    auto MockScoringSignalsProvider =
+        [](const ScoringSignalsRequest& scoring_signals_request,
+           ScoringSignalsDoneCallback on_done, absl::Duration timeout,
+           RequestContext context) {
+          auto scoring_signals = std::make_unique<ScoringSignals>();
+          scoring_signals->scoring_signals =
+              std::make_unique<std::string>(kSampleScoringSignals);
+          GetByteSize get_byte_size;
+          std::move(on_done)(std::move(scoring_signals), get_byte_size);
+        };
+    EXPECT_CALL(scoring_signals_provider, Get)
+        .WillRepeatedly(MockScoringSignalsProvider);
+  }
 
   // Setup expectation on scoring client from SFE.
   ScoreAdsRequest::ScoreAdsRawRequest expected_score_ads_request;
@@ -779,9 +830,9 @@ TYPED_TEST(SelectAdReactorForWebTest,
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true,
           kTestTopLevelSellerOriginDomain);
@@ -861,9 +912,9 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
           /*enable_reporting=*/false,
@@ -906,9 +957,9 @@ TYPED_TEST(SelectAdReactorForWebTest,
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
           /*enable_reporting=*/false,
@@ -994,18 +1045,33 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
 
   EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  auto mock_are_k_anonymous =
+      [](absl::string_view type,
+         absl::flat_hash_set<absl::string_view> hash_sets,
+         KAnonCacheManagerInterface::Callback on_done,
+         metric::SfeContext* sfe_context) -> absl::Status {
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
   auto [request_with_context, clients] =
       GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
                                                  TypeParam::kUseKvV2ForBrowser>(
-          CLIENT_TYPE_BROWSER, kNonZeroBidValue, scoring_signals_provider,
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
           scoring_client, buyer_front_end_async_client_factory_mock,
-          kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
           kSellerOriginDomain,
           /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
           /*enable_reporting=*/false,
           /*force_set_modified_bid_to_zero=*/false,
           /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
-          {std::move(ghost_score_1), std::move(ghost_score_2)});
+          {std::move(ghost_score_1), std::move(ghost_score_2)},
+          std::move(k_anon_cache_manager));
 
   MockEntriesCallOnBuyerFactory(
       request_with_context.protected_auction_input.buyer_input(),
@@ -1020,7 +1086,9 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
-          /*enable_kanon=*/true, /*fail_fast=*/false,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_cbor);
@@ -1137,6 +1205,935 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
               /*reporting_ids*/ id_param));
     }
   }
+}
+
+TYPED_TEST(SelectAdReactorForWebTest,
+           PopulatesKAnonDataAfterServerOrchestratedComponentAuction) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Create test AdScores for k-anon ghost winners.
+  ScoreAdsResponse::AdScore ghost_score_1;
+  ghost_score_1.set_render(absl::StrCat(kSampleBuyer2, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_1.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer2, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_1.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_1.set_interest_group_owner(kSampleBuyer2);
+  ghost_score_1.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_1.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ghost_score_1.set_bid(1);
+  ScoreAdsResponse::AdScore ghost_score_2;
+  ghost_score_2.set_render(absl::StrCat(kSampleBuyer3, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_2.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer3, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_2.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_2.set_interest_group_owner(kSampleBuyer3);
+  ghost_score_2.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_2.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ghost_score_2.set_bid(2);
+
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+
+  EXPECT_CALL(*key_fetcher_manager, GetPublicKey)
+      .WillOnce(Return(google::cmrt::sdk::public_key_service::v1::PublicKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  auto mock_are_k_anonymous =
+      [](absl::string_view type,
+         absl::flat_hash_set<absl::string_view> hash_sets,
+         KAnonCacheManagerInterface::Callback on_done,
+         metric::SfeContext* sfe_context) -> absl::Status {
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  MockCryptoClientWrapper crypto_client;
+  SetupMockCryptoClient(crypto_client);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          {&crypto_client,
+           EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP},
+          /*enforce_kanon=*/true,
+          {std::move(ghost_score_1), std::move(ghost_score_2)},
+          std::move(k_anon_cache_manager));
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer2, kSampleBiddingUrl2);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer3, kSampleBiddingUrl3);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_proto =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false, /*report_win_map=*/test_report_win_map);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_proto);
+  ASSERT_FALSE(response_with_proto.auction_result_ciphertext().empty());
+
+  // Decrypt the response.
+  absl::string_view decrypted_response =
+      response_with_proto.auction_result_ciphertext();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response.size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  // Validate the error message returned in the response.
+  AuctionResult deserialized_auction_result;
+  EXPECT_TRUE(deserialized_auction_result.ParseFromArray(
+      decompressed_response->data(), decompressed_response->size()));
+
+  // Validate chaff bit is not set if there was an input validation error.
+  EXPECT_FALSE(deserialized_auction_result.is_chaff());
+  EXPECT_FALSE(deserialized_auction_result.has_error());
+
+  // Validate server component auction fields.
+  EXPECT_EQ(deserialized_auction_result.auction_params().component_seller(),
+            kSellerOriginDomain);
+  EXPECT_EQ(
+      deserialized_auction_result.auction_params().ciphertext_generation_id(),
+      kSampleGenerationId);
+  ASSERT_TRUE(deserialized_auction_result.has_k_anon_winner_join_candidates())
+      << deserialized_auction_result.DebugString();
+  // Validate that ghost winner data is present in AuctionResult.
+  ASSERT_GT(deserialized_auction_result.k_anon_ghost_winners().size(), 0);
+  AuctionResult expected_auction_result;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_render_url: "https://ad_tech_A.com/ad"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=0"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=1"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=2"
+        interest_group_name: "interest_group"
+        interest_group_owner: "https://ad_tech_A.com"
+        score: 1
+        bid: 1
+        win_reporting_urls {
+          buyer_reporting_urls {}
+          component_seller_reporting_urls {}
+          top_level_seller_reporting_urls {}
+        }
+        bidding_groups {
+          key: "https://ad_tech_A.com"
+          value { index: 0 }
+        }
+        top_level_seller: "top-level-seller.com"
+        auction_params {
+          ciphertext_generation_id: "6fa459ea-ee8a-3ca4-894e-db77e160355e"
+          component_seller: "seller.com"
+        }
+        k_anon_winner_join_candidates {
+          ad_render_url_hash: "A&v~gVy\205\367A8?\323(BU\234e\355\205\3275\t\010\334I\324]\202\3731\351"
+          ad_component_render_urls_hash: "\211\003\215d \0141\003\020\366\234\375H\022\'\307\\c\317\336\361\220\334\354\244\357\025\243\217$\020)"
+          ad_component_render_urls_hash: "\364\206\225\221\202\t\314\216\373\036\303o\3375Eq\002S\'\364nR\225\357\302e<\273|R\222\375"
+          ad_component_render_urls_hash: "\247\364\302\316ir\2439TWb1\254\300\022\263\322\227>tey%1\217\355\3633\'B\336m"
+          reporting_id_hash: "\247\n+P\3476\375g\267\340\236\362\276qn\224\300\301k\274Z8?\020\323\001\220\021\312\220[e"
+        }
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\035?`\231\212\241m\321\255#\222\266~\301\323Q}\245\027\236L]]^\022l\005\346\tn\336P"
+            ad_component_render_urls_hash: "\2400w\204\261\275\2211\213\300M\301\313\350[\266 \320\367\342\001lF\354\007&\335\223G\317\264\375"
+            ad_component_render_urls_hash: "n\001\367;\312\213\177\000v\t\225n\372!N\374\246\353\322#\311\214\027\225\025\201W\014\016\013s/"
+            reporting_id_hash: "\306\t\177\243a\216\325~\312x\2207$*\250\000\271\000\320\340NS\337VV\2641\357\037\367y\317"
+          }
+          owner: "https://ad_tech_B.com"
+          ig_name: "interest_group"
+          ghost_winner_for_top_level_auction {
+            ad_render_url: "https://ad_tech_B.com/ad"
+            ad_component_render_urls: "https://ad_tech_B.com/ad-component-0"
+            ad_component_render_urls: "https://ad_tech_B.com/ad-component-1"
+            modified_bid: 1
+            buyer_reporting_id: "buyerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+          }
+        }
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\213\336\200GY9\270(\376\233{%zO\376\345v\217\t\036\200)\361\302\224\223\373Wr\214\034i"
+            ad_component_render_urls_hash: "\207\211\323\213\315\035=\353\207q\217\367\205S\320q]\030\032-A\244\327\222(M|\224\017\021\374\270"
+            ad_component_render_urls_hash: "+=\343\275\262\222\213\025\236\364\355\367J\257\016.\332\'\265\366Y\363\025\365\335\007\371\200u/\177Z"
+            reporting_id_hash: "\t]\331\214\226g]B\017\303\022\357\"\010\255\310\361\033\0041\327bY\201\322\274C\266\376\322\264&"
+          }
+          owner: "https://ad_tech_C.com"
+          ig_name: "interest_group"
+          ghost_winner_for_top_level_auction {
+            ad_render_url: "https://ad_tech_C.com/ad"
+            ad_component_render_urls: "https://ad_tech_C.com/ad-component-0"
+            ad_component_render_urls: "https://ad_tech_C.com/ad-component-1"
+            modified_bid: 2
+            buyer_reporting_id: "buyerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+          }
+        }
+      )pb",
+      &expected_auction_result));
+  EXPECT_THAT(expected_auction_result,
+              EqualsProto(deserialized_auction_result));
+}
+
+TYPED_TEST(SelectAdReactorForWebTest,
+           PopulatesKAnonDataAfterDeviceOrchestratedComponentAuction) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  // Create test AdScores for k-anon ghost winners.
+  ScoreAdsResponse::AdScore ghost_score_1;
+  ghost_score_1.set_render(absl::StrCat(kSampleBuyer2, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_1.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer2, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_1.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_1.set_interest_group_owner(kSampleBuyer2);
+  ghost_score_1.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_1.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ghost_score_1.set_bid(1);
+  ScoreAdsResponse::AdScore ghost_score_2;
+  ghost_score_2.set_render(absl::StrCat(kSampleBuyer3, kTestRenderUrlSuffix));
+  for (int i = 0; i < 2; i++) {
+    *ghost_score_2.mutable_component_renders()->Add() =
+        absl::StrCat(kSampleBuyer3, kTestComponentUrlSuffix, i);
+  }
+  ghost_score_2.set_interest_group_name(kSampleInterestGroupName);
+  ghost_score_2.set_interest_group_owner(kSampleBuyer3);
+  ghost_score_2.set_buyer_reporting_id(kSampleBuyerReportingId);
+  ghost_score_2.set_buyer_and_seller_reporting_id(
+      kSampleBuyerAndSellerReportingId);
+  ghost_score_2.set_bid(2);
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  auto mock_are_k_anonymous =
+      [](absl::string_view type,
+         absl::flat_hash_set<absl::string_view> hash_sets,
+         KAnonCacheManagerInterface::Callback on_done,
+         metric::SfeContext* sfe_context) -> absl::Status {
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, kTestTopLevelSellerOriginDomain,
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          {std::move(ghost_score_1), std::move(ghost_score_2)},
+          std::move(k_anon_cache_manager));
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer2, kSampleBiddingUrl2);
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer3, kSampleBiddingUrl3);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false, /*report_win_map=*/test_report_win_map);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << absl::BytesToHexString(*decompressed_response);
+
+  absl::StatusOr<AuctionResult> deserialized_auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  ASSERT_TRUE(deserialized_auction_result.ok());
+  EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
+  ASSERT_TRUE(deserialized_auction_result->has_k_anon_winner_join_candidates())
+      << deserialized_auction_result->DebugString();
+  // Validate that ghost winner data is present in AuctionResult.
+  ASSERT_GT(deserialized_auction_result->k_anon_ghost_winners().size(), 0);
+  AuctionResult expected_auction_result;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_render_url: "https://ad_tech_A.com/ad"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=0"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=1"
+        ad_component_render_urls: "https://fooAds.com/adComponents?id=2"
+        interest_group_name: "interest_group"
+        interest_group_owner: "https://ad_tech_A.com"
+        score: 1
+        bid: 1
+        bidding_groups {
+          key: "https://ad_tech_A.com"
+          value { index: 0 }
+        }
+        top_level_seller: "top-level-seller.com"
+        ad_metadata: "testAdMetadata"
+        k_anon_winner_join_candidates {
+          ad_render_url_hash: "A&v~gVy\205\367A8?\323(BU\234e\355\205\3275\t\010\334I\324]\202\3731\351"
+          ad_component_render_urls_hash: "\211\003\215d \0141\003\020\366\234\375H\022\'\307\\c\317\336\361\220\334\354\244\357\025\243\217$\020)"
+          ad_component_render_urls_hash: "\364\206\225\221\202\t\314\216\373\036\303o\3375Eq\002S\'\364nR\225\357\302e<\273|R\222\375"
+          ad_component_render_urls_hash: "\247\364\302\316ir\2439TWb1\254\300\022\263\322\227>tey%1\217\355\3633\'B\336m"
+          reporting_id_hash: "\247\n+P\3476\375g\267\340\236\362\276qn\224\300\301k\274Z8?\020\323\001\220\021\312\220[e"
+        }
+        k_anon_winner_positional_index: 0
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\035?`\231\212\241m\321\255#\222\266~\301\323Q}\245\027\236L]]^\022l\005\346\tn\336P"
+            ad_component_render_urls_hash: "\2400w\204\261\275\2211\213\300M\301\313\350[\266 \320\367\342\001lF\354\007&\335\223G\317\264\375"
+            ad_component_render_urls_hash: "n\001\367;\312\213\177\000v\t\225n\372!N\374\246\353\322#\311\214\027\225\025\201W\014\016\013s/"
+            reporting_id_hash: "\306\t\177\243a\216\325~\312x\2207$*\250\000\271\000\320\340NS\337VV\2641\357\037\367y\317"
+          }
+          owner: "https://ad_tech_B.com"
+          ig_name: "interest_group"
+          ghost_winner_for_top_level_auction {
+            ad_render_url: "https://ad_tech_B.com/ad"
+            ad_component_render_urls: "https://ad_tech_B.com/ad-component-0"
+            ad_component_render_urls: "https://ad_tech_B.com/ad-component-1"
+            modified_bid: 1
+            buyer_reporting_id: "buyerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+          }
+        }
+        k_anon_ghost_winners {
+          k_anon_join_candidates {
+            ad_render_url_hash: "\213\336\200GY9\270(\376\233{%zO\376\345v\217\t\036\200)\361\302\224\223\373Wr\214\034i"
+            ad_component_render_urls_hash: "\207\211\323\213\315\035=\353\207q\217\367\205S\320q]\030\032-A\244\327\222(M|\224\017\021\374\270"
+            ad_component_render_urls_hash: "+=\343\275\262\222\213\025\236\364\355\367J\257\016.\332\'\265\366Y\363\025\365\335\007\371\200u/\177Z"
+            reporting_id_hash: "\t]\331\214\226g]B\017\303\022\357\"\010\255\310\361\033\0041\327bY\201\322\274C\266\376\322\264&"
+          }
+          owner: "https://ad_tech_C.com"
+          ig_name: "interest_group"
+          ghost_winner_for_top_level_auction {
+            ad_render_url: "https://ad_tech_C.com/ad"
+            ad_component_render_urls: "https://ad_tech_C.com/ad-component-0"
+            ad_component_render_urls: "https://ad_tech_C.com/ad-component-1"
+            modified_bid: 2
+            buyer_reporting_id: "buyerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+          }
+        }
+      )pb",
+      &expected_auction_result));
+  EXPECT_THAT(expected_auction_result,
+              EqualsProto(*deserialized_auction_result));
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, QueriesAllRequiredHashes) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  HashUtil hasher = HashUtil();
+  absl::flat_hash_set<std::string> expected_hashes_to_query = {
+      hasher.HashedKAnonKeyForAdRenderURL(
+          /*owner=*/kSampleBuyer, /*bidding_url=*/kSampleBiddingUrl,
+          /*render_url=*/absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix)),
+      hasher.HashedKAnonKeyForReportingID(
+          /*owner=*/kSampleBuyer,
+          /*ig_name*/ kSampleInterestGroupName,
+          /*bidding_url*/ kSampleBiddingUrl,
+          /*render_url*/ absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix),
+          /*reporting_ids*/ {}),
+  };
+  for (int i = 0; i < 3; i++) {
+    expected_hashes_to_query.insert(
+        hasher.HashedKAnonKeyForAdComponentRenderURL(
+            absl::StrCat("https://fooAds.com/adComponents?id=", i)));
+  }
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  auto mock_are_k_anonymous =
+      [expected_hashes_to_query](
+          absl::string_view type,
+          absl::flat_hash_set<absl::string_view> hash_sets,
+          KAnonCacheManagerInterface::Callback on_done,
+          metric::SfeContext* sfe_context) -> absl::Status {
+    PS_VLOG(5) << " Observed hashes to query: "
+               << absl::StrJoin(hash_sets, ", ",
+                                [](std::string* out, absl::string_view hash) {
+                                  out->append(absl::BytesToHexString(hash));
+                                });
+    absl::flat_hash_set<absl::string_view> missing_hashes;
+    absl::flat_hash_set<absl::string_view> unexpected_hashes;
+    for (auto observed_hash : hash_sets) {
+      if (!expected_hashes_to_query.contains(observed_hash)) {
+        unexpected_hashes.insert(observed_hash);
+      }
+    }
+    for (const auto& expected_hash : expected_hashes_to_query) {
+      if (!hash_sets.contains(expected_hash)) {
+        missing_hashes.insert(expected_hash);
+      }
+    }
+    EXPECT_TRUE(unexpected_hashes.empty())
+        << "Unexpected hashes being queried from the k-anon cache manager: "
+        << absl::StrJoin(unexpected_hashes, ", ",
+                         [](std::string* out, absl::string_view hash) {
+                           out->append(absl::BytesToHexString(hash));
+                         });
+    EXPECT_TRUE(missing_hashes.empty())
+        << "Hashes unexpectedly not being queried from the k-anon cache "
+           "manager: "
+        << absl::StrJoin(unexpected_hashes, ", ",
+                         [](std::string* out, absl::string_view hash) {
+                           out->append(absl::BytesToHexString(hash));
+                         });
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          /*kanon_ghost_winners=*/{}, std::move(k_anon_cache_manager));
+
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << absl::BytesToHexString(*decompressed_response);
+
+  absl::StatusOr<AuctionResult> deserialized_auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  EXPECT_TRUE(deserialized_auction_result.ok());
+  EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
+
+  // Validate that k-anon winner join candidate data is present in
+  // AuctionResult.
+  EXPECT_TRUE(deserialized_auction_result->has_k_anon_winner_join_candidates());
+}
+
+TYPED_TEST(SelectAdReactorForWebTest, SetsKAnonStatusOnScoringRequests) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  auto mock_are_k_anonymous =
+      [](absl::string_view type,
+         absl::flat_hash_set<absl::string_view> hash_sets,
+         KAnonCacheManagerInterface::Callback on_done,
+         metric::SfeContext* sfe_context) -> absl::Status {
+    PS_VLOG(5) << " Observed hashes to query: "
+               << absl::StrJoin(hash_sets, ", ",
+                                [](std::string* out, absl::string_view hash) {
+                                  out->append(absl::BytesToHexString(hash));
+                                });
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          /*kanon_ghost_winners=*/{}, std::move(k_anon_cache_manager));
+
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .WillRepeatedly(
+          [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+             absl::Duration timeout, RequestConfig request_config) {
+            for (const auto& bid : request->ad_bids()) {
+              EXPECT_TRUE(bid.k_anon_status());
+              auto response =
+                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
+              ScoreAdsResponse::AdScore* score = response->mutable_ad_score();
+              EXPECT_FALSE(bid.render().empty());
+              score->set_render(bid.render());
+              score->mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
+              score->set_desirability(kNonZeroDesirability);
+              score->set_buyer_bid(kNonZeroBidValue);
+              score->set_interest_group_name(bid.interest_group_name());
+              score->set_interest_group_owner(kSampleBuyer);
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
+              // Expect only one bid.
+              break;
+            }
+            return absl::OkStatus();
+          });
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
+  ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
+                 << MessageToJson(response_with_cbor);
+
+  // Decrypt the response.
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *response_with_cbor.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  // Expect the payload to be of length that is a power of 2.
+  const size_t payload_size = decrypted_response->size();
+  int log_2_payload = log2(payload_size);
+  EXPECT_EQ(payload_size, 1 << log_2_payload);
+  EXPECT_GE(payload_size, kMinAuctionResultBytes);
+
+  // Decompress the encoded response.
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  EXPECT_TRUE(decompressed_response.ok());
+
+  std::string base64_response;
+  absl::Base64Escape(*decompressed_response, &base64_response);
+  ABSL_LOG(INFO) << "Decrypted, decompressed but CBOR encoded auction result:\n"
+                 << absl::BytesToHexString(*decompressed_response);
+
+  absl::StatusOr<AuctionResult> deserialized_auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  EXPECT_TRUE(deserialized_auction_result.ok());
+  EXPECT_FALSE(deserialized_auction_result->is_chaff());
+
+  ABSL_LOG(INFO) << "Decrypted, decompressed and CBOR decoded auction result:\n"
+                 << MessageToJson(*deserialized_auction_result);
+
+  // Validate that k-anon winner join candidate data is present in
+  // AuctionResult.
+  EXPECT_TRUE(deserialized_auction_result->has_k_anon_winner_join_candidates());
+}
+
+TYPED_TEST(SelectAdReactorForWebTest,
+           AdIsConsideredNonKAnonIfRenderUrlHashIsNotKAnon) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  HashUtil hasher = HashUtil();
+  std::string non_k_anon_hash = hasher.HashedKAnonKeyForAdRenderURL(
+      /*owner=*/kSampleBuyer, /*bidding_url=*/kSampleBiddingUrl,
+      /*render_url=*/absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix));
+  auto mock_are_k_anonymous =
+      [non_k_anon_hash](absl::string_view type,
+                        absl::flat_hash_set<absl::string_view> hash_sets,
+                        KAnonCacheManagerInterface::Callback on_done,
+                        metric::SfeContext* sfe_context) -> absl::Status {
+    PS_VLOG(5) << " Observed hashes to query: "
+               << absl::StrJoin(hash_sets, ", ",
+                                [](std::string* out, absl::string_view hash) {
+                                  out->append(absl::BytesToHexString(hash));
+                                });
+    EXPECT_TRUE(hash_sets.contains(non_k_anon_hash));
+    hash_sets.erase(non_k_anon_hash);
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          /*kanon_ghost_winners=*/{}, std::move(k_anon_cache_manager));
+
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .WillRepeatedly(
+          [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+             absl::Duration timeout, RequestConfig request_config) {
+            for (const auto& bid : request->ad_bids()) {
+              EXPECT_FALSE(bid.k_anon_status());
+              auto response =
+                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
+              ScoreAdsResponse::AdScore* score = response->mutable_ad_score();
+              EXPECT_FALSE(bid.render().empty());
+              score->set_render(bid.render());
+              score->mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
+              score->set_desirability(kNonZeroDesirability);
+              score->set_buyer_bid(kNonZeroBidValue);
+              score->set_interest_group_name(bid.interest_group_name());
+              score->set_interest_group_owner(kSampleBuyer);
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
+              // Expect only one bid.
+              break;
+            }
+            return absl::OkStatus();
+          });
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
+}
+
+TYPED_TEST(SelectAdReactorForWebTest,
+           AdIsConsideredNonKAnonIfNameReportHashIsNotKAnon) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  HashUtil hasher = HashUtil();
+  std::string non_k_anon_hash = hasher.HashedKAnonKeyForReportingID(
+      /*owner=*/kSampleBuyer,
+      /*ig_name*/ kSampleInterestGroupName,
+      /*bidding_url*/ kSampleBiddingUrl,
+      /*render_url*/ absl::StrCat(kSampleBuyer, kTestRenderUrlSuffix),
+      /*reporting_ids*/ {});
+  auto mock_are_k_anonymous =
+      [non_k_anon_hash](absl::string_view type,
+                        absl::flat_hash_set<absl::string_view> hash_sets,
+                        KAnonCacheManagerInterface::Callback on_done,
+                        metric::SfeContext* sfe_context) -> absl::Status {
+    PS_VLOG(5) << " Observed hashes to query: "
+               << absl::StrJoin(hash_sets, ", ",
+                                [](std::string* out, absl::string_view hash) {
+                                  out->append(absl::BytesToHexString(hash));
+                                });
+    EXPECT_TRUE(hash_sets.contains(non_k_anon_hash));
+    hash_sets.erase(non_k_anon_hash);
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          /*kanon_ghost_winners=*/{}, std::move(k_anon_cache_manager));
+
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .WillRepeatedly(
+          [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+             absl::Duration timeout, RequestConfig request_config) {
+            for (const auto& bid : request->ad_bids()) {
+              EXPECT_FALSE(bid.k_anon_status());
+              auto response =
+                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
+              ScoreAdsResponse::AdScore* score = response->mutable_ad_score();
+              EXPECT_FALSE(bid.render().empty());
+              score->set_render(bid.render());
+              score->mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
+              score->set_desirability(kNonZeroDesirability);
+              score->set_buyer_bid(kNonZeroBidValue);
+              score->set_interest_group_name(bid.interest_group_name());
+              score->set_interest_group_owner(kSampleBuyer);
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
+              // Expect only one bid.
+              break;
+            }
+            return absl::OkStatus();
+          });
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
+}
+
+TYPED_TEST(SelectAdReactorForWebTest,
+           AdIsConsideredNonKAnonIfAComponentRenderHashIsNotKAnon) {
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  auto k_anon_cache_manager = std::make_unique<KAnonCacheManagerMock>(
+      this->executor_.get(), std::move(this->k_anon_grpc_client_),
+      kKAnonCacheManagerConfig);
+  HashUtil hasher = HashUtil();
+  std::string non_k_anon_hash = hasher.HashedKAnonKeyForAdComponentRenderURL(
+      "https://fooAds.com/adComponents?id=2");
+  auto mock_are_k_anonymous =
+      [non_k_anon_hash](absl::string_view type,
+                        absl::flat_hash_set<absl::string_view> hash_sets,
+                        KAnonCacheManagerInterface::Callback on_done,
+                        metric::SfeContext* sfe_context) -> absl::Status {
+    PS_VLOG(5) << " Observed hashes to query: "
+               << absl::StrJoin(hash_sets, ", ",
+                                [](std::string* out, absl::string_view hash) {
+                                  out->append(absl::BytesToHexString(hash));
+                                });
+    EXPECT_TRUE(hash_sets.contains(non_k_anon_hash));
+    hash_sets.erase(non_k_anon_hash);
+    std::move(on_done)(
+        absl::flat_hash_set<std::string>(hash_sets.begin(), hash_sets.end()));
+    return absl::OkStatus();
+  };
+  EXPECT_CALL(*k_anon_cache_manager, AreKAnonymous)
+      .WillOnce(mock_are_k_anonymous);
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, kNonZeroBidValue, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain,
+          /*expect_all_buyers_solicited=*/true, /*top_level_seller=*/"",
+          /*enable_reporting=*/false,
+          /*force_set_modified_bid_to_zero=*/false,
+          /*server_component_auction_params=*/{}, /*enforce_kanon=*/true,
+          /*kanon_ghost_winners=*/{}, std::move(k_anon_cache_manager));
+
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .WillRepeatedly(
+          [](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+             grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+             absl::Duration timeout, RequestConfig request_config) {
+            for (const auto& bid : request->ad_bids()) {
+              EXPECT_FALSE(bid.k_anon_status());
+              auto response =
+                  std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>();
+              ScoreAdsResponse::AdScore* score = response->mutable_ad_score();
+              EXPECT_FALSE(bid.render().empty());
+              score->set_render(bid.render());
+              score->mutable_component_renders()->CopyFrom(bid.ad_components());
+              EXPECT_EQ(bid.ad_components_size(), kDefaultNumAdComponents);
+              score->set_desirability(kNonZeroDesirability);
+              score->set_buyer_bid(kNonZeroBidValue);
+              score->set_interest_group_name(bid.interest_group_name());
+              score->set_interest_group_owner(kSampleBuyer);
+              std::move(on_done)(std::move(response),
+                                 /* response_metadata= */ {});
+              // Expect only one bid.
+              break;
+            }
+            return absl::OkStatus();
+          });
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock);
+
+  absl::flat_hash_map<std::string, std::string> buyer_report_win_js_urls;
+  buyer_report_win_js_urls.try_emplace(kSampleBuyer, kSampleBiddingUrl);
+  ReportWinMap test_report_win_map = {.buyer_report_win_js_urls =
+                                          std::move(buyer_report_win_js_urls)};
+  SelectAdResponse response_with_cbor =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, request_with_context.select_ad_request,
+          /*enable_kanon=*/true,
+          /*enable_buyer_private_aggregate_reporting=*/false,
+          /*fail_fast=*/false,
+          /*report_win_map=*/test_report_win_map);
 }
 
 }  // namespace

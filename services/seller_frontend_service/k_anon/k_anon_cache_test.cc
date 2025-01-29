@@ -30,9 +30,9 @@ namespace {
 
 constexpr int kTestCacheCapacity = 2;
 constexpr absl::Duration kTestCacheDefaultTimeoutDuration = absl::Minutes(30);
-constexpr char kTestHash1[] = "hash1";
-constexpr char kTestHash2[] = "hash2";
-constexpr char kTestHash3[] = "hash3";
+constexpr char kTestKey1[] = "key1";
+constexpr char kTestKey2[] = "key2";
+constexpr char kTestKey3[] = "key3";
 
 class KAnonCacheTest : public ::testing::Test {
  public:
@@ -41,49 +41,56 @@ class KAnonCacheTest : public ::testing::Test {
     server_common::log::SetGlobalPSVLogLevel(20);
     executor_ = std::make_unique<server_common::EventEngineExecutor>(
         grpc_event_engine::experimental::CreateEventEngine());
-    cache_ = std::make_unique<KAnonCache>(
+    cache_ = std::make_unique<KAnonCache<std::string, std::string>>(
         kTestCacheCapacity, kTestCacheDefaultTimeoutDuration, executor_.get());
   }
 
  protected:
   std::unique_ptr<server_common::EventEngineExecutor> executor_;
   server_common::GrpcInit gprc_init;
-  std::unique_ptr<KAnonCache> cache_;
+  std::unique_ptr<KAnonCache<std::string, std::string>> cache_;
 };
 
 TEST_F(KAnonCacheTest, CanAddElement) {
-  CHECK_OK(cache_->Insert({kTestHash1}));
-  EXPECT_TRUE(cache_->Query({kTestHash1}).contains(kTestHash1));
+  CHECK_OK(cache_->Insert({{kTestKey1, kTestKey1}}));
+  EXPECT_TRUE(cache_->Query({kTestKey1}).contains(kTestKey1));
 }
 
 TEST_F(KAnonCacheTest, EvictsLeastRecentlyUsedElement) {
-  CHECK_OK(cache_->Insert({kTestHash1}));
-  CHECK_OK(cache_->Insert({kTestHash2}));
+  CHECK_OK(cache_->Insert({{kTestKey1, kTestKey1}}));
+  CHECK_OK(cache_->Insert({{kTestKey2, kTestKey2}}));
 
   // Querying the hash makes it most recently used.
-  EXPECT_TRUE(cache_->Query({kTestHash1}).contains(kTestHash1));
-  EXPECT_TRUE(cache_->Query({kTestHash2}).contains(kTestHash2));
+  EXPECT_TRUE(cache_->Query({kTestKey1}).contains(kTestKey1));
+  EXPECT_TRUE(cache_->Query({kTestKey2}).contains(kTestKey2));
 
   // Cache is now at capacity and adding a new hash should evict the LRU entry.
-  CHECK_OK(cache_->Insert({kTestHash3}));
-  EXPECT_FALSE(cache_->Query({kTestHash1}).contains(kTestHash1));
-  EXPECT_TRUE(cache_->Query({kTestHash2}).contains(kTestHash2));
-  EXPECT_TRUE(cache_->Query({kTestHash3}).contains(kTestHash3));
+  CHECK_OK(cache_->Insert({{kTestKey3, kTestKey3}}));
+  EXPECT_FALSE(cache_->Query({kTestKey1}).contains(kTestKey1));
+  EXPECT_TRUE(cache_->Query({kTestKey2}).contains(kTestKey2));
+  EXPECT_TRUE(cache_->Query({kTestKey3}).contains(kTestKey3));
 }
 
 TEST_F(KAnonCacheTest, KeysGetDeduplicated) {
-  CHECK_OK(cache_->Insert({kTestHash1}));
-  CHECK_OK(cache_->Insert({kTestHash1}));
-  auto cached_hashes = cache_->GetAllHashesForTesting();
+  CHECK_OK(cache_->Insert({{kTestKey1, kTestKey1}}));
+  CHECK_OK(cache_->Insert({{kTestKey1, kTestKey1}}));
+  auto cached_hashes = cache_->GetAllEntriesForTesting();
   ASSERT_EQ(cached_hashes.size(), 1);
-  EXPECT_TRUE(cached_hashes.contains(kTestHash1));
+  EXPECT_TRUE(cached_hashes.contains(kTestKey1));
 }
 
 TEST_F(KAnonCacheTest, KeysExpire) {
-  KAnonCache cache(kTestCacheCapacity, absl::Nanoseconds(1), executor_.get());
-  CHECK_OK(cache.Insert({kTestHash1}));
+  KAnonCache<std::string, std::string> cache(
+      kTestCacheCapacity, absl::Nanoseconds(1), executor_.get());
+  CHECK_OK(cache.Insert({{kTestKey1, kTestKey1}}));
   sleep(1);
-  EXPECT_FALSE(cache.Query({kTestHash1}).contains(kTestHash1));
+  EXPECT_FALSE(cache.Query({kTestKey1}).contains(kTestKey1));
+}
+
+TEST_F(KAnonCacheTest, AttemptingToAddMoreEntriesThanCapacityDoesntError) {
+  KAnonCache<std::string, std::string> cache(
+      /*capacity=*/1, absl::Nanoseconds(1), executor_.get());
+  CHECK_OK(cache.Insert({{kTestKey1, kTestKey1}, {kTestKey2, kTestKey2}}));
 }
 
 }  // namespace

@@ -30,6 +30,19 @@
       }
     }
   },
+  "debugReports": [
+    {
+      "adTechOrigin": "adtech-origin",
+      "reports": [
+        {
+          "isWinReport": true,
+          "isSellerReport": true,
+          "componentWin": true,
+          "url": "http://selling-ad-tech.com/debugWin/ad1"
+        }
+      ]
+    }
+  ],
   "error": {
     "code": 0,
     "message": "Success"
@@ -61,8 +74,31 @@
         "adMetadata": "arbitrary-data",
         "buyerReportingId": "buyer-reporting-test-id",
         "buyerAndSellerReportingId": "test-id",
-        "selectableBuyerAndSellerReportingId": "selectable-buyer-and-seller-test-id"
+        "selectedBuyerAndSellerReportingId": "selected-buyer-and-seller-test-id"
       }
+    }
+  ],
+  "paggResponse": [
+    {
+      "reportingOrigin": "adtech-origin",
+      "igContributions": [
+        {
+          "eventContributions": [
+            {
+              "event": "customEvent",
+              "contributions": [
+                {
+                  "bucket": "0x0000000000000064",
+                  "value": 100
+                }
+              ]
+            }
+          ],
+          "igIndex": 123,
+          "coordinator": "seller-coordinator-for-device-orchestrated-auction",
+          "componentWin": false
+        }
+      ]
     }
   ]
 }

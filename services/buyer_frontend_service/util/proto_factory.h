@@ -27,6 +27,10 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+// Bidding signals are set to null when KV lookup fails. This is to maintain
+// parity with Chrome.
+constexpr absl::string_view kNullBiddingSignalsJson = "null";
+
 struct PriorityVectorConfig {
   bool priority_vector_enabled = false;
   // Priority signals vector supplied by SSP via GetBidsRequest.
@@ -36,6 +40,16 @@ struct PriorityVectorConfig {
       per_ig_priority_vectors;
 };
 
+struct PrepareGenerateBidsRequestOptions {
+  bool enable_kanon = false;
+  bool require_bidding_signals = true;
+};
+
+struct PrepareGenerateBidsRequestResult {
+  std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest> raw_request;
+  double percent_igs_filtered;
+};
+
 // Creates Proto Objects on heap required for use by BuyerFrontEnd Service.
 // TODO(b/248609427): Benchmark allocations on Arena instead of heap
 std::unique_ptr<GetBidsResponse::GetBidsRawResponse> CreateGetBidsRawResponse(
@@ -43,13 +57,12 @@ std::unique_ptr<GetBidsResponse::GetBidsRawResponse> CreateGetBidsRawResponse(
         raw_response);
 
 // Creates Bidding Request from GetBidsRawRequest, Bidding Signals.
-std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
-CreateGenerateBidsRawRequest(
+PrepareGenerateBidsRequestResult PrepareGenerateBidsRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
     std::unique_ptr<rapidjson::Value> bidding_signals_obj,
     const size_t signal_size, uint32_t data_version,
     const PriorityVectorConfig& priority_vector_config,
-    const bool enable_kanon = false);
+    const PrepareGenerateBidsRequestOptions& options = {});
 
 // Creates a request to generate bid for protected app signals.
 std::unique_ptr<GenerateProtectedAppSignalsBidsRequest::

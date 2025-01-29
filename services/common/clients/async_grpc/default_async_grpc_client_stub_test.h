@@ -33,6 +33,7 @@
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
+#include "services/common/test/constants.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
@@ -160,7 +161,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithRequest) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -216,7 +217,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithMetadata) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -273,7 +274,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesStatusToCallback) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -335,7 +336,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -384,7 +385,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -435,7 +436,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, DoesNotExecuteCallbackOnSyncError) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;
@@ -486,7 +487,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
 
   ClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-  };
+      .ca_root_pem = kTestCaCertPath};
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   RawRequest raw_request;

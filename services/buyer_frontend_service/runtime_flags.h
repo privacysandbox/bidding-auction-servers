@@ -55,8 +55,12 @@ inline constexpr absl::string_view
         "BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND";
 inline constexpr absl::string_view BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
     "BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
+inline constexpr absl::string_view BIDDING_SIGNALS_FETCH_MODE =
+    "BIDDING_SIGNALS_FETCH_MODE";
+inline constexpr absl::string_view PROPAGATE_BUYER_SIGNALS_TO_TKV =
+    "PROPAGATE_BUYER_SIGNALS_TO_TKV";
 
-inline constexpr int kNumRuntimeFlags = 18;
+inline constexpr int kNumRuntimeFlags = 20;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -76,6 +80,8 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     BIDDING_EGRESS_TLS,
     BFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
+    BIDDING_SIGNALS_FETCH_MODE,
+    PROPAGATE_BUYER_SIGNALS_TO_TKV,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

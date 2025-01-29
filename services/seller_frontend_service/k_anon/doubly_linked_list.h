@@ -21,40 +21,103 @@
 
 #include "absl/strings/string_view.h"
 #include "services/common/util/event.h"
+#include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 // K-anon data stored in the DLL.
+template <typename KeyT, typename ValueT>
 struct KAnonHashData {
-  std::string hash;
+  KeyT key;
+  ValueT value;
   std::unique_ptr<Event> timer_event = nullptr;
 };
 
 // DLL Node.
+template <typename KeyT, typename ValueT>
 struct Node {
-  std::unique_ptr<KAnonHashData> data;
+  std::unique_ptr<KAnonHashData<KeyT, ValueT>> data;
   Node* next = nullptr;
   Node* prev = nullptr;
 
-  explicit Node(std::unique_ptr<KAnonHashData> k_anon_hash_data = nullptr)
+  explicit Node(
+      std::unique_ptr<KAnonHashData<KeyT, ValueT>> k_anon_hash_data = nullptr)
       : data(std::move(k_anon_hash_data)) {}
 };
 
 // Doubly linked list to back up the k-anon cache.
 // This helps the cache keep the data sorted in LRU order (nodes
 // towards the tail are LRU and nodes towards the head are MRU)
+template <typename KeyT, typename ValueT>
 class DoublyLinkedList {
  public:
-  DoublyLinkedList();
-  ~DoublyLinkedList();
-  Node* InsertAtFront(std::unique_ptr<KAnonHashData> k_anon_hash_data);
-  void MoveToFront(Node* node);
-  void Remove(Node* node);
-  Node* Tail();
+  DoublyLinkedList()
+      : head_(std::make_unique<Node<KeyT, ValueT>>()),
+        tail_(std::make_unique<Node<KeyT, ValueT>>()) {
+    head_->next = tail_.get();
+    tail_->prev = head_.get();
+  }
+
+  ~DoublyLinkedList() {
+    auto* cur = head_->next;
+    while (cur != tail_.get()) {
+      auto* tmp_next = cur->next;
+      cur->next = nullptr;
+      cur->prev = nullptr;
+      delete cur;
+      cur = tmp_next;
+    }
+    head_->next = nullptr;
+    tail_->prev = nullptr;
+  }
+
+  Node<KeyT, ValueT>* InsertAtFront(
+      std::unique_ptr<KAnonHashData<KeyT, ValueT>> k_anon_hash_data) {
+    auto node =
+        std::make_unique<Node<KeyT, ValueT>>(std::move(k_anon_hash_data));
+    auto* node_ptr = node.release();
+    node_ptr->next = head_->next;
+    node_ptr->prev = head_.get();
+    // Head's next is guaranteed to be present since we use a sentinel for tail
+    // as well.
+    head_->next->prev = node_ptr;
+    head_->next = node_ptr;
+    return node_ptr;
+  }
+
+  void MoveToFront(Node<KeyT, ValueT>* node) {
+    // Disconnect from neighbors
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
+
+    // Link at front
+    node->next = head_->next;
+    node->prev = head_.get();
+    head_->next->prev = node;
+    head_->next = node;
+  }
+
+  void Remove(Node<KeyT, ValueT>* node) {
+    PS_VLOG(5) << __func__ << ": Removing node";
+    auto node_to_clean = std::unique_ptr<Node<KeyT, ValueT>>(node);
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
+    node_to_clean.reset();
+  }
+
+  Node<KeyT, ValueT>* Tail() {
+    // Head and tail are always sentinels, so if they point at each other that
+    // implies an empty list.
+    if (tail_->prev == head_.get()) {
+      return nullptr;
+    }
+
+    return tail_->prev;
+  }
 
  private:
-  std::unique_ptr<Node> head_;
-  std::unique_ptr<Node> tail_;
+  std::unique_ptr<Node<KeyT, ValueT>> head_;
+  std::unique_ptr<Node<KeyT, ValueT>> tail_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -17,10 +17,12 @@ print_usage() {
     cat << USAGE
 Usage:
   <options>
-  --enable_inference                    Enable bidding with inference capabilities
-  --gdb                                 Run with GDB
-  --use-with-generateBid-file <path>    Use the provided generateBid file for bidding. Path MUST be relative to project root.
-  -h, --help                            Print usage information
+  --enable_inference                     Enable bidding with inference capabilities
+  --gdb                                  Run with GDB
+  --use-with-generateBid-file <path>     Use the provided generateBid file for bidding. Path MUST be relative to project root.
+  --inference_sidecar_binary_path <path> Path to the inference sidecar binary (default: "/server/bin/inference_sidecar_pytorch_v2_1_1")
+  --generate_bid_model_path <path>       Use the provided model for inference. Path MUST be relative to project root (default: "services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt")
+  -h, --help                             Print usage information
 USAGE
     exit 0
 }
@@ -30,6 +32,8 @@ source $(dirname "$0")/common
 BIDDING_JS_URL="${BIDDING_JS_URL:-}"
 EGRESS_SCHEMA_URL="${EGRESS_SCHEMA_URL:-}"
 INFERENCE_ARGS="${INFERENCE_ARGS:-}"
+INFERENCE_SIDECAR_BINARY_PATH="${INFERENCE_SIDECAR_BINARY_PATH:-/server/bin/inference_sidecar_pytorch_v2_1_1}"
+GENERATE_BID_MODEL_PATH="${GENERATE_BID_MODEL_PATH:-services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt}"
 
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
@@ -49,6 +53,14 @@ while [[ $# -gt 0 ]]; do
     --use-with-generateBid-file)
       GENERATE_BID_FILEPATH="$2"
       FETCH_MODE=2
+      shift 2
+      ;;
+    --inference_sidecar_binary_path)
+      INFERENCE_SIDECAR_BINARY_PATH="$2"
+      shift 2
+      ;;
+    --generate_bid_model_path)
+      GENERATE_BID_MODEL_PATH="$2"
       shift 2
       ;;
     -h | --help) print_usage ;;
@@ -104,11 +116,10 @@ if [[ ${ENABLE_INFERENCE} -eq 1 ]]; then
   GENERATE_BID_FILEPATH="services/inference_sidecar/common/tools/debug/generateBidRunInference.js"
 
   INFERENCE_ARGS=$(cat << END
---inference_sidecar_binary_path="/server/bin/inference_sidecar_pytorch_v2_1_1" \
+--inference_sidecar_binary_path="${INFERENCE_SIDECAR_BINARY_PATH}" \
 --inference_sidecar_runtime_config='{
   "num_interop_threads": 4,
-  "num_intraop_threads": 4,
-  "module_name": "pytorch_v2_1_1"
+  "num_intraop_threads": 4
 }' \
 --inference_model_local_paths="/generate_bid_model"
 END
@@ -134,21 +145,22 @@ SERVER_START_CMD=$(cat << END
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
---telemetry_config="mode: OFF" \
+--telemetry_config="${TELEMETRY_CONFIG}" \
 --roma_timeout_ms="120000" \
 --egress_schema_fetch_config='{
       "fetchMode": 0,
       "egressSchemaPath": "",
       "egressSchemaUrl": "${EGRESS_SCHEMA_URL}",
+      "temporaryUnlimitedEgressSchemaUrl": "${EGRESS_SCHEMA_URL}",
       "urlFetchPeriodMs": 13000000,
       "urlFetchTimeoutMs": 30000,
     }' \
 --buyer_code_fetch_config='${BUYER_CODE_FETCH_CONFIG}' \
---enable_protected_app_signals="false" \
+--enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
---enable_protected_audience="true" \
---enable_kanon="false" \
+--enable_protected_audience=${ENABLE_PROTECTED_AUDIENCE} \
+--enable_kanon=${ENABLE_KANON} \
 --tee_ad_retrieval_kv_server_addr="localhost:50057" \
 --ps_verbosity=${PS_VERBOSITY} \
 --max_allowed_size_debug_url_bytes=65536 \
@@ -169,7 +181,8 @@ if [[ ${USE_GDB} -eq 1 ]]; then
     "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server/bin/server"
     "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
     "--volume=${PROJECT_ROOT}/services/inference_sidecar/modules/pytorch_v2_1_1/artifacts/inference_sidecar_pytorch_v2_1_1:/server/bin/inference_sidecar_pytorch_v2_1_1"
-    "--volume=${PROJECT_ROOT}/services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt:/generate_bid_model"
+    "--volume=${PROJECT_ROOT}/services/inference_sidecar/modules/tensorflow_v2_14_0/artifacts/inference_sidecar_tensorflow_v2_14_0:/server/bin/inference_sidecar_tensorflow_v2_14_0"
+    "--volume=${PROJECT_ROOT}/${GENERATE_BID_MODEL_PATH}:/generate_bid_model"
     "--name=bidding"
   )
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
@@ -182,7 +195,10 @@ if [[ ${USE_GDB} -eq 1 ]]; then
 else
   docker_image_uri="$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
-    DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
+    DOCKER_RUN_ARGS+=(
+      "--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js"
+      "--volume=${PROJECT_ROOT}/${GENERATE_BID_MODEL_PATH}:/generate_bid_model"
+    )
   fi
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi

@@ -22,9 +22,6 @@ output "elb_security_group_id" {
   value = aws_security_group.elb_security_group.id
 }
 
-output "ssh_security_group_id" {
-  value = aws_security_group.ssh_security_group.id
-}
 
 output "vpc_endpoint_security_group_id" {
   value = aws_security_group.vpce_security_group.id
